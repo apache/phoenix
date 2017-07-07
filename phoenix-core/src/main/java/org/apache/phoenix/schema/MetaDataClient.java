@@ -2135,7 +2135,9 @@ public class MetaDataClient {
                 // Upsert physical name for mapped view only if the full physical table name is different than the full table name
                 // Otherwise, we end up with a self-referencing link and then cannot ever drop the view.
                 if (viewType != ViewType.MAPPED
-                        || !physicalNames.get(0).getString().equals(SchemaUtil.getTableName(schemaName, tableName))) {
+                    || (!physicalNames.get(0).getString().equals(SchemaUtil.getTableName(schemaName, tableName))
+                    && !physicalNames.get(0).getString().equals(SchemaUtil.getPhysicalHBaseTableName(
+                        schemaName, tableName, isNamespaceMapped).getString()))) {
                     // Add row linking from data table row to physical table row
                     PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
                     for (PName physicalName : physicalNames) {

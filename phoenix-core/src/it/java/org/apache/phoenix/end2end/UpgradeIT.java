@@ -58,13 +58,13 @@ import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -228,6 +228,16 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             phxConn.close();
             props = new Properties();
             phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+            // purge MetaDataCache except for system tables
+            phxConn.getMetaDataCache().pruneTables(new PMetaData.Pruner() {
+                @Override public boolean prune(PTable table) {
+                    return table.getType() != PTableType.SYSTEM;
+                }
+
+                @Override public boolean prune(PFunction function) {
+                    return false;
+                }
+            });
             admin = phxConn.getQueryServices().getAdmin();
             String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                     .getNameAsString();
@@ -351,6 +361,16 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         UpgradeUtil.mapChildViewsToNamespace(phxConn,phoenixFullTableName,props);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+        // purge MetaDataCache except for system tables
+        phxConn.getMetaDataCache().pruneTables(new PMetaData.Pruner() {
+            @Override public boolean prune(PTable table) {
+                return table.getType() != PTableType.SYSTEM;
+            }
+
+            @Override public boolean prune(PFunction function) {
+                return false;
+            }
+        });
         int i = 1;
         String indexPhysicalTableName = Bytes
                 .toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName)));
