@@ -18,7 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
@@ -82,6 +84,24 @@ public class LocalTableState implements TableState {
         for (KeyValue kv : list) {
             this.memstore.add(kv, overwrite);
         }
+    }
+
+    private void addUpdateCells(List<Cell> list, boolean overwrite) {
+        if (list == null) return;
+        // Avoid a copy of the Cell into a KeyValue if it's already a KeyValue
+        for (Cell c : list) {
+            this.memstore.add(maybeCopyCell(c), overwrite);
+        }
+    }
+
+    private KeyValue maybeCopyCell(Cell c) {
+        // Same as KeyValueUtil, but HBase has deprecated this method. Avoid depending on something
+        // that will likely be removed at some point in time.
+        if (c == null) return null;
+        if (c instanceof KeyValue) {
+            return (KeyValue) c;
+        }
+        return KeyValueUtil.copyToNewKeyValue(c);
     }
 
     @Override
@@ -176,8 +196,8 @@ public class LocalTableState implements TableState {
         // no need to perform scan to find prior row values when the indexed columns are immutable, as
         // by definition, there won't be any.
         if (!indexMetaData.isImmutableRows()) {
-            // add the current state of the row
-            this.addUpdate(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).list(), false);
+            // add the current state of the row. Uses listCells() to avoid a new array creation.
+            this.addUpdateCells(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).listCells(), false);
         }
 
         // add the covered columns to the set

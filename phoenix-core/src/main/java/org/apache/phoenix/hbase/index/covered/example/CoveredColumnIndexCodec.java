@@ -61,7 +61,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
 
     @Override
     public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData indexMetaData) {
-        List<IndexUpdate> updates = new ArrayList<IndexUpdate>();
+        List<IndexUpdate> updates = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
             IndexUpdate update = getIndexUpdateForGroup(group, state, indexMetaData);
             updates.add(update);
@@ -115,7 +115,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
 
     @Override
     public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) {
-        List<IndexUpdate> deletes = new ArrayList<IndexUpdate>();
+        List<IndexUpdate> deletes = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
             deletes.add(getDeleteForGroup(group, state, context));
         }
@@ -238,9 +238,12 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
      *            to use when building the key
      */
     static byte[] composeRowKey(byte[] pk, int length, List<ColumnEntry> values) {
+        final int numColumnEntries = values.size() * Bytes.SIZEOF_INT;
         // now build up expected row key, each of the values, in order, followed by the PK and then some
         // info about lengths so we can deserialize each value
-        byte[] output = new byte[length + pk.length];
+        //
+        // output = length of values + primary key + column entries + length of each column entry + number of column entries
+        byte[] output = new byte[length + pk.length + numColumnEntries + Bytes.SIZEOF_INT];
         int pos = 0;
         int[] lengths = new int[values.size()];
         int i = 0;
@@ -256,14 +259,22 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
 
         // add the primary key to the end of the row key
         System.arraycopy(pk, 0, output, pos, pk.length);
+        pos += pk.length;
 
         // add the lengths as suffixes so we can deserialize the elements again
         for (int l : lengths) {
-            output = ArrayUtils.addAll(output, Bytes.toBytes(l));
+            byte[] serializedLength = Bytes.toBytes(l);
+            System.arraycopy(serializedLength, 0, output, pos, Bytes.SIZEOF_INT);
+            pos += Bytes.SIZEOF_INT;
         }
 
         // and the last integer is the number of values
-        return ArrayUtils.addAll(output, Bytes.toBytes(values.size()));
+        byte[] serializedNumValues = Bytes.toBytes(values.size());
+        System.arraycopy(serializedNumValues, 0, output, pos, Bytes.SIZEOF_INT);
+        // Just in case we serialize more in the rowkey in the future..
+        pos += Bytes.SIZEOF_INT;
+
+        return output;
     }
 
     /**
