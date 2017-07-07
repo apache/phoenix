@@ -31,8 +31,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -227,12 +225,10 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
 		String expectedExplainPlan = "";
 		if (indxTable != null) {
 		    expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-		        SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, indxTable),
-		            isNamespaceMapped, PTableType.INDEX));
+		            SchemaUtil.getPhysicalHBaseTableName(schemaName, indxTable, isNamespaceMapped));
 		} else {
 			expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-					SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, dataTable),
-							isNamespaceMapped, PTableType.TABLE));
+			        SchemaUtil.getPhysicalHBaseTableName(schemaName, dataTable, isNamespaceMapped));
 		}
 		assertTrue(actualExplainPlan.contains(expectedExplainPlan));
 	}

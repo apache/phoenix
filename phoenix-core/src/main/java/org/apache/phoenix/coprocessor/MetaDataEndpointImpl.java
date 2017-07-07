@@ -1691,8 +1691,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         tableTypeFilter.setFilterIfMissing(false);
         linkFilter.setFilterIfMissing(true);
         byte[] suffix = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, SchemaUtil
-                .getPhysicalTableName(SchemaUtil.getTableNameAsBytes(schemaName, tableName), table.isNamespaceMapped())
-                .getName());
+                .getPhysicalHBaseTableName(schemaName, tableName, table.isNamespaceMapped())
+                .getBytes());
         SuffixFilter rowFilter = new SuffixFilter(suffix);
         FilterList filter = new FilterList(linkFilter,tableTypeFilter,rowFilter);
         scan.setFilter(filter);
@@ -3433,8 +3433,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(
-                            SchemaUtil.getPhysicalHBaseTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                                    isTablesMappingEnabled, PTableType.SYSTEM).getString(),
+                            SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                                    isTablesMappingEnabled).toString(),
                     new DoNotRetryIOException(
                             "Old client is not compatible when" + " system tables are upgraded to map to namespace")));
         }
