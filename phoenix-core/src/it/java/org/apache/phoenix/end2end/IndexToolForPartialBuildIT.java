@@ -243,19 +243,16 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
 		if (indxTable != null) {
 			if (isLocal) {
 				final String localIndexName = SchemaUtil
-						.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, dataTable), isNamespaceMapped,
-								PTableType.INDEX)
+						.getPhysicalHBaseTableName(schemaName, dataTable, isNamespaceMapped)
 						.getString();
 				expectedExplainPlan = String.format("CLIENT PARALLEL 3-WAY RANGE SCAN OVER %s [1]", localIndexName);
 			} else {
 				expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-						SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, indxTable),
-								isNamespaceMapped, PTableType.INDEX));
+						SchemaUtil.getPhysicalHBaseTableName(schemaName, indxTable, isNamespaceMapped));
 			}
 		} else {
 			expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-					SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, dataTable),
-							isNamespaceMapped, PTableType.TABLE));
+					SchemaUtil.getPhysicalHBaseTableName(schemaName, dataTable, isNamespaceMapped));
 		}
 		assertTrue(actualExplainPlan.contains(expectedExplainPlan));
 	}

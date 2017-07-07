@@ -187,7 +187,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         String sql = "SELECT * FROM " + viewName + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + SchemaUtil.getPhysicalHBaseTableName(fullTableName, isNamespaceMapped, PTableType.TABLE) + " [1,'10',100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + " [1,'10',100]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = conn1.prepareStatement(sql).executeQuery();
@@ -362,7 +362,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (10,10.0, true, 'j')");
             tsConn.commit();
             
-            String basePhysicalName = SchemaUtil.getPhysicalHBaseTableName(baseFullName, isNamespaceMapped, PTableType.TABLE).getString();
+            String basePhysicalName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(baseFullName), isNamespaceMapped).toString();
             assertRowCount(tsConn, tsViewFullName, basePhysicalName, 10);
             
             tsConn.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE TEXT1='d'");

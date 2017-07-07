@@ -150,7 +150,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         }
         tableName = "T_" + generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        physicalTableName = SchemaUtil.getPhysicalHBaseTableName(fullTableName, userTableNamespaceMapped, PTableType.TABLE).getString();
+        physicalTableName = SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, userTableNamespaceMapped).getString();
     }
 
     private Connection getConnection() throws SQLException {
@@ -633,7 +633,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
             long rows = endIndex - startIndex;
             long c2Bytes = rows * (columnEncoded ? ( mutable ? 37 : 48 ) : 35);
-            String physicalTableName = SchemaUtil.getPhysicalHBaseTableName(fullTableName, userTableNamespaceMapped, PTableType.TABLE).getString();
+            String physicalTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), userTableNamespaceMapped).toString();
             rs = conn.createStatement().executeQuery(
                     "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from \"SYSTEM\".STATS where PHYSICAL_NAME = '"
                             + physicalTableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]

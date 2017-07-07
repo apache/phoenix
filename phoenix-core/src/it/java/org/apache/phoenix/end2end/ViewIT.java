@@ -36,6 +36,9 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -708,6 +711,75 @@ public class ViewIT extends BaseViewIT {
       ResultSet rs = conn1.createStatement()
           .executeQuery("SELECT * FROM "+TABLE_NAME+" WHERE v1 = 'value1'");
       assertTrue(rs.next());
+    }
+
+    @Test
+    public void testCreateViewMappedToExistingHbaseTableWithNamespaceMappingEnabled() throws Exception {
+        final String NS = "NS_" + generateUniqueName();
+        final String TBL = "TBL_" + generateUniqueName();
+        final String CF = "CF";
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+            HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+
+            conn.createStatement().execute("CREATE SCHEMA " + NS);
+
+            // test for a view that is in non-default schema
+            {
+                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, TBL));
+                desc.addFamily(new HColumnDescriptor(CF));
+                admin.createTable(desc);
+
+                String view = NS + "." + TBL;
+                conn.createStatement().execute(
+                    "CREATE VIEW " + view + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + view))
+                    .contains(NS + ":" + TBL));
+
+                conn.createStatement().execute("DROP VIEW " + view);
+            }
+
+            // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for backward compatibility)
+            {
+                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS + "." + TBL));
+                desc.addFamily(new HColumnDescriptor(CF));
+                admin.createTable(desc);
+
+                String view = "\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                    "CREATE VIEW " + view + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + view))
+                    .contains(NS + "." + TBL));
+
+                conn.createStatement().execute("DROP VIEW " + view);
+            }
+
+            // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
+            {
+                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, NS + "." + TBL));
+                desc.addFamily(new HColumnDescriptor(CF));
+                admin.createTable(desc);
+
+                String view = NS + ".\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                    "CREATE VIEW " + view + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + view))
+                    .contains(NS + ":" + NS + "." + TBL));
+
+                conn.createStatement().execute("DROP VIEW " + view);
+            }
+
+            conn.createStatement().execute("DROP SCHEMA " + NS);
+        }
     }
 
     private void assertPKs(ResultSet rs, String[] expectedPKs) throws SQLException {
