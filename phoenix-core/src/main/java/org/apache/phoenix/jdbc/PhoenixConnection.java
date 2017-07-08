@@ -75,6 +75,7 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -1020,12 +1021,12 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.traceScope = traceScope;
     }
     
-    public Map<String, Map<String, Long>> getMutationMetrics() {
+    public Map<String, Map<MetricType, Long>> getMutationMetrics() {
         return mutationState.getMutationMetricQueue().aggregate();
     }
     
-    public Map<String, Map<String, Long>> getReadMetrics() {
-        return mutationState.getReadMetricQueue() != null ? mutationState.getReadMetricQueue().aggregate() : Collections.<String, Map<String, Long>>emptyMap();
+    public Map<String, Map<MetricType, Long>> getReadMetrics() {
+        return mutationState.getReadMetricQueue() != null ? mutationState.getReadMetricQueue().aggregate() : Collections.<String, Map<MetricType, Long>>emptyMap();
     }
     
     public boolean isRequestLevelMetricsEnabled() {
