@@ -18,6 +18,7 @@
 package org.apache.phoenix.execute;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
@@ -965,6 +966,11 @@ public class MutationState implements SQLCloseable {
 
                 int retryCount = 0;
                 boolean shouldRetry = false;
+                long numMutations = 0;
+                long mutationSizeBytes = 0;
+                long mutationCommitTime = 0;
+                long numFailedMutations = 0;;
+                long startTime = 0;
                 do {
                     TableRef origTableRef = tableInfo.getOrigTableRef();
                     PTable table = origTableRef.getTable();
@@ -992,10 +998,11 @@ public class MutationState implements SQLCloseable {
                             hTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, hTable, table);
                         }
                         
-                        long numMutations = mutationList.size();
+                        numMutations = mutationList.size();
                         GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
+                        mutationSizeBytes = calculateMutationSize(mutationList);
                         
-                        long startTime = System.currentTimeMillis();
+                        startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
                         List<List<Mutation>> mutationBatchList = getMutationBatchList(batchSize, batchSizeBytes, mutationList);
                         for (List<Mutation> mutationBatch : mutationBatchList) {
@@ -1006,18 +1013,17 @@ public class MutationState implements SQLCloseable {
                         child.stop();
                         child.stop();
                         shouldRetry = false;
-                        long mutationCommitTime = System.currentTimeMillis() - startTime;
+                        mutationCommitTime = System.currentTimeMillis() - startTime;
                         GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
+                        numFailedMutations = 0;
                         
-                        long mutationSizeBytes = calculateMutationSize(mutationList);
-                        MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes, mutationCommitTime);
-                        mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
                         if (tableInfo.isDataTable()) {
                             numRows -= numMutations;
                         }
                         // Remove batches as we process them
                         mutations.remove(origTableRef);
                     } catch (Exception e) {
+                    	mutationCommitTime = System.currentTimeMillis() - startTime;
                         serverTimestamp = ServerUtil.parseServerTimestamp(e);
                         SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                         if (inferredE != null) {
@@ -1040,8 +1046,13 @@ public class MutationState implements SQLCloseable {
                         }
                         // Throw to client an exception that indicates the statements that
                         // were not committed successfully.
-                        sqlE = new CommitException(e, getUncommittedStatementIndexes(), serverTimestamp);
+                        int[] uncommittedStatementIndexes = getUncommittedStatementIndexes();
+						sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
+						numFailedMutations = uncommittedStatementIndexes.length;
+						GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
                     } finally {
+                    	MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes, mutationCommitTime, numFailedMutations);
+                        mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
                         try {
                             if (cache!=null) 
                                 cache.close();

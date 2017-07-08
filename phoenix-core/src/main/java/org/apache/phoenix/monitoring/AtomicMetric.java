@@ -33,13 +33,8 @@ public class AtomicMetric implements Metric {
     }
 
     @Override
-    public String getName() {
-        return type.name();
-    }
-
-    @Override
-    public String getDescription() {
-        return type.description();
+    public MetricType getMetricType() {
+        return type;
     }
 
     @Override
@@ -59,7 +54,7 @@ public class AtomicMetric implements Metric {
 
     @Override
     public String getCurrentMetricState() {
-        return getName() + ": " + value.get();
+        return getMetricType().shortName() + ": " + value.get();
     }
 
     @Override
