@@ -35,14 +35,9 @@ public interface CombinableMetric extends Metric {
         private static final String EMPTY_STRING = "";
 
         @Override
-        public String getName() {
-            return EMPTY_STRING;
-        }
-
-        @Override
-        public String getDescription() {
-            return EMPTY_STRING;
-        }
+		public MetricType getMetricType() {
+			return MetricType.NO_OP_METRIC;
+		}
 
         @Override
         public long getValue() {
@@ -75,6 +70,7 @@ public interface CombinableMetric extends Metric {
 
         @Override
         public void decrement() {}
+
     }
 
 }

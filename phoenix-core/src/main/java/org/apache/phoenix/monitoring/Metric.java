@@ -21,15 +21,11 @@ package org.apache.phoenix.monitoring;
  * Interface that represents phoenix-internal metric.
  */
 public interface Metric {
+    
     /**
-     * @return Name of the metric
+     * @return type of the metric
      */
-    public String getName();
-
-    /**
-     * @return Description of the metric
-     */
-    public String getDescription();
+    public MetricType getMetricType();
 
     /**
      * @return Current value of the metric

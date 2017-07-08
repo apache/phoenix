@@ -88,14 +88,14 @@ public class OverAllQueryMetrics {
         resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
     }
 
-    public Map<String, Long> publish() {
-        Map<String, Long> metricsForPublish = new HashMap<>();
-        metricsForPublish.put(numParallelScans.getName(), numParallelScans.getValue());
-        metricsForPublish.put(wallClockTimeMS.getName(), wallClockTimeMS.getValue());
-        metricsForPublish.put(resultSetTimeMS.getName(), resultSetTimeMS.getValue());
-        metricsForPublish.put(queryTimedOut.getName(), queryTimedOut.getValue());
-        metricsForPublish.put(queryFailed.getName(), queryFailed.getValue());
-        metricsForPublish.put(cacheRefreshedDueToSplits.getName(), cacheRefreshedDueToSplits.getValue());
+    public Map<MetricType, Long> publish() {
+        Map<MetricType, Long> metricsForPublish = new HashMap<>();
+        metricsForPublish.put(numParallelScans.getMetricType(), numParallelScans.getValue());
+        metricsForPublish.put(wallClockTimeMS.getMetricType(), wallClockTimeMS.getValue());
+        metricsForPublish.put(resultSetTimeMS.getMetricType(), resultSetTimeMS.getValue());
+        metricsForPublish.put(queryTimedOut.getMetricType(), queryTimedOut.getValue());
+        metricsForPublish.put(queryFailed.getMetricType(), queryFailed.getValue());
+        metricsForPublish.put(cacheRefreshedDueToSplits.getMetricType(), cacheRefreshedDueToSplits.getValue());
         return metricsForPublish;
     }
 
