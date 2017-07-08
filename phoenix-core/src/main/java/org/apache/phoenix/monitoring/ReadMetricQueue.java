@@ -68,19 +68,19 @@ public class ReadMetricQueue {
     /**
      * @return map of table name -> list of pair of (metric name, metric value)
      */
-    public Map<String, Map<String, Long>> aggregate() {
-        Map<String, Map<String, Long>> publishedMetrics = new HashMap<>();
+    public Map<String, Map<MetricType, Long>> aggregate() {
+        Map<String, Map<MetricType, Long>> publishedMetrics = new HashMap<>();
         for (Entry<MetricKey, Queue<CombinableMetric>> entry : metricsMap.entrySet()) {
             String tableNameToPublish = entry.getKey().tableName;
             Collection<CombinableMetric> metrics = entry.getValue();
             if (metrics.size() > 0) {
                 CombinableMetric m = combine(metrics);
-                Map<String, Long> map = publishedMetrics.get(tableNameToPublish);
+                Map<MetricType, Long> map = publishedMetrics.get(tableNameToPublish);
                 if (map == null) {
                     map = new HashMap<>();
                     publishedMetrics.put(tableNameToPublish, map);
                 }
-                map.put(m.getName(), m.getValue());
+                map.put(m.getMetricType(), m.getValue());
             }
         }
         return publishedMetrics;

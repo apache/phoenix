@@ -22,6 +22,7 @@ import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_WAIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
@@ -60,6 +61,7 @@ public enum GlobalClientMetrics {
     GLOBAL_MUTATION_BATCH_SIZE(MUTATION_BATCH_SIZE),
     GLOBAL_MUTATION_BYTES(MUTATION_BYTES),
     GLOBAL_MUTATION_COMMIT_TIME(MUTATION_COMMIT_TIME),
+    GLOBAL_MUTATION_BATCH_FAILED_COUNT(MUTATION_BATCH_FAILED_SIZE),
     GLOBAL_QUERY_TIME(QUERY_TIME),
     GLOBAL_NUM_PARALLEL_SCANS(NUM_PARALLEL_SCANS),
     GLOBAL_SCAN_BYTES(SCAN_BYTES),
