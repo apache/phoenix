@@ -68,7 +68,8 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixQ
             RexNode project = projects.get(i);
             if ((bindVariablesPresent && RexLiteral.isNullLiteral(project))
                     || project instanceof ImplicitNullLiteral
-                    || (project instanceof RexCall && (((RexCall) project).getOperands().get(0) instanceof ImplicitNullLiteral))) {
+                    || (project instanceof RexCall && !((RexCall) project).getOperands().isEmpty() && (((RexCall) project)
+                            .getOperands().get(0) instanceof ImplicitNullLiteral))) {
                 unspecifiedColumnPositions.add(new Integer(i));
                 continue;
             }

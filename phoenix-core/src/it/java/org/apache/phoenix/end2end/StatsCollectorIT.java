@@ -233,8 +233,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         Array array;
         conn = upsertValues(props, fullTableName);
         // CAll the update statistics query here. If already major compaction has run this will not get executed.
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
-        stmt.execute();
+        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
         stmt = upsertStmt(conn, fullTableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -244,8 +243,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         array = conn.createArrayOf("VARCHAR", s);
         stmt.setArray(3, array);
         stmt.execute();
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
-        stmt.execute();
+        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
         rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName);
         assertTrue(rs.next());
         conn.close();
@@ -301,10 +299,8 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn = upsertValues(props, fullTableName);
         conn = upsertValues(props, fullTableName2);
         // CAll the update statistics query here
-        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName);
-        stmt.execute();
-        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
-        stmt.execute();
+        conn.createStatement().execute("UPDATE STATISTICS "+fullTableName);
+        conn.createStatement().execute("UPDATE STATISTICS "+fullTableName2);
         stmt = upsertStmt(conn, fullTableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -326,8 +322,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.close();
         conn = getConnection();
         // This analyze would not work
-        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
-        stmt.execute();
+        conn.createStatement().execute("UPDATE STATISTICS "+fullTableName2);
         rs = conn.createStatement().executeQuery("SELECT k FROM "+fullTableName2);
         assertTrue(rs.next());
         conn.close();

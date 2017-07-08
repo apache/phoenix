@@ -131,9 +131,8 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
                 "CONSTRAINT my_pk PRIMARY KEY (a_id, a_string))";
         
     
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.execute();
-        statement = conn.prepareStatement(
+        conn.createStatement().execute(query);
+        PreparedStatement statement = conn.prepareStatement(
                 "upsert into " + tableName +
                 "    (a_id, " +
                 "    a_string, " +

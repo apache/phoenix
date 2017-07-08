@@ -61,10 +61,10 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
                 "col1 FLOAT, col2 INTEGER, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3)) DISABLE_WAL=true, IMMUTABLE_ROWS=true, SALT_BUCKETS=8";
         createTestTable(getUrl(), ddl);
 
-        conn.prepareStatement("CREATE INDEX " + testTableF + "_idx ON "+testTableF+"(col2) DISABLE_WAL=true").execute();
-        conn.prepareStatement("CREATE LOCAL INDEX " + testTableV + "_idx ON "+testTableV+"(col2) DISABLE_WAL=true").execute();
+        conn.createStatement().execute("CREATE INDEX " + testTableF + "_idx ON "+testTableF+"(col2) DISABLE_WAL=true");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + testTableV + "_idx ON "+testTableV+"(col2) DISABLE_WAL=true");
 
-        conn.prepareStatement("CREATE SEQUENCE " + testSeq + " CACHE 1000").execute();
+        conn.createStatement().execute("CREATE SEQUENCE " + testSeq + " CACHE 1000");
 
         insertPrefixF(1, 1);
         insertPrefixF(1, 2);

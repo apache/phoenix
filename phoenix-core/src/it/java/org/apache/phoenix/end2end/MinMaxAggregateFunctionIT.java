@@ -33,13 +33,13 @@ public class MinMaxAggregateFunctionIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            conn.prepareStatement(
+            conn.createStatement().execute(
                 "create table " + TABLE_NAME + "("
                         + "VAL1 integer not null, "
                         + "VAL2 char(2), "
                         + "VAL3 varchar, "
                         + "VAL4 varchar "
-                        + "constraint PK primary key (VAL1))").execute();
+                        + "constraint PK primary key (VAL1))");
             conn.commit();
 
             conn.prepareStatement("upsert into " + TABLE_NAME + " values (0, '00', '00', '0')").execute();
