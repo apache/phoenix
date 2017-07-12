@@ -17,24 +17,12 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-
-import javax.annotation.concurrent.GuardedBy;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.client.CoprocessorHConnection;
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.phoenix.hbase.index.table.CoprocessorHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
 public class IndexWriterUtils {
@@ -73,68 +61,14 @@ public class IndexWriterUtils {
     // private ctor for utilites
   }
 
-    public static HTableFactory getDefaultDelegateHTableFactory(CoprocessorEnvironment env) {
-        // create a simple delegate factory, setup the way we need
-        Configuration conf = env.getConfiguration();
-        // set the number of threads allowed per table.
-        int htableThreads =
-                conf.getInt(IndexWriterUtils.INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY,
-                    IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
-        LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
-        IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
-        if (env instanceof RegionCoprocessorEnvironment) {
-            RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) env;
-            RegionServerServices services = e.getRegionServerServices();
-            if (services instanceof HRegionServer) {
-                return new SimpleTableFactory(conf, (HRegionServer) services);
-            }
-        } else {
-            return new CoprocessorHTableFactory(env);
-        }
-        throw new IllegalStateException("Unexpected environment or settings!");
-    }
-
-    /**
-     * {@code HTableFactory} that creates HTables by using a {@link CoprocessorHConnection} This
-     * factory was added as a workaround to the bug reported in
-     * https://issues.apache.org/jira/browse/HBASE-18359
-     */
-    private static class SimpleTableFactory implements HTableFactory {
-        @GuardedBy("SimpleTableFactory.this")
-        private HConnection connection;
-        private final Configuration conf;
-        private final HRegionServer server;
-
-        SimpleTableFactory(Configuration conf, HRegionServer server) {
-            this.conf = conf;
-            this.server = server;
-        }
-
-        private synchronized HConnection getConnection(Configuration conf) throws IOException {
-            if (connection == null || connection.isClosed()) {
-                connection = new CoprocessorHConnection(conf, server);
-            }
-            return connection;
-        }
-
-        @Override
-        public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
-            return getConnection(conf).getTable(tablename.copyBytesIfNecessary());
-        }
-
-        @Override
-        public void shutdown() {
-            try {
-                getConnection(conf).close();
-            } catch (IOException e) {
-                LOG.error("Exception caught while trying to close the HConnection used by SimpleTableFactory");
-            }
-        }
-
-        @Override
-        public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool)
-                throws IOException {
-            return getConnection(conf).getTable(tablename.copyBytesIfNecessary(), pool);
-        }
-    }
+  public static HTableFactory getDefaultDelegateHTableFactory(CoprocessorEnvironment env) {
+    // create a simple delegate factory, setup the way we need
+    Configuration conf = env.getConfiguration();
+    // set the number of threads allowed per table.
+    int htableThreads =
+        conf.getInt(IndexWriterUtils.INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY, IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
+    LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
+    IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
+    return new CoprocessorHTableFactory(env);
+  }
 }
