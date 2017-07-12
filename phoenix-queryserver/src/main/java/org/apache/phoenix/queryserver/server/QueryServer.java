@@ -28,6 +28,10 @@ import org.apache.calcite.avatica.remote.LocalService;
 import org.apache.calcite.avatica.remote.Service;
 import org.apache.calcite.avatica.server.DoAsRemoteUserCallback;
 import org.apache.calcite.avatica.server.HttpServer;
+import org.apache.calcite.avatica.server.RemoteUserExtractor;
+import org.apache.calcite.avatica.server.RemoteUserExtractionException;
+import org.apache.calcite.avatica.server.HttpRequestRemoteUserExtractor;
+import org.apache.calcite.avatica.server.HttpQueryStringParameterRemoteUserExtractor;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -38,6 +42,7 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.security.authorize.AuthorizationException;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -57,6 +62,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+
+import javax.servlet.http.HttpServletRequest;
 
 /**
  * A query server for Phoenix over Calcite's Avatica.
@@ -228,7 +235,9 @@ public final class QueryServer extends Configured implements Tool, Runnable {
         builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
             .withAutomaticLogin(keytab)
             .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+
       }
+      setRemoteUserExtractorIfNecessary(builder, getConf());
 
       // Build and start the HttpServer
       server = builder.build();
@@ -270,6 +279,54 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       retCode = run(argv);
     } catch (Exception e) {
       // already logged
+    }
+  }
+
+  // add remoteUserExtractor to builder if enabled
+  @VisibleForTesting
+  public void setRemoteUserExtractorIfNecessary(HttpServer.Builder builder, Configuration conf) {
+    if (conf.getBoolean(QueryServices.QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR_ATTRIB,
+            QueryServicesOptions.DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR)) {
+      builder.withRemoteUserExtractor(new PhoenixRemoteUserExtractor(conf));
+    }
+  }
+
+  /**
+   * Use the correctly way to extract end user.
+   */
+
+  static class PhoenixRemoteUserExtractor implements RemoteUserExtractor{
+    private final HttpQueryStringParameterRemoteUserExtractor paramRemoteUserExtractor;
+    private final HttpRequestRemoteUserExtractor requestRemoteUserExtractor;
+    private final String userExtractParam;
+
+    public PhoenixRemoteUserExtractor(Configuration conf) {
+      this.requestRemoteUserExtractor = new HttpRequestRemoteUserExtractor();
+      this.userExtractParam = conf.get(QueryServices.QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM,
+              QueryServicesOptions.DEFAULT_QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM);
+      this.paramRemoteUserExtractor = new HttpQueryStringParameterRemoteUserExtractor(userExtractParam);
+    }
+
+    @Override
+    public String extract(HttpServletRequest request) throws RemoteUserExtractionException {
+      if (request.getParameter(userExtractParam) != null) {
+        String extractedUser = paramRemoteUserExtractor.extract(request);
+        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(request.getRemoteUser());
+        UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(extractedUser, ugi);
+
+        // Check if this user is allowed to be impersonated.
+        // Will throw AuthorizationException if the impersonation as this user is not allowed
+        try {
+          ProxyUsers.authorize(proxyUser, request.getRemoteAddr());
+          return extractedUser;
+        } catch (AuthorizationException e) {
+          throw new RemoteUserExtractionException(e.getMessage(), e);
+        }
+      } else {
+        LOG.warn("The parameter used to extract user doesn't exist in the request.");
+        return requestRemoteUserExtractor.extract(request);
+      }
+
     }
   }
 
