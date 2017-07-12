@@ -21,7 +21,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -155,8 +158,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 return null;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
-                                if (LOG.isDebugEnabled()) {
-                                    LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
+                                if (LOG.isTraceEnabled()) {
+                                    LOG.trace("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
                                             + ignord);
                                 }
                             }
