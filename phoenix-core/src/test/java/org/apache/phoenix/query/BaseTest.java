@@ -996,7 +996,11 @@ public abstract class BaseTest {
     protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         return initATableValues(null, tenantId, splits, date, ts, url, null);
     }
-    
+
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url, String tableDDLOptions) throws Exception {
+        return initATableValues(null, tenantId, splits, date, ts, url, tableDDLOptions);
+    }
+
     protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url, String tableDDLOptions) throws Exception {
         if(tableName == null) {
             tableName = generateUniqueName();
