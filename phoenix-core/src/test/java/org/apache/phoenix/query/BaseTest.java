@@ -595,19 +595,19 @@ public abstract class BaseTest {
          * helps us in running several mini clusters at the same time without hitting 
          * the threads limit imposed by the OS. 
          */
-        conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
-        conf.setInt("hbase.regionserver.metahandler.count", 2);
-        conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
-        conf.setInt("dfs.namenode.handler.count", 2);
-        conf.setInt("dfs.namenode.service.handler.count", 2);
-        conf.setInt("dfs.datanode.handler.count", 2);
-        conf.setInt("ipc.server.read.threadpool.size", 2);
-        conf.setInt("ipc.server.handler.threadpool.size", 2);
-        conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
-        conf.setInt("hbase.hlog.asyncer.number", 2);
-        conf.setInt("hbase.assignment.zkevent.workers", 5);
-        conf.setInt("hbase.assignment.threads.max", 5);
-        conf.setInt("hbase.catalogjanitor.interval", 5000);
+//        conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
+//        conf.setInt("hbase.regionserver.metahandler.count", 2);
+//        conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
+//        conf.setInt("dfs.namenode.handler.count", 2);
+//        conf.setInt("dfs.namenode.service.handler.count", 2);
+//        conf.setInt("dfs.datanode.handler.count", 2);
+//        conf.setInt("ipc.server.read.threadpool.size", 2);
+//        conf.setInt("ipc.server.handler.threadpool.size", 2);
+//        conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
+//        conf.setInt("hbase.hlog.asyncer.number", 2);
+//        conf.setInt("hbase.assignment.zkevent.workers", 5);
+//        conf.setInt("hbase.assignment.threads.max", 5);
+//        conf.setInt("hbase.catalogjanitor.interval", 5000);
         return conf;
     }
 
