@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 
@@ -57,5 +58,24 @@ public class PropertiesUtil {
             }
         }
         return props;
+    }
+
+    /**
+     * Utility to work around the limitation of the copy constructor
+     * {@link Configuration#Configuration(Configuration)} provided by the {@link Configuration}
+     * class. See https://issues.apache.org/jira/browse/HBASE-18378.
+     * The copy constructor doesn't copy all the config settings, so we need to resort to
+     * iterating through all the settings and setting it on the cloned config.
+     * @param toCopy  configuration to copy
+     * @return
+     */
+    public static Configuration cloneConfig(Configuration toCopy) {
+        Configuration clone = new Configuration();
+        Iterator<Entry<String, String>> iterator = toCopy.iterator();
+        while (iterator.hasNext()) {
+            Entry<String, String> entry = iterator.next();
+            clone.set(entry.getKey(), entry.getValue());
+        }
+        return clone;
     }
 }

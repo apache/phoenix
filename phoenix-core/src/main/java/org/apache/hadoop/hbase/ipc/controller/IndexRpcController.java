@@ -25,6 +25,12 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
+import com.google.protobuf.RpcController;
+
+/**
+ * {@link RpcController} that sets the appropriate priority of RPC calls destined for Phoenix index
+ * tables.
+ */
 class IndexRpcController extends DelegatingPayloadCarryingRpcController {
 
     private final int priority;
