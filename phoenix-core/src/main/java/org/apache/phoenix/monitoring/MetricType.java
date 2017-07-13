@@ -21,10 +21,10 @@ public enum MetricType {
 
 	NO_OP_METRIC("no", "No op metric"),
 	// mutation (write) related metrics 
-    MUTATION_BATCH_SIZE("mc", "Number of mutations in the batch"),
+    MUTATION_BATCH_SIZE("ms", "Number of mutations in the batch"),
     MUTATION_BYTES("mb", "Size of mutations in bytes"),
     MUTATION_COMMIT_TIME("mt", "Time it took to commit a batch of mutations"),
-    MUTATION_BATCH_FAILED_SIZE("mfc", "Number of mutations that failed to be committed"),
+    MUTATION_BATCH_FAILED_SIZE("mfs", "Number of mutations that failed to be committed"),
     MUTATION_SQL_COUNTER("msc", "Counter for number of mutation sql statements"),
     // query (read) related metrics
     QUERY_TIME("qt", "Query times"),
