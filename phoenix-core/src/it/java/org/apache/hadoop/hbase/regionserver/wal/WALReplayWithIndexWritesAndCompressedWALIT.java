@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -192,7 +193,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     WALFactory walFactory = new WALFactory(this.conf, null, "localhost,1234");
 
     WAL wal = createWAL(this.conf, walFactory);
-    RegionServerServices mockRS = Mockito.mock(RegionServerServices.class);
+    HRegionServer mockRS = Mockito.mock(HRegionServer.class);
     // mock out some of the internals of the RSS, so we can run CPs
     when(mockRS.getWAL(null)).thenReturn(wal);
     RegionServerAccounting rsa = Mockito.mock(RegionServerAccounting.class);

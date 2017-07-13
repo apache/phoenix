@@ -20,19 +20,14 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.util.List;
 
-
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-
 import org.apache.hadoop.hbase.NotServingRegionException;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -44,14 +39,13 @@ import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
+import org.apache.phoenix.iterate.RegionScannerFactory;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-
-import org.apache.phoenix.iterate.RegionScannerFactory;
-import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
@@ -115,15 +109,12 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
-    protected Configuration rawConf;
     protected QualifierEncodingScheme encodingScheme;
     protected boolean useNewValueColumnQualifier;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
-        this.rawConf =
-                ((RegionCoprocessorEnvironment) e).getRegionServerServices().getConfiguration();
     }
 
     /**
