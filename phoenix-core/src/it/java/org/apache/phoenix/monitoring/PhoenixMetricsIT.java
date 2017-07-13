@@ -62,13 +62,16 @@ import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixMetricsLog;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.Logger;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -279,7 +282,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(mutationBatchSizePresent);
             assertTrue(mutationCommitTimePresent);
             assertTrue(mutationBytesPresent);
-            assertTrue(mutationBytesPresent);
+            assertTrue(mutationBatchFailedPresent);
         }
         Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(pConn);
         assertEquals("Read metrics should be empty", 0, readMetrics.size());
@@ -1001,6 +1004,76 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             return c;
         }
+    }
+    
+    @Test
+    public void testPhoenixMetricsLogged() throws Exception {
+        final Map<MetricType, Long> overAllQueryMetricsMap = Maps.newHashMap();
+        final Map<String, Map<MetricType, Long>> requestReadMetricsMap = Maps.newHashMap();
+        final Map<String, Map<MetricType, Long>> mutationWriteMetricsMap = Maps.newHashMap();
+        final Map<String, Map<MetricType, Long>> mutationReadMetricsMap = Maps.newHashMap();
+
+        String tableName1 = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName1 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+        Connection ddlConn = DriverManager.getConnection(getUrl());
+        ddlConn.createStatement().execute(ddl);
+        ddlConn.close();
+        insertRowsInTable(tableName1, 10);
+
+        String tableName2 = generateUniqueName();
+        ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+        ddlConn = DriverManager.getConnection(getUrl());
+        ddlConn.createStatement().execute(ddl);
+        ddlConn.close();
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        LoggingPhoenixConnection protectedConn =
+                new LoggingPhoenixConnection(conn, new PhoenixMetricsLog() {
+                    @Override
+                    public void logOverAllReadRequestMetrics(Logger logger,
+                            Map<MetricType, Long> overAllQueryMetrics) {
+                        overAllQueryMetricsMap.putAll(overAllQueryMetrics);
+                    }
+
+                    @Override
+                    public void logRequestReadMetrics(Logger logger,
+                            Map<String, Map<MetricType, Long>> requestReadMetrics) {
+                        requestReadMetricsMap.putAll(requestReadMetrics);
+                    }
+
+                    @Override
+                    public void logWriteMetricsfoForMutations(Logger logger,
+                            Map<String, Map<MetricType, Long>> mutationWriteMetrics) {
+                        mutationWriteMetricsMap.putAll(mutationWriteMetrics);
+                    }
+
+                    @Override
+                    public void logReadMetricInfoForMutationsSinceLastReset(Logger logger,
+                            Map<String, Map<MetricType, Long>> mutationReadMetrics) {
+                        mutationReadMetricsMap.putAll(mutationReadMetrics);
+                    }
+                });
+        
+        // run SELECT to verify read metrics are logged
+        String query = "SELECT * FROM " + tableName1;
+        Statement stmt = protectedConn.createStatement();
+        ResultSet rs = stmt.executeQuery(query);
+        while (rs.next()) {
+        }
+        rs.close();
+        assertTrue("Read metrics for not found for " + tableName1,
+            requestReadMetricsMap.get(tableName1).size() > 0);
+        assertTrue("Overall read metrics for not found ", overAllQueryMetricsMap.size() > 0);
+
+        // run UPSERT SELECT to verify mutation metrics are logged
+        String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
+        protectedConn.createStatement().executeUpdate(upsertSelect);
+        protectedConn.commit();
+        assertTrue("Mutation write metrics for not found for " + tableName2,
+            mutationWriteMetricsMap.get(tableName2).size() > 0);
+        assertTrue("Mutation read metrics for not found for " + tableName1,
+            mutationReadMetricsMap.get(tableName1).size() > 0);
+        protectedConn.close();
     }
 
 }
