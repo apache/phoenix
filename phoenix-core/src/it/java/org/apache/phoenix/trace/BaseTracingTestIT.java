@@ -35,6 +35,7 @@ import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.impl.MilliSpan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.DelegateConnection;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
