@@ -532,7 +532,9 @@ public class UpsertCompiler {
                 // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
                 // so we might be able to run it entirely on the server side.
                 // region space managed by region servers. So we bail out on executing on server side.
-                runOnServer = (sameTable || serverUpsertSelectEnabled) && isAutoCommit && !table.isTransactional()
+                // Disable running upsert select on server side if a table has global mutable secondary indexes on it
+                boolean hasGlobalMutableIndexes = SchemaUtil.hasGlobalIndex(table) && !table.isImmutableRows();
+                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit && !table.isTransactional()
                         && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
                         && !select.isJoin() && table.getRowTimestampColPos() == -1;
             }
