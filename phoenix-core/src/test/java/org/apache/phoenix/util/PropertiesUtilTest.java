@@ -59,14 +59,25 @@ public class PropertiesUtilTest {
         conf.set(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST);
         conf.set(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY, 
                 PropertiesUtilTest.SOME_OTHER_PROPERTY_VALUE);
-        PropertiesUtil.extractProperties(props, conf);
-        assertEquals(props.getProperty(HConstants.ZOOKEEPER_QUORUM),
+        Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
+        assertEquals(combinedProps.getProperty(HConstants.ZOOKEEPER_QUORUM),
                 conf.get(HConstants.ZOOKEEPER_QUORUM));
-        assertEquals(props.getProperty(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY),
+        assertEquals(combinedProps.getProperty(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY),
                 conf.get(PropertiesUtilTest.SOME_OTHER_PROPERTY_KEY));
     }
-    private void verifyValidCopy(Properties props) throws SQLException {
 
+    @Test
+    public void testPropertyOverrideRespected() throws Exception {
+        final Configuration conf = HBaseConfiguration.create();
+        final Properties props = new Properties();
+        props.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY,
+            Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
+        Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
+        assertEquals(combinedProps.getProperty(HConstants.HBASE_RPC_TIMEOUT_KEY),
+            Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
+    }
+
+    private void verifyValidCopy(Properties props) throws SQLException {
         Properties copy = PropertiesUtil.deepCopy(props);
         copy.containsKey(PhoenixRuntime.TENANT_ID_ATTRIB); //This checks the map and NOT the defaults in java.util.Properties
         assertEquals(SOME_TENANT_ID, copy.getProperty(PhoenixRuntime.TENANT_ID_ATTRIB));
