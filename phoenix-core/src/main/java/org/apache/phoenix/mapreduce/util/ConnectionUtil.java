@@ -57,7 +57,7 @@ public class ConnectionUtil {
 		return getConnection(PhoenixConfigurationUtil.getInputCluster(conf),
 				PhoenixConfigurationUtil.getClientPort(conf),
 				PhoenixConfigurationUtil.getZNodeParent(conf),
-				PropertiesUtil.extractProperties(props, conf));
+				PropertiesUtil.combineProperties(props, conf));
     }
 
     /**
@@ -82,7 +82,7 @@ public class ConnectionUtil {
 		return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf),
 				PhoenixConfigurationUtil.getClientPort(conf),
 				PhoenixConfigurationUtil.getZNodeParent(conf),
-				PropertiesUtil.extractProperties(props, conf));
+				PropertiesUtil.combineProperties(props, conf));
     }
 
     /**

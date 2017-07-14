@@ -61,7 +61,7 @@ public class PhoenixConnectionUtil {
                 zNodeParent;
 
         return getConnection(quorum, zooKeeperClientPort, zNodeParent, PropertiesUtil
-                .extractProperties(props, conf));
+                .combineProperties(props, conf));
     }
 
     public static Connection getConnection(final Table table) throws SQLException {
