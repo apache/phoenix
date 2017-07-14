@@ -131,6 +131,11 @@ public interface QueryServices extends SQLCloseable {
     // A master switch if to enable auto rebuild an index which failed to be updated previously
     public static final String INDEX_FAILURE_HANDLING_REBUILD_ATTRIB = "phoenix.index.failure.handling.rebuild";
     public static final String INDEX_FAILURE_HANDLING_REBUILD_PERIOD = "phoenix.index.failure.handling.rebuild.period";
+    public static final String INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB = "phoenix.index.rebuild.query.timeout";
+    public static final String INDEX_REBUILD_RPC_TIMEOUT_ATTRIB = "phoenix.index.rebuild.rpc.timeout";
+    public static final String INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB = "phoenix.index.rebuild.client.scanner.timeout";
+    public static final String INDEX_REBUILD_RPC_RETRIES_COUNTER = "phoenix.index.rebuild.rpc.retries.counter";
+    public static final String INDEX_REBUILD_RPC_RETRY_PAUSE_TIME = "phoenix.index.rebuild.rpc.retry.pause";
 
     // Time interval to check if there is an index needs to be rebuild
     public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB =
