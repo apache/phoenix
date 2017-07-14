@@ -32,7 +32,6 @@ import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
-import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -78,8 +77,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                 ThreadPoolManager.getExecutor(
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
-                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent,
-                CachingHTableFactory.getCacheSize(conf),env);
+                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent, env);
         this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
@@ -88,8 +86,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
      * <p>
      * Exposed for TESTING
      */
-    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, int cacheSize, RegionCoprocessorEnvironment env) {
-        this.factory = new CachingHTableFactory(factory, cacheSize, env);
+    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, RegionCoprocessorEnvironment env) {
+        this.factory = factory;
         this.pool = new QuickFailingTaskRunner(pool);
         this.stopped = stop;
     }
@@ -131,8 +129,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
             tasks.add(new Task<Void>() {
 
                 /**
-                 * Do the actual write to the primary table. We don't need to worry about closing the table because that
-                 * is handled the {@link CachingHTableFactory}.
+                 * Do the actual write to the primary table.
                  * 
                  * @return
                  */
