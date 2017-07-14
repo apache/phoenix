@@ -382,6 +382,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         dml = "UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY UPDATE counter1 = counter1 + 2";
         conn.createStatement().execute(dml);
+        conn.commit();
         dml = "UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY UPDATE counter1 = counter1 + 1";
         conn.createStatement().execute(dml);
         conn.commit();
