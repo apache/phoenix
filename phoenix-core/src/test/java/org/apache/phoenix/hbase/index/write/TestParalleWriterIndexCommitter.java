@@ -70,7 +70,7 @@ public class TestParalleWriterIndexCommitter {
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     // create a simple writer
-    writer.setup(factory, exec, mockAbort, mockStop, 1, e);
+    writer.setup(factory, exec, mockAbort, mockStop, e);
     // stop the writer
     writer.stop(this.test.getTableNameString() + " finished");
     assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
@@ -118,7 +118,7 @@ public class TestParalleWriterIndexCommitter {
 
     // setup the writer and failure policy
     ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
-    writer.setup(factory, exec, abort, stop, 1, e);
+    writer.setup(factory, exec, abort, stop, e);
     writer.write(indexUpdates, true);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
