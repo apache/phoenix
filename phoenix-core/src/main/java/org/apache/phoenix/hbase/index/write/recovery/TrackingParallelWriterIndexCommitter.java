@@ -37,7 +37,6 @@ import org.apache.phoenix.hbase.index.parallel.TaskRunner;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
-import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.write.IndexCommitter;
@@ -90,8 +89,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 ThreadPoolManager.getExecutor(
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
-                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent,
-                CachingHTableFactory.getCacheSize(conf), env);
+                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent, env);
     }
 
     /**
@@ -99,10 +97,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
      * <p>
      * Exposed for TESTING
      */
-    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, int cacheSize,
+    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop,
             RegionCoprocessorEnvironment env) {
         this.pool = new WaitForCompletionTaskRunner(pool);
-        this.factory = new CachingHTableFactory(factory, cacheSize, env);
+        this.factory = factory;
         this.abortable = new CapturingAbortable(abortable);
         this.stopped = stop;
     }
@@ -139,8 +137,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
             tasks.add(new Task<Boolean>() {
 
                 /**
-                 * Do the actual write to the primary table. We don't need to worry about closing the table because that
-                 * is handled the {@link CachingHTableFactory}.
+                 * Do the actual write to the primary table.
                  */
                 @SuppressWarnings("deprecation")
                 @Override
