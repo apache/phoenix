@@ -32,8 +32,11 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.annotation.concurrent.GuardedBy;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
@@ -79,11 +82,13 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.ServiceException;
@@ -95,10 +100,14 @@ import com.google.protobuf.ServiceException;
  */
 public class MetaDataRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
+    public static final String REBUILD_INDEX_APPEND_TO_URL_STRING = "REBUILDINDEX";
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
     private static Map<PName, Long> batchExecutedPerTableMap = new HashMap<PName, Long>();
+
+    @GuardedBy("MetaDataRegionObserver.class")
+    private static Properties rebuildIndexConnectionProps;
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -112,7 +121,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         // sleep a little bit to compensate time clock skew when SYSTEM.CATALOG moves
         // among region servers because we relies on server time of RS which is hosting
         // SYSTEM.CATALOG
-        long sleepTime = env.getConfiguration().getLong(QueryServices.CLOCK_SKEW_INTERVAL_ATTRIB,
+        Configuration config = env.getConfiguration();
+        long sleepTime = config.getLong(QueryServices.CLOCK_SKEW_INTERVAL_ATTRIB,
             QueryServicesOptions.DEFAULT_CLOCK_SKEW_INTERVAL);
         try {
             if(sleepTime > 0) {
@@ -121,11 +131,14 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
         }
-        enableRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB,
-            QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
-        rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
-            QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
-        
+        enableRebuildIndex =
+                config.getBoolean(
+                    QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB,
+                    QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
+        rebuildIndexTimeInterval =
+                config.getLong(
+                    QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
+                    QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
     }
     
     @Override
@@ -178,6 +191,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         }
         try {
             Class.forName(PhoenixDriver.class.getName());
+            initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
             // starts index rebuild schedule work
             BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
             // run scheduled task every 10 secs
@@ -201,9 +215,10 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
             this.env = env;
-            this.rebuildIndexBatchSize = env.getConfiguration().getLong(
+            Configuration configuration = env.getConfiguration();
+            this.rebuildIndexBatchSize = configuration.getLong(
                     QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, HConstants.LATEST_TIMESTAMP);
-            this.configuredBatches = env.getConfiguration().getLong(
+            this.configuredBatches = configuration.getLong(
                     QueryServices.INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE, configuredBatches);
         }
 
@@ -276,18 +291,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
 
                     if (conn == null) {
-                    	final Properties props = new Properties();
-                    	// Set SCN so that we don't ping server and have the upper bound set back to
-                    	// the timestamp when the failure occurred.
-                    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
-                    	
-                    	//Set timeout to max value as rebuilding may take time
-                    	props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-                    	props.setProperty(QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB, Long.toString(Long.MAX_VALUE));
-                    	props.setProperty(QueryServices.RPC_TIMEOUT_ATTRIB, Long.toString(Long.MAX_VALUE));
-                    	// don't run a second index populations upsert select 
-                        props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0"); 
-                        conn = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
+                        conn = getRebuildIndexConnection(env.getConfiguration());
                         dataTableToIndexesMap = Maps.newHashMap();
                     }
                     String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
@@ -308,7 +312,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     // Allow index to begin incremental maintenance as index is back online and we
                     // cannot transition directly from DISABLED -> ACTIVE
                     if (Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexState) == 0) {
-                        updateIndexState(conn, indexTableFullName, env, PIndexState.DISABLE, PIndexState.INACTIVE);
+                        updateIndexState(conn, indexTableFullName, env, PIndexState.DISABLE, PIndexState.INACTIVE, null);
                     }
                     List<PTable> indexesToPartiallyRebuild = dataTableToIndexesMap.get(dataPTable);
                     if (indexesToPartiallyRebuild == null) {
@@ -403,7 +407,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 										indexPTable.getTableName().getString());
 								if (scanEndTime == HConstants.LATEST_TIMESTAMP) {
 									updateIndexState(conn, indexTableFullName, env, PIndexState.INACTIVE,
-											PIndexState.ACTIVE);
+											PIndexState.ACTIVE, 0l);
 									batchExecutedPerTableMap.remove(dataPTable.getName());
                                     LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
 								} else {
@@ -424,12 +428,26 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 											"During Round-robin build: Successfully updated index disabled timestamp  for "
 													+ indexTableFullName + " to " + scanEndTime);
 								}
-
 							}
-						} catch (Exception e) { // Log, but try next table's
-												// indexes
-							LOG.warn("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild
-									+ ". Will try again next on next scheduled invocation.", e);
+						} catch (Exception e) {
+							for (PTable index : indexesToPartiallyRebuild) {
+						        String indexTableFullName = SchemaUtil.getTableName(
+                                    index.getSchemaName().getString(),
+                                    index.getTableName().getString());
+                                try {
+                                    /*
+                                     * We are going to mark the index as disabled and set the index
+                                     * disable timestamp to 0 so that the rebuild task won't pick up
+                                     * this index again for rebuild.
+                                     */
+                                    updateIndexState(conn, indexTableFullName, env,
+                                        PIndexState.INACTIVE, PIndexState.DISABLE, 0l);
+                                } catch (Throwable ex) {
+						            LOG.error("Unable to mark index " + indexTableFullName + " as disabled after rebuilding it failed", ex);
+						        }
+						    }
+							LOG.error("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild
+									+ ". Won't attempt again. Manual intervention needed to re-build the index", e);
 						}
 					}
 				}
@@ -469,8 +487,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     }
     
 	private static void updateIndexState(PhoenixConnection conn, String indexTableName,
-			RegionCoprocessorEnvironment env, PIndexState oldState, PIndexState newState)
+			RegionCoprocessorEnvironment env, PIndexState oldState, PIndexState newState, Long indexDisableTimestamp)
 					throws ServiceException, Throwable {
+        if (newState == PIndexState.ACTIVE) {
+            Preconditions.checkArgument(indexDisableTimestamp == 0,
+                "Index disable timestamp has to be 0 when marking an index as active");
+        }
 		byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
 		String schemaName = SchemaUtil.getSchemaNameFromFullName(indexTableName);
 		String indexName = SchemaUtil.getTableNameFromFullName(indexTableName);
@@ -479,12 +501,15 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 		Put put = new Put(indexTableKey);
 		put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
 				newState.getSerializedBytes());
-		if (newState == PIndexState.ACTIVE) {
-			put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-					PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES, PLong.INSTANCE.toBytes(0));
-			put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-					PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP_BYTES, PLong.INSTANCE.toBytes(0));
-		}
+        if (indexDisableTimestamp != null) {
+            put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
+                PLong.INSTANCE.toBytes(indexDisableTimestamp));
+        }
+        if (newState == PIndexState.ACTIVE) {
+            put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP_BYTES, PLong.INSTANCE.toBytes(0));
+        }
 		final List<Mutation> tableMetadata = Collections.<Mutation> singletonList(put);
 		MetaDataMutationResult result = conn.getQueryServices().updateIndexState(tableMetadata, null);
 		MutationCode code = result.getMutationCode();
@@ -509,4 +534,50 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 				put);
 
 	}
+
+    private static synchronized void initRebuildIndexConnectionProps(Configuration config) {
+        if (rebuildIndexConnectionProps == null) {
+            Properties props = new Properties();
+            long indexRebuildQueryTimeoutMs =
+                    config.getLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT);
+            long indexRebuildRPCTimeoutMs =
+                    config.getLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT);
+            long indexRebuildClientScannerTimeOutMs =
+                    config.getLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT);
+            int indexRebuildRpcRetriesCounter =
+                    config.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
+            long indexRebuildRpcRetryPauseTimeMs =
+                    config.getLong(QueryServices.INDEX_REBUILD_RPC_RETRY_PAUSE_TIME,
+                        QueryServicesOptions.DEFAULT_INDEX_REBULD_RPC_RETRY_PAUSE);
+            // Set SCN so that we don't ping server and have the upper bound set back to
+            // the timestamp when the failure occurred.
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
+            // Set various phoenix and hbase level timeouts and rpc retries
+            props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                Long.toString(indexRebuildQueryTimeoutMs));
+            props.setProperty(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
+                Long.toString(indexRebuildClientScannerTimeOutMs));
+            props.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY,
+                Long.toString(indexRebuildRPCTimeoutMs));
+            props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+                Long.toString(indexRebuildRpcRetriesCounter));
+            props.setProperty(HConstants.HBASE_CLIENT_PAUSE,
+                Long.toString(indexRebuildRpcRetryPauseTimeMs));
+            // don't run a second index populations upsert select
+            props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0");
+            rebuildIndexConnectionProps = PropertiesUtil.combineProperties(props, config);
+        }
+    }
+
+    public static PhoenixConnection getRebuildIndexConnection(Configuration config)
+            throws SQLException, ClassNotFoundException {
+        initRebuildIndexConnectionProps(config);
+        //return QueryUtil.getConnectionOnServer(rebuildIndexConnectionProps, config).unwrap(PhoenixConnection.class);
+        return QueryUtil.getConnectionOnServerWithCustomUrl(rebuildIndexConnectionProps,
+            REBUILD_INDEX_APPEND_TO_URL_STRING).unwrap(PhoenixConnection.class);
+    }
 }
