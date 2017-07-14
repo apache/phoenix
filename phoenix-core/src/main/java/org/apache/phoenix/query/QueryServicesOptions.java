@@ -182,6 +182,11 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true; 
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 1; // 1 ms
+    public static final long DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT = 30000 * 60; // 30 mins
+    public static final long DEFAULT_INDEX_REBUILD_RPC_TIMEOUT = 30000 * 60; // 30 mins
+    public static final long DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT = 30000 * 60; // 30 mins
+    public static final int DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER = 5;
+    public static final long DEFAULT_INDEX_REBULD_RPC_RETRY_PAUSE = 3000; // 3 seconds
 
     /**
      * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
