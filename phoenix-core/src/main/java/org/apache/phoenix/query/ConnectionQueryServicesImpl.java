@@ -93,6 +93,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -305,6 +306,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // List of queues instead of a single queue to provide reduced contention via lock striping
     private final List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> connectionQueues;
     private ScheduledExecutorService renewLeaseExecutor;
+    /*
+     * We can have multiple instances of ConnectionQueryServices. By making the thread factory
+     * static, renew lease thread names will be unique across them.
+     */
+    private static final ThreadFactory renewLeaseThreadFactory = new RenewLeaseThreadFactory();
     private final boolean renewLeaseEnabled;
     private final boolean isAutoUpgradeEnabled;
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
@@ -3326,15 +3332,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void scheduleRenewLeaseTasks() {
         if (isRenewingLeasesEnabled()) {
-            ThreadFactory threadFactory =
-                    new ThreadFactoryBuilder().setDaemon(true)
-                    .setNameFormat("PHOENIX-SCANNER-RENEW-LEASE" + "-thread-%s").build();
             renewLeaseExecutor =
-                    Executors.newScheduledThreadPool(renewLeasePoolSize, threadFactory);
+                    Executors.newScheduledThreadPool(renewLeasePoolSize, renewLeaseThreadFactory);
             for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> q : connectionQueues) {
                 renewLeaseExecutor.scheduleAtFixedRate(new RenewLeaseTask(q), 0,
-                        renewLeaseTaskFrequency, TimeUnit.MILLISECONDS);
+                    renewLeaseTaskFrequency, TimeUnit.MILLISECONDS);
             }
+        }
+    }
+
+    private static class RenewLeaseThreadFactory implements ThreadFactory {
+        private static final AtomicInteger threadNumber = new AtomicInteger(1);
+        private static final String NAME_PREFIX = "PHOENIX-SCANNER-RENEW-LEASE-thread-";
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, NAME_PREFIX + threadNumber.getAndIncrement());
+            t.setDaemon(true);
+            return t;
         }
     }
 
