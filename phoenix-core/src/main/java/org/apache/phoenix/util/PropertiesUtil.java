@@ -41,26 +41,30 @@ public class PropertiesUtil {
         return newProperties;
     }
     
-     /**
-     * Add properties from the given Configuration to the provided Properties.
-     *
-     * @param props properties to which connection information from the Configuration will be added
-     * @param conf configuration containing connection information
-     * @return the input Properties value, with additional connection information from the
-     * given Configuration
+    /**
+     * Add properties from the given Configuration to the provided Properties. Note that only those
+     * configuration properties will be added to the provided properties whose values are already
+     * not set. The method doesn't modify the passed in properties instead makes a clone of them
+     * before combining.
+     * @return properties object that is a combination of properties contained in props and
+     *         properties contained in conf
      */
-    public static Properties extractProperties(Properties props, final Configuration conf) {
+    public static Properties combineProperties(Properties props, final Configuration conf) {
         Iterator<Map.Entry<String, String>> iterator = conf.iterator();
-        if(iterator != null) {
+        Properties copy = deepCopy(props);
+        if (iterator != null) {
             while (iterator.hasNext()) {
                 Map.Entry<String, String> entry = iterator.next();
-                props.setProperty(entry.getKey(), entry.getValue());
+                // set the property from config only if props doesn't have it already
+                if (copy.getProperty(entry.getKey()) == null) {
+                    copy.setProperty(entry.getKey(), entry.getValue());
+                }
             }
         }
-        return props;
+        return copy;
     }
 
-    /**
+   /**
      * Utility to work around the limitation of the copy constructor
      * {@link Configuration#Configuration(Configuration)} provided by the {@link Configuration}
      * class. See https://issues.apache.org/jira/browse/HBASE-18378.
