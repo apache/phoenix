@@ -28,7 +28,12 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.RpcController;
 
+/**
+ * {@link RpcController} that sets the appropriate priority of RPC calls destined for Phoenix SYSTEM
+ * tables
+ */
 class MetadataRpcController extends DelegatingPayloadCarryingRpcController {
 
 	private int priority;

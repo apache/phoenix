@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.never;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -38,7 +39,6 @@ import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
@@ -67,9 +67,7 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
     public static void doSetup() throws Exception {
     	Map<String, String> serverProps = Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
         		TestPhoenixIndexRpcSchedulerFactory.class.getName());
-        // use the standard rpc controller for client rpc, so that we can isolate server rpc and ensure they use the correct queue  
-    	Map<String, String> clientProps = Collections.singletonMap(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
-    			RpcControllerFactory.class.getName());
+        Map<String, String> clientProps = Collections.emptyMap();
         NUM_SLAVES_BASE = 2;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
@@ -99,9 +97,11 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             createIndex(conn, indexName);
 
             ensureTablesOnDifferentRegionServers(dataTableFullName, indexTableFullName);
-    
+            TestPhoenixIndexRpcSchedulerFactory.reset();
             upsertRow(conn, dataTableFullName);
-    
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor())
+                    .dispatch(Mockito.any(CallRunner.class));
+            TestPhoenixIndexRpcSchedulerFactory.reset();
             // run select query that should use the index
             String selectSql = "SELECT k, v2 from " + dataTableFullName + " WHERE v1=?";
             PreparedStatement stmt = conn.prepareStatement(selectSql);
@@ -124,8 +124,10 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             // create a data table with the same name as the index table
             createTable(conn, indexTableFullName);
             
+            TestPhoenixIndexRpcSchedulerFactory.reset();
             // upsert one row to the table (which has the same table name as the previous index table)
             upsertRow(conn, indexTableFullName);
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(), never()).dispatch(Mockito.any(CallRunner.class));
             
             // run select query on the new table
             selectSql = "SELECT k, v2 from " + indexTableFullName + " WHERE v1=?";
@@ -138,9 +140,6 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("k1", rs.getString(1));
             assertEquals("v2", rs.getString(2));
             assertFalse(rs.next());
-            
-            // verify that that index queue is used only once (for the first upsert)
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
             
             TestPhoenixIndexRpcSchedulerFactory.reset();
             createIndex(conn, indexName + "_1");
