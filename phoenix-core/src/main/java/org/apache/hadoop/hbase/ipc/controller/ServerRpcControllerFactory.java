@@ -17,46 +17,20 @@
  */
 package org.apache.hadoop.hbase.ipc.controller;
 
-import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CellScannable;
-import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that sets the priority of index and metadata rpc calls
- * so that they are each processed in their own queues
+ * {@link RpcControllerFactory} that sets the priority of metadata rpc calls so that they get
+ * processed in their own queue. This controller factory should only be configured on the region
+ * servers. It is meant to control inter region server RPCs destined for Phoenix SYSTEM tables.
+ * <p>
+ * This class is left here only for legacy reasons so as to not break users who have configured this
+ * {@link RpcControllerFactory} in their hbase-site.xml.
  */
-public class ServerRpcControllerFactory extends RpcControllerFactory {
-
+@Deprecated
+public class ServerRpcControllerFactory extends InterRegionServerMetadataRpcControllerFactory {
     public ServerRpcControllerFactory(Configuration conf) {
         super(conf);
     }
-
-    @Override
-    public PayloadCarryingRpcController newController() {
-        PayloadCarryingRpcController delegate = super.newController();
-        return getController(delegate);
-    }
-
-    @Override
-    public PayloadCarryingRpcController newController(CellScanner cellScanner) {
-        PayloadCarryingRpcController delegate = super.newController(cellScanner);
-        return getController(delegate);
-    }
-
-    @Override
-    public PayloadCarryingRpcController newController(List<CellScannable> cellIterables) {
-        PayloadCarryingRpcController delegate = super.newController(cellIterables);
-        return getController(delegate);
-    }
-    
-    private PayloadCarryingRpcController getController(PayloadCarryingRpcController delegate) {
-    	// construct a chain of controllers: metadata, index and standard controller
-    	IndexRpcController indexRpcController = new IndexRpcController(delegate, conf);
-		return new MetadataRpcController(indexRpcController, conf);
-    }
-    
 }
