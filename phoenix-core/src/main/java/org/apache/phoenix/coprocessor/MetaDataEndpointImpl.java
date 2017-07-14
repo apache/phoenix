@@ -3471,13 +3471,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             int disableTimeStampKVIndex = -1;
             int indexStateKVIndex = 0;
             int index = 0;
-            for(Cell cell : newKVs){
+            for(Cell cell : newKVs) {
                 if(Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                       INDEX_STATE_BYTES, 0, INDEX_STATE_BYTES.length) == 0){
                   newKV = cell;
                   indexStateKVIndex = index;
                 } else if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                  INDEX_DISABLE_TIMESTAMP_BYTES, 0, INDEX_DISABLE_TIMESTAMP_BYTES.length) == 0){
+                  INDEX_DISABLE_TIMESTAMP_BYTES, 0, INDEX_DISABLE_TIMESTAMP_BYTES.length) == 0) {
                   disableTimeStampKVIndex = index;
                 }
                 index++;
