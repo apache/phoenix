@@ -187,9 +187,6 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
                 assertEquals(
                     Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER),
                     rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
-                assertEquals(
-                    Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBULD_RPC_RETRY_PAUSE),
-                    rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_PAUSE));
                 ConnectionQueryServices rebuildQueryServices = rebuildIndexConnection.getQueryServices();
                 HConnection rebuildIndexHConnection =
                         (HConnection) Whitebox.getInternalState(rebuildQueryServices,
@@ -212,9 +209,6 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
                 assertEquals(
                     Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER),
                     rebuildHConnectionConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
-                assertEquals(
-                    Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBULD_RPC_RETRY_PAUSE),
-                    rebuildHConnectionConfig.get(HConstants.HBASE_CLIENT_PAUSE));
             }
         }
     }
