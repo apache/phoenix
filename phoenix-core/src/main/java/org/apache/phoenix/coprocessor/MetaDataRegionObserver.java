@@ -76,8 +76,10 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -105,7 +107,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
     private static Map<PName, Long> batchExecutedPerTableMap = new HashMap<PName, Long>();
-
     @GuardedBy("MetaDataRegionObserver.class")
     private static Properties rebuildIndexConnectionProps;
 
@@ -194,8 +195,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
             // starts index rebuild schedule work
             BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
-            // run scheduled task every 10 secs
-            executor.scheduleAtFixedRate(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
+            executor.scheduleWithFixedDelay(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
         } catch (ClassNotFoundException ex) {
             LOG.error("BuildIndexScheduleTask cannot start!", ex);
         }
@@ -212,6 +212,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         RegionCoprocessorEnvironment env;
         private long rebuildIndexBatchSize = HConstants.LATEST_TIMESTAMP;
         private long configuredBatches = 10;
+        private long indexDisableTimestampThreshold;
 
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
             this.env = env;
@@ -220,6 +221,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, HConstants.LATEST_TIMESTAMP);
             this.configuredBatches = configuration.getLong(
                     QueryServices.INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE, configuredBatches);
+            this.indexDisableTimestampThreshold =
+                    configuration.getLong(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD);
         }
 
         @Override
@@ -308,6 +312,32 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         LOG.debug("Index rebuild has been skipped because not all regions of index table="
                                 + indexPTable.getName() + " are online.");
                         continue;
+                    }
+                    long indexDisableTimestamp =
+                            PLong.INSTANCE.getCodec().decodeLong(disabledTimeStamp, 0,
+                                SortOrder.ASC);
+                    PIndexState state = PIndexState.fromSerializedValue(indexState[0]);
+                    if (indexDisableTimestamp > 0 && System.currentTimeMillis()
+                            - indexDisableTimestamp > indexDisableTimestampThreshold) {
+                        /*
+                         * It has been too long since the index has been disabled and any future
+                         * attempts to reenable it likely will fail. So we are going to mark the
+                         * index as disabled and set the index disable timestamp to 0 so that the
+                         * rebuild task won't pick up this index again for rebuild.
+                         */
+                        try {
+                            updateIndexState(conn, indexTableFullName, env, state,
+                                PIndexState.DISABLE, 0l);
+                            LOG.error("Unable to rebuild index " + indexTableFullName
+                                    + ". Won't attempt again since index disable timestamp is older than current time by "
+                                    + indexDisableTimestampThreshold
+                                    + " milliseconds. Manual intervention needed to re-build the index");
+                        } catch (Throwable ex) {
+                            LOG.error(
+                                "Unable to mark index " + indexTableFullName + " as disabled.", ex);
+                        }
+                        continue; // don't attempt another rebuild irrespective of whether
+                                  // updateIndexState worked or not
                     }
                     // Allow index to begin incremental maintenance as index is back online and we
                     // cannot transition directly from DISABLED -> ACTIVE
@@ -430,24 +460,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 								}
 							}
 						} catch (Exception e) {
-							for (PTable index : indexesToPartiallyRebuild) {
-						        String indexTableFullName = SchemaUtil.getTableName(
-                                    index.getSchemaName().getString(),
-                                    index.getTableName().getString());
-                                try {
-                                    /*
-                                     * We are going to mark the index as disabled and set the index
-                                     * disable timestamp to 0 so that the rebuild task won't pick up
-                                     * this index again for rebuild.
-                                     */
-                                    updateIndexState(conn, indexTableFullName, env,
-                                        PIndexState.INACTIVE, PIndexState.DISABLE, 0l);
-                                } catch (Throwable ex) {
-						            LOG.error("Unable to mark index " + indexTableFullName + " as disabled after rebuilding it failed", ex);
-						        }
-						    }
-							LOG.error("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild
-									+ ". Won't attempt again. Manual intervention needed to re-build the index", e);
+							LOG.error("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild, e);
 						}
 					}
 				}
@@ -550,9 +563,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             int indexRebuildRpcRetriesCounter =
                     config.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
-            long indexRebuildRpcRetryPauseTimeMs =
-                    config.getLong(QueryServices.INDEX_REBUILD_RPC_RETRY_PAUSE_TIME,
-                        QueryServicesOptions.DEFAULT_INDEX_REBULD_RPC_RETRY_PAUSE);
             // Set SCN so that we don't ping server and have the upper bound set back to
             // the timestamp when the failure occurred.
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
@@ -565,8 +575,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 Long.toString(indexRebuildRPCTimeoutMs));
             props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                 Long.toString(indexRebuildRpcRetriesCounter));
-            props.setProperty(HConstants.HBASE_CLIENT_PAUSE,
-                Long.toString(indexRebuildRpcRetryPauseTimeMs));
             // don't run a second index populations upsert select
             props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0");
             rebuildIndexConnectionProps = PropertiesUtil.combineProperties(props, config);
