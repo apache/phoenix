@@ -185,8 +185,8 @@ public class QueryServicesOptions {
     public static final long DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT = 30000 * 60; // 30 mins
     public static final long DEFAULT_INDEX_REBUILD_RPC_TIMEOUT = 30000 * 60; // 30 mins
     public static final long DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT = 30000 * 60; // 30 mins
-    public static final int DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER = 5;
-    public static final long DEFAULT_INDEX_REBULD_RPC_RETRY_PAUSE = 3000; // 3 seconds
+    public static final int DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER = 1; // no retries at rpc level
+    public static final int DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD = 30000 * 60; // 30 mins
 
     /**
      * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
