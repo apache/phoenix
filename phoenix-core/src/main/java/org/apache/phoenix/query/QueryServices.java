@@ -148,6 +148,7 @@ public interface QueryServices extends SQLCloseable {
     // Block writes to data table when index write fails
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
     public static final String INDEX_FAILURE_DISABLE_INDEX = "phoenix.index.failure.disable.index";
+    public static final String INDEX_FAILURE_THROW_EXCEPTION_ATTRIB = "phoenix.index.failure.throw.exception";
 
     // Index will be partially re-built from index disable time stamp - following overlap time
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =

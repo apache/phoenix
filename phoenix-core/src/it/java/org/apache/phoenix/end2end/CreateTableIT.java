@@ -49,7 +49,11 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -759,5 +763,33 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
 
             conn.createStatement().execute("DROP SCHEMA " + NS);
         }
+    }
+    @Test
+    public void testSetHTableDescriptorPropertyOnView() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        final String dataTableFullName = generateUniqueName();
+        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
+                +"ID1 VARCHAR(15) NOT NULL,\n"
+                +"ID2 VARCHAR(15) NOT NULL,\n"
+                +"CREATED_DATE DATE,\n"
+                +"CREATION_TIME BIGINT,\n"
+                +"LAST_USED DATE,\n"
+                +"CONSTRAINT PK PRIMARY KEY (ID1, ID2)) ";
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        conn1.close();
+        final String viewFullName = generateUniqueName();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
+        ddl = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE CREATION_TIME = 1 THROW_INDEX_WRITE_FAILURE = FALSE";
+        try {
+            conn2.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
+        }
+        conn2.close();
     }
 }

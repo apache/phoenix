@@ -1423,6 +1423,13 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
+        ddl = "ALTER VIEW " + viewFullName + " SET THROW_INDEX_WRITE_FAILURE = FALSE";
+        try {
+            conn1.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
+        }
     }
 
     @Test

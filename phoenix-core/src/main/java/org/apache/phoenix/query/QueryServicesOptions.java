@@ -180,6 +180,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
     public static final boolean DEFAULT_INDEX_FAILURE_BLOCK_WRITE = false; 
     public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true; 
+    public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true; 
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 1; // 1 ms
     public static final long DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT = 30000 * 60; // 30 mins
