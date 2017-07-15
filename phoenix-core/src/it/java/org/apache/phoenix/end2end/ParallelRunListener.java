@@ -24,7 +24,7 @@ import org.junit.runner.notification.RunListener;
 public class ParallelRunListener extends RunListener {
     // This causes output to go to the console when run through maven
     // private static final Log LOG = LogFactory.getLog(ParallelRunListener.class);
-    private static final int TEAR_DOWN_THRESHOLD = 100;
+    private static final int TEAR_DOWN_THRESHOLD = 20;
     
     private int testRuns = 0;
 
