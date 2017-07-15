@@ -99,15 +99,18 @@ public class MutableIndexFailureIT extends BaseTest {
     private final boolean isNamespaceMapped;
     private final boolean leaveIndexActiveOnFailure;
     private final boolean rebuildIndexOnWriteFailure;
+    private final boolean failRebuildTask;
+    private final boolean throwIndexWriteFailure;
     private String schema = generateUniqueName();
     private List<CommitException> exceptions = Lists.newArrayList();
 
-    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, Boolean rebuildIndexOnWriteFailure) {
+    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, Boolean rebuildIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
         this.transactional = transactional;
         this.localIndex = localIndex;
         this.tableDDLOptions = " SALT_BUCKETS=2 " + (transactional ? ", TRANSACTIONAL=true " : "") 
                 + (disableIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE + "=" + disableIndexOnWriteFailure))
-                + (rebuildIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.REBUILD_INDEX_ON_WRITE_FAILURE + "=" + rebuildIndexOnWriteFailure));
+                + (rebuildIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.REBUILD_INDEX_ON_WRITE_FAILURE + "=" + rebuildIndexOnWriteFailure))
+                + (throwIndexWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.THROW_INDEX_WRITE_FAILURE + "=" + throwIndexWriteFailure));
         this.tableName = FailingRegionObserver.FAIL_TABLE_NAME;
         this.indexName = "A_" + FailingRegionObserver.FAIL_INDEX_NAME;
         fullTableName = SchemaUtil.getTableName(schema, tableName);
@@ -115,6 +118,8 @@ public class MutableIndexFailureIT extends BaseTest {
         this.isNamespaceMapped = isNamespaceMapped;
         this.leaveIndexActiveOnFailure = ! (disableIndexOnWriteFailure == null ? QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX : disableIndexOnWriteFailure);
         this.rebuildIndexOnWriteFailure = ! Boolean.FALSE.equals(rebuildIndexOnWriteFailure);
+        this.failRebuildTask = failRebuildTask;
+        this.throwIndexWriteFailure = ! Boolean.FALSE.equals(throwIndexWriteFailure);
     }
 
     @BeforeClass
@@ -136,40 +141,37 @@ public class MutableIndexFailureIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},rebuildIndexOnWriteFailure={4}") // name is used by failsafe as file name in reports
+    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},rebuildIndexOnWriteFailure={4},failRebuildTask={5},throwIndexWriteFailure={6}") // name is used by failsafe as file name in reports
     public static List<Object[]> data() {
         return Arrays.asList(new Object[][] { 
-                { false, false, true, true, true},
-                { false, false, false, true, true},
-                { true, false, false, true, true},
-                { true, false, true, true, true},
-                { false, true, true, true, true},
-                { false, true, false, null, null},
-                { true, true, false, true, null},
-                { true, true, true, null, true},
+                { false, false, false, true, true, false, false},
+                { false, false, true, true, true, false, null},
+                { false, false, true, true, true, false, true},
+                { false, false, false, true, true, false, null},
+                { true, false, false, true, true, false, null},
+                { true, false, true, true, true, false, null},
+                { false, true, true, true, true, false, null},
+                { false, true, false, null, null, false, null},
+                { true, true, false, true, null, false, null},
+                { true, true, true, null, true, false, null},
 
-                { false, false, false, false, true},
-                { false, true, false, false, null},
-                { false, false, false, false, false},
-                { false, false, false, true, true},
-                { false, false, false, true, true},
-                { false, true, false, true, true},
-                { false, true, false, true, true},
-        } 
+                { false, false, false, false, true, false, null},
+                { false, true, false, false, null, false, null},
+                { false, false, false, false, false, false, null},
+                { false, false, false, true, true, false, null},
+                { false, false, false, true, true, false, null},
+                { false, true, false, true, true, false, null},
+                { false, true, false, true, true, false, null},
+                { false, false, false, true, true, true, null},
+                { false, false, true, true, true, true, null},
+                { false, false, false, true, true, true, false},
+                { false, false, true, true, true, true, false},
+                } 
         );
     }
 
     @Test
-    public void testWriteFailureDisablesIndex() throws Exception {
-        helpTestWriteFailureDisablesIndex(false);
-    }
-
-    @Test
-    public void testRebuildTaskFailureMarksIndexDisabled() throws Exception {
-        helpTestWriteFailureDisablesIndex(true);
-    }
-
-    public void helpTestWriteFailureDisablesIndex(boolean failRebuildTask) throws Exception {
+    public void testIndexWriteFailure() throws Exception {
         String secondIndexName = "B_" + FailingRegionObserver.FAIL_INDEX_NAME;
 //        String thirdIndexName = "C_" + INDEX_NAME;
 //        String thirdFullIndexName = SchemaUtil.getTableName(schema, thirdIndexName);
@@ -289,7 +291,7 @@ public class MutableIndexFailureIT extends BaseTest {
                     replayMutations();
                 }
 
-                // Verify UPSERT on data table still works after index table is recreated
+                // Verify UPSERT on data table still works after index table is caught up
                 PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
                 stmt.setString(1, "a3");
                 stmt.setString(2, "x4");
@@ -300,31 +302,28 @@ public class MutableIndexFailureIT extends BaseTest {
                 // verify index table has correct data (note that second index has been dropped)
                 validateDataWithIndex(conn, fullTableName, fullIndexName, localIndex);
             } else {
-                // the index is only disabled for non-txn tables upon index table write failure
-                if (rebuildIndexOnWriteFailure && !transactional && !leaveIndexActiveOnFailure && !localIndex) {
-                    try {
-                        // Wait for index to be rebuilt automatically. This should fail because
-                        // we haven't flipped the FAIL_WRITE flag to false and as a result this
-                        // should cause index rebuild to fail too.
-                        waitForIndexToBeRebuilt(conn, indexName);
-                        // verify that the index was marked as disabled and the index disable
-                        // timestamp set to 0
-                        String q =
-                                "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
-                                        + schema + "' AND TABLE_NAME = '" + indexName + "'"
-                                        + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
-                        try (ResultSet r = conn.createStatement().executeQuery(q)) {
-                            assertTrue(r.next());
-                            assertEquals(PIndexState.DISABLE.getSerializedValue(), r.getString(1));
-                            assertEquals(0, r.getLong(2));
-                            assertFalse(r.next());
-                        }
-                    } finally {
-                        // even if the above test fails, make sure we leave the index active
-                        // as other tests might be dependent on it
-                        FAIL_WRITE = false;
-                        waitForIndexToBeRebuilt(conn, indexName);
+                try {
+                    // Wait for index to be rebuilt automatically. This should fail because
+                    // we haven't flipped the FAIL_WRITE flag to false and as a result this
+                    // should cause index rebuild to fail too.
+                    waitForIndexToBeRebuilt(conn, indexName);
+                    // verify that the index was marked as disabled and the index disable
+                    // timestamp set to 0
+                    String q =
+                            "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
+                                    + schema + "' AND TABLE_NAME = '" + indexName + "'"
+                                    + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
+                    try (ResultSet r = conn.createStatement().executeQuery(q)) {
+                        assertTrue(r.next());
+                        assertEquals(PIndexState.DISABLE.getSerializedValue(), r.getString(1));
+                        assertEquals(0, r.getLong(2));
+                        assertFalse(r.next());
                     }
+                } finally {
+                    // even if the above test fails, make sure we leave the index active
+                    // as other tests might be dependent on it
+                    FAIL_WRITE = false;
+                    waitForIndexToBeRebuilt(conn, indexName);
                 }
             }
         } finally {
@@ -449,11 +448,11 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         try {
             conn.commit();
-            if (commitShouldFail && !localIndex) {
+            if (commitShouldFail && !localIndex && this.throwIndexWriteFailure) {
                 fail();
             }
         } catch (CommitException e) {
-            if (!commitShouldFail) {
+            if (!commitShouldFail || !this.throwIndexWriteFailure) {
                 throw e;
             }
             exceptions.add(e);
@@ -470,11 +469,11 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         try {
             conn.commit();
-            if (commitShouldFail && !localIndex) {
+            if (commitShouldFail && !localIndex && this.throwIndexWriteFailure) {
                 fail();
             }
         } catch (CommitException e) {
-            if (!commitShouldFail) {
+            if (!commitShouldFail || !this.throwIndexWriteFailure) {
                 throw e;
             }
             exceptions.add(e);

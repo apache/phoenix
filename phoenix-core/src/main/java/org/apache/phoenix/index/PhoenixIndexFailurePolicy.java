@@ -69,6 +69,7 @@ import com.google.common.collect.Multimap;
  */
 public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     private static final Log LOG = LogFactory.getLog(PhoenixIndexFailurePolicy.class);
+    public static final String THROW_INDEX_WRITE_FAILURE = "THROW_INDEX_WRITE_FAILURE";
     public static final String DISABLE_INDEX_ON_WRITE_FAILURE = "DISABLE_INDEX_ON_WRITE_FAILURE";
     public static final String REBUILD_INDEX_ON_WRITE_FAILURE = "REBUILD_INDEX_ON_WRITE_FAILURE";
     public static final String BLOCK_DATA_TABLE_WRITES_ON_WRITE_FAILURE = "BLOCK_DATA_TABLE_WRITES_ON_WRITE_FAILURE";
@@ -76,6 +77,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     private boolean blockDataTableWritesOnFailure;
     private boolean disableIndexOnFailure;
     private boolean rebuildIndexOnFailure;
+    private boolean throwIndexWriteFailure;
 
     public PhoenixIndexFailurePolicy() {
         super(new KillServerOnFailurePolicy());
@@ -110,6 +112,14 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         } else {
             blockDataTableWritesOnFailure = Boolean.parseBoolean(value);
         }
+        
+        value = htd.getValue(THROW_INDEX_WRITE_FAILURE);
+        if (value == null) {
+	        throwIndexWriteFailure = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_THROW_EXCEPTION_ATTRIB,
+	                QueryServicesOptions.DEFAULT_INDEX_FAILURE_THROW_EXCEPTION);
+        } else {
+        	throwIndexWriteFailure = Boolean.parseBoolean(value);
+        }
     }
 
     /**
@@ -135,7 +145,12 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             throwing = false;
         } finally {
             if (!throwing) {
-                throw ServerUtil.wrapInDoNotRetryIOException("Unable to update the following indexes: " + attempted.keySet(), cause, timestamp);
+            	IOException ioException = ServerUtil.wrapInDoNotRetryIOException("Unable to update the following indexes: " + attempted.keySet(), cause, timestamp);
+            	if (throwIndexWriteFailure) {
+            		throw ioException;
+            	} else {
+                    LOG.warn("Swallowing index write failure", ioException);
+            	}
             }
         }
     }
