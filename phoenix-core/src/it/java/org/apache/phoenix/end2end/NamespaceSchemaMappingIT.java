@@ -17,14 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.util.Properties;
-
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
@@ -41,6 +33,14 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.util.Properties;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 /*
  * since 4.8
  */
@@ -63,11 +63,14 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         String hbaseFullTableName = schemaName + ":" + tableName;
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(namespace).build());
-        admin.createTable(new HTableDescriptor(TableName.valueOf(namespace, tableName))
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
-        admin.createTable(new HTableDescriptor(TableName.valueOf(phoenixFullTableName))
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
 
+        HTableDescriptor tableDescriptor = new HTableDescriptor(TableName.valueOf(namespace, tableName));
+        HColumnDescriptor hColumnDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+        tableDescriptor.addFamily(hColumnDescriptor);
+        admin.createTable(tableDescriptor);
+        tableDescriptor = new HTableDescriptor(TableName.valueOf(phoenixFullTableName));
+        tableDescriptor.addFamily(hColumnDescriptor);
+        admin.createTable(tableDescriptor);
         Put put = new Put(PVarchar.INSTANCE.toBytes(phoenixFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);

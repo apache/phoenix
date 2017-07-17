@@ -17,11 +17,20 @@
  */
 package org.apache.phoenix.util;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
+import com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.ZooKeeperConnectionException;
+import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.ActiveRMInfoProto;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.data.Stat;
+import org.codehaus.jettison.json.JSONException;
+
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
@@ -30,21 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ZooKeeperConnectionException;
-import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
-import org.apache.hadoop.mapreduce.MRJobConfig;
-import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.ActiveRMInfoProto;
-import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.data.Stat;
-import org.codehaus.jettison.json.JSONException;
-
-import com.google.protobuf.InvalidProtocolBufferException;
 
 public class PhoenixMRJobUtil {
 
@@ -219,15 +213,15 @@ public class PhoenixMRJobUtil {
      * @param conf - Configuration to which Capacity Queue information to be added
      */
     public static void updateCapacityQueueInfo(Configuration conf) {
-        conf.set(MRJobConfig.QUEUE_NAME,
-            conf.get(PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY, DEFAULT_QUEUE_NAME));
+        conf.set("mapreduce.job.queuename",
+                conf.get(PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY, DEFAULT_QUEUE_NAME));
         int mapMemoryMB = conf.getInt(PHOENIX_INDEX_MR_MAP_MEMORY_PROPERTY, DEFAULT_MAP_MEMROY_MB);
 
-        conf.setInt(MRJobConfig.MAP_MEMORY_MB, mapMemoryMB);
-        conf.set(MRJobConfig.MAP_JAVA_OPTS, XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
+        conf.setInt("mapreduce.map.memory.mb", mapMemoryMB);
+        conf.set("mapreduce.map.java.opts", XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
 
-        LOG.info("Queue Name=" + conf.get(MRJobConfig.QUEUE_NAME) + ";" + "Map Meory MB="
-                + conf.get(MRJobConfig.MAP_MEMORY_MB) + ";" + "Map Java Opts="
-                + conf.get(MRJobConfig.MAP_JAVA_OPTS));
+        LOG.info("Queue Name=" + conf.get("mapreduce.job.queuename") + ";" + "Map Meory MB="
+                + conf.get("mapreduce.map.memory.mb") + ";" + "Map Java Opts="
+                + conf.get("mapreduce.map.java.opts"));
     }
 }

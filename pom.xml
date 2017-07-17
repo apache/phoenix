@@ -40,6 +40,10 @@
 
   <repositories>
     <repository>
+      <id>cloudera</id>
+      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+    </repository>
+    <repository>
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
     </repository>
@@ -65,13 +69,13 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.2.3</hbase.version>
-    <hadoop-two.version>2.7.1</hadoop-two.version>
+    <hbase.version>1.2.0-cdh5.9.1</hbase.version>
+    <hadoop-two.version>2.6.0-cdh5.9.1</hadoop-two.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
     <hive.version>1.2.1</hive.version>
-    <hadoop.version>2.7.1</hadoop.version>
+    <hadoop.version>2.6.0-cdh5.9.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>

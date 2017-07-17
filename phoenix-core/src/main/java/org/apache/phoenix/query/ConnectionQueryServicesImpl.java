@@ -2494,11 +2494,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Throwables.propagate(e);
         }
     }
-    
+
     private void createSysMutexTable(HBaseAdmin admin) throws IOException, SQLException {
         try {
-            HTableDescriptor tableDesc = new HTableDescriptor(
-                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
+            final TableName mutexTableName = TableName.valueOf(
+                    PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
+            List<TableName> systemTables = getSystemTableNames(admin);
+            if (systemTables.contains(mutexTableName)) {
+                logger.debug("System mutex table already appears to exist, not creating it");
+                return;
+            }
+            HTableDescriptor tableDesc = new HTableDescriptor(mutexTableName);
             HColumnDescriptor columnDesc = new HColumnDescriptor(
                     PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
@@ -2514,6 +2520,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableExistsException e) {
             // Ignore
         }
+    }
+
+    List<TableName> getSystemTableNames(HBaseAdmin admin) throws IOException {
+        return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
     }
 
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException {
