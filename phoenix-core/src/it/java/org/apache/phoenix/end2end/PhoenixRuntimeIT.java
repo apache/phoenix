@@ -18,8 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -31,9 +29,6 @@ import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -45,13 +40,9 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -60,7 +51,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-import org.mockito.internal.util.reflection.Whitebox;
 
 import com.google.common.collect.Sets;
 
@@ -156,60 +146,5 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         Expression e7 = PhoenixRuntime.getFirstPKColumnExpression(conn, tableName);
         HTableInterface htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
-    }
-    
-    @Test
-    public void testRebuildIndexConnectionProperties() throws Exception {
-        try (PhoenixConnection rebuildIndexConnection =
-                MetaDataRegionObserver.getRebuildIndexConnection(config)) {
-            try (PhoenixConnection regularConnection =
-                    DriverManager.getConnection(url).unwrap(PhoenixConnection.class)) {
-                String rebuildUrl = rebuildIndexConnection.getURL();
-                // assert that the url ends with expected string
-                assertTrue(
-                    rebuildUrl.contains(MetaDataRegionObserver.REBUILD_INDEX_APPEND_TO_URL_STRING));
-                // assert that the url for regular connection vs the rebuild connection is different
-                assertFalse(rebuildUrl.equals(regularConnection.getURL()));
-                Configuration rebuildQueryServicesConfig =
-                        rebuildIndexConnection.getQueryServices().getConfiguration();
-                // assert that the properties are part of the query services config
-                assertEquals(Long.toString(Long.MAX_VALUE),
-                    rebuildQueryServicesConfig.get(PhoenixRuntime.CURRENT_SCN_ATTRIB));
-                assertEquals(
-                    Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT),
-                    rebuildQueryServicesConfig.get(QueryServices.THREAD_TIMEOUT_MS_ATTRIB));
-                assertEquals(
-                    Long.toString(
-                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT),
-                    rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD));
-                assertEquals(Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT),
-                    rebuildQueryServicesConfig.get(HConstants.HBASE_RPC_TIMEOUT_KEY));
-                assertEquals(
-                    Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER),
-                    rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
-                ConnectionQueryServices rebuildQueryServices = rebuildIndexConnection.getQueryServices();
-                HConnection rebuildIndexHConnection =
-                        (HConnection) Whitebox.getInternalState(rebuildQueryServices,
-                            "connection");
-                HConnection regularHConnection =
-                        (HConnection) Whitebox.getInternalState(
-                            regularConnection.getQueryServices(), "connection");
-                // assert that a new HConnection was spawned
-                assertFalse(
-                    regularHConnection.toString().equals(rebuildIndexHConnection.toString()));
-                Configuration rebuildHConnectionConfig = rebuildIndexHConnection.getConfiguration();
-                // assert that the HConnection has the desired properties needed for rebuilding
-                // indices
-                assertEquals(
-                    Long.toString(
-                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT),
-                    rebuildHConnectionConfig.get(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD));
-                assertEquals(Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT),
-                    rebuildHConnectionConfig.get(HConstants.HBASE_RPC_TIMEOUT_KEY));
-                assertEquals(
-                    Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER),
-                    rebuildHConnectionConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
-            }
-        }
     }
 }
