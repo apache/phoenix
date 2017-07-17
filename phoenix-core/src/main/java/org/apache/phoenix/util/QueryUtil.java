@@ -350,9 +350,7 @@ public final class QueryUtil {
         return getConnectionUrl(props, conf, null);
     }
     /**
-     * @return connection url using the various properties set in props and conf. This method is an
-     *         alternative to {@link #getConnectionUrlUsingProps(Properties, String)} when all the
-     *         relevant connection properties are passed in both {@link Properties} and {@link Configuration}
+     * @return connection url using the various properties set in props and conf.
      */
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws ClassNotFoundException, SQLException {
@@ -376,7 +374,7 @@ public final class QueryUtil {
                 props.getProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, defaultExtraArgs);
         if (extraArgs.length() > 0) {
             url +=
-                    PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + extraArgs
+                    PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + extraArgs
                             + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
         } else {
             url += PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;

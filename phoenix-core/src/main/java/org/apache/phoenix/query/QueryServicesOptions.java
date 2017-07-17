@@ -185,7 +185,7 @@ public class QueryServicesOptions {
     public static final long DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT = 30000 * 60; // 30 mins
     public static final long DEFAULT_INDEX_REBUILD_RPC_TIMEOUT = 30000 * 60; // 30 mins
     public static final long DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT = 30000 * 60; // 30 mins
-    public static final int DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER = 1; // no retries at rpc level
+    public static final int DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER = 0; // no retries at rpc level
     public static final int DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD = 30000 * 60; // 30 mins
 
     /**
