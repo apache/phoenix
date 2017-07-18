@@ -285,7 +285,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 FailingRegionObserver.FAIL_WRITE = false;
                 if (rebuildIndexOnWriteFailure) {
                     // wait for index to be rebuilt automatically
-                    waitForIndexToBeRebuilt(conn,indexName);
+                    waitForIndexRebuild(conn,indexName, PIndexState.ACTIVE);
                 } else {
                     // simulate replaying failed mutation
                     replayMutations();
@@ -302,36 +302,28 @@ public class MutableIndexFailureIT extends BaseTest {
                 // verify index table has correct data (note that second index has been dropped)
                 validateDataWithIndex(conn, fullTableName, fullIndexName, localIndex);
             } else {
-                try {
-                    // Wait for index to be rebuilt automatically. This should fail because
-                    // we haven't flipped the FAIL_WRITE flag to false and as a result this
-                    // should cause index rebuild to fail too.
-                    waitForIndexToBeRebuilt(conn, indexName);
-                    // verify that the index was marked as disabled and the index disable
-                    // timestamp set to 0
-                    String q =
-                            "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
-                                    + schema + "' AND TABLE_NAME = '" + indexName + "'"
-                                    + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
-                    try (ResultSet r = conn.createStatement().executeQuery(q)) {
-                        assertTrue(r.next());
-                        assertEquals(PIndexState.DISABLE.getSerializedValue(), r.getString(1));
-                        assertEquals(0, r.getLong(2));
-                        assertFalse(r.next());
-                    }
-                } finally {
-                    // even if the above test fails, make sure we leave the index active
-                    // as other tests might be dependent on it
-                    FAIL_WRITE = false;
-                    waitForIndexToBeRebuilt(conn, indexName);
+                // Wait for index to be rebuilt automatically. This should fail because
+                // we haven't flipped the FAIL_WRITE flag to false and as a result this
+                // should cause index rebuild to fail too.
+                waitForIndexRebuild(conn, indexName, PIndexState.DISABLE);
+                // verify that the index was marked as disabled and the index disable
+                // timestamp set to 0
+                String q =
+                        "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
+                                + schema + "' AND TABLE_NAME = '" + indexName + "'"
+                                + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
+                try (ResultSet r = conn.createStatement().executeQuery(q)) {
+                    assertTrue(r.next());
+                    assertEquals(PIndexState.DISABLE.getSerializedValue(), r.getString(1));
+                    assertEquals(0, r.getLong(2));
+                    assertFalse(r.next());
                 }
+
             }
-        } finally {
-            FAIL_WRITE = false;
         }
     }
 
-    private void waitForIndexToBeRebuilt(Connection conn, String index) throws InterruptedException, SQLException {
+    private void waitForIndexRebuild(Connection conn, String index, PIndexState expectedIndexState) throws InterruptedException, SQLException {
         boolean isActive = false;
         if (!transactional) {
             int maxTries = 12, nTries = 0;
@@ -340,15 +332,20 @@ public class MutableIndexFailureIT extends BaseTest {
                 String query = "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT) FROM " +
                         PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
                         + ") = (" + "'" + schema + "','" + index + "') "
-                        + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
+                        + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL"
+                        + " AND " + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + expectedIndexState.getSerializedValue() + "'";
                 ResultSet rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
-                if (rs.getLong(1) == 0 && !rs.wasNull()) {
-                    isActive = true;
-                    break;
+                if (expectedIndexState == PIndexState.ACTIVE) {
+                    if (rs.getLong(1) == 0 && !rs.wasNull()) {
+                        isActive = true;
+                        break;
+                    }
                 }
             } while (++nTries < maxTries);
-            assertTrue(isActive);
+            if (expectedIndexState == PIndexState.ACTIVE) {
+                assertTrue(isActive);
+            }
         }
     }
 
