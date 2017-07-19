@@ -132,11 +132,13 @@ public class IndexWriterUtils {
         }
 
         @Override
-        public void shutdown() {
+        public synchronized void shutdown() {
             try {
-                getConnection(conf).close();
-            } catch (IOException e) {
-                LOG.error("Exception caught while trying to close the HConnection used by CoprocessorHConnectionTableFactory");
+                if (connection != null && !connection.isClosed()) {
+                    connection.close();
+                }
+            } catch (Throwable e) {
+                LOG.warn("Error while trying to close the HConnection used by CoprocessorHConnectionTableFactory", e);
             }
         }
 
