@@ -146,7 +146,10 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         } finally {
             if (!throwing) {
             	IOException ioException = ServerUtil.wrapInDoNotRetryIOException("Unable to update the following indexes: " + attempted.keySet(), cause, timestamp);
-            	if (throwIndexWriteFailure) {
+            	Mutation m = attempted.entries().iterator().next().getValue();
+            	boolean isIndexRebuild = PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap());
+            	// Always throw if rebuilding index since the rebuilder needs to know if it was successful
+            	if (throwIndexWriteFailure || isIndexRebuild) {
             		throw ioException;
             	} else {
                     LOG.warn("Swallowing index write failure", ioException);

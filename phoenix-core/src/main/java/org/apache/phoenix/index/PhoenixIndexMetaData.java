@@ -90,6 +90,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
 
     }
 
+    public static boolean isIndexRebuild(Map<String,byte[]> attributes) {
+        return attributes.get(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
+    }
+    
     public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
         this.indexMetaDataCache = getIndexMetaData(env, attributes);
         boolean isImmutable = true;
@@ -98,7 +102,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         }
         this.isImmutable = isImmutable;
         this.attributes = attributes;
-        this.ignoreNewerMutations = attributes.get(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
+        this.ignoreNewerMutations = isIndexRebuild(attributes);
     }
     
     public PhoenixTransactionContext getTransactionContext() {
