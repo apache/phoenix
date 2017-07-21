@@ -930,4 +930,12 @@ public class ScanUtil {
         return scan.getAttribute((BaseScannerRegionObserver.REBUILD_INDEXES)) != null;
     }
     
+    public static boolean isClientSideUpsertSelect(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.CLIENT_SIDE_UPSERT_SELECT) != null;
+    }
+    
+    public static void setClientSideUpsertSelect(Scan scan) {
+        scan.setAttribute(BaseScannerRegionObserver.CLIENT_SIDE_UPSERT_SELECT, PDataType.TRUE_BYTES);
+    }
+
 }

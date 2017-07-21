@@ -28,9 +28,9 @@ import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.job.JobManager.JobCallable;
-import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
@@ -55,16 +55,16 @@ public class ParallelIterators extends BaseResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     private final boolean initFirstScanOnly;
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, boolean initFirstScanOnly)
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, boolean initFirstScanOnly, List<ServerCache> caches)
             throws SQLException {
-        super(plan, perScanLimit, null, scanGrouper, scan);
+        super(plan, perScanLimit, null, scanGrouper, scan,caches);
         this.iteratorFactory = iteratorFactory;
         this.initFirstScanOnly = initFirstScanOnly;
     }   
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, Scan scan, boolean initOneScanPerRegion)
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, Scan scan, boolean initOneScanPerRegion, List<ServerCache> caches)
             throws SQLException {
-        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance(), scan, initOneScanPerRegion);
+        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance(), scan, initOneScanPerRegion, caches);
     }  
 
     @Override
@@ -106,7 +106,7 @@ public class ParallelIterators extends BaseResultIterators {
             final TableResultIterator tableResultItr =
                     context.getConnection().getTableResultIteratorFactory().newIterator(
                         mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
-                        scanGrouper);
+                        scanGrouper, caches);
             context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 

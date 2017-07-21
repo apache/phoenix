@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -73,7 +74,6 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -196,20 +196,20 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     @Override
     public final ResultIterator iterator() throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance(), null);
+        return iterator(DefaultParallelScanGrouper.getInstance());
     }
     
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, null);
+        return iterator(scanGrouper, null);
     }
 
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, scan);
+        return iterator(Collections.<ServerCache>emptyList(), scanGrouper, scan);
     }
-    
-	private ResultIterator getWrappedIterator(final List<? extends SQLCloseable> dependencies,
+        
+	private ResultIterator getWrappedIterator(final List<ServerCache> dependencies,
 			ResultIterator iterator) {
 		ResultIterator wrappedIterator = dependencies.isEmpty() ? iterator : new DelegateResultIterator(iterator) {
 			@Override
@@ -224,7 +224,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
 		return wrappedIterator;
 	}
 
-    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+    public final ResultIterator iterator(final List<ServerCache> caches,
+            ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
          if (scan == null) {
              scan = context.getScan();
          }
@@ -235,11 +236,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
 		 * row to be scanned.
 		 */
         if (context.getScanRanges() == ScanRanges.NOTHING && !getStatement().isAggregate()) {
-            return getWrappedIterator(dependencies, ResultIterator.EMPTY_ITERATOR);
+        return getWrappedIterator(caches, ResultIterator.EMPTY_ITERATOR);
         }
         
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
-            return getWrappedIterator(dependencies, newIterator(scanGrouper, scan));
+            return newIterator(scanGrouper, scan, caches);
         }
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
@@ -344,7 +345,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
-        ResultIterator iterator = getWrappedIterator(dependencies, newIterator(scanGrouper, scan));
+        ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOG.isDebugEnabled()) {
         	LOG.debug(LogUtil.addCustomAnnotations("Iterator ready: " + iterator, connection));
         }
@@ -468,7 +469,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException;
+    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, List<ServerCache> caches) throws SQLException;
     
     @Override
     public long getEstimatedSize() {

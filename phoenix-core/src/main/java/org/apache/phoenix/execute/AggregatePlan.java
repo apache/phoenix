@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -185,7 +185,7 @@ public class AggregatePlan extends BaseQueryPlan {
     }
     
     @Override
-    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, List<ServerCache> caches) throws SQLException {
         if (groupBy.isEmpty()) {
             UngroupedAggregateRegionObserver.serializeIntoScan(scan);
         } else {
@@ -221,8 +221,8 @@ public class AggregatePlan extends BaseQueryPlan {
             }
         }
         BaseResultIterators iterators = isSerial
-                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false);
+                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches)
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false, caches);
         estimatedRows = iterators.getEstimatedRowCount();
         estimatedSize = iterators.getEstimatedByteCount();
         splits = iterators.getSplits();

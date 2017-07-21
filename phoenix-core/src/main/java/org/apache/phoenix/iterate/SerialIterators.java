@@ -27,6 +27,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -59,9 +60,9 @@ public class SerialIterators extends BaseResultIterators {
     private final Integer offset;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, Integer offset,
-            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan)
+            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, List<ServerCache> caches)
             throws SQLException {
-        super(plan, perScanLimit, offset, scanGrouper, scan);
+        super(plan, perScanLimit, offset, scanGrouper, scan, caches);
         this.offset = offset;
         // must be a offset or a limit specified or a SERIAL hint
         Preconditions.checkArgument(
@@ -90,7 +91,7 @@ public class SerialIterators extends BaseResultIterators {
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 @Override
                 public PeekingResultIterator call() throws Exception {
-                    PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset);
+                    PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset, caches);
                     return itr;
                 }
 
@@ -140,13 +141,15 @@ public class SerialIterators extends BaseResultIterators {
         private int index;
         private PeekingResultIterator currentIterator;
         private Integer remainingOffset;
+        private List<ServerCache> caches;
         
-        private SerialIterator(List<Scan> flattenedScans, String tableName, long renewLeaseThreshold, Integer offset) throws SQLException {
+        private SerialIterator(List<Scan> flattenedScans, String tableName, long renewLeaseThreshold, Integer offset, List<ServerCache> caches) throws SQLException {
             this.scans = Lists.newArrayListWithExpectedSize(flattenedScans.size());
             this.tableName = tableName;
             this.renewLeaseThreshold = renewLeaseThreshold;
             this.scans.addAll(flattenedScans);
             this.remainingOffset = offset;
+            this.caches = caches;
             if (this.remainingOffset != null) {
                 // mark the last scan for offset purposes
                 this.scans.get(this.scans.size() - 1).setAttribute(QueryConstants.LAST_SCAN, Bytes.toBytes(Boolean.TRUE));
@@ -180,7 +183,7 @@ public class SerialIterators extends BaseResultIterators {
                             isRequestMetricsEnabled);
                 TableResultIterator itr =
                         new TableResultIterator(mutationState, currentScan, scanMetricsHolder,
-                                renewLeaseThreshold, plan, scanGrouper);
+                                renewLeaseThreshold, plan, scanGrouper, caches);
                 PeekingResultIterator peekingItr = iteratorFactory.newIterator(context, itr, currentScan, tableName, plan);
                 Tuple tuple;
                 if ((tuple = peekingItr.peek()) == null) {

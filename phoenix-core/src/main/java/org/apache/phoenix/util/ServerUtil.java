@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -45,6 +46,7 @@ public class ServerUtil {
     
     private static final String FORMAT = "ERROR %d (%s): %s";
     private static final Pattern PATTERN = Pattern.compile("ERROR (\\d+) \\((\\w+)\\): (.*)");
+    private static final Pattern HASH_JOIN_EXCEPTION_PATTERN = Pattern.compile("joinId: (-?\\d+)");
     private static final Pattern PATTERN_FOR_TS = Pattern.compile(",serverTimestamp=(\\d+),");
     private static final String FORMAT_FOR_TIMESTAMP = ",serverTimestamp=%d,";
     private static final Map<Class<? extends Exception>, SQLExceptionCode> errorcodeMap
@@ -127,6 +129,7 @@ public class ServerUtil {
     }
 
     private static SQLException parseRemoteException(Throwable t) {
+        
         String message = t.getLocalizedMessage();
         if (message != null) {
             // If the message matches the standard pattern, recover the SQLException and throw it.
@@ -134,6 +137,10 @@ public class ServerUtil {
             if (matcher.find()) {
                 int statusCode = Integer.parseInt(matcher.group(1));
                 SQLExceptionCode code = SQLExceptionCode.fromErrorCode(statusCode);
+                if(code.equals(SQLExceptionCode.HASH_JOIN_CACHE_NOT_FOUND)){
+                    Matcher m = HASH_JOIN_EXCEPTION_PATTERN.matcher(t.getLocalizedMessage());
+                    if (m.find()) { return new HashJoinCacheNotFoundException(Long.parseLong(m.group(1))); }
+                }
                 return new SQLExceptionInfo.Builder(code).setMessage(matcher.group()).setRootCause(t).build().buildException();
             }
         }

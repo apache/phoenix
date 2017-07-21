@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -131,12 +132,16 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
+    public static final String CLIENT_SIDE_UPSERT_SELECT = "_ClientSideUpsertSelect";
+    protected Configuration rawConf;
     protected QualifierEncodingScheme encodingScheme;
     protected boolean useNewValueColumnQualifier;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
+        this.rawConf =
+                ((RegionCoprocessorEnvironment) e).getRegionServerServices().getConfiguration();
     }
 
     /**

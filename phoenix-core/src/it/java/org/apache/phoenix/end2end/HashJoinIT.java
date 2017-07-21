@@ -25,6 +25,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -34,25 +35,63 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.phoenix.cache.GlobalCache;
+import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class HashJoinIT extends BaseJoinIT {
+    
+    public static boolean hashTableTest = false;
+    
     public HashJoinIT(String[] indexDDL, String[] plans) {
         super(indexDDL, plans);
+        if (indexDDL == null || indexDDL.length == 0) {
+            hashTableTest = true;
+        } else {
+            hashTableTest = false;
+        }
+    }
+    
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
+        serverProps.put("hbase.coprocessor.region.classes", InvalidateHashCacheRandomly.class.getName());
+        serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
+        serverProps.put("hbase.client.pause", "5000");
+        Map<String, String> clientProps = Collections.EMPTY_MAP;
+        NUM_SLAVES_BASE = 4;
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
     @Parameters
@@ -1213,6 +1252,9 @@ public class HashJoinIT extends BaseJoinIT {
 
     @Test
     public void testInnerJoin() throws Exception {
+        boolean washashTableTest = hashTableTest;
+        // it involves sequences which may be incremented on re-try when hash cache is removed so this test may flap sometimes
+        hashTableTest = false;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
@@ -1262,6 +1304,7 @@ public class HashJoinIT extends BaseJoinIT {
         } finally {
             conn.close();
         }
+        hashTableTest = washashTableTest;
     }
             
     @Test
@@ -3452,5 +3495,28 @@ public class HashJoinIT extends BaseJoinIT {
         } finally {
             conn.close();
         }
+    }
+    
+    public static class InvalidateHashCacheRandomly extends SimpleRegionObserver {
+        public static Random rand= new Random();
+        public static List<ImmutableBytesPtr> lastRemovedJoinIds=new ArrayList<ImmutableBytesPtr>();
+        @Override
+        public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
+                final RegionScanner s) throws IOException {
+            final HashJoinInfo joinInfo = HashJoinInfo.deserializeHashJoinFromScan(scan);
+            if (joinInfo != null) {
+                TenantCache cache = GlobalCache.getTenantCache(c.getEnvironment(), null);
+                int count = joinInfo.getJoinIds().length;
+                for (int i = 0; i < count; i++) {
+                    ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
+                    if (rand.nextInt(2) == 1 && !ByteUtil.contains(lastRemovedJoinIds,joinId)  && hashTableTest) {
+                        lastRemovedJoinIds.add(joinId);
+                        cache.removeServerCache(joinId);
+                    }
+                }
+            }
+            return s;
+        }
+        
     }
 }

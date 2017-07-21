@@ -18,10 +18,12 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -41,16 +43,16 @@ public class DelayedTableResultIteratorFactory implements TableResultIteratorFac
     @Override
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
             Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+            QueryPlan plan, ParallelScanGrouper scanGrouper, List<ServerCache> caches) throws SQLException {
         return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetricsHolder,
-                renewLeaseThreshold, plan, scanGrouper);
+                renewLeaseThreshold, plan, scanGrouper, caches);
     }
 
     private class DelayedTableResultIterator extends TableResultIterator {
         public DelayedTableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan,
                 ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
-                ParallelScanGrouper scanGrouper) throws SQLException {
-            super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper);
+                ParallelScanGrouper scanGrouper, List<ServerCache> caches) throws SQLException {
+            super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches);
         }
         
         @Override
