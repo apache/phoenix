@@ -24,6 +24,7 @@ import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
@@ -48,6 +49,7 @@ import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.DelegateResultIterator;
@@ -206,10 +208,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-        return iterator(Collections.<ServerCache>emptyList(), scanGrouper, scan);
+        return iterator(Collections.<ImmutableBytesPtr,ServerCache>emptyMap(), scanGrouper, scan);
     }
         
-	private ResultIterator getWrappedIterator(final List<ServerCache> dependencies,
+	private ResultIterator getWrappedIterator(final Map<ImmutableBytesPtr,ServerCache> dependencies,
 			ResultIterator iterator) {
 		ResultIterator wrappedIterator = dependencies.isEmpty() ? iterator : new DelegateResultIterator(iterator) {
 			@Override
@@ -217,14 +219,14 @@ public abstract class BaseQueryPlan implements QueryPlan {
 				try {
 					super.close();
 				} finally {
-					SQLCloseables.closeAll(dependencies);
+					SQLCloseables.closeAll(dependencies.values());
 				}
 			}
 		};
 		return wrappedIterator;
 	}
 
-    public final ResultIterator iterator(final List<ServerCache> caches,
+    public final ResultIterator iterator(final Map<ImmutableBytesPtr,ServerCache> caches,
             ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
          if (scan == null) {
              scan = context.getScan();
@@ -469,7 +471,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, List<ServerCache> caches) throws SQLException;
+    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException;
     
     @Override
     public long getEstimatedSize() {

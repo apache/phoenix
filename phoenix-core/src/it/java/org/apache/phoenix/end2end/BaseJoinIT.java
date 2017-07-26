@@ -30,14 +30,19 @@ import java.text.SimpleDateFormat;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.end2end.HashJoinCacheIT.InvalidateHashCacheRandomly;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 
-public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
+public abstract class BaseJoinIT extends BaseUniqueNamesOwnClusterIT {
     protected static final String JOIN_SCHEMA = "Join";
     protected static final String JOIN_ORDER_TABLE = "OrderTable";
     protected static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
@@ -51,6 +56,16 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
     protected static final String JOIN_COITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_COITEM_TABLE + '"';
 
     private static final Map<String,String> tableDDLMap;
+    
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
+        serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
+        serverProps.put("hbase.client.pause", "5000");
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+    }
     
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();

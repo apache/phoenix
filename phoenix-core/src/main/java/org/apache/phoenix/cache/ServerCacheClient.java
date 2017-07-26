@@ -91,6 +91,7 @@ public class ServerCacheClient {
     public static final byte[] KEY_IN_FIRST_REGION = new byte[]{0};
     private static final Log LOG = LogFactory.getLog(ServerCacheClient.class);
     private static final Random RANDOM = new Random();
+	public static final String HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER = "hash.join.server.cache.resend.per.server";
     private final PhoenixConnection connection;
     private final Map<Integer, TableRef> cacheUsingTableRefMap = new ConcurrentHashMap<Integer, TableRef>();
 
@@ -120,17 +121,16 @@ public class ServerCacheClient {
     public class ServerCache implements SQLCloseable {
         private final int size;
         private final byte[] id;
-        private final ImmutableSet<HRegionLocation> servers;
+        private final Set<HRegionLocation> servers;
         private ImmutableBytesWritable cachePtr;
         private MemoryChunk chunk;
-        private List<byte[]> keys;
         private File outputFile;
         
         
         public ServerCache(byte[] id, Set<HRegionLocation> servers, ImmutableBytesWritable cachePtr,
                 ConnectionQueryServices services, boolean storeCacheOnClient) throws IOException {
             this.id = id;
-            this.servers = ImmutableSet.copyOf(servers);
+            this.servers = new HashSet<HRegionLocation>(servers);
             this.size =  cachePtr.getLength();
             if (storeCacheOnClient) {
                 try {
@@ -171,7 +171,11 @@ public class ServerCacheClient {
         public byte[] getId() {
             return id;
         }
-
+        
+		public boolean addServer(HRegionLocation loc) {
+			return this.servers.add(loc);
+		}
+        
         /**
          * Call to free up cache on region servers when no longer needed
          */
@@ -190,18 +194,6 @@ public class ServerCacheClient {
             }
         }
         
-        public void addKey(byte[] key) {
-            if (keys == null) {
-                keys = new ArrayList<byte[]>();
-            }
-            keys.add(key);
-        }
-        /**
-         * @return can return null
-         */
-        public List<byte[]> getKeys(){
-            return keys;
-        }
     }
     
     public ServerCache addServerCache(ScanRanges keyRanges, final ImmutableBytesWritable cachePtr, final byte[] txState,
@@ -318,11 +310,10 @@ public class ServerCacheClient {
      * @throws SQLException
      * @throws IllegalStateException if hashed table cannot be removed on any region server on which it was added
      */
-    private void removeServerCache(final ServerCache cache, Set<HRegionLocation> servers) throws SQLException {
+    private void removeServerCache(final ServerCache cache, Set<HRegionLocation> remainingOnServers) throws SQLException {
         HTableInterface iterateOverTable = null;
         final byte[] cacheId = cache.getId();
         try {
-            List<byte[]> keys = cache.getKeys();
             ConnectionQueryServices services = connection.getQueryServices();
             Throwable lastThrowable = null;
             TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
@@ -331,7 +322,6 @@ public class ServerCacheClient {
             iterateOverTable = services.getTable(tableName);
 
             List<HRegionLocation> locations = services.getAllTableRegions(tableName);
-            Set<HRegionLocation> remainingOnServers = new HashSet<HRegionLocation>(servers);
             /**
              * Allow for the possibility that the region we based where to send our cache has split and been relocated
              * to another region server *after* we sent it, but before we removed it. To accommodate this, we iterate
@@ -343,8 +333,7 @@ public class ServerCacheClient {
             }
             for (HRegionLocation entry : locations) {
              // Call once per server
-                if (remainingOnServers.contains(entry)
-                        || (keys != null && ByteUtil.contains(keys,entry.getRegionInfo().getStartKey()))) { 
+                if (remainingOnServers.contains(entry)) { 
                     try {
                         byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
                         iterateOverTable.coprocessorService(ServerCachingService.class, key, key,
@@ -424,15 +413,19 @@ public class ServerCacheClient {
     public boolean addServerCache(byte[] startkeyOfRegion, ServerCache cache, HashCacheFactory cacheFactory,
              byte[] txState, PTable pTable) throws Exception {
         HTableInterface table = null;
+        boolean success = true;
         byte[] cacheId = cache.getId();
         try {
             ConnectionQueryServices services = connection.getQueryServices();
+            
             byte[] tableName = pTable.getPhysicalName().getBytes();
             table = services.getTable(tableName);
-            boolean success = addServerCache(table, startkeyOfRegion, pTable, cacheId, cache.getCachePtr(), cacheFactory, txState);
-            //track keys so that we can remove the hash table cache from the new regionservers where the cache was re-sent
-            cache.addKey(startkeyOfRegion);
-            return success;
+            HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, startkeyOfRegion);
+			if (cache.addServer(tableRegionLocation) || services.getProps().getBoolean(HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER,false)) {
+				success = addServerCache(table, startkeyOfRegion, pTable, cacheId, cache.getCachePtr(), cacheFactory,
+						txState);
+			}
+			return success;
         } finally {
             Closeables.closeQuietly(table);
         }
@@ -489,13 +482,4 @@ public class ServerCacheClient {
 
     }
     
-    public static ServerCache getCacheForId(List<ServerCache> caches, Long cacheId) {
-        if (caches == null) { return null; }
-        for(ServerCache cache: caches){
-            if(Bytes.toLong(cache.getId())==cacheId){
-                return cache;
-            }
-        }
-        return null;
-    }
 }

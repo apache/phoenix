@@ -19,6 +19,7 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -28,6 +29,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -43,7 +45,7 @@ public class DelayedTableResultIteratorFactory implements TableResultIteratorFac
     @Override
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
             Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper, List<ServerCache> caches) throws SQLException {
+            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetricsHolder,
                 renewLeaseThreshold, plan, scanGrouper, caches);
     }
@@ -51,7 +53,7 @@ public class DelayedTableResultIteratorFactory implements TableResultIteratorFac
     private class DelayedTableResultIterator extends TableResultIterator {
         public DelayedTableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan,
                 ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
-                ParallelScanGrouper scanGrouper, List<ServerCache> caches) throws SQLException {
+                ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
             super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches);
         }
         
