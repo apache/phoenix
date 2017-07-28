@@ -17,17 +17,16 @@
  */
 package org.apache.phoenix.expression.visitor;
 
+import java.util.Collections;
 import java.util.Iterator;
 
 import org.apache.phoenix.expression.Expression;
-
-import com.google.common.collect.Iterators;
 
 public abstract class TraverseNoExpressionVisitor<E> extends BaseExpressionVisitor<E> {
 
     @Override
     public Iterator<Expression> defaultIterator(Expression node) {
-        return Iterators.emptyIterator();
+        return Collections.emptyIterator();
     }
 
 }
