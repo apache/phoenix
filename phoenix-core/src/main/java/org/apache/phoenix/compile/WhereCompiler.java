@@ -67,7 +67,6 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -259,7 +258,7 @@ public class WhereCompiler {
                 public Iterator<Expression> defaultIterator(Expression node) {
                     // Stop traversal once we've found multiple KeyValue columns
                     if (counter.getCount() == Counter.Count.MULTIPLE) {
-                        return Iterators.emptyIterator();
+                        return Collections.emptyIterator();
                     }
                     return super.defaultIterator(node);
                 }
