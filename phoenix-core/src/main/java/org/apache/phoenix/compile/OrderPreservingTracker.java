@@ -312,7 +312,7 @@ public class OrderPreservingTracker {
 
         @Override
         public Iterator<Expression> visitEnter(ScalarFunction node) {
-            return node.preservesOrder() == OrderPreserving.NO ? Iterators.<Expression> emptyIterator() : Iterators
+            return node.preservesOrder() == OrderPreserving.NO ? Collections.<Expression> emptyIterator() : Iterators
                     .singletonIterator(node.getChildren().get(node.getKeyFormationTraversalIndex()));
         }
 
