@@ -51,7 +51,6 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
 
@@ -566,7 +565,7 @@ public class ScanRanges {
     }
     
     public Iterator<KeyRange> getPointLookupKeyIterator() {
-        return isPointLookup ? ranges.get(0).iterator() : Iterators.<KeyRange>emptyIterator();
+        return isPointLookup ? ranges.get(0).iterator() : Collections.<KeyRange>emptyIterator();
     }
 
     public int getBoundPkColumnCount() {
