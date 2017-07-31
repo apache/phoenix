@@ -117,6 +117,7 @@ public class Indexer extends BaseRegionObserver {
 
   protected IndexWriter writer;
   protected IndexBuildManager builder;
+  private LockManager lockManager;
 
   /** Configuration key for the {@link IndexBuilder} to use */
   public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
@@ -162,15 +163,18 @@ public class Indexer extends BaseRegionObserver {
   private long slowPreWALRestoreThreshold;
   private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
-
+  private int rowLockWaitDuration;
+  
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
-    public static final int INDEXING_SUPPORTED_MAJOR_VERSION = VersionUtil
+  public static final int INDEXING_SUPPORTED_MAJOR_VERSION = VersionUtil
             .encodeMaxPatchVersion(0, 94);
-    public static final int INDEXING_SUPPORTED__MIN_MAJOR_VERSION = VersionUtil
+  public static final int INDEXING_SUPPORTED__MIN_MAJOR_VERSION = VersionUtil
             .encodeVersion("0.94.0");
-    private static final int INDEX_WAL_COMPRESSION_MINIMUM_SUPPORTED_VERSION = VersionUtil
+  private static final int INDEX_WAL_COMPRESSION_MINIMUM_SUPPORTED_VERSION = VersionUtil
             .encodeVersion("0.94.9");
+
+  private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
 
   @Override
   public void start(CoprocessorEnvironment e) throws IOException {
@@ -206,6 +210,10 @@ public class Indexer extends BaseRegionObserver {
         DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
         // setup the actual index writer
         this.writer = new IndexWriter(indexWriterEnv, serverName + "-index-writer");
+        
+        this.rowLockWaitDuration = clonedConfig.getInt("hbase.rowlock.wait.duration",
+                DEFAULT_ROWLOCK_WAIT_DURATION);
+        this.lockManager = new LockManager();
 
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
         this.metricSource = MetricsIndexerSourceFactory.getInstance().create();
@@ -346,8 +354,9 @@ public class Indexer extends BaseRegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private static final OperationStatus SUCCESS = new OperationStatus(OperationStatusCode.SUCCESS);
-  
+  private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
+  private static final OperationStatus FAILURE = new OperationStatus(OperationStatusCode.FAILURE, "Unable to acquire row lock");
+
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
@@ -365,7 +374,7 @@ public class Indexer extends BaseRegionObserver {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
           if (this.builder.isAtomicOp(m)) {
-              miniBatchOp.setOperationStatus(i, SUCCESS);
+              miniBatchOp.setOperationStatus(i, IGNORE);
               continue;
           }
           // skip this mutation if we aren't enabling indexing
@@ -373,13 +382,40 @@ public class Indexer extends BaseRegionObserver {
           // should be indexed, which means we need to expose another method on the builder. Such is the
           // way optimization go though.
           if (this.builder.isEnabled(m)) {
+              boolean success = false;
+              try {
+                  lockManager.lockRow(m.getRow(), rowLockWaitDuration);
+                  success = true;
+              } finally {
+                  if (!success) {
+                      // We're throwing here as a result of either a timeout while waiting
+                      // for the row lock or an interrupt. Either way, the lock on the
+                      // current row was unsuccessful and we won't be locking any more rows
+                      // since we're throwing. By setting the operation status to FAILURE
+                      // here, we prevent the attempt to unlock rows we've never locked when
+                      // postBatchMutateIndispensably is executed. We're very limited wrt
+                      // the state that can be shared between the batch mutate coprocessor
+                      // calls (see HBASE-18127).
+                      // Note that we shouldn't necessarily be throwing here, since we're
+                      // essentially failing the data write because we can't do the locking
+                      // necessary for performing consistent index maintenance. We'd ideally
+                      // want to go through the index failure policy to determine what action
+                      // to perform. We currently cannot ignore this lock failure as we lack
+                      // the ability to keep that state (PHOENIX-4055).
+                      for (int j = i; j < miniBatchOp.size(); j++) {
+                          miniBatchOp.setOperationStatus(j,FAILURE);
+                      }
+                  }
+              }
               Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
                       defaultDurability : m.getDurability();
               if (effectiveDurablity.ordinal() > durability.ordinal()) {
                   durability = effectiveDurablity;
               }
     
-              // add the mutation to the batch set
+              // TODO: remove this code as Phoenix prevents any duplicate
+              // rows in the batch mutation from the client side (PHOENIX-4054).
+              // Add the mutation to the batch set
               ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
               MultiMutation stored = mutations.get(row);
               // we haven't seen this row before, so add it
@@ -390,7 +426,7 @@ public class Indexer extends BaseRegionObserver {
               stored.addAll(m);
           }
       }
-
+    
       // early exit if it turns out we don't have any edits
       if (mutations.isEmpty()) {
           return;
@@ -403,6 +439,7 @@ public class Indexer extends BaseRegionObserver {
           edit = new WALEdit();
           miniBatchOp.setWalEdit(0, edit);
       }
+  
 
       // get the current span, or just use a null-span to avoid a bunch of if statements
       try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -488,6 +525,12 @@ public class Indexer extends BaseRegionObserver {
       }
       long start = EnvironmentEdgeManager.currentTimeMillis();
       try {
+          for (int i = 0; i < miniBatchOp.size(); i++) {
+              OperationStatus status = miniBatchOp.getOperationStatus(i);
+              if (status != IGNORE && status != FAILURE) {
+                  lockManager.unlockRow(miniBatchOp.getOperation(i).getRow());
+              }
+          }
           this.builder.batchCompleted(miniBatchOp);
 
           if (success) { // if miniBatchOp was successfully written, write index updates

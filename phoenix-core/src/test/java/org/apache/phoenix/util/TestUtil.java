@@ -838,6 +838,8 @@ public class TestUtil {
     public static void dumpTable(HTableInterface table) throws IOException {
         System.out.println("************ dumping " + table + " **************");
         Scan s = new Scan();
+        s.setRaw(true);;
+        s.setMaxVersions();
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {
