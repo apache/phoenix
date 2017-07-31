@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,12 +34,6 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
-import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
-import org.apache.phoenix.hbase.index.parallel.Task;
-import org.apache.phoenix.hbase.index.parallel.TaskBatch;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-
-import com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * Manage the building of index updates from primary table updates.
@@ -90,7 +82,8 @@ public class IndexBuildManager implements Stoppable {
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
     ArrayList<Pair<Mutation, byte[]>> results = new ArrayList<>(mutations.size());
     for (Mutation m : mutations) {
-      results.addAll(delegate.getIndexUpdate(m, indexMetaData));
+      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData);
+      results.addAll(updates);
     }
     return results;
   }
@@ -139,5 +132,4 @@ public class IndexBuildManager implements Stoppable {
   public IndexBuilder getBuilderForTesting() {
     return this.delegate;
   }
-
 }
