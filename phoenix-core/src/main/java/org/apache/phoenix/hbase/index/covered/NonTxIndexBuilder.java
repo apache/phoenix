@@ -221,35 +221,40 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
 
         // A.2 do a single pass first for the updates to the current state
         state.applyPendingUpdates();
-        long minTs = addUpdateForGivenTimestamp(batchTs, state, updateMap, indexMetaData);
-        // if all the updates are the latest thing in the index, we are done - don't go and fix history
-        if (ColumnTracker.isNewestTime(minTs)) { return false; }
-
-        // A.3 otherwise, we need to roll up through the current state and get the 'correct' view of the
-        // index. after this, we have the correct view of the index, from the batch up to the index
-        while (!ColumnTracker.isNewestTime(minTs)) {
-            minTs = addUpdateForGivenTimestamp(minTs, state, updateMap, indexMetaData);
-        }
-
-        // B. only cleanup the current state if we need to - its a huge waste of effort otherwise.
-        if (requireCurrentStateCleanup) {
-            // roll back the pending update. This is needed so we can remove all the 'old' index entries.
-            // We don't need to do the puts here, but just the deletes at the given timestamps since we
-            // just want to completely hide the incorrect entries.
-            state.rollback(batch.getKvs());
-            // setup state
-            state.setPendingUpdates(batch.getKvs());
-
-            // cleanup the pending batch. If anything in the correct history is covered by Deletes used to
-            // 'fix' history (same row key and ts), we just drop the delete (we don't want to drop both
-            // because the update may have a different set of columns or value based on the update).
-            cleanupIndexStateFromBatchOnward(updateMap, batchTs, state, indexMetaData);
-
-            // have to roll the state forward again, so the current state is correct
-            state.applyPendingUpdates();
-            return true;
-        }
+        addUpdateForGivenTimestamp(batchTs, state, updateMap, indexMetaData);
+        // FIXME: PHOENIX-4057 do not attempt to issue index updates
+        // for out-of-order mutations since it corrupts the index.
         return false;
+        
+//        long minTs = addUpdateForGivenTimestamp(batchTs, state, updateMap, indexMetaData);
+//        // if all the updates are the latest thing in the index, we are done - don't go and fix history
+//        if (ColumnTracker.isNewestTime(minTs)) { return false; }
+//
+//        // A.3 otherwise, we need to roll up through the current state and get the 'correct' view of the
+//        // index. after this, we have the correct view of the index, from the batch up to the index
+//        while (!ColumnTracker.isNewestTime(minTs)) {
+//            minTs = addUpdateForGivenTimestamp(minTs, state, updateMap, indexMetaData);
+//        }
+//
+//        // B. only cleanup the current state if we need to - its a huge waste of effort otherwise.
+//        if (requireCurrentStateCleanup) {
+//            // roll back the pending update. This is needed so we can remove all the 'old' index entries.
+//            // We don't need to do the puts here, but just the deletes at the given timestamps since we
+//            // just want to completely hide the incorrect entries.
+//            state.rollback(batch.getKvs());
+//            // setup state
+//            state.setPendingUpdates(batch.getKvs());
+//
+//            // cleanup the pending batch. If anything in the correct history is covered by Deletes used to
+//            // 'fix' history (same row key and ts), we just drop the delete (we don't want to drop both
+//            // because the update may have a different set of columns or value based on the update).
+//            cleanupIndexStateFromBatchOnward(updateMap, batchTs, state, indexMetaData);
+//
+//            // have to roll the state forward again, so the current state is correct
+//            state.applyPendingUpdates();
+//            return true;
+//        }
+//        return false;
     }
 
     private long addUpdateForGivenTimestamp(long ts, LocalTableState state, IndexUpdateManager updateMap, IndexMetaData indexMetaData)
@@ -308,6 +313,13 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
             if (trackerTs < minTs) {
                 minTs = tracker.getTS();
             }
+            
+            // FIXME: PHOENIX-4057 do not attempt to issue index updates
+            // for out-of-order mutations since it corrupts the index.
+            if (tracker.hasNewerTimestamps()) {
+                continue;
+            }
+            
             // track index hints for the next round. Hint if we need an update for that column for the
             // next timestamp. These columns clearly won't need to update as we go through time as they
             // already match the most recent possible thing.
@@ -392,6 +404,13 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
                 if (!d.isValid()) {
                     continue;
                 }
+                // FIXME: PHOENIX-4057 do not attempt to issue index updates
+                // for out-of-order mutations since it corrupts the index.
+                final ColumnTracker tracker = d.getIndexedColumns();
+                if (tracker.hasNewerTimestamps()) {
+                    continue;
+                }
+                
                 // override the timestamps in the delete to match the current batch.
                 Delete remove = (Delete)d.getUpdate();
                 remove.setTimestamp(ts);
