@@ -52,7 +52,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
@@ -80,7 +79,6 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @Test
-    @Ignore
     public void testSynchronousDeletesAndUpsertValues() throws Exception {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
@@ -164,7 +162,6 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    @Ignore
     public void testConcurrentDeletesAndUpsertValues() throws Exception {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();

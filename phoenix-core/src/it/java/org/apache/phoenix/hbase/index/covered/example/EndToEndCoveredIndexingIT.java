@@ -52,9 +52,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -381,6 +381,7 @@ public class EndToEndCoveredIndexingIT {
      * @throws Exception on failure
      */
     @Test
+    @Ignore("PHOENIX-4057 Do not issue index updates for out of order mutation")
     public void testMultipleTimestampsInSingleDelete() throws Exception {
         HTable primary = createSetupTables(fam1);
 
@@ -505,6 +506,7 @@ public class EndToEndCoveredIndexingIT {
      * @throws Exception
      */
     @Test
+    @Ignore("PHOENIX-4057 Do not issue index updates for out of order mutation")
     public void testOutOfOrderUpdates() throws Exception {
         HTable primary = createSetupTables(fam1);
 
@@ -563,6 +565,7 @@ public class EndToEndCoveredIndexingIT {
      * @throws Exception on failure
      */
     @Test
+    @Ignore("PHOENIX-4057 Do not issue index updates for out of order mutation")
     public void testExceedVersionsOutOfOrderPut() throws Exception {
         // setup the index
         HTable primary = createSetupTables(fam2);
@@ -686,6 +689,7 @@ public class EndToEndCoveredIndexingIT {
      * @throws Exception on failure
      */
     @Test
+    @Ignore("PHOENIX-4057 Do not issue index updates for out of order mutation")
     public void testExceedVersionsOutOfOrderUpdates() throws Exception {
         HTable primary = createSetupTables(fam1);
 
