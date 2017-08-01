@@ -221,7 +221,7 @@ public class QueryOptimizer {
         schemaName = schemaName.length() == 0 ? null :  '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';
-        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName));
+        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName),select.getTableSamplingRate());
         SelectStatement indexSelect = FACTORY.select(select, table);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
         // We will or will not do tuple projection according to the data plan.
