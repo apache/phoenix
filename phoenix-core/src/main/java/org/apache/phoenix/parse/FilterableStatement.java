@@ -25,6 +25,7 @@ public interface FilterableStatement extends BindableStatement {
     public boolean isDistinct();
     public boolean isAggregate();
     public List<OrderByNode> getOrderBy();
+    public Double getTableSamplingRate();
     public LimitNode getLimit();
     public OffsetNode getOffset();
 }

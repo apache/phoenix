@@ -114,6 +114,7 @@ tokens
     TRACE='trace';
     ASYNC='async';
     SAMPLING='sampling';
+    TABLESAMPLE='tablesample';
     UNION='union';
     FUNCTION='function';
     AS='as';
@@ -794,6 +795,10 @@ sampling_rate returns [LiteralParseNode ret]
     : l=literal { $ret = l; }
     ;
 
+tableSampleNode returns [LiteralParseNode ret]
+    : l=literal { $ret = l; }
+    ;
+
 hintClause returns [HintNode ret]
     :  c=ML_HINT { $ret = factory.hint(c.getText()); }
     ;
@@ -851,7 +856,7 @@ table_ref returns [TableNode ret]
 table_factor returns [TableNode ret]
     :   LPAREN t=table_list RPAREN { $ret = t; }
     |   n=bind_name ((AS)? alias=identifier)? { $ret = factory.bindTable(alias, factory.table(null,n)); } // TODO: review
-    |   f=from_table_name ((AS)? alias=identifier)? (LPAREN cdefs=dyn_column_defs RPAREN)? { $ret = factory.namedTable(alias,f,cdefs); }
+    |   f=from_table_name ((AS)? alias=identifier)? (LPAREN cdefs=dyn_column_defs RPAREN)? (TABLESAMPLE LPAREN tableSample=tableSampleNode RPAREN)? { $ret = factory.namedTable(alias,f,cdefs, tableSample);}
     |   LPAREN s=select_node RPAREN ((AS)? alias=identifier)? { $ret = factory.derivedTable(alias, s); }
     ;
 
