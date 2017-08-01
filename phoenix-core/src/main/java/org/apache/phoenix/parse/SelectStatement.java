@@ -266,6 +266,21 @@ public class SelectStatement implements FilterableStatement {
         return limit;
     }
     
+    /**
+     *  This method should not be called during the early stage 
+     *  of the plan preparation phase since fromTable might not 
+     *  be ConcreteTableNode at that time(e.g., JoinTableNode).
+     *  
+     *  By the time getTableSamplingRate method is called, 
+     *  each select statements should have exactly one ConcreteTableNode,
+     *  with its corresponding sampling rate associate with it.
+     */
+    @Override
+    public Double getTableSamplingRate(){
+    	if(fromTable==null || !(fromTable instanceof ConcreteTableNode)) return null;
+    	return ((ConcreteTableNode)fromTable).getTableSamplingRate();
+    }
+    
     @Override
     public int getBindCount() {
         return bindCount;
