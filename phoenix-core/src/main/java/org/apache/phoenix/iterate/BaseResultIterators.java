@@ -113,6 +113,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
+import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
@@ -782,9 +783,32 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         } finally {
             if (stream != null) Closeables.closeQuietly(stream);
         }
+        
+        sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
         return parallelScans;
     }
 
+    /**
+     * Loop through List<List<Scan>> parallelScans object, 
+     * rolling dice on each scan based on startRowKey.
+     * 
+     * All FilterableStatement should have tableSamplingRate. 
+     * In case it is delete statement, an unsupported message is raised. 
+     * In case it is null tableSamplingRate, 100% sampling rate will be applied by default.
+     *  
+     * @param parallelScans
+     */
+    private void sampleScans(final List<List<Scan>> parallelScans, final Double tableSamplingRate){
+    	if(tableSamplingRate==null||tableSamplingRate==100d) return;
+    	final Predicate<byte[]> tableSamplerPredicate=TableSamplerPredicate.of(tableSamplingRate);
+    	
+    	for(Iterator<List<Scan>> is = parallelScans.iterator();is.hasNext();){
+    		for(Iterator<Scan> i=is.next().iterator();i.hasNext();){
+    			final Scan scan=i.next();
+    			if(!tableSamplerPredicate.apply(scan.getStartRow())){i.remove();}
+    		}
+    	}
+    }
    
     public static <T> List<T> reverseIfNecessary(List<T> list, boolean reverse) {
         if (!reverse) {
@@ -1070,6 +1094,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
         buf.append(getName()).append(" ").append(size()).append("-WAY ");
+        
+        if(this.plan.getStatement().getTableSamplingRate()!=null){
+        	buf.append(plan.getStatement().getTableSamplingRate()/100D).append("-").append("SAMPLED ");
+        }
         try {
             if (plan.useRoundRobinIterator()) {
                 buf.append("ROUND ROBIN ");

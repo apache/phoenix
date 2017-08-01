@@ -398,12 +398,34 @@ public class ParseNodeFactory {
         return new NamedNode(name);
     }
 
+    @Deprecated
     public NamedTableNode namedTable(String alias, TableName name) {
         return new NamedTableNode(alias, name);
     }
-
-    public NamedTableNode namedTable(String alias, TableName name ,List<ColumnDef> dyn_columns) {
+    
+    @Deprecated
+    public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns) {
         return new NamedTableNode(alias, name,dyn_columns);
+    }
+    
+    public NamedTableNode namedTable(String alias, TableName name, Double tableSamplingRate) {
+        return new NamedTableNode(alias, name, tableSamplingRate);
+    }
+    
+    public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, Double tableSamplingRate) {
+    	return new NamedTableNode(alias, name,dyn_columns, tableSamplingRate);
+    }
+    
+    public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, LiteralParseNode tableSampleNode) {
+    	Double tableSamplingRate;
+    	if(tableSampleNode==null||tableSampleNode.getValue()==null){
+    		tableSamplingRate=ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
+    	}else if(tableSampleNode.getValue() instanceof Integer){
+    		tableSamplingRate=(double)((int)tableSampleNode.getValue());
+    	}else{
+    		tableSamplingRate=((BigDecimal) tableSampleNode.getValue()).doubleValue();
+    	}
+    	return new NamedTableNode(alias, name, dyn_columns, tableSamplingRate);
     }
 
     public BindTableNode bindTable(String alias, TableName name) {

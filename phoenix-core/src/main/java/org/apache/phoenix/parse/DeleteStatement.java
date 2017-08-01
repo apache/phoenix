@@ -76,5 +76,10 @@ public class DeleteStatement extends DMLStatement implements FilterableStatement
     public OffsetNode getOffset() {
         return null;
     }
+    
+    @Override
+    public Double getTableSamplingRate(){
+    	throw new UnsupportedOperationException("Table sampling is not allowd for Deletion");
+    }
 
 }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.commons.math3.exception.OutOfRangeException;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**
@@ -27,15 +28,33 @@ import org.apache.phoenix.util.SchemaUtil;
  * @since 0.1
  */
 public abstract class ConcreteTableNode extends TableNode {
+	//DEFAULT_TABLE_SAMPLING_RATE alternative is to set as 100d
+	public static final Double DEFAULT_TABLE_SAMPLING_RATE=null;
     private final TableName name;
+    private final Double tableSamplingRate;
     
     ConcreteTableNode(String alias, TableName name) {
+    	this(alias,name,DEFAULT_TABLE_SAMPLING_RATE);
+    }
+    
+    ConcreteTableNode(String alias, TableName name, Double tableSamplingRate) {
         super(SchemaUtil.normalizeIdentifier(alias));
         this.name = name;
+        if(tableSamplingRate==null){
+        	this.tableSamplingRate=DEFAULT_TABLE_SAMPLING_RATE;
+        }else if(tableSamplingRate<0d||tableSamplingRate>100d){
+        	throw new OutOfRangeException(tableSamplingRate, 0d, 100d);
+        }else{
+        	this.tableSamplingRate=tableSamplingRate;
+        }
     }
 
     public TableName getName() {
         return name;
+    }
+    
+    public Double getTableSamplingRate(){
+    	return tableSamplingRate;
     }
 
     @Override
@@ -43,6 +62,7 @@ public abstract class ConcreteTableNode extends TableNode {
         final int prime = 31;
         int result = 1;
         result = prime * result + ((name == null) ? 0 : name.hashCode());
+        result = prime * result + ((tableSamplingRate == null) ? 0 : tableSamplingRate.hashCode());
         return result;
     }
 
@@ -55,6 +75,9 @@ public abstract class ConcreteTableNode extends TableNode {
         if (name == null) {
             if (other.name != null) return false;
         } else if (!name.equals(other.name)) return false;
+        if (tableSamplingRate == null) {
+            if (other.tableSamplingRate != null) return false;
+        } else if (!tableSamplingRate.equals(other.tableSamplingRate)) return false;
         return true;
     }
 }
