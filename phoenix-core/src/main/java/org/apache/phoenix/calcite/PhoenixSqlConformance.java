@@ -90,4 +90,9 @@ public class PhoenixSqlConformance implements SqlConformance {
     public boolean allowExtend() {
         return true;
     }
+
+    @Override
+    public boolean isLimitStartCountAllowed() {
+        return false;
+    }
 }

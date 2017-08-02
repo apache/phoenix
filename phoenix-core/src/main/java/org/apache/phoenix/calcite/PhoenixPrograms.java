@@ -2,7 +2,6 @@ package org.apache.phoenix.calcite;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -144,24 +143,15 @@ public class PhoenixPrograms {
                     List<RelOptMaterialization> materializations,
                     List<RelOptLattice> lattices) {
                 final List<Pair<RelNode, List<RelOptMaterialization>>> materializationUses;
-                final Set<RelOptMaterialization> applicableMaterializations;
+                final Set<RelOptMaterialization> applicableMaterializations = Collections.emptySet();
                 final CalciteConnectionConfig config =
                         planner.getContext().unwrap(CalciteConnectionConfig.class);
                 if (config != null && config.materializationsEnabled()) {
                     // Transform rels using materialized views.
                     materializationUses =
                             RelOptMaterializations.useMaterializedViews(rel, materializations);
-
-                    // Add not used but potentially useful materialized views to the planner.
-                    applicableMaterializations = new HashSet<>(
-                            RelOptMaterializations.getApplicableMaterializations(
-                                    rel, materializations));
-                    for (Pair<RelNode, List<RelOptMaterialization>> use : materializationUses) {
-                        applicableMaterializations.removeAll(use.right);
-                    }
                 } else {
                     materializationUses = Collections.emptyList();
-                    applicableMaterializations = Collections.emptySet();
                 }
 
                 final List<RelOptRule> rules = planner.getRules();

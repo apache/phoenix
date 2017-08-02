@@ -463,7 +463,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             strArray[1] = "CD";
             Array array = conn.createArrayOf("VARCHAR", strArray);
             stmt.setArray(counter++, array);
-            assertPlanDetails(stmt, expectedColNames, expectedColumnNameDataTypes, false, 0);
+            assertPlanDetails(conn, sql, expectedColNames, expectedColumnNameDataTypes, false, 0);
             
             counter = 1;
             // Filter on row key columns of data table. Order by row key columns. Limit specified.
@@ -475,7 +475,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             stmt.setDouble(counter++, 1.23);
             array = conn.createArrayOf("VARCHAR", strArray);
             stmt.setArray(counter++, array);
-            assertPlanDetails(stmt, expectedColNames, expectedColumnNameDataTypes, false, 100);
+            assertPlanDetails(conn, sql, expectedColNames, expectedColumnNameDataTypes, false, 100);
             
             counter = 1;
             // Filter on row key columns of data table. Order by non-row key columns. Limit specified.
@@ -487,7 +487,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             stmt.setDouble(counter++, 1.23);
             array = conn.createArrayOf("VARCHAR", strArray);
             stmt.setArray(counter++, array);
-            assertPlanDetails(stmt, expectedColNames, expectedColumnNameDataTypes, true, 100);
+            assertPlanDetails(conn, sql, expectedColNames, expectedColumnNameDataTypes, true, 100);
             
             if (useIndex) {
                 
@@ -498,20 +498,20 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
                 sql = "SELECT a_date FROM " + tableName + " where CF.a_integer = ?";
                 stmt = conn.prepareStatement(sql);
                 stmt.setInt(1, 1000);
-                assertPlanDetails(stmt, expectedColNames, expectedColumnNameDataTypes, false, 0);
+                assertPlanDetails(conn, sql, expectedColNames, expectedColumnNameDataTypes, false, 0);
 
                 // Filter on columns that the secondary index is on. Order by on the indexed column. Limit specified.
                 sql = "SELECT a_date FROM " + tableName + " where CF.a_integer = ? ORDER BY CF.a_integer LIMIT 100";
                 stmt = conn.prepareStatement(sql);
                 stmt.setInt(1, 1000);
-                assertPlanDetails(stmt, expectedColNames, expectedColumnNameDataTypes, false, 100);
+                assertPlanDetails(conn, sql, expectedColNames, expectedColumnNameDataTypes, false, 100);
 
                 // Filter on columns that the secondary index is on. Order by on the non-indexed column. Limit specified.
                 sql = "SELECT a_integer FROM " + tableName + " where CF.a_integer = ? and a_date = ? ORDER BY a_date LIMIT 100";
                 stmt = conn.prepareStatement(sql);
                 stmt.setInt(1, 1000);
                 stmt.setDate(2, new Date(909000));
-                assertPlanDetails(stmt, expectedColNames, expectedColumnNameDataTypes, true, 100);
+                assertPlanDetails(conn, sql, expectedColNames, expectedColumnNameDataTypes, true, 100);
             }
         } finally {
             conn.close();
@@ -669,9 +669,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
     }
 
-    private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
-        Connection conn = stmt.getConnection();
-        QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
+    private void assertPlanDetails(Connection conn, String sql, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, sql);
         
         List<Pair<String, String>> columns = PhoenixRuntime.getPkColsForSql(conn, plan);
         assertEquals(expectedPkCols, Joiner.on(",").join(getColumnNames(columns)));
