@@ -1081,12 +1081,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         	if (newValue != null) { // Indexed column has potentially changed
         	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref);
         		boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode() || CellUtil.matchingValue(newValue, HConstants.EMPTY_BYTE_ARRAY));
+        		boolean oldValueSetAsNull = oldValue == null || oldValue.getLength() == 0;
         		//If the new column value has to be set as null and the older value is null too,
         		//then just skip to the next indexed column.
-        		if (newValueSetAsNull && oldValue == null) {
+        		if (newValueSetAsNull && oldValueSetAsNull) {
         			continue;
         		}
-        		if ((oldValue == null && !newValueSetAsNull) || (oldValue != null && newValueSetAsNull)) {
+        		if (oldValueSetAsNull || newValueSetAsNull) {
         			return true;
         		}
         		// If the old value is different than the new value, the index row needs to be deleted
