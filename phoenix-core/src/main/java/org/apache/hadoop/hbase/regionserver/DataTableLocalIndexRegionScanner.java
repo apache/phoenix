@@ -85,8 +85,13 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
 
     @Override
     public boolean next(List<Cell> outResult, ScannerContext scannerContext) throws IOException {
+        return next(outResult);
+    }
+
+    @Override
+    public boolean next(List<Cell> results) throws IOException {
         List<Cell> dataTableResults = new ArrayList<Cell>();
-        boolean next = super.next(dataTableResults, scannerContext);
+        boolean next = super.next(dataTableResults);
         addMutations(dataTableResults);
         if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)||!next) {
             region.batchMutate(mutationList.toArray(new Mutation[mutationList.size()]), HConstants.NO_NONCE,

@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -140,12 +141,7 @@ public abstract class RegionScannerFactory {
 
       @Override
       public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        try {
-          return s.next(result, scannerContext);
-        } catch (Throwable t) {
-          ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
-          return false; // impossible
-        }
+          throw new IOException("Next with scannerContext should not be called in Phoenix environment");
       }
 
       @Override
@@ -221,45 +217,10 @@ public abstract class RegionScannerFactory {
       @Override
       public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
           throws IOException {
-        try {
-          boolean next = s.nextRaw(result, scannerContext);
-          Cell arrayElementCell = null;
-          if (result.size() == 0) {
-            return next;
-          }
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-            arrayElementCell = result.get(arrayElementCellPosition);
-          }
-          if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
-            if(hasReferences && actualStartKey!=null) {
-              next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                  scannerContext, arrayElementCell);
-              if (result.isEmpty()) {
-                return next;
-              }
-            }
-            /* In the following, c is only used when data region is null.
-            dataRegion will never be null in case of non-coprocessor call,
-            therefore no need to refactor
-             */
-            IndexUtil.wrapResultUsingOffset(env, result, offset, dataColumns,
-                tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
-          }
-          if (projector != null) {
-            Tuple toProject = useQualifierAsListIndex ? new PositionBasedMultiKeyValueTuple(result) : new ResultTuple(Result.create(result));
-            Tuple tuple = projector.projectResults(toProject, useNewValueColumnQualifier);
-            result.clear();
-            result.add(tuple.getValue(0));
-            if(arrayElementCell != null)
-              result.add(arrayElementCell);
-          }
-          // There is a scanattribute set to retrieve the specific array element
-          return next;
-        } catch (Throwable t) {
-          ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
-          return false; // impossible
-        }
+        boolean res = next(result);
+        ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+        ScannerContextUtil.updateTimeProgress(scannerContext);
+        return res;
       }
 
       /**
