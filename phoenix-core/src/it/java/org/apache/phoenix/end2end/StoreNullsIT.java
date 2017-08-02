@@ -24,8 +24,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
@@ -34,6 +37,7 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -48,6 +52,7 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -240,6 +245,89 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             rs.close();
         }
+    }
+
+    
+    private static long getRowCount(Connection conn, String tableName) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + tableName);
+        assertTrue(rs.next());
+        return rs.getLong(1);
+    }
+
+    @Test
+    public void testSetIndexedColumnToNullTwiceWithStoreNulls() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        long ts = 1000;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);     
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, "
+                + "CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=" + storeNulls + (columnEncoded ? "" : ",COLUMN_ENCODED_BYTES=0"));
+        conn.close();
+
+        ts = 1010;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+        conn.close();
+        
+        ts = 1020;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);        
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+        stmt.setTimestamp(1, new Timestamp(1000L));
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        
+        Timestamp expectedTimestamp;
+        ts = 1030;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+        expectedTimestamp = null;
+        stmt.setTimestamp(1, expectedTimestamp);
+        stmt.executeUpdate();
+        conn.commit();
+        
+        ts = 1040;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+        expectedTimestamp = null;
+        stmt.setTimestamp(1, expectedTimestamp);
+        stmt.executeUpdate();
+        conn.commit();
+
+        ts = 1050;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
+
+        long count1 = getRowCount(conn, tableName);
+        long count2 = getRowCount(conn, indexName);
+        assertEquals("Table should have 1 row", 1, count1);
+        assertEquals("Index should have 1 row", 1, count2);
+        conn.close();
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(expectedTimestamp, rs.getTimestamp(1));
+        assertEquals(null, rs.getString(2));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT \"0:TS\", \"0:V\" FROM " + indexName);
+        assertTrue(rs.next());
+        assertEquals(expectedTimestamp, rs.getTimestamp(1));
+        assertEquals(null, rs.getString(2));
+        assertFalse(rs.next());
     }
 
 }
