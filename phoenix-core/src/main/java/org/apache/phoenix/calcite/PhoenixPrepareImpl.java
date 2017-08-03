@@ -248,9 +248,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             public Object apply(RelNode root) {
                 for (CalciteSchema schema : rootSchema.getSubSchemaMap().values()) {
                     if (schema.schema instanceof PhoenixSchema) {
-                        ((PhoenixSchema) schema.schema).defineIndexesAsMaterializations();
+                        ((PhoenixSchema) schema.schema).defineIndexesAsMaterializations(schema.plus().getParentSchema());
                         for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
-                            ((PhoenixSchema) subSchema.schema).defineIndexesAsMaterializations();
+                            ((PhoenixSchema) subSchema.schema).defineIndexesAsMaterializations(subSchema.plus().getParentSchema());
                         }
                     }
                 }

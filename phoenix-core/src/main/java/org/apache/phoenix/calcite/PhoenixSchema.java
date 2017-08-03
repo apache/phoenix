@@ -54,12 +54,7 @@ import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
-import org.apache.phoenix.parse.ColumnParseNode;
-import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.ParseNodeRewriter;
-import org.apache.phoenix.parse.ParseNodeVisitor;
-import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
@@ -565,7 +560,7 @@ public class PhoenixSchema implements Schema {
         return new PhoenixSchema(name, schemaName, parentSchema, pc, typeFactory);
     }
     
-    public void defineIndexesAsMaterializations() {
+    public void defineIndexesAsMaterializations(SchemaPlus parentSchema) {
         SchemaPlus schema = parentSchema.getSubSchema(this.name);
         SchemaPlus viewSqlSchema =
                 this.schemaName == null ? schema : parentSchema;
