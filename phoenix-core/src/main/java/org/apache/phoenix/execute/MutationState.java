@@ -905,7 +905,6 @@ public class MutationState implements SQLCloseable {
         }
 
         Map<ImmutableBytesPtr, RowMutationState> valuesMap;
-        List<TableRef> txTableRefs = Lists.newArrayListWithExpectedSize(mutations.size());
         Map<TableInfo,List<Mutation>> physicalTableMutationMap = Maps.newLinkedHashMap(); 
         // add tracing for this operation
         try (TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables")) {
@@ -985,7 +984,6 @@ public class MutationState implements SQLCloseable {
                     try {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
-                            txTableRefs.add(origTableRef);
                             uncommittedPhysicalNames.add(table.getPhysicalName().getString());
 
                             // If we have indexes, wrap the HTable in a delegate HTable that
