@@ -354,7 +354,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                 int repeating1 = oldInput.readShort();
                 if (Bytes.compareTo(
                     oldOnDupKeyBytes, ON_DUP_KEY_HEADER_BYTE_SIZE, oldOnDupKeyBytes.length - ON_DUP_KEY_HEADER_BYTE_SIZE, 
-                    newOnDupKeyBytes, Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN, oldOnDupKeyBytes.length - ON_DUP_KEY_HEADER_BYTE_SIZE) == 0) {
+                    newOnDupKeyBytes, Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN, newOnDupKeyBytes.length - ON_DUP_KEY_HEADER_BYTE_SIZE) == 0) {
                 // If both old and new ON DUPLICATE KEY UPDATE clauses match,
                 // reduce the size of data we're sending over the wire.
                 // TODO: optimization size of RPC more.
