@@ -53,7 +53,6 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + "))  " + (dataProps.isEmpty() ? "" : dataProps) );
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-        conn.close();
         StringBuilder buf = new StringBuilder("UPSERT INTO " + fullTableName  + " VALUES(");
         for (int i = 0; i < values.length; i++) {
             buf.append("?,");
@@ -79,6 +78,7 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
         dataType.coerceBytes(ptr, dataType, pkColumns.get(index).getSortOrder(), SortOrder.getDefault());
         Object actualObject = dataType.toObject(ptr);
         assertEquals(expectedObject, actualObject);
+        conn.close();
     }
     
     @Test

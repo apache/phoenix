@@ -82,8 +82,7 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         try {
             rs = conn.createStatement().executeQuery("SELECT next value for " + seqName + " FROM " + tableName + " LIMIT 1");
             fail();
-        } catch (SequenceNotFoundException e) {
-            conn.close();            
+        } catch (SequenceNotFoundException e) { // expected
         }
         
         conn.createStatement().execute("CREATE SEQUENCE " + seqName);
