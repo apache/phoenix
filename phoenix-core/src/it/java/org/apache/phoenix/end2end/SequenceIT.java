@@ -1367,6 +1367,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         conn.close();
         
+        nextConnection();
         // verify that calling close() does not return sequence values back to the server
         query = "SELECT CURRENT_VALUE FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA='ALPHA' AND SEQUENCE_NAME='ZETA'";
         rs = conn.prepareStatement(query).executeQuery();

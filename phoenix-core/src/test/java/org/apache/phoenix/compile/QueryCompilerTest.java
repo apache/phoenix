@@ -1469,7 +1469,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
-        conn.close();
         try {
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
             stmt.addBatch();
@@ -4192,6 +4191,24 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute("DROP TABLE IF EXISTS s.t1");
             statement.execute("DROP TABLE IF EXISTS s.t2");
             conn.close();
+        }
+    }
+    
+    @Test
+    public void testCannotCreateStatementOnClosedConnection() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.close();
+        try {
+            conn.createStatement();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
+        }
+        try {
+            conn.prepareStatement("SELECT * FROM SYSTEM.CATALOG");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
         }
     }
 }

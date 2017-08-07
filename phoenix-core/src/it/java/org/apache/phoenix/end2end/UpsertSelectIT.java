@@ -805,7 +805,6 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         assertTrue(rs.next());
         assertEquals(numOfRecords, rs.getLong(1));
-        conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
         ResultSet rs2 = conn.createStatement().executeQuery(

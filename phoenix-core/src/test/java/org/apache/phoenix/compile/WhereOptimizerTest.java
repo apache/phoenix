@@ -2043,7 +2043,6 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         
         ddl = "create table t (a integer not null, b integer not null, c integer constraint pk primary key (a,b))";
         conn.createStatement().execute(ddl);
-        conn.close();
         
         query = "select c from t where (a,b) in ( (1,2) , (1,3) ) and b = 4";
         context = compileStatement(query, Collections.<Object>emptyList());
@@ -2062,12 +2061,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         // Test with RVC occurring later in the PK
         ddl = "create table t1 (d varchar, e char(3) not null, a integer not null, b integer not null, c integer constraint pk primary key (d, e, a,b))";
         conn.createStatement().execute(ddl);
-        conn.close();
         
         query = "select c from t1 where d = 'a' and e = 'foo' and a in (1,2) and b = 3 and (a,b) in ( (1,2) , (1,3))";
         context = compileStatement(query, Collections.<Object>emptyList());
         assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(3)), context.getScan().getStartRow());
         assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), ByteUtil.nextKey(PInteger.INSTANCE.toBytes(3))), context.getScan().getStopRow());
+        conn.close();
     }
 
     @Test
