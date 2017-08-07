@@ -21,13 +21,20 @@ package org.apache.phoenix.hbase.index.scanner;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter.DeleteTracker;
+import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 
 
 /**
  * {@link Scanner} that has no underlying data
  */
-public class EmptyScanner implements Scanner {
-
+public class EmptyScanner implements CoveredDeleteScanner {
+  private final DeleteTracker deleteTracker;
+  
+  public EmptyScanner (DeleteTracker deleteTracker) {
+      this.deleteTracker = deleteTracker;
+  }
+  
   @Override
   public Cell next() throws IOException {
     return null;
@@ -46,5 +53,10 @@ public class EmptyScanner implements Scanner {
   @Override
   public void close() throws IOException {
     // noop
+  }
+
+  @Override
+  public DeleteTracker getDeleteTracker() {
+    return deleteTracker;
   }
 }

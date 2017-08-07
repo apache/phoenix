@@ -37,6 +37,7 @@ import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -102,7 +103,7 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     //check that our value still shows up first on scan, even though this is a lazy load
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
   }
@@ -185,7 +186,7 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     //check that our value still shows up first on scan, even though this is a lazy load
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
   }
@@ -229,7 +230,7 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", kv, s.next());
 
@@ -273,7 +274,7 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     // make sure it read the table the one time
     assertEquals("Didn't get the stored keyvalue!", storedKv, s.next());
