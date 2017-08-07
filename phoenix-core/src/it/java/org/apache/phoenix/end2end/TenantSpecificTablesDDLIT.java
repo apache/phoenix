@@ -471,7 +471,6 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertEquals(tenantTable2, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
             assertFalse(rs.next());
-            conn.close();
             
             Set<String> sortedCatalogs = new HashSet<>(Arrays.asList(TENANT_ID, tenantId2));
             rs = conn.getMetaData().getCatalogs();

@@ -50,7 +50,6 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
             stmt.execute();
         }
         conn.commit();
-        conn.close();
         
         String select = "SELECT COUNT(*) from " + tableName ;
         ResultSet rs = conn.createStatement().executeQuery(select);
@@ -117,6 +116,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
             assertEquals(testNumbers[i], rs.getInt(1));
         }
         assertFalse(rs.next());
+        conn.close();
     }
 
     @Test
@@ -137,7 +137,6 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
             stmt.execute();
         }
         conn.commit();
-        conn.close();
         
         String select = "SELECT COUNT(*) from " + tableName ;
         ResultSet rs = conn.createStatement().executeQuery(select);
@@ -204,6 +203,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         }
         assertFalse(rs.next());
         */
+        conn.close();
     }
 
     @Test
@@ -222,7 +222,6 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
             stmt.execute();
         }
         conn.commit();
-        conn.close();
         
         String select = "SELECT COUNT(*) from " + tableName ;
         ResultSet rs = conn.createStatement().executeQuery(select);
@@ -285,6 +284,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
             assertEquals(testNumbers[i], rs.getInt(1));
         }
         assertFalse(rs.next());
+        conn.close();
     }
 
     @Test
@@ -306,7 +306,6 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
             stmt.execute();
         }
         conn.commit();
-        conn.close();
         
         String select = "SELECT COUNT(*) from " + tableName ;
         ResultSet rs = conn.createStatement().executeQuery(select);
@@ -373,5 +372,6 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         }
         assertFalse(rs.next());
         */
+        conn.close();
     }
 }

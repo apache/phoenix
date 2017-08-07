@@ -46,16 +46,15 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
             String ddl;
             ddl = "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
             conn.createStatement().execute(ddl);
-            conn.commit();
+            insertRow(conn, "123n7-app-2-", 1);
+            insertRow(conn, "132n7-App-2-", 2);
+            insertRow(conn, "213n7-app-2-", 4);
+            insertRow(conn, "231n7-App-2-", 8);
+            insertRow(conn, "312n7-app-2-", 16);
+            insertRow(conn, "321n7-App-2-", 32);
         } finally {
             closeStmtAndConn(stmt, conn);
         }
-        insertRow(conn, "123n7-app-2-", 1);
-        insertRow(conn, "132n7-App-2-", 2);
-        insertRow(conn, "213n7-app-2-", 4);
-        insertRow(conn, "231n7-App-2-", 8);
-        insertRow(conn, "312n7-app-2-", 16);
-        insertRow(conn, "321n7-App-2-", 32);
     }
 
     private void insertRow(Connection conn, String k, int i) throws SQLException {

@@ -266,8 +266,6 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode(), e.getErrorCode());
-        } finally {
-            connWithConflict.close();
         }
         
         // New connection should now see data as it has been committed
