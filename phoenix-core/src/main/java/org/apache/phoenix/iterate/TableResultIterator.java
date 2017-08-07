@@ -203,17 +203,7 @@ public class TableResultIterator implements ResultIterator {
 										plan.getTableRef().getTable())) {
 									throw e1;
 								}
-
-								if (ScanUtil.isClientSideUpsertSelect(newScan)) {
-									if (!ScanUtil.isLocalIndex(newScan)) {
-										this.scanIterator = new ScanningResultIterator(htable.getScanner(newScan),
-												newScan, scanMetricsHolder);
-									} else {
-										throw e;
-									}
-								} else {
-									this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
-								}
+								this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
 
 							} catch (Exception e2) {
 								throw new SQLException(e2);

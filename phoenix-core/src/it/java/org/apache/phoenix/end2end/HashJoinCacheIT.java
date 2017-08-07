@@ -20,13 +20,11 @@ package org.apache.phoenix.end2end;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -35,7 +33,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
-import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.util.ByteUtil;
@@ -434,6 +431,11 @@ public class HashJoinCacheIT extends HashJoinIT {
 		// cache is removed so this test may flap sometimes, so we don't need to
 		// test it for this case.	
     }
+
+	@Test
+	public void testUpsertWithJoin() throws Exception {
+		// TODO: We will enable this test once PHOENIX-3163
+	}
     
     public static class InvalidateHashCacheRandomly extends SimpleRegionObserver {
         public static Random rand= new Random();
