@@ -35,6 +35,15 @@ public class PDouble extends PRealNumber<Double> {
 
   @Override
   public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
+      if (lhs == rhs) {
+          return 0;
+      }
+      if (lhs == null) {
+          return -1;
+      }
+      if (rhs == null) {
+          return 1;
+      }
     if (rhsType == PDecimal.INSTANCE) {
       return -((BigDecimal) rhs).compareTo(BigDecimal.valueOf(((Number) lhs).doubleValue()));
     }
