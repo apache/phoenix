@@ -1098,6 +1098,15 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 
     @Override
     public int compareTo(Object lhs, Object rhs) {
+        if (lhs == rhs) {
+            return 0;
+        }
+        if (lhs == null) {
+            return -1;
+        }
+        if (rhs == null) {
+            return 1;
+        }
         PhoenixArray lhsArr = (PhoenixArray)lhs;
         PhoenixArray rhsArr = (PhoenixArray)rhs;
         if (lhsArr.equals(rhsArr)) { return 0; }
