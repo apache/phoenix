@@ -61,7 +61,6 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         insertRow(conn, tableName, "SOQL3", 30, 7);
         insertRow(conn, tableName, "SOQL4", 30, 8);
         conn.commit();
-        conn.close();
     }
 
     private static void insertRow(Connection conn, String tableName, String uri, int appcpu, int id) throws SQLException {

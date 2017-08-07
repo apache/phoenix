@@ -315,7 +315,6 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         long count2 = getRowCount(conn, indexName);
         assertEquals("Table should have 1 row", 1, count1);
         assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -328,6 +327,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
         assertEquals(null, rs.getString(2));
         assertFalse(rs.next());
+        conn.close();
     }
 
 }

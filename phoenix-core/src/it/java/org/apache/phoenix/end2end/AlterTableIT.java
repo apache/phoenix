@@ -997,7 +997,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         stmtInsert1.execute();
         conn1.commit();
         stmtInsert1.close();
-        conn1.close();
 
         // Do the alter through a separate client.
         conn3.createStatement().execute("alter table " + dataTableFullName + " add field2 BIGINT");

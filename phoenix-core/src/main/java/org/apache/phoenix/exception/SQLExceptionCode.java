@@ -362,6 +362,7 @@ public enum SQLExceptionCode {
     }),
     CANNOT_SPLIT_LOCAL_INDEX(1109,"XCL09", "Local index may not be pre-split."),
     CANNOT_SALT_LOCAL_INDEX(1110,"XCL10", "Local index may not be salted."),
+    CONNECTION_CLOSED(1111, "XCL11", "Connectioin is closed."),
 
     INDEX_FAILURE_BLOCK_WRITE(1120, "XCL20", "Writes to table blocked until index can be updated."),
     
