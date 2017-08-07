@@ -30,8 +30,8 @@ import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
-import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder;
+import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
 /**
@@ -163,7 +163,7 @@ public class LocalTableState implements TableState {
      *         {@link IndexUpdate}.
      * @throws IOException
      */
-    public Pair<Scanner, IndexUpdate> getIndexedColumnsTableState(
+    public Pair<CoveredDeleteScanner, IndexUpdate> getIndexedColumnsTableState(
         Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData) throws IOException {
         ensureLocalStateInitialized(indexedColumns, ignoreNewerMutations, indexMetaData);
         // filter out things with a newer timestamp and track the column references to which it applies
@@ -175,9 +175,9 @@ public class LocalTableState implements TableState {
             }
         }
 
-        Scanner scanner = this.scannerBuilder.buildIndexedColumnScanner(indexedColumns, tracker, ts, returnNullScannerIfRowNotFound);
+        CoveredDeleteScanner scanner = this.scannerBuilder.buildIndexedColumnScanner(indexedColumns, tracker, ts, returnNullScannerIfRowNotFound);
 
-        return new Pair<Scanner, IndexUpdate>(scanner, new IndexUpdate(tracker));
+        return new Pair<CoveredDeleteScanner, IndexUpdate>(scanner, new IndexUpdate(tracker));
     }
 
     /**
@@ -266,7 +266,7 @@ public class LocalTableState implements TableState {
     @Override
     public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData)
             throws IOException {
-        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, returnNullScannerIfRowNotFound, indexMetaData);
+        Pair<CoveredDeleteScanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, returnNullScannerIfRowNotFound, indexMetaData);
         ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(pair.getFirst(), getCurrentRowKey());
         return new Pair<ValueGetter, IndexUpdate>(valueGetter, pair.getSecond());
     }
