@@ -70,6 +70,9 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
     Collections.sort(this.families);
   }
       
+  public DeleteTracker getDeleteTracker() {
+      return coveringDelete;
+  }
   
   private ImmutableBytesPtr getNextFamily(ImmutableBytesPtr family) {
     int index = Collections.binarySearch(families, family);
@@ -209,7 +212,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
     }
   }
 
-  class DeleteTracker {
+  public static class DeleteTracker {
 
     public KeyValue deleteFamily;
     public KeyValue deleteColumn;
@@ -283,7 +286,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
           return true;
         }
         // clear the point delete since the TS must not be matching
-        coveringDelete.pointDelete = null;
+        pointDelete = null;
       }
       return false;
     }

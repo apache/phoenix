@@ -216,35 +216,36 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 minTimeStamp *= -1;
             }
             // Disable the index by using the updateIndexState method of MetaDataProtocol end point coprocessor.
-            HTableInterface systemTable = env.getTable(SchemaUtil
-                    .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-            MetaDataMutationResult result = IndexUtil.setIndexDisableTimeStamp(indexTableName, minTimeStamp,
-                    systemTable, newState);
-            if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
-                LOG.info("Index " + indexTableName + " has been dropped. Ignore uncommitted mutations");
-                continue;
+            try (HTableInterface systemTable = env.getTable(SchemaUtil
+                    .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
+                MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
+                        systemTable, newState);
+                if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
+                    LOG.info("Index " + indexTableName + " has been dropped. Ignore uncommitted mutations");
+                    continue;
+                }
+                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                    if (leaveIndexActive) {
+                        LOG.warn("Attempt to update INDEX_DISABLE_TIMESTAMP " + " failed with code = "
+                                + result.getMutationCode());
+                        // If we're not disabling the index, then we don't want to throw as throwing
+                        // will lead to the RS being shutdown.
+                        if (blockDataTableWritesOnFailure) {
+                            throw new DoNotRetryIOException("Attempt to update INDEX_DISABLE_TIMESTAMP failed.");
+                        }
+                    } else {
+                        LOG.warn("Attempt to disable index " + indexTableName + " failed with code = "
+                                + result.getMutationCode() + ". Will use default failure policy instead.");
+                        throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
+                    } 
+                }
+                if (leaveIndexActive)
+                    LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName + " due to an exception while writing updates.",
+                            cause);
+                else
+                    LOG.info("Successfully disabled index " + indexTableName + " due to an exception while writing updates.",
+                            cause);
             }
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                if (leaveIndexActive) {
-                    LOG.warn("Attempt to update INDEX_DISABLE_TIMESTAMP " + " failed with code = "
-                            + result.getMutationCode());
-                    // If we're not disabling the index, then we don't want to throw as throwing
-                    // will lead to the RS being shutdown.
-                    if (blockDataTableWritesOnFailure) {
-                        throw new DoNotRetryIOException("Attempt to update INDEX_DISABLE_TIMESTAMP failed.");
-                    }
-                } else {
-                    LOG.warn("Attempt to disable index " + indexTableName + " failed with code = "
-                            + result.getMutationCode() + ". Will use default failure policy instead.");
-                    throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
-                } 
-            }
-            if (leaveIndexActive)
-                LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName + " due to an exception while writing updates.",
-                        cause);
-            else
-                LOG.info("Successfully disabled index " + indexTableName + " due to an exception while writing updates.",
-                        cause);
         }
         // Return the cell time stamp (note they should all be the same)
         return timestamp;

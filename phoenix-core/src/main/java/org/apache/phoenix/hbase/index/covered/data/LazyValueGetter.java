@@ -24,11 +24,12 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter.DeleteTracker;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -37,7 +38,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  */
 public class LazyValueGetter implements ValueGetter {
 
-  private Scanner scan;
+  private CoveredDeleteScanner scan;
   private volatile Map<ColumnReference, ImmutableBytesWritable> values;
   private byte[] row;
   
@@ -46,13 +47,13 @@ public class LazyValueGetter implements ValueGetter {
    * @param scan backing scanner
    * @param currentRow row key for the row to seek in the scanner
    */
-  public LazyValueGetter(Scanner scan, byte[] currentRow) {
+  public LazyValueGetter(CoveredDeleteScanner scan, byte[] currentRow) {
     this.scan = scan;
     this.row = currentRow;
   }
 
   @Override
-  public ImmutableBytesWritable getLatestValue(ColumnReference ref) throws IOException {
+  public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
     // ensure we have a backing map
     if (values == null) {
       synchronized (this) {
@@ -64,6 +65,14 @@ public class LazyValueGetter implements ValueGetter {
     ImmutableBytesWritable value = values.get(ref);
     if (value == null) {
       value = get(ref);
+      DeleteTracker deleteTracker = scan.getDeleteTracker();
+      if (value == null) {
+          // Delete family is used for row deletion. Family won't necessarily match as we'll be at
+          // the delete family marker on the last column family if there is one.
+          if (deleteTracker.deleteFamily != null && deleteTracker.deleteFamily.getTimestamp() == ts) {
+              value = HIDDEN_BY_DELETE;
+          }
+      }
       values.put(ref, value);
     }
 
@@ -81,7 +90,7 @@ public class LazyValueGetter implements ValueGetter {
     }
     // there is a next value - we only care about the current value, so we can just snag that
     Cell next = scan.next();
-    if (ref.matches(KeyValueUtil.ensureKeyValue(next))) {
+    if (ref.matches(next)) {
       return new ImmutableBytesPtr(next.getValueArray(), next.getValueOffset(), next.getValueLength());
     }
     return null;

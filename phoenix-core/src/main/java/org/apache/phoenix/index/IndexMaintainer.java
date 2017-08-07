@@ -548,7 +548,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         initCachedState();
     }
     
-    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey)  {
+    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey, long ts)  {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean prependRegionStartKey = isLocalIndex && regionStartKey != null;
         boolean isIndexSalted = !isLocalIndex && nIndexSaltBuckets > 0;
@@ -620,7 +620,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 	dataColumnType = expression.getDataType();
                 	dataSortOrder = expression.getSortOrder();
                     isNullable = expression.isNullable();
-                	expression.evaluate(new ValueGetterTuple(valueGetter), ptr);
+                	expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
                 }
                 else {
                     Field field = dataRowKeySchema.getField(dataPkPosition[i]);
@@ -932,10 +932,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
-        byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey);
+        byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         Put put = null;
         // New row being inserted: add the empty key value
-        if (valueGetter==null || valueGetter.getLatestValue(dataEmptyKeyValueRef) == null) {
+        ImmutableBytesWritable latestValue = null;
+        if (valueGetter==null || (latestValue = valueGetter.getLatestValue(dataEmptyKeyValueRef, ts)) == null || latestValue == ValueGetter.HIDDEN_BY_DELETE) {
+            // We need to track whether or not our empty key value is hidden by a Delete Family marker at the same timestamp.
+            // If it is, these Puts will be masked so should not be emitted.
+            if (latestValue == ValueGetter.HIDDEN_BY_DELETE) {
+                return null;
+            }
             put = new Put(indexRowKey);
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
@@ -997,7 +1003,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme);
                     ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-                    expression.evaluate(new ValueGetterTuple(valueGetter), ptr);
+                    expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
                     byte[] value = ptr.copyBytesIfNecessary();
                     if (value != null) {
                         int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
@@ -1023,8 +1029,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 ColumnReference indexColRef = this.coveredColumnsMap.get(ref);
                 ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
                 ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
-                ImmutableBytesWritable value = valueGetter.getLatestValue(ref);
-                if (value != null) {
+                ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
+                if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
                     if (put == null) {
                         put = new Put(indexRowKey);
                         put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
@@ -1068,7 +1074,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return getDeleteTypeOrNull(pendingUpdates) != null;
     }
     
-    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<KeyValue> pendingUpdates) throws IOException {
+    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<KeyValue> pendingUpdates, long ts) throws IOException {
         if (pendingUpdates.isEmpty()) {
             return false;
         }
@@ -1079,8 +1085,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         for (ColumnReference ref : indexedColumns) {
         	Cell newValue = newState.get(ref);
         	if (newValue != null) { // Indexed column has potentially changed
-        	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref);
-        		boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode() || CellUtil.matchingValue(newValue, HConstants.EMPTY_BYTE_ARRAY));
+        	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref, ts);
+                boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode() || CellUtil.matchingValue(newValue, HConstants.EMPTY_BYTE_ARRAY));
         		boolean oldValueSetAsNull = oldValue == null || oldValue.getLength() == 0;
         		//If the new column value has to be set as null and the older value is null too,
         		//then just skip to the next indexed column.
@@ -1109,10 +1115,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<KeyValue> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
-        byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey);
+        byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         // Delete the entire row if any of the indexed columns changed
         DeleteType deleteType = null;
-        if (oldState == null || (deleteType=getDeleteTypeOrNull(pendingUpdates)) != null || hasIndexedColumnChanged(oldState, pendingUpdates)) { // Deleting the entire row
+        if (oldState == null || (deleteType=getDeleteTypeOrNull(pendingUpdates)) != null || hasIndexedColumnChanged(oldState, pendingUpdates, ts)) { // Deleting the entire row
             byte[] emptyCF = emptyKeyValueCFPtr.copyBytesIfNecessary();
             Delete delete = new Delete(indexRowKey);
             
@@ -1774,7 +1780,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         return new ValueGetter() {
             @Override
-            public ImmutableBytesWritable getLatestValue(ColumnReference ref) {
+            public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
                 if(ref.equals(dataEmptyKeyValueRef)) return null;
                 return valueMap.get(ref);
             }

@@ -48,7 +48,6 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -63,6 +62,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -324,31 +324,12 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     private void waitForIndexRebuild(Connection conn, String index, PIndexState expectedIndexState) throws InterruptedException, SQLException {
-        boolean isActive = false;
         if (!transactional) {
-            int maxTries = 12, nTries = 0;
-            do {
-                Thread.sleep(5 * 1000); // sleep 5 secs
-                String query = "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT) FROM " +
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
-                        + ") = (" + "'" + schema + "','" + index + "') "
-                        + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL"
-                        + " AND " + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + expectedIndexState.getSerializedValue() + "'";
-                ResultSet rs = conn.createStatement().executeQuery(query);
-                assertTrue(rs.next());
-                if (expectedIndexState == PIndexState.ACTIVE) {
-                    if (rs.getLong(1) == 0 && !rs.wasNull()) {
-                        isActive = true;
-                        break;
-                    }
-                }
-            } while (++nTries < maxTries);
-            if (expectedIndexState == PIndexState.ACTIVE) {
-                assertTrue(isActive);
-            }
+            String fullIndexName = SchemaUtil.getTableName(schema, index);
+            TestUtil.waitForIndexRebuild(conn, fullIndexName, expectedIndexState);
         }
     }
-
+    
     private void initializeTable(Connection conn, String tableName) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
         stmt.setString(1, "a");
