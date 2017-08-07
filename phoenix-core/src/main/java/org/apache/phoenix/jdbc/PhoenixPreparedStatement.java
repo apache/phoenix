@@ -444,8 +444,10 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public void setObject(int parameterIndex, Object o, int targetSqlType) throws SQLException {
         PDataType targetType = PDataType.fromTypeId(targetSqlType);
-        PDataType sourceType = PDataType.fromLiteral(o);
-        o = targetType.toObject(o, sourceType);
+        if (o != null) {
+            PDataType sourceType = PDataType.fromLiteral(o);
+            o = targetType.toObject(o, sourceType);
+        }
         setParameter(parameterIndex, o);
     }
 
