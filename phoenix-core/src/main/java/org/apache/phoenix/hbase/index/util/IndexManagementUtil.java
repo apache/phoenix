@@ -32,7 +32,7 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 
 /**
  * Utility class to help manage indexes
@@ -97,7 +97,7 @@ public class IndexManagementUtil {
 
     }
 
-    public static ValueGetter createGetterFromScanner(Scanner scanner, byte[] currentRow) {
+    public static ValueGetter createGetterFromScanner(CoveredDeleteScanner scanner, byte[] currentRow) {
         return scanner!=null ? new LazyValueGetter(scanner, currentRow) : null;
     }
 

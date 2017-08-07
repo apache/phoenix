@@ -91,13 +91,9 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         conn = DriverManager.getConnection(getUrl(), props);
         
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals(0, count1);
-        assertEquals(0, count2);
-        conn.close();
-        
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         assertNoTimeStampAt(conn, indexName, 1030);
+        conn.close();
         
         /**
          *
@@ -179,11 +175,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         conn = DriverManager.getConnection(getUrl(), props);
         
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals("Table should have 1 row", 1, count1);
-        assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts FROM " + tableName);
         assertTrue(rs.next());
@@ -196,6 +188,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
 
         assertNoTimeStampAt(conn, indexName, 1030);
+        conn.close();
 
         /**
          *
@@ -272,11 +265,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals("Table should have 1 row", 1, count1);
-        assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts FROM " + tableName);
         assertTrue(rs.next());
@@ -287,6 +276,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
         assertFalse(rs.next());
+        conn.close();
     }
 
     @Test
@@ -341,11 +331,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals("Table should have 1 row", 1, count1);
-        assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts FROM " + tableName);
         assertTrue(rs.next());
@@ -356,6 +342,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
         assertFalse(rs.next());
+        conn.close();
     }    
     
     @Test
@@ -406,11 +393,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals("Table should have 1 row", 1, count1);
-        assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -423,6 +406,8 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
         assertEquals(null, rs.getString(2));
         assertFalse(rs.next());
+        
+        conn.close();
     }
 
     @Test
@@ -473,11 +458,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals("Table should have 1 row", 1, count1);
-        assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -490,6 +471,8 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
         assertEquals(null, rs.getString(2));
         assertFalse(rs.next());
+        
+        conn.close();
     }
     
     @Test
@@ -540,11 +523,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertEquals("Table should have 1 row", 1, count1);
-        assertEquals("Index should have 1 row", 1, count2);
-        conn.close();
+        TestUtil.scutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -557,5 +536,113 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
         assertEquals(null, rs.getString(2));
         assertFalse(rs.next());
+        
+        conn.close();
+    }
+    
+    @Test
+    public void testDeleteRowAndUpsertValueAtSameTS1() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        long ts = 1000;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);     
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, A.V VARCHAR, B.V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+        conn.close();
+
+        ts = 1010;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+        conn.close();
+        
+        ts = 1020;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);        
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0','1')");
+        stmt.setTimestamp(1, new Timestamp(1000L));
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        
+        Timestamp expectedTimestamp;
+        ts = 1040;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
+        stmt.executeUpdate();
+        conn.commit();
+        expectedTimestamp = new Timestamp(3000L);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null,'3')");
+        stmt.setTimestamp(1, expectedTimestamp);
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        
+        ts = 1050;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
+
+        long rowCount = TestUtil.scutinizeIndex(conn, tableName, indexName);
+        assertEquals(0,rowCount);
+        
+        conn.close();
+    }
+    
+    @Test
+    public void testDeleteRowAndUpsertValueAtSameTS2() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        long ts = 1000;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);     
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+        conn.close();
+
+        ts = 1010;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+        conn.close();
+        
+        ts = 1020;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);        
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+        stmt.setTimestamp(1, new Timestamp(1000L));
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        
+        Timestamp expectedTimestamp;
+        ts = 1040;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        expectedTimestamp = new Timestamp(3000L);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+        stmt.setTimestamp(1, expectedTimestamp);
+        stmt.executeUpdate();
+        conn.commit();
+        stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
+        stmt.executeUpdate();
+        conn.commit();
+        conn.close();
+        
+        ts = 1050;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        conn = DriverManager.getConnection(getUrl(), props);
+        
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
+
+        long rowCount = TestUtil.scutinizeIndex(conn, tableName, indexName);
+        assertEquals(0,rowCount);
+        
+        conn.close();
     }
 }

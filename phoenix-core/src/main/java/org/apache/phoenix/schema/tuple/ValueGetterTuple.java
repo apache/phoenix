@@ -32,13 +32,17 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
  * Class used to construct a {@link Tuple} in order to evaluate an {@link Expression}
  */
 public class ValueGetterTuple extends BaseTuple {
-	private ValueGetter valueGetter;
+	private final ValueGetter valueGetter;
+	private final long ts;
     
-    public ValueGetterTuple(ValueGetter valueGetter) {
+    public ValueGetterTuple(ValueGetter valueGetter, long ts) {
         this.valueGetter = valueGetter;
+        this.ts = ts;
     }
     
     public ValueGetterTuple() {
+        this.valueGetter = null;
+        this.ts = HConstants.LATEST_TIMESTAMP;
     }
     
     @Override
@@ -55,7 +59,7 @@ public class ValueGetterTuple extends BaseTuple {
     public KeyValue getValue(byte[] family, byte[] qualifier) {
         ImmutableBytesWritable value = null;
         try {
-            value = valueGetter.getLatestValue(new ColumnReference(family, qualifier));
+            value = valueGetter.getLatestValue(new ColumnReference(family, qualifier), ts);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -92,7 +96,7 @@ public class ValueGetterTuple extends BaseTuple {
         KeyValue kv = getValue(family, qualifier);
         if (kv == null)
             return false;
-        ptr.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+        ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
     }
 

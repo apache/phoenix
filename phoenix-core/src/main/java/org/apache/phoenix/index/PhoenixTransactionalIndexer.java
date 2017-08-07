@@ -615,7 +615,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             ValueGetter getter = new ValueGetter() {
 
                 @Override
-                public ImmutableBytesWritable getLatestValue(ColumnReference ref) throws IOException {
+                public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
                     return valueMap.get(ref);
                 }
 
