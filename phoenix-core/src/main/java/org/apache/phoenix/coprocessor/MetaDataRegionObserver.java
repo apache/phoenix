@@ -431,7 +431,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 							long scanEndTime = Math.min(latestUpperBoundTimestamp,
 							        getTimestampForBatch(scanBeginTime,batchExecutedPerTableMap.get(dataPTable.getName())));
 							// We can't allow partial results
-							dataTableScan.setAllowPartialResults(false);
 							dataTableScan.setTimeRange(scanBeginTime, scanEndTime);
 							dataTableScan.setCacheBlocks(false);
 							dataTableScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
