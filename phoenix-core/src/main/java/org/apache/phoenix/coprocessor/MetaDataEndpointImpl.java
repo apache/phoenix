@@ -3519,6 +3519,24 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
                     long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
                             newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
+                    // We never set the INDEX_DISABLE_TIMESTAMP to a positive value when we're setting the state to ACTIVE.
+                    // Instead, we're passing in what we expect the INDEX_DISABLE_TIMESTAMP to be currently. If it's
+                    // changed, it means that a data table row failed to write while we were partially rebuilding it
+                    // and we must rerun it.
+                    if (newState == PIndexState.ACTIVE && newDisableTimeStamp > 0) {
+                        // Don't allow setting to ACTIVE if the INDEX_DISABLE_TIMESTAMP doesn't match
+                        // what we expect.
+                        if (newDisableTimeStamp != Math.abs(curTimeStampVal)) {
+                            builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                       }
+                        // Reset INDEX_DISABLE_TIMESTAMP_BYTES to zero as we're good to go.
+                        newKVs.set(disableTimeStampKVIndex, 
+                                CellUtil.createCell(key, TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES, 
+                                        timeStamp, KeyValue.Type.Put.getCode(), PLong.INSTANCE.toBytes(0L)));
+                    }
                     // We use the sign of the INDEX_DISABLE_TIMESTAMP to differentiate the keep-index-active (negative)
                     // from block-writes-to-data-table case. In either case, we want to keep the oldest timestamp to
                     // drive the partial index rebuild rather than update it with each attempt to update the index
