@@ -151,8 +151,13 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_THROW_EXCEPTION_ATTRIB = "phoenix.index.failure.throw.exception";
 
     // Index will be partially re-built from index disable time stamp - following overlap time
+    @Deprecated
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
         "phoenix.index.failure.handling.rebuild.overlap.time";
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME_ATTRIB =
+            "phoenix.index.failure.handling.rebuild.overlap.backward.time";
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB =
+            "phoenix.index.failure.handling.rebuild.overlap.forward.time";
     public static final String INDEX_PRIOIRTY_ATTRIB = "phoenix.index.rpc.priority";
     public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.metadata.rpc.priority";
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";

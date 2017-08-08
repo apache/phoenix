@@ -114,7 +114,6 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
 public class IndexUtil {
@@ -790,10 +789,6 @@ public class IndexUtil {
 
     public static void updateIndexState(PhoenixConnection conn, String indexTableName,
     		PIndexState newState, Long indexDisableTimestamp) throws SQLException {
-        if (newState == PIndexState.ACTIVE) {
-            Preconditions.checkArgument(indexDisableTimestamp == 0,
-                "Index disable timestamp has to be 0 when marking an index as active");
-        }
     	byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
     	String schemaName = SchemaUtil.getSchemaNameFromFullName(indexTableName);
     	String indexName = SchemaUtil.getTableNameFromFullName(indexTableName);
