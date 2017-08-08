@@ -882,7 +882,7 @@ public class TestUtil {
         }
     }
 
-    public static long scutinizeIndex(Connection conn, String fullTableName, String fullIndexName) throws SQLException {
+    public static long scrutinizeIndex(Connection conn, String fullTableName, String fullIndexName) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable ptable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
         PTable pindex = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
