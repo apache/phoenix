@@ -172,7 +172,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true; 
     public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true; 
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
-    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 1; // 1 ms
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME = 1; // 1 ms
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME = 60000 * 3; // 3 mins
     // 30 min rpc timeout * 5 tries, with 2100ms total pause time between retries
     public static final long DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT = (5 * 30000 * 60) + 2100;
     public static final long DEFAULT_INDEX_REBUILD_RPC_TIMEOUT = 30000 * 60; // 30 mins

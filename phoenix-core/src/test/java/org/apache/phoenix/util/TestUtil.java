@@ -870,8 +870,7 @@ public class TestUtil {
                     + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL"
                     + " AND " + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + expectedIndexState.getSerializedValue() + "'";
             ResultSet rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            if (expectedIndexState == PIndexState.ACTIVE) {
+            if (rs.next() && expectedIndexState == PIndexState.ACTIVE) {
                 if (rs.getLong(1) == 0 && !rs.wasNull()) {
                     isActive = true;
                     break;
