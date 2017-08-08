@@ -91,7 +91,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         conn = DriverManager.getConnection(getUrl(), props);
         
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         assertNoTimeStampAt(conn, indexName, 1030);
         conn.close();
         
@@ -175,7 +175,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         conn = DriverManager.getConnection(getUrl(), props);
         
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts FROM " + tableName);
         assertTrue(rs.next());
@@ -265,7 +265,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts FROM " + tableName);
         assertTrue(rs.next());
@@ -331,7 +331,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts FROM " + tableName);
         assertTrue(rs.next());
@@ -393,7 +393,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -458,7 +458,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -523,7 +523,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        TestUtil.scutinizeIndex(conn, tableName, indexName);        
+        TestUtil.scrutinizeIndex(conn, tableName, indexName);        
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
         assertTrue(rs.next());
@@ -587,7 +587,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long rowCount = TestUtil.scutinizeIndex(conn, tableName, indexName);
+        long rowCount = TestUtil.scrutinizeIndex(conn, tableName, indexName);
         assertEquals(0,rowCount);
         
         conn.close();
@@ -640,7 +640,7 @@ public class OutOfOrderMutationsIT extends ParallelStatsDisabledIT {
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
-        long rowCount = TestUtil.scutinizeIndex(conn, tableName, indexName);
+        long rowCount = TestUtil.scrutinizeIndex(conn, tableName, indexName);
         assertEquals(0,rowCount);
         
         conn.close();
