@@ -79,15 +79,15 @@ import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB
 import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
+import static org.apache.phoenix.query.QueryServices.TRACING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.TRACING_THREAD_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.TRACING_TRACE_BUFFER_SIZE;
 import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TRACING_ENABLED;
-import static org.apache.phoenix.query.QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
-import static org.apache.phoenix.query.QueryServices.TRACING_THREAD_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.TRACING_TRACE_BUFFER_SIZE;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 
 import java.util.HashSet;
@@ -182,7 +182,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true; 
     public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true; 
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
-    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 1; // 1 ms
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME = 1; // 1 ms
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME = 60000 * 3; // 3 mins
     // 30 min rpc timeout * 5 tries, with 2100ms total pause time between retries
     public static final long DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT = (5 * 30000 * 60) + 2100;
     public static final long DEFAULT_INDEX_REBUILD_RPC_TIMEOUT = 30000 * 60; // 30 mins
