@@ -74,7 +74,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(1,count);
             conn.commit();
             try {
-                TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+                TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
                 assertEquals(e.getMessage(),"Expected data table row count to match expected:<1> but was:<2>");
@@ -98,7 +98,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().executeUpdate("UPSERT INTO " + fullIndexName + " VALUES ('bbb','x','0')");
             conn.commit();
             try {
-                TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+                TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
                 assertEquals(e.getMessage(),"Expected to find PK in data table: ('x')");
@@ -107,7 +107,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @Test
-    public void testValuetIndexScrutiny() throws Throwable {
+    public void testValueIndexScrutiny() throws Throwable {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
@@ -123,7 +123,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().executeUpdate("UPSERT INTO " + fullIndexName + " VALUES ('ccc','a','2')");
             conn.commit();
             try {
-                TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+                TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
                 assertEquals(e.getMessage(),"Expected equality for V2, but '2'!='1'");
@@ -156,7 +156,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
     
@@ -185,7 +185,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
     
@@ -214,7 +214,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
     
@@ -241,7 +241,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
        }
     }
     
@@ -268,7 +268,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
     
@@ -299,7 +299,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
     
@@ -330,7 +330,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
     
@@ -361,7 +361,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
 
-            TestUtil.scutinizeIndex(conn, fullTableName, fullIndexName);
+            TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
     }
 }
