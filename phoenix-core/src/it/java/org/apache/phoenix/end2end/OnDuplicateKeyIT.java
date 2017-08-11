@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -549,6 +550,36 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
 
         conn.close();
     }
-    
+    @Test
+    public void testDuplicateUpdateWithSaltedTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        final Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        try {
+            String ddl = "create table " + tableName + " (id varchar not null,id1 varchar not null, counter1 bigint, counter2 bigint CONSTRAINT pk PRIMARY KEY (id,id1)) SALT_BUCKETS=6";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+            String dml = "UPSERT INTO " + tableName + " (id,id1, counter1, counter2) VALUES ('abc','123', 0, 0) ON DUPLICATE KEY UPDATE counter1 = counter1 + 1, counter2 = counter2 + 1";
+            conn.createStatement().execute(dml);
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals("0",rs.getString(3));
+            assertEquals("0",rs.getString(4));
+            conn.createStatement().execute(dml);
+            conn.commit();
+            rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals("1",rs.getString(3));
+            assertEquals("1",rs.getString(4));
+
+        } catch (Exception e) {
+            fail();
+        } finally {
+            conn.close();
+        }
+    }
+
+
 }
     
