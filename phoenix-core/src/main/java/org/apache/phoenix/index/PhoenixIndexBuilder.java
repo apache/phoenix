@@ -224,11 +224,12 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                     Collections.sort(flattenedCells,KeyValue.COMPARATOR);
                 }
                 PRow row = table.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
+                int adjust = table.getBucketNum() == null ? 1 : 2;
                 for (int i = 0; i < expressions.size(); i++) {
                     Expression expression = expressions.get(i);
                     ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
                     expression.evaluate(tuple, ptr);
-                    PColumn column = table.getColumns().get(i + 1);
+                    PColumn column = table.getColumns().get(i + adjust);
                     Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
                     // We are guaranteed that the two column will have the
                     // same type.
