@@ -25,7 +25,7 @@ import org.apache.curator.CuratorZookeeperClient;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.curator.test.TestingServer;
+import org.apache.curator.TestingServer;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.phoenix.loadbalancer.service.LoadBalancer;
 import org.apache.phoenix.loadbalancer.service.LoadBalanceZookeeperConf;
@@ -38,10 +38,10 @@ import org.junit.*;
 import java.util.Arrays;
 import java.util.List;
 
-public class LoadBalancerEnd2End {
+public class LoadBalancerEnd2EndIT {
     private static TestingServer testingServer;
     private static CuratorFramework curatorFramework;
-    private static final Log LOG = LogFactory.getLog(LoadBalancerEnd2End.class);
+    private static final Log LOG = LogFactory.getLog(LoadBalancerEnd2EndIT.class);
     private static final LoadBalanceZookeeperConf LOAD_BALANCER_CONFIGURATION = new LoadBalanceZookeeperConfImpl();
     private static  String path;
     private static LoadBalancer loadBalancer;
