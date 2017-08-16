@@ -1167,7 +1167,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void checkClientServerCompatibility(byte[] metaTable) throws SQLException {
-        StringBuilder buf = new StringBuilder("The following servers require an updated " + QueryConstants.DEFAULT_COPROCESS_PATH + " to be put in the classpath of HBase: ");
+        StringBuilder buf = new StringBuilder("Newer Phoenix clients can't communicate with older Phoenix servers. The following servers require an updated " + QueryConstants.DEFAULT_COPROCESS_JAR_NAME + " to be put in the classpath of HBase: ");
         boolean isIncompatible = false;
         int minHBaseVersion = Integer.MAX_VALUE;
         boolean isTableNamespaceMappingEnabled = false;
@@ -1232,7 +1232,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (Throwable t) {
             // This is the case if the "phoenix.jar" is not on the classpath of HBase on the region server
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR).setRootCause(t)
-            .setMessage("Ensure that " + QueryConstants.DEFAULT_COPROCESS_PATH + " is put on the classpath of HBase in every region server: " + t.getMessage())
+            .setMessage("Ensure that " + QueryConstants.DEFAULT_COPROCESS_JAR_NAME + " is put on the classpath of HBase in every region server: " + t.getMessage())
             .build().buildException();
         } finally {
             if (ht != null) {
