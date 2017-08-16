@@ -196,6 +196,8 @@ public interface QueryConstants {
     public static final byte[] DESC_SEPARATOR_BYTE_ARRAY = new byte[] {DESC_SEPARATOR_BYTE};
 
     public static final String DEFAULT_COPROCESS_PATH = "phoenix.jar";
+    public static final String DEFAULT_COPROCESS_JAR_NAME = "phoenix-[version]-server.jar";
+    
     public final static int MILLIS_IN_DAY = 1000 * 60 * 60 * 24;
 
     public static final String EMPTY_COLUMN_NAME = "_0";
