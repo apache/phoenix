@@ -421,17 +421,19 @@ public enum SQLExceptionCode {
         public SQLException newException(SQLExceptionInfo info) {
             return new SchemaAlreadyExistsException(info.getSchemaName());
         }
-    }), SCHEMA_NOT_FOUND(722, "43M05", "Schema does not exists", new Factory() {
+    }),
+    SCHEMA_NOT_FOUND(722, "43M05", "Schema does not exist", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
             return new SchemaNotFoundException(info.getSchemaName());
         }
-    }), CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables"), SCHEMA_NOT_ALLOWED(
-            724, "43M07", "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08",
-                    "Cannot create schema because config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
-                            + " for enabling name space mapping isn't enabled."), INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES(
-                                    726, "43M10", " Inconsistent namespace mapping properites.."), ASYNC_NOT_ALLOWED(
-                                    727, "43M11", " ASYNC option is not allowed.. "),
+    }),
+    CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables"),
+    SCHEMA_NOT_ALLOWED(724, "43M07", "Schema name not allowed!!"),
+    CREATE_SCHEMA_NOT_ALLOWED(725, "43M08", "Cannot create schema because config "
+            + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " for enabling name space mapping isn't enabled."),
+    INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES(726, "43M10", " Inconsistent namespace mapping properties.."),
+    ASYNC_NOT_ALLOWED(727, "43M11", " ASYNC option is not allowed.. "),
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
