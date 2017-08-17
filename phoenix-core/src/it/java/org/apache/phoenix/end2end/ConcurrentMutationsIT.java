@@ -47,6 +47,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -274,7 +275,7 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         }
         
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
-        long actualRowCount = TestUtil.scrutinizeIndex(conn, tableName, indexName);
+        long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
         assertEquals(nRows, actualRowCount);
     }
 

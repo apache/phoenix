@@ -46,7 +46,7 @@ import org.mockito.stubbing.Answer;
 /**
  *
  */
-public class TestLocalTableState {
+public class LocalTableStateTest {
 
   private static final byte[] row = Bytes.toBytes("row");
   private static final byte[] fam = Bytes.toBytes("fam");
