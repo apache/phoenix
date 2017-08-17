@@ -238,11 +238,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.RetryStrategies;
 import org.apache.twill.zookeeper.ZKClientService;
-import org.apache.twill.zookeeper.ZKClientServices;
-import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -250,14 +246,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -1226,7 +1220,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             if (isTableNamespaceMappingEnabled != SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                     getProps())) { throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
+                            SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES)
                     .setMessage(
                             "Ensure that config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                             + " is consitent on client and server.")
@@ -2400,7 +2394,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     }
                                     ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
                                 } else if (mappedSystemCatalogExists) { throw new SQLExceptionInfo.Builder(
-                                        SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
+                                        SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES)
                                 .setMessage("Cannot initiate connection as "
                                         + SchemaUtil.getPhysicalTableName(
                                                 SYSTEM_CATALOG_NAME_BYTES, true)
