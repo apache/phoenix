@@ -53,15 +53,8 @@ public class PostIndexDDLCompiler {
 
     public MutationPlan compile(final PTable indexTable) throws SQLException {
         /*
-         * Handles:
-         * 1) Populate a newly created table with contents.
-         * 2) Activate the index by setting the INDEX_STATE to 
+         * Compiles an UPSERT SELECT command to read from the data table and populate the index table
          */
-        // NOTE: For first version, we would use a upsert/select to populate the new index table and
-        //   returns synchronously. Creating an index on an existing table with large amount of data
-        //   will as a result take a very very long time.
-        //   In the long term, we should change this to an asynchronous process to populate the index
-        //   that would allow the user to easily monitor the process of index creation.
         StringBuilder indexColumns = new StringBuilder();
         StringBuilder dataColumns = new StringBuilder();
         
