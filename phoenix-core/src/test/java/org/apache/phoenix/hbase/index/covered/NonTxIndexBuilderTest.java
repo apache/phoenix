@@ -53,6 +53,7 @@ import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
@@ -73,8 +74,9 @@ import org.mockito.stubbing.Answer;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
-public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
+public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
     private static final String TEST_TABLE_STRING = "TEST_TABLE";
     private static final String TEST_TABLE_DDL = "CREATE TABLE IF NOT EXISTS " +
             TEST_TABLE_STRING + " (\n" +
@@ -247,8 +249,10 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
         put.addImmutable(FAM, INDEXED_QUALIFIER, 2, VALUE_2);
         mutation.addAll(put);
 
-        Collection<Pair<Mutation, byte[]>> indexUpdates =
-                indexBuilder.getIndexUpdate(mutation, mockIndexMetaData);
+        Collection<Pair<Mutation, byte[]>> indexUpdates = Lists.newArrayList();
+        for (Mutation m : IndexManagementUtil.flattenMutationsByTimestamp(Collections.singletonList(mutation))) {
+            indexUpdates.addAll(indexBuilder.getIndexUpdate(m, mockIndexMetaData));
+        }
         // 3 puts and 3 deletes (one to hide existing index row for VALUE_1, and two to hide index
         // rows for VALUE_2, VALUE_3)
         assertEquals(6, indexUpdates.size());
@@ -279,8 +283,10 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
         MultiMutation mutation = getMultipleVersionMutation(200);
         currentRowCells = mutation.getFamilyCellMap().get(FAM);
 
-        Collection<Pair<Mutation, byte[]>> indexUpdates =
-                indexBuilder.getIndexUpdate(mutation, mockIndexMetaData);
+        Collection<Pair<Mutation, byte[]>> indexUpdates = Lists.newArrayList();
+        for (Mutation m : IndexManagementUtil.flattenMutationsByTimestamp(Collections.singletonList(mutation))) {
+            indexUpdates.addAll(indexBuilder.getIndexUpdate(m, mockIndexMetaData));
+        }
         assertNotEquals(0, indexUpdates.size());
     }
 

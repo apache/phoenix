@@ -27,7 +27,7 @@ import org.junit.Test;
 import org.apache.phoenix.hbase.index.covered.CoveredColumns;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 
-public class TestCoveredColumns {
+public class CoveredColumnsTest {
 
   private static final byte[] fam = Bytes.toBytes("fam");
   private static final byte[] qual = Bytes.toBytes("qual");

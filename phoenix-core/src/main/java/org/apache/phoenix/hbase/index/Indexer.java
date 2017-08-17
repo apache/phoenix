@@ -123,6 +123,11 @@ public class Indexer extends BaseRegionObserver {
   protected IndexBuildManager builder;
   private LockManager lockManager;
 
+  // Hack to get around not being able to save any state between
+  // coprocessor calls. TODO: remove after HBASE-18127 when available
+  private ThreadLocal<Collection<Pair<Mutation, byte[]>>> indexUpdates =
+          new ThreadLocal<Collection<Pair<Mutation, byte[]>>>();
+  
   /** Configuration key for the {@link IndexBuilder} to use */
   public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
 
@@ -480,9 +485,12 @@ public class Indexer extends BaseRegionObserver {
               }
     
               // Only copy mutations if we found duplicate rows
-              // (which is pretty much never for Phoenix)
+              // which only occurs when we're partially rebuilding
+              // the index (since we'll potentially have both a
+              // Put and a Delete mutation for the same row).
               if (copyMutations) {
                   // Add the mutation to the batch set
+
                   ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
                   MultiMutation stored = mutationsMap.get(row);
                   // we haven't seen this row before, so add it
@@ -505,6 +513,9 @@ public class Indexer extends BaseRegionObserver {
           miniBatchOp.setWalEdit(0, edit);
       }
   
+      if (copyMutations) {
+          mutations = IndexManagementUtil.flattenMutationsByTimestamp(mutations);
+      }
 
       // get the current span, or just use a null-span to avoid a bunch of if statements
       try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -543,42 +554,29 @@ public class Indexer extends BaseRegionObserver {
               miniBatchOp.addOperationsFromCP(0,
                   localUpdates.toArray(new Mutation[localUpdates.size()]));
           }
-          
-          // write them, either to WAL or the index tables
-          doPre(indexUpdates, edit, durability);
+          if (!indexUpdates.isEmpty()) {
+              setIndexUpdates(c, indexUpdates);
+              // write index updates to WAL
+              if (durability != Durability.SKIP_WAL) {
+                  // we have all the WAL durability, so we just update the WAL entry and move on
+                  for (Pair<Mutation, byte[]> entry : indexUpdates) {
+                    edit.add(new IndexedKeyValue(entry.getSecond(), entry.getFirst()));
+                  }              
+              }
+          }
       }
   }
 
-  /**
-   * Add the index updates to the WAL, or write to the index table, if the WAL has been disabled
-   * @return <tt>true</tt> if the WAL has been updated.
-   * @throws IOException
-   */
-  private boolean doPre(Collection<Pair<Mutation, byte[]>> indexUpdates, final WALEdit edit,
-      final Durability durability) throws IOException {
-    // no index updates, so we are done
-    if (indexUpdates == null || indexUpdates.size() == 0) {
-      return false;
-    }
-
-    // if writing to wal is disabled, we never see the WALEdit updates down the way, so do the index
-    // update right away
-    if (durability == Durability.SKIP_WAL) {
-      try {
-        this.writer.write(indexUpdates, false);
-        return false;
-      } catch (Throwable e) {
-        LOG.error("Failed to update index with entries:" + indexUpdates, e);
-        IndexManagementUtil.rethrowIndexingException(e);
-      }
-    }
-
-    // we have all the WAL durability, so we just update the WAL entry and move on
-    for (Pair<Mutation, byte[]> entry : indexUpdates) {
-      edit.add(new IndexedKeyValue(entry.getSecond(), entry.getFirst()));
-    }
-
-    return true;
+  private void setIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c, Collection<Pair<Mutation, byte[]>> indexUpdates) {
+      this.indexUpdates.set(indexUpdates);
+  }
+  
+  private Collection<Pair<Mutation, byte[]>> getIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c) {
+      return this.indexUpdates.get();
+  }
+  
+  private void removeIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c) {
+      this.indexUpdates.remove();
   }
 
   @Override
@@ -601,8 +599,7 @@ public class Indexer extends BaseRegionObserver {
           if (success) { // if miniBatchOp was successfully written, write index updates
               //each batch operation, only the first one will have anything useful, so we can just grab that
               Mutation mutation = miniBatchOp.getOperation(0);
-              WALEdit edit = miniBatchOp.getWalEdit(0);
-              doPost(edit, mutation, mutation.getDurability());
+              doPost(c, mutation);
           }
        } finally {
            long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
@@ -616,22 +613,21 @@ public class Indexer extends BaseRegionObserver {
        }
   }
 
-  private void doPost(WALEdit edit, Mutation m, final Durability durability) throws IOException {
-    try {
-      doPostWithExceptions(edit, m, durability);
-      return;
-    } catch (Throwable e) {
-      rethrowIndexingException(e);
+  private void doPost(ObserverContext<RegionCoprocessorEnvironment> c, Mutation m) throws IOException {
+      try {
+        doPostWithExceptions(c,m);
+        return;
+      } catch (Throwable e) {
+        rethrowIndexingException(e);
+      }
+      throw new RuntimeException(
+          "Somehow didn't complete the index update, but didn't return succesfully either!");
     }
-    throw new RuntimeException(
-        "Somehow didn't complete the index update, but didn't return succesfully either!");
-  }
 
-  private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability)
-          throws Exception {
+  private void doPostWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c, Mutation m)
+          throws IOException {
       //short circuit, if we don't need to do any work
-      if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m) || edit == null) {
-          // already did the index update in prePut, so we are done
+      if (!this.builder.isEnabled(m)) {
           return;
       }
 
@@ -643,42 +639,21 @@ public class Indexer extends BaseRegionObserver {
           }
           long start = EnvironmentEdgeManager.currentTimeMillis();
 
-          // there is a little bit of excess here- we iterate all the non-indexed kvs for this check first
-          // and then do it again later when getting out the index updates. This should be pretty minor
-          // though, compared to the rest of the runtime
-          IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
-
-          /*
-           * early exit - we have nothing to write, so we don't need to do anything else. NOTE: we don't
-           * release the WAL Rolling lock (INDEX_UPDATE_LOCK) since we never take it in doPre if there are
-           * no index updates.
-           */
-          if (ikv == null) {
+          
+          Collection<Pair<Mutation, byte[]>> indexUpdates = getIndexUpdates(c);
+          if (indexUpdates == null) {
               return;
           }
 
-          /*
-           * only write the update if we haven't already seen this batch. We only want to write the batch
-           * once (this hook gets called with the same WALEdit for each Put/Delete in a batch, which can
-           * lead to writing all the index updates for each Put/Delete).
-           */
-          if (!ikv.getBatchFinished()) {
-              Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(edit);
-
-              // the WAL edit is kept in memory and we already specified the factory when we created the
-              // references originally - therefore, we just pass in a null factory here and use the ones
-              // already specified on each reference
-              try {
-                  current.addTimelineAnnotation("Actually doing index update for first time");
-                  writer.writeAndKillYourselfOnFailure(indexUpdates, false);
-              } finally {                  // With a custom kill policy, we may throw instead of kill the server.
-                  // Without doing this in a finally block (at least with the mini cluster),
-                  // the region server never goes down.
-
-                  // mark the batch as having been written. In the single-update case, this never gets check
-                  // again, but in the batch case, we will check it again (see above).
-                  ikv.markBatchFinished();
-              }
+          // the WAL edit is kept in memory and we already specified the factory when we created the
+          // references originally - therefore, we just pass in a null factory here and use the ones
+          // already specified on each reference
+          try {
+              current.addTimelineAnnotation("Actually doing index update for first time");
+              writer.writeAndKillYourselfOnFailure(indexUpdates, false);
+          } finally { // With a custom kill policy, we may throw instead of kill the server.
+              // mark the batch as having been written so it won't be written again
+              removeIndexUpdates(c);
           }
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;

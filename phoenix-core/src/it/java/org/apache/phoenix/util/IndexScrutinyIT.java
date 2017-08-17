@@ -9,7 +9,7 @@ import java.sql.DriverManager;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.junit.Test;
 
-public class TestUtilIT extends ParallelStatsDisabledIT {
+public class IndexScrutinyIT extends ParallelStatsDisabledIT {
     @Test
     public void testRowCountIndexScrutiny() throws Throwable {
         String schemaName = generateUniqueName();
@@ -28,7 +28,7 @@ public class TestUtilIT extends ParallelStatsDisabledIT {
             assertEquals(1,count);
             conn.commit();
             try {
-                TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
+                IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
                 assertEquals(e.getMessage(),"Expected data table row count to match expected:<2> but was:<1>");
@@ -52,7 +52,7 @@ public class TestUtilIT extends ParallelStatsDisabledIT {
             conn.createStatement().executeUpdate("UPSERT INTO " + fullIndexName + " VALUES ('bbb','x','0')");
             conn.commit();
             try {
-                TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
+                IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
                 assertEquals(e.getMessage(),"Expected to find PK in data table: ('x')");
@@ -77,7 +77,7 @@ public class TestUtilIT extends ParallelStatsDisabledIT {
             conn.createStatement().executeUpdate("UPSERT INTO " + fullIndexName + " VALUES ('ccc','a','2')");
             conn.commit();
             try {
-                TestUtil.scrutinizeIndex(conn, fullTableName, fullIndexName);
+                IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
                 assertEquals(e.getMessage(),"Expected equality for V2, but '2'!='1'");

@@ -40,6 +40,7 @@ import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
 /**
  * Index maintainer that maintains multiple indexes based on '{@link ColumnGroup}s'. Each group is a
@@ -141,7 +142,7 @@ public class CoveredColumnIndexer extends NonTxIndexBuilder {
       }
 
       // do the usual thing as for deletes
-      Collection<Batch> timeBatch = createTimestampBatchesFromMutation(p);
+      Collection<Batch> timeBatch = IndexManagementUtil.createTimestampBatchesFromMutation(p);
       LocalTableState state = new LocalTableState(env, localTable, p);
       for (Batch entry : timeBatch) {
         //just set the timestamp on the table - it already has all the future state
@@ -158,7 +159,7 @@ public class CoveredColumnIndexer extends NonTxIndexBuilder {
    */
   private Collection<Batch>  batchByRow(Collection<KeyValue> filtered) {
     Map<Long, Batch> batches = new HashMap<Long, Batch>();
-    createTimestampBatchesFromKeyValues(filtered, batches);
+    IndexManagementUtil.createTimestampBatchesFromKeyValues(filtered, batches);
     return batches.values();
   }
 }

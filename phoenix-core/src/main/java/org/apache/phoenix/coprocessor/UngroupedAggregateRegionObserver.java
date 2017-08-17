@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -897,6 +898,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
                                             PDataType.TRUE_BYTES);
                                     mutations.add(put);
+                                    // Since we're replaying existing mutations, it makes no sense to write them to the wal
+                                    put.setDurability(Durability.SKIP_WAL);
                                 }
                                 put.add(cell);
                             } else {
@@ -907,6 +910,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
                                             PDataType.TRUE_BYTES);
                                     mutations.add(del);
+                                    // Since we're replaying existing mutations, it makes no sense to write them to the wal
+                                    del.setDurability(Durability.SKIP_WAL);
                                 }
                                 del.addDeleteMarker(cell);
                             }
