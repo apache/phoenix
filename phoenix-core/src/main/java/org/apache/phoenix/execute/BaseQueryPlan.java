@@ -279,12 +279,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
 	        TimeRange scanTimeRange = scan.getTimeRange();
 	        Long scn = connection.getSCN();
 	        if (scn == null) {
-	            // If we haven't resolved the time at the beginning of compilation, don't
-	            // force the lookup on the server, but use HConstants.LATEST_TIMESTAMP instead.
-	            scn = tableRef.getTimeStamp();
-	            if (scn == QueryConstants.UNSET_TIMESTAMP) {
-	                scn = HConstants.LATEST_TIMESTAMP;
-	            }
+	        	// Always use latest timestamp unless scn is set or transactional (see PHOENIX-4089)
+                scn = HConstants.LATEST_TIMESTAMP;
 	        }
 	        try {
 	            TimeRange timeRangeToUse = ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);

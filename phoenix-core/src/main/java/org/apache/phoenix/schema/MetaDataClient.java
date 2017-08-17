@@ -1244,43 +1244,6 @@ public class MetaDataClient {
         throw new IllegalStateException(); // impossible
     }
     
-    /**
-     * For new mutations only should not be used if there are deletes done in the data table between start time and end
-     * time passed to the method.
-     */
-    public MutationState buildIndex(PTable index, TableRef dataTableRef, long startTime, long EndTime)
-            throws SQLException {
-        boolean wasAutoCommit = connection.getAutoCommit();
-        try {
-            AlterIndexStatement indexStatement = FACTORY
-                    .alterIndex(
-                            FACTORY.namedTable(null,
-                                    TableName.create(index.getSchemaName().getString(),
-                                            index.getTableName().getString())),
-                            dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
-            alterIndex(indexStatement);
-            connection.setAutoCommit(true);
-            MutationPlan mutationPlan = getMutationPlanForBuildingIndex(index, dataTableRef);
-            Scan scan = mutationPlan.getContext().getScan();
-            try {
-                scan.setTimeRange(startTime, EndTime);
-            } catch (IOException e) {
-                throw new SQLException(e);
-            }
-            MutationState state = connection.getQueryServices().updateData(mutationPlan);
-            indexStatement = FACTORY
-                    .alterIndex(
-                            FACTORY.namedTable(null,
-                                    TableName.create(index.getSchemaName().getString(),
-                                            index.getTableName().getString())),
-                            dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
-            alterIndex(indexStatement);
-            return state;
-        } finally {
-            connection.setAutoCommit(wasAutoCommit);
-        }
-    }
-
     private MutationPlan getMutationPlanForBuildingIndex(PTable index, TableRef dataTableRef) throws SQLException {
         MutationPlan mutationPlan;
         if (index.getIndexType() == IndexType.LOCAL) {
@@ -1320,7 +1283,12 @@ public class MetaDataClient {
 
             // for global indexes on non transactional tables we might have to
             // run a second index population upsert select to handle data rows
-            // that were being written on the server while the index was created
+            // that were being written on the server while the index was created.
+            // TODO: this sleep time is really arbitrary. If any query is in progress
+            // while the index is being built, we're depending on this sleep
+            // waiting them out. Instead we should have a means of waiting until
+            // all in progress queries are complete (though I'm not sure that's
+            // feasible). See PHOENIX-4092.
             long sleepTime =
                     connection
                     .getQueryServices()
@@ -1342,6 +1310,12 @@ public class MetaDataClient {
                 // was created
                 long minTimestamp = index.getTimeStamp() - firstUpsertSelectTime;
                 try {
+                    // TODO: Use scn or LATEST_TIMESTAMP here? It's possible that a DML statement
+                    // ran and ended up with timestamps later than this time. If we use a later
+                    // timestamp, we'll need to run the partial index rebuilder here as it's
+                    // possible that the updates to the table were made (such as deletes) after
+                    // the scn which would not be properly reflected correctly this mechanism.
+                    // See PHOENIX-4092.
                     mutationPlan.getContext().getScan().setTimeRange(minTimestamp, scn);
                 } catch (IOException e) {
                     throw new SQLException(e);

@@ -50,14 +50,18 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.Repeat;
+import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import com.google.common.collect.Maps;
 
+@RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Random RAND = new Random();
+    private static final Random RAND = new Random(5);
     private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";  
     private static final String LOCK_TEST_TABLE_PREFIX = "LOCKTEST_";
     private static final int ROW_LOCK_WAIT_TIME = 10000;
@@ -224,6 +228,56 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue("Expected table row count ( " + count1 + ") to match index row count (" + count2 + ")", count1 == count2);
     }
     
+    @Test
+    @Repeat(25)
+    public void testConcurrentUpserts() throws Exception {
+        int nThreads = 8;
+        final int batchSize = 200;
+        final int nRows = 51;
+        final int nIndexValues = 23;
+        final String tableName = generateUniqueName();
+        final String indexName = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=true, VERSIONS=1");
+        addDelayingCoprocessor(conn, tableName);
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
+        final CountDownLatch doneSignal = new CountDownLatch(nThreads);
+        Runnable[] runnables = new Runnable[nThreads];
+        for (int i = 0; i < nThreads; i++) {
+           runnables[i] = new Runnable() {
+    
+               @Override
+               public void run() {
+                   try {
+                       Connection conn = DriverManager.getConnection(getUrl());
+                       for (int i = 0; i < 10000; i++) {
+                           boolean isNull = RAND.nextBoolean();
+                           int randInt = RAND.nextInt() % nIndexValues;
+                           conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, " + (isNull ? null : randInt) + ")");
+                           if ((i % batchSize) == 0) {
+                               conn.commit();
+                           }
+                       }
+                       conn.commit();
+                   } catch (SQLException e) {
+                       throw new RuntimeException(e);
+                   } finally {
+                       doneSignal.countDown();
+                   }
+               }
+                
+            };
+        }
+        for (int i = 0; i < nThreads; i++) {
+            Thread t = new Thread(runnables[i]);
+            t.start();
+        }
+        
+        assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+        long actualRowCount = TestUtil.scrutinizeIndex(conn, tableName, indexName);
+        assertEquals(nRows, actualRowCount);
+    }
+
     @Test
     public void testRowLockDuringPreBatchMutateWhenIndexed() throws Exception {
         final String tableName = LOCK_TEST_TABLE_PREFIX + generateUniqueName();

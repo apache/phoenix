@@ -41,6 +41,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
@@ -85,9 +87,11 @@ import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 /**
@@ -356,12 +360,25 @@ public class Indexer extends BaseRegionObserver {
 
   private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
   private static final OperationStatus FAILURE = new OperationStatus(OperationStatusCode.FAILURE, "Unable to acquire row lock");
+  
+  // Assume time stamp of mutation a client defined time stamp if it's not within
+  // a factor of ten of the current time.
+  // TODO: get rid of this and have client pass LATEST_TIMESTAMP unless an SCN is set
+  private static boolean isProbablyClientControlledTimeStamp(Mutation m) {
+      double ratio = EnvironmentEdgeManager.currentTimeMillis() / MetaDataUtil.getClientTimeStamp(m);
+      return ratio > 10 || ratio < 0.10;
+  }
+   
+  private static void setTimeStamp(KeyValue kv, byte[] tsBytes) {
+      int tsOffset = kv.getTimestampOffset();
+      System.arraycopy(tsBytes, 0, kv.getBuffer(), tsOffset, Bytes.SIZEOF_LONG);
+  }
 
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
       // first group all the updates for a single row into a single update to be processed
-      Map<ImmutableBytesPtr, MultiMutation> mutations =
+      Map<ImmutableBytesPtr, MultiMutation> mutationsMap =
               new HashMap<ImmutableBytesPtr, MultiMutation>();
           
       Durability defaultDurability = Durability.SYNC_WAL;
@@ -370,17 +387,18 @@ public class Indexer extends BaseRegionObserver {
           defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
                   Durability.SYNC_WAL : defaultDurability;
       }
+      /*
+       * Exclusively lock all rows so we get a consistent read
+       * while determining the index updates
+       */
       Durability durability = Durability.SKIP_WAL;
+      boolean copyMutations = false;
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
           if (this.builder.isAtomicOp(m)) {
               miniBatchOp.setOperationStatus(i, IGNORE);
               continue;
           }
-          // skip this mutation if we aren't enabling indexing
-          // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
-          // should be indexed, which means we need to expose another method on the builder. Such is the
-          // way optimization go though.
           if (this.builder.isEnabled(m)) {
               boolean success = false;
               try {
@@ -412,26 +430,73 @@ public class Indexer extends BaseRegionObserver {
               if (effectiveDurablity.ordinal() > durability.ordinal()) {
                   durability = effectiveDurablity;
               }
-    
-              // TODO: remove this code as Phoenix prevents any duplicate
-              // rows in the batch mutation from the client side (PHOENIX-4054).
-              // Add the mutation to the batch set
+              // Track whether or not we need to 
               ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-              MultiMutation stored = mutations.get(row);
-              // we haven't seen this row before, so add it
-              if (stored == null) {
-                  stored = new MultiMutation(row);
-                  mutations.put(row, stored);
+              if (mutationsMap.containsKey(row)) {
+                  copyMutations = true;
+              } else {
+                  mutationsMap.put(row, null);
               }
-              stored.addAll(m);
           }
       }
-    
+
       // early exit if it turns out we don't have any edits
-      if (mutations.isEmpty()) {
+      if (mutationsMap.isEmpty()) {
           return;
       }
 
+      // If we're copying the mutations
+      Collection<Mutation> originalMutations;
+      Collection<? extends Mutation> mutations;
+      if (copyMutations) {
+          originalMutations = null;
+          mutations = mutationsMap.values();
+      } else {
+          originalMutations = Lists.newArrayListWithExpectedSize(mutationsMap.size());
+          mutations = originalMutations;
+      }
+      
+      Mutation firstMutation = miniBatchOp.getOperation(0);
+      boolean resetTimeStamp = !this.builder.isPartialRebuild(firstMutation) && !isProbablyClientControlledTimeStamp(firstMutation);
+      long now = EnvironmentEdgeManager.currentTimeMillis();
+      byte[] byteNow = Bytes.toBytes(now);
+      for (int i = 0; i < miniBatchOp.size(); i++) {
+          Mutation m = miniBatchOp.getOperation(i);
+          // skip this mutation if we aren't enabling indexing
+          // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
+          // should be indexed, which means we need to expose another method on the builder. Such is the
+          // way optimization go though.
+          if (miniBatchOp.getOperationStatus(i) != IGNORE && this.builder.isEnabled(m)) {
+              if (resetTimeStamp) {
+                  // Unless we're replaying edits to rebuild the index, we update the time stamp
+                  // of the data table to prevent overlapping time stamps (which prevents index
+                  // inconsistencies as this case isn't handled correctly currently).
+                  for (List<Cell> family : m.getFamilyCellMap().values()) {
+                      List<KeyValue> familyKVs = KeyValueUtil.ensureKeyValues(family);
+                      for (KeyValue kv : familyKVs) {
+                          setTimeStamp(kv, byteNow);
+                      }
+                  }
+              }
+    
+              // Only copy mutations if we found duplicate rows
+              // (which is pretty much never for Phoenix)
+              if (copyMutations) {
+                  // Add the mutation to the batch set
+                  ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+                  MultiMutation stored = mutationsMap.get(row);
+                  // we haven't seen this row before, so add it
+                  if (stored == null) {
+                      stored = new MultiMutation(row);
+                      mutationsMap.put(row, stored);
+                  }
+                  stored.addAll(m);
+              } else {
+                  originalMutations.add(m);
+              }
+          }
+      }
+    
       // dump all the index updates into a single WAL. They will get combined in the end anyways, so
       // don't worry which one we get
       WALEdit edit = miniBatchOp.getWalEdit(0);
@@ -451,7 +516,7 @@ public class Indexer extends BaseRegionObserver {
 
           // get the index updates for all elements in this batch
           Collection<Pair<Mutation, byte[]>> indexUpdates =
-                  this.builder.getIndexUpdate(miniBatchOp, mutations.values());
+                  this.builder.getIndexUpdate(miniBatchOp, mutations);
 
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;

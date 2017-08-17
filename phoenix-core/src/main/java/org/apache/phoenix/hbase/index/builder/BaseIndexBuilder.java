@@ -129,4 +129,9 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     public boolean isStopped() {
         return this.stopped;
     }
+
+    @Override
+    public boolean isPartialRebuild(Mutation m) {
+        return false;
+    }
 }

@@ -381,4 +381,9 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     public static boolean isDupKeyIgnore(byte[] onDupKeyBytes) {
         return onDupKeyBytes != null && Bytes.compareTo(ON_DUP_KEY_IGNORE_BYTES, onDupKeyBytes) == 0;
     }
+
+    @Override
+    public boolean isPartialRebuild(Mutation m) {
+        return PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap());
+    }
 }
