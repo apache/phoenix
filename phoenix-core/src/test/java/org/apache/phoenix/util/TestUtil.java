@@ -41,7 +41,6 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -122,7 +121,6 @@ import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 
 
@@ -882,112 +880,7 @@ public class TestUtil {
         }
     }
 
-    public static long scrutinizeIndex(Connection conn, String fullTableName, String fullIndexName) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable ptable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-        PTable pindex = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
-        StringBuilder indexQueryBuf = new StringBuilder("SELECT ");
-        for (PColumn dcol : ptable.getPKColumns()) {
-            indexQueryBuf.append("CAST(\"" + IndexUtil.getIndexColumnName(dcol) + "\" AS " + dcol.getDataType().getSqlTypeName() + ")");
-            indexQueryBuf.append(",");
-        }
-        for (PColumn icol : pindex.getColumns()) {
-            PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
-            if (SchemaUtil.isPKColumn(icol) && !SchemaUtil.isPKColumn(dcol)) {
-                indexQueryBuf.append("CAST (\"" + icol.getName().getString() + "\" AS " + dcol.getDataType().getSqlTypeName() + ")");
-                indexQueryBuf.append(",");
-            }
-        }
-        for (PColumn icol : pindex.getColumns()) {
-            if (!SchemaUtil.isPKColumn(icol)) {
-                PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
-                indexQueryBuf.append("CAST (\"" + icol.getName().getString() + "\" AS " + dcol.getDataType().getSqlTypeName() + ")");
-                indexQueryBuf.append(",");
-            }
-        }
-        indexQueryBuf.setLength(indexQueryBuf.length()-1);
-        indexQueryBuf.append("\nFROM " + fullIndexName);
-        
-        StringBuilder tableQueryBuf = new StringBuilder("SELECT ");
-        for (PColumn dcol : ptable.getPKColumns()) {
-            tableQueryBuf.append("\"" + dcol.getName().getString() + "\"");
-            tableQueryBuf.append(",");
-        }
-        for (PColumn icol : pindex.getColumns()) {
-            PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
-            if (SchemaUtil.isPKColumn(icol) && !SchemaUtil.isPKColumn(dcol)) {
-                if (dcol.getFamilyName() != null) {
-                    tableQueryBuf.append("\"" + dcol.getFamilyName().getString() + "\"");
-                    tableQueryBuf.append(".");
-                }
-                tableQueryBuf.append("\"" + dcol.getName().getString() + "\"");
-                tableQueryBuf.append(",");
-            }
-        }
-        for (PColumn icol : pindex.getColumns()) {
-            if (!SchemaUtil.isPKColumn(icol)) {
-                PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
-                if (dcol.getFamilyName() != null) {
-                    tableQueryBuf.append("\"" + dcol.getFamilyName().getString() + "\"");
-                    tableQueryBuf.append(".");
-                }
-                tableQueryBuf.append("\"" + dcol.getName().getString() + "\"");
-                tableQueryBuf.append(",");
-            }
-        }
-        tableQueryBuf.setLength(tableQueryBuf.length()-1);
-        tableQueryBuf.append("\nFROM " + fullTableName + "\nWHERE (");
-        for (PColumn dcol : ptable.getPKColumns()) {
-            tableQueryBuf.append("\"" + dcol.getName().getString() + "\"");
-            tableQueryBuf.append(",");
-        }
-        tableQueryBuf.setLength(tableQueryBuf.length()-1);
-        tableQueryBuf.append(") = ((");
-        for (int i = 0; i < ptable.getPKColumns().size(); i++) {
-            tableQueryBuf.append("?");
-            tableQueryBuf.append(",");
-        }
-        tableQueryBuf.setLength(tableQueryBuf.length()-1);
-        tableQueryBuf.append("))");
-        
-        String tableQuery = tableQueryBuf.toString();
-        PreparedStatement istmt = conn.prepareStatement(tableQuery);
-        
-        String indexQuery = indexQueryBuf.toString();
-        ResultSet irs = conn.createStatement().executeQuery(indexQuery);
-        ResultSetMetaData irsmd = irs.getMetaData();
-        long icount = 0;
-        while (irs.next()) {
-            icount++;
-            StringBuilder pkBuf = new StringBuilder("(");
-            for (int i = 0; i < ptable.getPKColumns().size(); i++) {
-                PColumn dcol = ptable.getPKColumns().get(i);
-                Object pkVal = irs.getObject(i+1);
-                PDataType pkType = PDataType.fromTypeId(irsmd.getColumnType(i + 1));
-                istmt.setObject(i+1, pkVal, dcol.getDataType().getSqlType());
-                pkBuf.append(pkType.toStringLiteral(pkVal));
-                pkBuf.append(",");
-            }
-            pkBuf.setLength(pkBuf.length()-1);
-            pkBuf.append(")");
-            ResultSet drs = istmt.executeQuery();
-            ResultSetMetaData drsmd = drs.getMetaData();
-            assertTrue("Expected to find PK in data table: " + pkBuf, drs.next());
-            for (int i = 0; i < irsmd.getColumnCount(); i++) {
-                Object iVal = irs.getObject(i + 1);
-                PDataType iType = PDataType.fromTypeId(irsmd.getColumnType(i + 1));
-                Object dVal = drs.getObject(i + 1);
-                PDataType dType = PDataType.fromTypeId(drsmd.getColumnType(i + 1));
-                assertTrue("Expected equality for " + drsmd.getColumnName(i + 1) + ", but " + iType.toStringLiteral(iVal) + "!=" + dType.toStringLiteral(dVal), Objects.equal(iVal, dVal));
-            }
-        }
-        
-        long dcount = getRowCount(conn, fullTableName);
-        assertEquals("Expected data table row count to match", dcount, icount);
-        return dcount;
-    }
-    
-    private static long getRowCount(Connection conn, String tableName) throws SQLException {
+    public static long getRowCount(Connection conn, String tableName) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + tableName);
         assertTrue(rs.next());
         return rs.getLong(1);
