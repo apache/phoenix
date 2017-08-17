@@ -39,7 +39,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
@@ -52,6 +51,7 @@ import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -71,7 +71,6 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
-    private final boolean columnEncoded;
     private final String tableDDLOptions;
 
     private volatile boolean stopThreads = false;
@@ -83,7 +82,6 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     public ImmutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         this.localIndex = localIndex;
-        this.columnEncoded = columnEncoded;
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
                 optionBuilder.append(",");
@@ -186,11 +184,12 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
             String upsertSelect = "UPSERT INTO " + TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) " +
                     "SELECT varchar_pk||'_upsert_select', char_pk, int_pk, long_pk, decimal_pk, date_pk FROM "+ TABLE_NAME;
             conn.createStatement().execute(upsertSelect);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(440,rs.getInt(1));
-            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + TABLE_NAME);
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexName);
             assertTrue(rs.next());
             assertEquals(440,rs.getInt(1));
         }
@@ -207,14 +206,22 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
             if (tableName.equalsIgnoreCase(TABLE_NAME)
                     // create the index after the second batch  
                     && Bytes.startsWith(put.getRow(), Bytes.toBytes("varchar200_upsert_select"))) {
-                try {
-                    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-                    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-                        conn.createStatement().execute(INDEX_DDL);
+                Runnable r = new Runnable() {
+
+                    @Override
+                    public void run() {
+                        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+                        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                            // Run CREATE INDEX call in separate thread as otherwise we block
+                            // this thread (not a realistic scenario) and prevent our catchup
+                            // query from adding the missing rows.
+                            conn.createStatement().execute(INDEX_DDL);
+                        } catch (SQLException e) {
+                        } 
                     }
-                } catch (SQLException e) {
-                    throw new DoNotRetryIOException(e);
-                } 
+                    
+                };
+                new Thread(r).start();
             }
         }
     }

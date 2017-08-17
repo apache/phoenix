@@ -132,4 +132,8 @@ public class IndexBuildManager implements Stoppable {
   public IndexBuilder getBuilderForTesting() {
     return this.delegate;
   }
+
+  public boolean isPartialRebuild(Mutation m) throws IOException {
+    return this.delegate.isPartialRebuild(m);
+  }
 }

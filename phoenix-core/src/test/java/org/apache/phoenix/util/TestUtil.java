@@ -983,8 +983,8 @@ public class TestUtil {
         }
         
         long dcount = getRowCount(conn, fullTableName);
-        assertEquals("Expected data table row count to match", icount, dcount);
-        return icount;
+        assertEquals("Expected data table row count to match", dcount, icount);
+        return dcount;
     }
     
     private static long getRowCount(Connection conn, String tableName) throws SQLException {

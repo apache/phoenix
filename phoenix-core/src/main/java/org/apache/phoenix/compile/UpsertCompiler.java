@@ -24,7 +24,6 @@ import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
@@ -81,8 +80,6 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.DelegateColumn;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
@@ -109,7 +106,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -345,10 +341,6 @@ public class UpsertCompiler {
                 services.getProps().getBoolean(QueryServices.ENABLE_SERVER_UPSERT_SELECT,
                         QueryServicesOptions.DEFAULT_ENABLE_SERVER_UPSERT_SELECT);
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
-        // Retry once if auto commit is off, as the meta data may
-        // be out of date. We do not retry if auto commit is on, as we
-        // update the cache up front when we create the resolver in that case.
-        boolean retryOnce = !connection.getAutoCommit();
         boolean useServerTimestampToBe = false;
         
 
@@ -512,7 +504,6 @@ public class UpsertCompiler {
             }
             sameTable = !select.isJoin()
                 && tableRefToBe.equals(selectResolver.getTables().get(0));
-            tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
             /* We can run the upsert in a coprocessor if:
              * 1) from has only 1 table or server UPSERT SELECT is enabled
              * 2) the select query isn't doing aggregation (which requires a client-side final merge)
@@ -550,17 +541,12 @@ public class UpsertCompiler {
             select = SelectStatement.create(select, hint);
             // Pass scan through if same table in upsert and select so that projection is computed correctly
             // Use optimizer to choose the best plan
-            try {
-                QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
-                queryPlanToBe = compiler.compile();
-                // This is post-fix: if the tableRef is a projected table, this means there are post-processing
-                // steps and parallelIteratorFactory did not take effect.
-                if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
-                    parallelIteratorFactoryToBe = null;
-                }
-            } catch (MetaDataEntityNotFoundException e) {
-                retryOnce = false; // don't retry if select clause has meta data entities that aren't found, as we already updated the cache
-                throw e;
+            QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
+            queryPlanToBe = compiler.compile();
+            // This is post-fix: if the tableRef is a projected table, this means there are post-processing
+            // steps and parallelIteratorFactory did not take effect.
+            if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
+                parallelIteratorFactoryToBe = null;
             }
             nValuesToSet = queryPlanToBe.getProjector().getColumnCount();
             // Cannot auto commit if doing aggregation or topN or salted
@@ -699,10 +685,6 @@ public class UpsertCompiler {
                      */
                     final StatementContext context = queryPlan.getContext();
                     final Scan scan = context.getScan();
-                    // Propagate IGNORE_NEWER_MUTATIONS when replaying mutations since there will be
-                    // future dated data row mutations that will get in the way of generating the
-                    // correct index rows on replay.
-                    scan.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserver.serialize(projectedTable));
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
                     
@@ -752,10 +734,6 @@ public class UpsertCompiler {
                                 Tuple row = iterator.next();
                                 final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row,
                                         PLong.INSTANCE, ptr);
-                                for (PTable index : getNewIndexes(table)) {
-                                    new MetaDataClient(connection).buildIndex(index, tableRef,
-                                            scan.getTimeRange().getMax(), scan.getTimeRange().getMax() + 1);
-                                }
                                 return new MutationState(maxSize, maxSizeBytes, connection) {
                                     @Override
                                     public long getUpdateCount() {
@@ -766,18 +744,6 @@ public class UpsertCompiler {
                                 iterator.close();
                             }
                             
-                        }
-
-                        private List<PTable> getNewIndexes(PTable table) throws SQLException {
-                            List<PTable> indexes = table.getIndexes();
-                            List<PTable> newIndexes = new ArrayList<PTable>(2);
-                            PTable newTable = PhoenixRuntime.getTableNoCache(connection, table.getName().getString());
-                            for (PTable index : newTable.getIndexes()) {
-                                if (!indexes.contains(index)) {
-                                    newIndexes.add(index);
-                                }
-                            }
-                            return newIndexes;
                         }
 
                         @Override
@@ -1133,24 +1099,6 @@ public class UpsertCompiler {
         return false;
     }
     
-    private TableRef adjustTimestampToMinOfSameTable(TableRef upsertRef, List<TableRef> selectRefs) {
-        long minTimestamp = Long.MAX_VALUE;
-        for (TableRef selectRef : selectRefs) {
-            if (selectRef.equals(upsertRef)) {
-                minTimestamp = Math.min(minTimestamp, selectRef.getTimeStamp());
-            }
-        }
-        if (minTimestamp != Long.MAX_VALUE) {
-            // If we found the same table is selected from that is being upserted to,
-            // reset the timestamp of the upsert (which controls the Put timestamp)
-            // to the lowest timestamp we found to ensure that the data being selected
-            // will not see the data being upserted. This prevents infinite loops
-            // like the one in PHOENIX-1257.
-            return new TableRef(upsertRef, minTimestamp);
-        }
-        return upsertRef;
-    }
-
     private static class UpdateColumnCompiler extends ExpressionCompiler {
         private PColumn column;
         
