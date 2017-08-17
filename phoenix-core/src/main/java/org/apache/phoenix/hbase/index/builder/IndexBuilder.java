@@ -148,4 +148,6 @@ public interface IndexBuilder extends Stoppable {
    * or null if Increment does not represent an ON DUPLICATE KEY clause.
    */
   public List<Mutation> executeAtomicOp(Increment inc) throws IOException;
+
+  public boolean isPartialRebuild(Mutation m);
 }

@@ -696,7 +696,6 @@ public class MutationState implements SQLCloseable {
     private long validate(TableRef tableRef, Map<ImmutableBytesPtr, RowMutationState> rowKeyToColumnMap) throws SQLException {
         Long scn = connection.getSCN();
         MetaDataClient client = new MetaDataClient(connection);
-        long serverTimeStamp = tableRef.getTimeStamp();
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
         PTable table = tableRef.getTable();
@@ -720,7 +719,6 @@ public class MutationState implements SQLCloseable {
         } 
         long timestamp = result.getMutationTime();
         if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-            serverTimeStamp = timestamp;
             if (result.wasUpdated()) {
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
                 for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
@@ -742,7 +740,7 @@ public class MutationState implements SQLCloseable {
                 }
             }
         }
-        return scn == null ? serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp : scn;
+        return scn == null ? HConstants.LATEST_TIMESTAMP : scn;
     }
     
     private static long calculateMutationSize(List<Mutation> mutations) {
@@ -911,7 +909,6 @@ public class MutationState implements SQLCloseable {
         try (TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables")) {
             Span span = trace.getSpan();
             ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
-            boolean isTransactional;
             while (tableRefIterator.hasNext()) {
                 // at this point we are going through mutations for each table
                 final TableRef tableRef = tableRefIterator.next();
