@@ -31,8 +31,4 @@ import org.junit.experimental.categories.Category;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class BaseUniqueNamesOwnClusterIT extends BaseTest {
-    @AfterClass
-    public static void doTeardown() throws Exception {
-        tearDownMiniCluster();
-    }
 }
