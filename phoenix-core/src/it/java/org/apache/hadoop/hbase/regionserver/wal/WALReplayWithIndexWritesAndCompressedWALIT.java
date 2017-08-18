@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -52,10 +51,10 @@ import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.TableName;
-import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexer;
+import org.apache.phoenix.hbase.index.covered.ColumnGroup;
+import org.apache.phoenix.hbase.index.covered.CoveredColumn;
+import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
+import org.apache.phoenix.hbase.index.util.TestIndexManagementUtil;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.After;
 import org.junit.Before;
@@ -211,7 +210,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     wal.close();
 
     // then create the index table so we are successful on WAL replay
-    CoveredColumnIndexer.createIndexTable(UTIL.getHBaseAdmin(), INDEX_TABLE_NAME);
+    TestIndexManagementUtil.createIndexTable(UTIL.getHBaseAdmin(), INDEX_TABLE_NAME);
 
     // run the WAL split and setup the region
     runWALSplit(this.conf);
