@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 
@@ -149,5 +150,5 @@ public interface IndexBuilder extends Stoppable {
    */
   public List<Mutation> executeAtomicOp(Increment inc) throws IOException;
 
-  public boolean isPartialRebuild(Mutation m);
+  public ReplayWrite getReplayWrite(Mutation m);
 }

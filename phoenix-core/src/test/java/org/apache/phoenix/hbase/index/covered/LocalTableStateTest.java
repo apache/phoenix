@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -61,8 +62,8 @@ public class LocalTableStateTest {
     }
 
     @Override
-    public boolean ignoreNewerMutations() {
-        return false;
+    public ReplayWrite getReplayWrite() {
+        return null;
     }
       
   };
@@ -124,8 +125,8 @@ public class LocalTableStateTest {
           }
 
           @Override
-          public boolean ignoreNewerMutations() {
-              return false;
+          public ReplayWrite getReplayWrite() {
+              return null;
           }
             
         };
@@ -161,8 +162,8 @@ public class LocalTableStateTest {
           }
 
           @Override
-          public boolean ignoreNewerMutations() {
-              return false;
+          public ReplayWrite getReplayWrite() {
+              return null;
           }
             
         };

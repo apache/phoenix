@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
@@ -131,7 +132,7 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     }
 
     @Override
-    public boolean isPartialRebuild(Mutation m) {
-        return false;
+    public ReplayWrite getReplayWrite(Mutation m) {
+        return null;
     }
 }

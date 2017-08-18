@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.hbase.index.covered;
 
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
+
 public interface IndexMetaData {
     public static final IndexMetaData NULL_INDEX_META_DATA = new IndexMetaData() {
 
@@ -26,11 +28,11 @@ public interface IndexMetaData {
         }
 
         @Override
-        public boolean ignoreNewerMutations() {
-          return false;
+        public ReplayWrite getReplayWrite() {
+          return null;
         }};
 
     public boolean isImmutableRows();
 
-    public boolean ignoreNewerMutations();
+    public ReplayWrite getReplayWrite();
 }
