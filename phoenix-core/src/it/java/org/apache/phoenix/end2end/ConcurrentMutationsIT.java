@@ -230,7 +230,7 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @Test
-    @Repeat(25)
+    @Repeat(10)
     public void testConcurrentUpserts() throws Exception {
         int nThreads = 8;
         final int batchSize = 200;
