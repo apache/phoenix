@@ -16,10 +16,9 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.hbase.index.covered.example;
+package org.apache.phoenix.hbase.index.covered;
 
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 
 /**

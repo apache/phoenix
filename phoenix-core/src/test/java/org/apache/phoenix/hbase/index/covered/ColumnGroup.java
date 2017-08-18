@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.hbase.index.covered.example;
+package org.apache.phoenix.hbase.index.covered;
 
 import java.util.ArrayList;
 import java.util.Iterator;
