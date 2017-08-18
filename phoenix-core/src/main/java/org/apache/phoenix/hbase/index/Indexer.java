@@ -69,6 +69,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
@@ -364,6 +365,7 @@ public class Indexer extends BaseRegionObserver {
   }
 
   private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
+  private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
   private static final OperationStatus FAILURE = new OperationStatus(OperationStatusCode.FAILURE, "Unable to acquire row lock");
   
   // Assume time stamp of mutation a client defined time stamp if it's not within
@@ -462,7 +464,8 @@ public class Indexer extends BaseRegionObserver {
       }
       
       Mutation firstMutation = miniBatchOp.getOperation(0);
-      boolean resetTimeStamp = !this.builder.isPartialRebuild(firstMutation) && !isProbablyClientControlledTimeStamp(firstMutation);
+      ReplayWrite replayWrite = this.builder.getReplayWrite(firstMutation);
+      boolean resetTimeStamp = replayWrite == null && !isProbablyClientControlledTimeStamp(firstMutation);
       long now = EnvironmentEdgeManager.currentTimeMillis();
       byte[] byteNow = Bytes.toBytes(now);
       for (int i = 0; i < miniBatchOp.size(); i++) {
@@ -482,6 +485,11 @@ public class Indexer extends BaseRegionObserver {
                           setTimeStamp(kv, byteNow);
                       }
                   }
+              }
+              // No need to write the table mutations when we're rebuilding
+              // the index as they're already written and just being replayed.
+              if (replayWrite == ReplayWrite.INDEX_ONLY) {
+                  miniBatchOp.setOperationStatus(i, NOWRITE);
               }
     
               // Only copy mutations if we found duplicate rows

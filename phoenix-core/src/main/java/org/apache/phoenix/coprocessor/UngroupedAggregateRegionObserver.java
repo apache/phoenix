@@ -374,7 +374,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         
         RegionScanner theScanner = s;
         
-        boolean replayMutations = scan.getAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
+        byte[] replayMutations = scan.getAttribute(BaseScannerRegionObserver.REPLAY_WRITES);
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
         List<Expression> selectExpressions = null;
@@ -603,8 +603,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             Cell firstKV = results.get(0);
                             Delete delete = new Delete(firstKV.getRowArray(),
                                 firstKV.getRowOffset(), firstKV.getRowLength(),ts);
-                            if (replayMutations) {
-                                delete.setAttribute(IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                            if (replayMutations != null) {
+                                delete.setAttribute(REPLAY_WRITES, replayMutations);
                             }
                             mutations.add(delete);
                             // force tephra to ignore this deletes
@@ -657,8 +657,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                             for (Mutation mutation : row.toRowMutations()) {
-                                if (replayMutations) {
-                                    mutation.setAttribute(IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                                if (replayMutations != null) {
+                                    mutation.setAttribute(REPLAY_WRITES, replayMutations);
                                 }
                                 mutations.add(mutation);
                             }
@@ -895,8 +895,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put = new Put(CellUtil.cloneRow(cell));
                                     put.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    put.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
-                                            PDataType.TRUE_BYTES);
+                                    put.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
                                     mutations.add(put);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
                                     put.setDurability(Durability.SKIP_WAL);
@@ -907,8 +906,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del = new Delete(CellUtil.cloneRow(cell));
                                     del.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    del.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
-                                            PDataType.TRUE_BYTES);
+                                    del.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
                                     mutations.add(del);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
                                     del.setDurability(Durability.SKIP_WAL);
