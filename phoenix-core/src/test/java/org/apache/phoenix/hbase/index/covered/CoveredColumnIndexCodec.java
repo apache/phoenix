@@ -7,7 +7,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-package org.apache.phoenix.hbase.index.covered.example;
+package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -25,10 +25,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
-import org.apache.phoenix.hbase.index.covered.IndexMetaData;
-import org.apache.phoenix.hbase.index.covered.IndexUpdate;
-import org.apache.phoenix.hbase.index.covered.LocalTableState;
-import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 
@@ -215,7 +211,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
         return new Pair<Integer, List<ColumnEntry>>(totalValueLength, entries);
     }
 
-    static class ColumnEntry {
+    public static class ColumnEntry {
         byte[] value = EMPTY_BYTES;
         CoveredColumn ref;
 
@@ -238,7 +234,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
      * @param values
      *            to use when building the key
      */
-    static byte[] composeRowKey(byte[] pk, int length, List<ColumnEntry> values) {
+    public static byte[] composeRowKey(byte[] pk, int length, List<ColumnEntry> values) {
         final int numColumnEntries = values.size() * Bytes.SIZEOF_INT;
         // now build up expected row key, each of the values, in order, followed by the PK and then some
         // info about lengths so we can deserialize each value

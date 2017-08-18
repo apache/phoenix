@@ -59,12 +59,12 @@ import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
-import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexer;
+import org.apache.phoenix.hbase.index.covered.ColumnGroup;
+import org.apache.phoenix.hbase.index.covered.CoveredColumn;
+import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.util.TestIndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.junit.Assert;
@@ -182,7 +182,7 @@ public class TestWALRecoveryCaching {
     // create the index table
     HTableDescriptor indexTableDesc = new HTableDescriptor(Bytes.toBytes(getIndexTableName()));
     indexTableDesc.addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
-    CoveredColumnIndexer.createIndexTable(admin, indexTableDesc);
+    TestIndexManagementUtil.createIndexTable(admin, indexTableDesc);
 
     // figure out where our tables live
     ServerName shared =

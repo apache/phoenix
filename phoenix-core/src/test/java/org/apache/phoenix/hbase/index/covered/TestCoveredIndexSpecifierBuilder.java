@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.hbase.index.covered.example;
+package org.apache.phoenix.hbase.index.covered;
 
 import static org.junit.Assert.assertEquals;
 
@@ -25,9 +25,6 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
 import org.junit.Test;
 
 public class TestCoveredIndexSpecifierBuilder {
