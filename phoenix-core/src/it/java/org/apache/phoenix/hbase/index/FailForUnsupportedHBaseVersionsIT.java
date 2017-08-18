@@ -35,9 +35,9 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.hbase.index.covered.example.ColumnGroup;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumn;
-import org.apache.phoenix.hbase.index.covered.example.CoveredColumnIndexSpecifierBuilder;
+import org.apache.phoenix.hbase.index.covered.ColumnGroup;
+import org.apache.phoenix.hbase.index.covered.CoveredColumn;
+import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 

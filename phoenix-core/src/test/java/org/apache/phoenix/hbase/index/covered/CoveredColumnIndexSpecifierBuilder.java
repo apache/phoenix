@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.hbase.index.covered.example;
+package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,11 +29,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.phoenix.hbase.index.Indexer;
-import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
-import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
 /**
- * Helper to build the configuration for the {@link CoveredColumnIndexer}.
+ * Helper to build the configuration for the {@link NonTxIndexBuilder}.
  * <p>
  * This class is NOT thread-safe; all concurrent access must be managed externally.
  */
@@ -85,7 +83,7 @@ public class CoveredColumnIndexSpecifierBuilder {
     this.groups.clear();
   }
 
-  Map<String, String> convertToMap() {
+  public Map<String, String> convertToMap() {
     int total = this.groups.size();
     // hbase.index.covered.groups = i
     specs.put(INDEX_GROUPS_COUNT_KEY, Integer.toString(total));
@@ -133,14 +131,14 @@ public class CoveredColumnIndexSpecifierBuilder {
     build(desc, CoveredColumnIndexCodec.class);
   }
 
-  void build(HTableDescriptor desc, Class<? extends IndexCodec> clazz) throws IOException {
+  public void build(HTableDescriptor desc, Class<? extends IndexCodec> clazz) throws IOException {
     // add the codec for the index to the map of options
     Map<String, String> opts = this.convertToMap();
     opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, clazz.getName());
-    Indexer.enableIndexing(desc, CoveredColumnIndexer.class, opts, Coprocessor.PRIORITY_USER);
+    Indexer.enableIndexing(desc, NonTxIndexBuilder.class, opts, Coprocessor.PRIORITY_USER);
   }
 
-  static List<ColumnGroup> getColumns(Configuration conf) {
+  public static List<ColumnGroup> getColumns(Configuration conf) {
     int count= conf.getInt(INDEX_GROUPS_COUNT_KEY, 0);
     if (count ==0) {
       return Collections.emptyList();
