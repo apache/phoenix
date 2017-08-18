@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.MultiMutation;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
@@ -227,7 +228,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
     public void testRebuildMultipleVersionRow() throws IOException {
         // when doing a rebuild, we are replaying mutations so we want to ignore newer mutations
         // see LocalTable#getCurrentRowState()
-        Mockito.when(mockIndexMetaData.ignoreNewerMutations()).thenReturn(true);
+        Mockito.when(mockIndexMetaData.getReplayWrite()).thenReturn(ReplayWrite.INDEX_ONLY);
 
         // the current row state has 3 versions, but if we rebuild as of t=2, scanner in LocalTable
         // should only return first
@@ -279,7 +280,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
     public void testManyVersions() throws IOException {
         // when doing a rebuild, we are replaying mutations so we want to ignore newer mutations
         // see LocalTable#getCurrentRowState()
-        Mockito.when(mockIndexMetaData.ignoreNewerMutations()).thenReturn(true);
+        Mockito.when(mockIndexMetaData.getReplayWrite()).thenReturn(ReplayWrite.INDEX_ONLY);
         MultiMutation mutation = getMultipleVersionMutation(200);
         currentRowCells = mutation.getFamilyCellMap().get(FAM);
 

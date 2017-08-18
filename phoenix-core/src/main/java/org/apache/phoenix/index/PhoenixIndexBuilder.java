@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -382,7 +383,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     }
 
     @Override
-    public boolean isPartialRebuild(Mutation m) {
-        return PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap());
+    public ReplayWrite getReplayWrite(Mutation m) {
+        return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
 }
