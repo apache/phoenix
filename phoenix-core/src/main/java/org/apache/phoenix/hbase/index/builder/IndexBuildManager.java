@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 
@@ -133,7 +134,7 @@ public class IndexBuildManager implements Stoppable {
     return this.delegate;
   }
 
-  public boolean isPartialRebuild(Mutation m) throws IOException {
-    return this.delegate.isPartialRebuild(m);
+  public ReplayWrite getReplayWrite(Mutation m) throws IOException {
+    return this.delegate.getReplayWrite(m);
   }
 }

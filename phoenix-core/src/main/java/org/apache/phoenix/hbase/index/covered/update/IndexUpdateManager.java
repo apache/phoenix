@@ -120,7 +120,7 @@ public class IndexUpdateManager {
       updates = new TreeSet<Mutation>(COMPARATOR);
       map.put(key, updates);
     }
-    if (indexMetaData.ignoreNewerMutations()) {
+    if (indexMetaData.getReplayWrite() != null) {
       // if we're replaying mutations, we don't need to worry about out-of-order updates
       updates.add(m);
     } else {

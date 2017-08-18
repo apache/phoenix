@@ -72,7 +72,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         ptr.set(state.getCurrentRowKey());
         List<IndexUpdate> indexUpdates = Lists.newArrayList();
         for (IndexMaintainer maintainer : indexMaintainers) {
-            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.ignoreNewerMutations(), false, context);
+            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.getReplayWrite() != null, false, context);
             ValueGetter valueGetter = statePair.getFirst();
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
@@ -99,7 +99,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             // client side.
             Set<ColumnReference> cols = Sets.newHashSet(maintainer.getAllColumns());
             cols.add(new ColumnReference(indexMaintainers.get(0).getDataEmptyKeyValueCF(), indexMaintainers.get(0).getEmptyKeyValueQualifier()));
-            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(cols, metaData.ignoreNewerMutations(), true, context);
+            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(cols, metaData.getReplayWrite() != null, true, context);
             ValueGetter valueGetter = statePair.getFirst();
             if (valueGetter!=null) {
                 IndexUpdate indexUpdate = statePair.getSecond();
