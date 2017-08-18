@@ -21,12 +21,21 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -92,6 +101,44 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
                 fail("Should throw TableNotFoundException after dropping table");
             } catch (TableNotFoundException e) {
                 //Expected
+            }
+        } finally {
+            conn1.close();
+            conn2.close();
+        }
+    }
+
+    @Test
+    public void testTableSentWhenIndexStateChanges() throws Throwable {
+        // Create connections 1 and 2
+        Properties longRunningProps = new Properties(); // Must update config before starting server
+        longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+            QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
+        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
+        conn1.setAutoCommit(true);
+        conn2.setAutoCommit(true);
+        try {
+            String schemaName = generateUniqueName();
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+            conn1.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+            conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+            HTableInterface metaTable = conn2.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+            IndexUtil.updateIndexState(fullIndexName, 0, metaTable, PIndexState.DISABLE);
+            conn2.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(1,2,3)");
+            conn2.commit();
+            conn1.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(4,5,6)");
+            conn1.commit();
+            PTableKey key = new PTableKey(null,fullTableName);
+            PMetaData metaCache = conn1.unwrap(PhoenixConnection.class).getMetaDataCache();
+            PTable table = metaCache.getTableRef(key).getTable();
+            for (PTable index : table.getIndexes()) {
+                assertEquals(PIndexState.DISABLE, index.getIndexState());
             }
         } finally {
             conn1.close();

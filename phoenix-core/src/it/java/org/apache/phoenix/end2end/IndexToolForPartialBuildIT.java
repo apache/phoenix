@@ -99,6 +99,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         serverProps.put("hbase.client.pause", "5000");
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB, Boolean.FALSE.toString());
         serverProps.put(QueryServices.INDEX_FAILURE_DISABLE_INDEX, Boolean.TRUE.toString());
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(2000));
         return serverProps;
     }
     
@@ -200,6 +201,10 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
                 assertTrue(rs.next());
                 assertEquals("xxUNAME" + i*1000 + "_xyz", rs.getString(1));
             }
+            for (int i = 6; i <= 7; i++) {
+                assertTrue(rs.next());
+                assertEquals("xxUNAME" + i*1000 + "_xyz", rs.getString(1));
+            }
             assertFalse(rs.next());
             // run the index MR job.
             final IndexTool indexingTool = new IndexTool();
@@ -227,7 +232,6 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
                 assertTrue(rs.next());
                 assertEquals("xxUNAME" + i*1000 + "_xyz", rs.getString(1));
             }
-
             assertFalse(rs.next());
 
            // conn.createStatement().execute(String.format("DROP INDEX  %s ON %s", indxTable, fullTableName));

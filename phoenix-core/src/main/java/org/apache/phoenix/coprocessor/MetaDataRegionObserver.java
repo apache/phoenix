@@ -77,6 +77,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -312,7 +313,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                 + indexPTable.getName() + " are online.");
                         continue;
                     }
-                    if (System.currentTimeMillis() - Math.abs(indexDisableTimestamp) > indexDisableTimestampThreshold) {
+                    if (EnvironmentEdgeManager.currentTimeMillis() - Math.abs(indexDisableTimestamp) > indexDisableTimestampThreshold) {
                         /*
                          * It has been too long since the index has been disabled and any future
                          * attempts to reenable it likely will fail. So we are going to mark the
@@ -338,7 +339,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.INACTIVE, null);
                         continue; // Must wait until clients start to do index maintenance again
                     }
-                    long currentTime = System.currentTimeMillis();
+                    long currentTime = EnvironmentEdgeManager.currentTimeMillis();
                     long forwardOverlapDurationMs = env.getConfiguration().getLong(
                             QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, 
                                     QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME);
@@ -512,7 +513,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             if (disabledTimeStamp < 0 || rebuildIndexBatchSize > (HConstants.LATEST_TIMESTAMP
                     - disabledTimeStamp)) { return HConstants.LATEST_TIMESTAMP; }
             long timestampForNextBatch = disabledTimeStamp + rebuildIndexBatchSize;
-			if (timestampForNextBatch < 0 || timestampForNextBatch > System.currentTimeMillis()
+			if (timestampForNextBatch < 0 || timestampForNextBatch > EnvironmentEdgeManager.currentTimeMillis()
 					|| (noOfBatches != null && noOfBatches > configuredBatches)) {
 				// if timestampForNextBatch cross current time , then we should
 				// build the complete index

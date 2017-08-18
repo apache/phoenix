@@ -855,29 +855,30 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
-    public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
-        boolean isActive = false;
-        String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
-        String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
-        int maxTries = 12, nTries = 0;
+    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+        int maxTries = 300, nTries = 0;
         do {
-            Thread.sleep(5 * 1000); // sleep 5 secs
-            String query = "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT) FROM " +
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
-                    + ") = (" + "'" + schema + "','" + index + "') "
-                    + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL"
-                    + " AND " + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + expectedIndexState.getSerializedValue() + "'";
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            if (rs.next() && expectedIndexState == PIndexState.ACTIVE) {
-                if (rs.getLong(1) == 0 && !rs.wasNull()) {
-                    isActive = true;
-                    break;
-                }
+            Thread.sleep(1000); // sleep 1 sec
+            if (checkIndexState(conn, fullIndexName, expectedIndexState)) {
+                return;
             }
         } while (++nTries < maxTries);
-        if (expectedIndexState == PIndexState.ACTIVE) {
-            assertTrue(isActive);
+        fail("Ran out of time waiting for index state to become " + expectedIndexState);
+    }
+
+    public static boolean checkIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+        String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
+        String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
+        String query = "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT) FROM " +
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
+                + ") = (" + "'" + schema + "','" + index + "') "
+                + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL"
+                + " AND " + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + expectedIndexState.getSerializedValue() + "'";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        if (rs.next()) {
+            return expectedIndexState != PIndexState.ACTIVE || (rs.getLong(1) == 0 && !rs.wasNull());
         }
+        return false;
     }
 
     public static long getRowCount(Connection conn, String tableName) throws SQLException {
