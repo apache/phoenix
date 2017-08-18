@@ -148,7 +148,10 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     }
                     HTableInterface table = null;
                     try {
-                        if (allowLocalUpdates && env != null) {
+                        if (allowLocalUpdates
+                                && env != null
+                                && tableReference.getTableName().equals(
+                                    env.getRegion().getTableDesc().getNameAsString())) {
                             try {
                                 throwFailureIfDone();
                                 IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
