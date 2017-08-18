@@ -21,7 +21,7 @@ package org.apache.phoenix.util;
 /**
  * Default implementation of an environment edge.
  */
-public class DefaultEnvironmentEdge implements EnvironmentEdge {
+public class DefaultEnvironmentEdge extends EnvironmentEdge {
   /**
    * {@inheritDoc}
    * <p/>
@@ -31,4 +31,5 @@ public class DefaultEnvironmentEdge implements EnvironmentEdge {
   public long currentTime() {
     return System.currentTimeMillis();
   }
+
 }
