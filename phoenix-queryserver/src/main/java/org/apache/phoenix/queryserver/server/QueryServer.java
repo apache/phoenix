@@ -184,6 +184,8 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   @Override
   public int run(String[] args) throws Exception {
     logProcessInfo(getConf());
+    final boolean loadBalancerEnabled = getConf().getBoolean(QueryServices.PHOENIX_QUERY_SERVER_LOADBALANCER_ENABLED,
+            QueryServicesOptions.DEFAULT_PHOENIX_QUERY_SERVER_LOADBALANCER_ENABLED);
     try {
       final boolean isKerberos = "kerberos".equalsIgnoreCase(getConf().get(
           QueryServices.QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB));
@@ -259,7 +261,9 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       // Build and start the HttpServer
       server = builder.build();
       server.start();
-      registerToServiceProvider(hostname);
+      if (loadBalancerEnabled) {
+        registerToServiceProvider(hostname);
+      }
       runningLatch.countDown();
       server.join();
       return 0;
@@ -268,7 +272,9 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       this.t = t;
       return -1;
     } finally {
-      unRegister();
+      if (loadBalancerEnabled) {
+        unRegister();
+      }
     }
   }
 
