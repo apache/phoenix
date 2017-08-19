@@ -221,6 +221,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -1277,9 +1278,9 @@ public class MetaDataClient {
             }
 
             // execute index population upsert select
-            long startTime = System.currentTimeMillis();
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
             MutationState state = connection.getQueryServices().updateData(mutationPlan);
-            long firstUpsertSelectTime = System.currentTimeMillis() - startTime;
+            long firstUpsertSelectTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
 
             // for global indexes on non transactional tables we might have to
             // run a second index population upsert select to handle data rows

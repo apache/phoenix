@@ -66,6 +66,7 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SizedUtil;
 
 public class ListJarsQueryPlan implements QueryPlan {
@@ -163,7 +164,7 @@ public class ListJarsQueryPlan implements QueryPlan {
                     byte[] rowKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     Cell cell =
                             CellUtil.createCell(rowKey, HConstants.EMPTY_BYTE_ARRAY,
-                                HConstants.EMPTY_BYTE_ARRAY, System.currentTimeMillis(),
+                                HConstants.EMPTY_BYTE_ARRAY, EnvironmentEdgeManager.currentTimeMillis(),
                                 Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
                     List<Cell> cells = new ArrayList<Cell>(1);
                     cells.add(cell);
