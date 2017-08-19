@@ -458,8 +458,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 										indexPTable.getSchemaName().getString(),
 										indexPTable.getTableName().getString());
 								if (scanEndTime == latestUpperBoundTimestamp) {
-								    // We compare the absolute value of the index disable timestamp. We don't want to
-								    // pass a negative value because that means an additional index write failed.
+								    // Finished building. Pass in the expected value for the index disabled timestamp
+								    // and only set to active if it hasn't changed (i.e. a write failed again, before
+								    // we're done). We take the absolute value because if the option to leave the
+								    // index active upon failure is used, we'll see a negative value when a write
+								    // fails.
 									IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, Math.abs(indexPTable.getIndexDisableTimestamp()));
 									batchExecutedPerTableMap.remove(dataPTable.getName());
                                     LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");

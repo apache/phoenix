@@ -286,7 +286,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 FailingRegionObserver.FAIL_WRITE = false;
                 if (rebuildIndexOnWriteFailure) {
                     // wait for index to be rebuilt automatically
-                    waitForIndexRebuild(conn,indexName, PIndexState.ACTIVE);
+                    waitForIndexRebuild(conn,fullIndexName, PIndexState.ACTIVE);
                 } else {
                     // simulate replaying failed mutation
                     replayMutations();
@@ -306,7 +306,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 // Wait for index to be rebuilt automatically. This should fail because
                 // we haven't flipped the FAIL_WRITE flag to false and as a result this
                 // should cause index rebuild to fail too.
-                waitForIndexRebuild(conn, indexName, PIndexState.DISABLE);
+                waitForIndexRebuild(conn, fullIndexName, PIndexState.DISABLE);
                 // verify that the index was marked as disabled and the index disable
                 // timestamp set to 0
                 String q =
@@ -324,9 +324,8 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
-    private void waitForIndexRebuild(Connection conn, String index, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+    private void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
         if (!transactional) {
-            String fullIndexName = SchemaUtil.getTableName(schema, index);
             TestUtil.waitForIndexRebuild(conn, fullIndexName, expectedIndexState);
         }
     }
