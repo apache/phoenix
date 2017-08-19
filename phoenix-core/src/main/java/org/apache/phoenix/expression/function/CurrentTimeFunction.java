@@ -17,19 +17,19 @@
  */
 package org.apache.phoenix.expression.function;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import java.sql.SQLException;
+import java.util.List;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.CurrentDateTimeFunction;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.CurrentTimeParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PTime;
-import org.apache.phoenix.schema.tuple.Tuple;
-
-import java.sql.SQLException;
-import java.util.List;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 
 /**
@@ -48,7 +48,7 @@ public class CurrentTimeFunction extends CurrentDateTimeFunction {
     private final ImmutableBytesWritable currentDate = new ImmutableBytesWritable(new byte[PTime.INSTANCE.getByteSize()]);
     
     public CurrentTimeFunction() {
-        this(System.currentTimeMillis());
+        this(EnvironmentEdgeManager.currentTimeMillis());
     }
 
     public CurrentTimeFunction(List<Expression> children, StatementContext context) throws SQLException {
