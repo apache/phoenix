@@ -855,18 +855,22 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
-    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+    public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState indexState) throws InterruptedException, SQLException {
+        waitForIndexState(conn, fullIndexName, indexState, 0L);
+    }
+    
+    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
         int maxTries = 300, nTries = 0;
         do {
             Thread.sleep(1000); // sleep 1 sec
-            if (checkIndexState(conn, fullIndexName, expectedIndexState)) {
+            if (checkIndexState(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp)) {
                 return;
             }
         } while (++nTries < maxTries);
         fail("Ran out of time waiting for index state to become " + expectedIndexState);
     }
 
-    public static boolean checkIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+    public static boolean checkIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
         String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
         String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
         String query = "SELECT CAST(" + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " AS BIGINT) FROM " +
@@ -876,7 +880,7 @@ public class TestUtil {
                 + " AND " + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + expectedIndexState.getSerializedValue() + "'";
         ResultSet rs = conn.createStatement().executeQuery(query);
         if (rs.next()) {
-            return expectedIndexState != PIndexState.ACTIVE || (rs.getLong(1) == 0 && !rs.wasNull());
+            return expectedIndexDisableTimestamp == null || (rs.getLong(1) == 0 && !rs.wasNull());
         }
         return false;
     }

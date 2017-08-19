@@ -160,7 +160,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             HTableInterface metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, disableTS, metaTable, PIndexState.DISABLE);
             mutateRandomly(conn, fullTableName, nRows);
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
             assertEquals(nRows,actualRowCount);
@@ -202,7 +202,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             long disableTS = EnvironmentEdgeManager.currentTimeMillis();
             IndexUtil.updateIndexState(fullIndexName, disableTS, metaTable, PIndexState.DISABLE);
             doneSignal.await(60, TimeUnit.SECONDS);
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             assertTrue(hasInactiveIndex[0]);
             
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
@@ -231,7 +231,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','eeeee')");
             conn.commit();
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
 
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
@@ -258,7 +258,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc')");
             conn.commit();
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
 
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
@@ -285,7 +285,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a',null)");
             conn.commit();
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
 
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
@@ -310,7 +310,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             conn.createStatement().execute("DELETE FROM " + fullTableName);
             conn.commit();
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
 
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
        }
@@ -335,7 +335,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             IndexUtil.updateIndexState(fullIndexName, disableTS, metaTable, PIndexState.DISABLE);
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','b')");
             conn.commit();
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
 
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
         }
@@ -379,7 +379,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             clock.time += 1000;
             advanceClockUntilPartialRebuildStarts(fullIndexName, clock);
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             clock.time += 100;
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
@@ -414,7 +414,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             clock.time += 1000;
             advanceClockUntilPartialRebuildStarts(fullIndexName, clock);
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             clock.time += 100;
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
         } finally {
@@ -447,7 +447,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             clock.time += 1000;
             advanceClockUntilPartialRebuildStarts(fullIndexName, clock);
-            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             clock.time += 100;
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName)));
             TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
@@ -463,7 +463,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             public void run() {
                 try (Connection conn = DriverManager.getConnection(getUrl())) {
                   int nTries = 10;
-                    while (--nTries >0 && !TestUtil.checkIndexState(conn, fullIndexName, PIndexState.INACTIVE)) {
+                    while (--nTries >0 && !TestUtil.checkIndexState(conn, fullIndexName, PIndexState.INACTIVE, null)) {
                         Thread.sleep(1000);
                         clock.time += 1000;
                     }
