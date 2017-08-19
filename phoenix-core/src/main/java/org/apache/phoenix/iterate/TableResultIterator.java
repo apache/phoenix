@@ -47,6 +47,7 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -243,7 +244,7 @@ public class TableResultIterator implements ResultIterator {
     }
 
     private static long now() {
-        return System.currentTimeMillis();
+        return EnvironmentEdgeManager.currentTimeMillis();
     }
 
     @Override
