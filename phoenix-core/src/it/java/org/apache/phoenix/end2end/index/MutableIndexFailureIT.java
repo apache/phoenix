@@ -329,7 +329,7 @@ public class MutableIndexFailureIT extends BaseTest {
     private void waitForIndexRebuild(Connection conn, String index, PIndexState expectedIndexState) throws InterruptedException, SQLException {
         if (!transactional) {
             String fullIndexName = SchemaUtil.getTableName(schema, index);
-            TestUtil.waitForIndexState(conn, fullIndexName, expectedIndexState);
+            TestUtil.waitForIndexRebuild(conn, fullIndexName, expectedIndexState);
         }
     }
     

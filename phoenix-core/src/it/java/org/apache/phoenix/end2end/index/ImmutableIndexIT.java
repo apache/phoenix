@@ -184,7 +184,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
             String upsertSelect = "UPSERT INTO " + TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) " +
                     "SELECT varchar_pk||'_upsert_select', char_pk, int_pk, long_pk, decimal_pk, date_pk FROM "+ TABLE_NAME;
             conn.createStatement().execute(upsertSelect);
-            TestUtil.waitForIndexState(conn, indexName, PIndexState.ACTIVE);
+            TestUtil.waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + TABLE_NAME);
             assertTrue(rs.next());
