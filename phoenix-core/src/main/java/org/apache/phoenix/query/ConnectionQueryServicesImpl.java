@@ -57,8 +57,8 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
+import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -227,6 +227,7 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -1761,7 +1762,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
             // Also, could be used to update property values on ALTER TABLE t SET prop=xxx
             if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
-                return new MetaDataMutationResult(MutationCode.NO_OP, System.currentTimeMillis(), table);
+                return new MetaDataMutationResult(MutationCode.NO_OP, EnvironmentEdgeManager.currentTimeMillis(), table);
             }
             byte[][] rowKeyMetaData = new byte[3][];
             PTableType tableType = table.getType();

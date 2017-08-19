@@ -100,6 +100,7 @@ import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PrefixByteCodec;
@@ -831,7 +832,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
         // Get query time out from Statement
-        final long startTime = System.currentTimeMillis();
+        final long startTime = EnvironmentEdgeManager.currentTimeMillis();
         final long maxQueryEndTime = startTime + context.getStatement().getQueryTimeoutInMillis();
         int numScans = size();
         // Capture all iterators so that if something goes wrong, we close them all
@@ -878,7 +879,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 while (scanPairItr.hasNext()) {
                     Pair<Scan,Future<PeekingResultIterator>> scanPair = scanPairItr.next();
                     try {
-                        long timeOutForScan = maxQueryEndTime - System.currentTimeMillis();
+                        long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
                         if (timeOutForScan < 0) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
                         }

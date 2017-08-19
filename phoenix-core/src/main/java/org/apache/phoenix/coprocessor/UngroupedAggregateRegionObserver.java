@@ -114,6 +114,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -1061,7 +1062,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
 
         private long collectStatsInternal() throws IOException {
-            long startTime = System.currentTimeMillis();
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
             region.startRegionOperation();
             boolean hasMore = false;
             boolean noErrors = false;
