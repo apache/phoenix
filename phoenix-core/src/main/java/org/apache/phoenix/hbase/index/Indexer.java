@@ -524,7 +524,7 @@ public class Indexer extends BaseRegionObserver {
           miniBatchOp.setWalEdit(0, edit);
       }
   
-      if (copyMutations) {
+      if (copyMutations || replayWrite != null) {
           mutations = IndexManagementUtil.flattenMutationsByTimestamp(mutations);
       }
 

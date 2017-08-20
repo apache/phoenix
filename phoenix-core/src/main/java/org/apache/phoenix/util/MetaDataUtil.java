@@ -533,7 +533,7 @@ public class MetaDataUtil {
         try {
             hcon = HConnectionManager.getConnection(conf);
             List<HRegionLocation> locations = hcon.locateRegions(
-                org.apache.hadoop.hbase.TableName.valueOf(table.getTableName().getBytes()));
+                org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
 
             for (HRegionLocation loc : locations) {
                 try {
