@@ -93,7 +93,9 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
             List<KeyValue> kvs = KeyValueUtil.ensureKeyValues(family);
             for (KeyValue kv : kvs) {
                 batch.add(kv);
-                assert(ts == kv.getTimestamp());
+                if(ts != kv.getTimestamp()) {
+                    throw new IllegalStateException("Time stamps must match for all cells in a batch");
+                }
             }
         }
 
