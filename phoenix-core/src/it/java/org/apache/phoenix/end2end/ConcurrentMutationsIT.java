@@ -27,7 +27,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -45,23 +44,18 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import com.google.common.collect.Maps;
-
 @RunWith(RunUntilFailure.class)
-public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
+public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     private static final Random RAND = new Random(5);
     private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";  
     private static final String LOCK_TEST_TABLE_PREFIX = "LOCKTEST_";
@@ -88,7 +82,7 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
         addDelayingCoprocessor(conn, tableName);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
@@ -239,7 +233,7 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=true, VERSIONS=1");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
         addDelayingCoprocessor(conn, tableName);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
@@ -285,7 +279,7 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         
-        conn.createStatement().execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER)");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
         addDelayingCoprocessor(conn, tableName);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
@@ -340,7 +334,7 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         final String tableName = MVCC_LOCK_TEST_TABLE_PREFIX + generateUniqueName();
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER)");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v,k)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('foo',0)");
         conn.commit();
@@ -409,17 +403,6 @@ public class ConcurrentMutationsIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue(rs.next());
         return rs.getLong(1);
     }
-
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(10);
-        clientProps.put(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB, Integer.toString(0));
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
-        serverProps.put("hbase.rowlock.wait.duration", Integer.toString(ROW_LOCK_WAIT_TIME));
-        serverProps.put(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(3));
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
-    }
-
 
     public static class DelayingRegionObserver extends SimpleRegionObserver {
         private volatile boolean lockedTableRow;
