@@ -16,8 +16,6 @@
  * limitations under the License.
  */
 
-
-
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
