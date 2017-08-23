@@ -58,6 +58,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -155,6 +156,8 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    // This test is know to flap. We need PHOENIX-2582 to be fixed before enabling this back.
+    @Ignore
     @Test
     public void testCreateIndexDuringUpsertSelect() throws Exception {
         // This test times out at the UPSERT SELECT call for local index
@@ -255,6 +258,8 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    // This test is know to flap. We need PHOENIX-2582 to be fixed before enabling this back.
+    @Ignore
     @Test
     public void testCreateIndexWhileUpsertingData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
