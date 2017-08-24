@@ -41,6 +41,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -103,7 +105,29 @@ public final class PhoenixConfigurationUtil {
     public static final String INDEX_DISABLED_TIMESTAMP_VALUE = "phoenix.mr.index.disableTimestamp";
 
     public static final String INDEX_MAINTAINERS = "phoenix.mr.index.maintainers";
-    
+
+    public static final String SCRUTINY_DATA_TABLE_NAME = "phoenix.mr.scrutiny.data.table.name";
+
+    public static final String SCRUTINY_INDEX_TABLE_NAME = "phoenix.mr.scrutiny.index.table.name";
+
+    public static final String SCRUTINY_SOURCE_TABLE = "phoenix.mr.scrutiny.source.table";
+
+    public static final String SCRUTINY_BATCH_SIZE = "phoenix.mr.scrutiny.batch.size";
+
+    public static final String SCRUTINY_OUTPUT_INVALID_ROWS =
+            "phoenix.mr.scrutiny.output.invalid.rows";
+
+    public static final boolean DEFAULT_SCRUTINY_OUTPUT_INVALID_ROWS = false;
+
+    public static final String SCRUTINY_OUTPUT_FORMAT = "phoenix.mr.scrutiny.output.format";
+
+    public static final String SCRUTINY_EXECUTE_TIMESTAMP = "phoenix.mr.scrutiny.execute.timestamp";
+
+    // max output rows per mapper
+    public static final String SCRUTINY_OUTPUT_MAX = "phoenix.mr.scrutiny.output.max";
+
+    public static final long DEFAULT_SCRUTINY_BATCH_SIZE = 1000;
+
     public static final String DISABLED_INDEXES = "phoenix.mr.index.disabledIndexes";
 
     // Generate splits based on scans from stats, or just from region splits
@@ -295,6 +319,12 @@ public final class PhoenixConfigurationUtil {
         return upsertStmt;
         
     }
+
+     public static void setUpsertStatement(final Configuration configuration, String upsertStmt) throws SQLException {
+         Preconditions.checkNotNull(configuration);
+         Preconditions.checkNotNull(upsertStmt);
+         configuration.set(UPSERT_STATEMENT, upsertStmt);
+     }
     
     public static List<ColumnInfo> getSelectColumnMetadataList(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
@@ -475,7 +505,101 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(indexName);
         configuration.set(DISABLED_INDEXES, indexName);
     }
-    
+
+    public static String getScrutinyDataTableName(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(SCRUTINY_DATA_TABLE_NAME);
+    }
+
+    public static void setScrutinyDataTable(Configuration configuration, String qDataTableName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(qDataTableName);
+        configuration.set(SCRUTINY_DATA_TABLE_NAME, qDataTableName);
+    }
+
+    public static String getScrutinyIndexTableName(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(SCRUTINY_INDEX_TABLE_NAME);
+    }
+
+    public static void setScrutinyIndexTable(Configuration configuration, String qIndexTableName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(qIndexTableName);
+        configuration.set(SCRUTINY_INDEX_TABLE_NAME, qIndexTableName);
+    }
+
+    public static SourceTable getScrutinySourceTable(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return SourceTable.valueOf(configuration.get(SCRUTINY_SOURCE_TABLE));
+    }
+
+    public static void setScrutinySourceTable(Configuration configuration,
+            SourceTable sourceTable) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(sourceTable);
+        configuration.set(SCRUTINY_SOURCE_TABLE, sourceTable.name());
+    }
+
+    public static boolean getScrutinyOutputInvalidRows(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(SCRUTINY_OUTPUT_INVALID_ROWS,
+            DEFAULT_SCRUTINY_OUTPUT_INVALID_ROWS);
+    }
+
+    public static void setScrutinyOutputInvalidRows(Configuration configuration,
+            boolean outputInvalidRows) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(SCRUTINY_OUTPUT_INVALID_ROWS, outputInvalidRows);
+    }
+
+    public static long getScrutinyBatchSize(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getLong(SCRUTINY_BATCH_SIZE, DEFAULT_SCRUTINY_BATCH_SIZE);
+    }
+
+    public static void setScrutinyBatchSize(Configuration configuration, long batchSize) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setLong(SCRUTINY_BATCH_SIZE, batchSize);
+    }
+
+    public static OutputFormat getScrutinyOutputFormat(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return OutputFormat
+                .valueOf(configuration.get(SCRUTINY_OUTPUT_FORMAT, OutputFormat.FILE.name()));
+    }
+
+    public static void setScrutinyOutputFormat(Configuration configuration,
+            OutputFormat outputFormat) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(outputFormat);
+        configuration.set(SCRUTINY_OUTPUT_FORMAT, outputFormat.name());
+    }
+
+    public static long getScrutinyExecuteTimestamp(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        long ts = configuration.getLong(SCRUTINY_EXECUTE_TIMESTAMP, -1);
+        Preconditions.checkArgument(ts != -1);
+        return ts;
+    }
+
+    public static void setScrutinyOutputMax(Configuration configuration,
+            long outputMaxRows) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setLong(SCRUTINY_OUTPUT_MAX, outputMaxRows);
+    }
+
+    public static long getScrutinyOutputMax(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        long maxRows = configuration.getLong(SCRUTINY_OUTPUT_MAX, -1);
+        Preconditions.checkArgument(maxRows != -1);
+        return maxRows;
+    }
+
+    public static void setScrutinyExecuteTimestamp(Configuration configuration, long ts) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setLong(SCRUTINY_EXECUTE_TIMESTAMP, ts);
+    }
+
     public static String getDisableIndexes(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(DISABLED_INDEXES);

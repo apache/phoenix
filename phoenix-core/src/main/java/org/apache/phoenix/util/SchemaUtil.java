@@ -80,7 +80,9 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
+import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -333,6 +335,15 @@ public class SchemaUtil {
 
     public static String getColumnName(String familyName, String columnName) {
         return getName(familyName, columnName, false);
+    }
+
+    public static List<String> getColumnNames(List<PColumn> pCols) {
+        return Lists.transform(pCols, new Function<PColumn, String>() {
+            @Override
+            public String apply(PColumn input) {
+                return input.getName().getString();
+            }
+        });
     }
 
     public static byte[] getTableNameAsBytes(String schemaName, String tableName) {
@@ -767,6 +778,16 @@ public class SchemaUtil {
         return getEscapedArgument(columnFamily) + QueryConstants.NAME_SEPARATOR + getEscapedArgument(columnName) ;
     }
     
+    public static List<String> getEscapedFullColumnNames(List<String> fullColumnNames) {
+        return Lists
+                .newArrayList(Iterables.transform(fullColumnNames, new Function<String, String>() {
+                    @Override
+                    public String apply(String col) {
+                        return getEscapedFullColumnName(col);
+                    }
+                }));
+    }
+
     public static String getEscapedFullTableName(String fullTableName) {
         final String schemaName = getSchemaNameFromFullName(fullTableName);
         final String tableName = getTableNameFromFullName(fullTableName);
