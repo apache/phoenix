@@ -68,6 +68,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
+import org.apache.phoenix.hbase.index.LockManager.RowLock;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
@@ -82,6 +83,7 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -120,14 +122,23 @@ public class Indexer extends BaseRegionObserver {
 
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   private RegionCoprocessorEnvironment environment;
+  private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
+  private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
+  
+
   protected IndexWriter writer;
   protected IndexBuildManager builder;
   private LockManager lockManager;
 
   // Hack to get around not being able to save any state between
   // coprocessor calls. TODO: remove after HBASE-18127 when available
-  private ThreadLocal<Collection<Pair<Mutation, byte[]>>> indexUpdates =
-          new ThreadLocal<Collection<Pair<Mutation, byte[]>>>();
+  private static class BatchMutateContext {
+      public Collection<Pair<Mutation, byte[]>> indexUpdates = Collections.emptyList();
+      public List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+  }
+  
+  private ThreadLocal<BatchMutateContext> batchMutateContext =
+          new ThreadLocal<BatchMutateContext>();
   
   /** Configuration key for the {@link IndexBuilder} to use */
   public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
@@ -367,10 +378,6 @@ public class Indexer extends BaseRegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
-  private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
-  private static final OperationStatus FAILURE = new OperationStatus(OperationStatusCode.FAILURE, "Unable to acquire row lock");
-  
   // Assume time stamp of mutation a client defined time stamp if it's not within
   // a factor of ten of the current time.
   // TODO: get rid of this and have client pass LATEST_TIMESTAMP unless an SCN is set
@@ -401,6 +408,8 @@ public class Indexer extends BaseRegionObserver {
        * Exclusively lock all rows so we get a consistent read
        * while determining the index updates
        */
+      BatchMutateContext context = new BatchMutateContext();
+      setBatchMutateContext(c, context);
       Durability durability = Durability.SKIP_WAL;
       boolean copyMutations = false;
       for (int i = 0; i < miniBatchOp.size(); i++) {
@@ -410,31 +419,7 @@ public class Indexer extends BaseRegionObserver {
               continue;
           }
           if (this.builder.isEnabled(m)) {
-              boolean success = false;
-              try {
-                  lockManager.lockRow(m.getRow(), rowLockWaitDuration);
-                  success = true;
-              } finally {
-                  if (!success) {
-                      // We're throwing here as a result of either a timeout while waiting
-                      // for the row lock or an interrupt. Either way, the lock on the
-                      // current row was unsuccessful and we won't be locking any more rows
-                      // since we're throwing. By setting the operation status to FAILURE
-                      // here, we prevent the attempt to unlock rows we've never locked when
-                      // postBatchMutateIndispensably is executed. We're very limited wrt
-                      // the state that can be shared between the batch mutate coprocessor
-                      // calls (see HBASE-18127).
-                      // Note that we shouldn't necessarily be throwing here, since we're
-                      // essentially failing the data write because we can't do the locking
-                      // necessary for performing consistent index maintenance. We'd ideally
-                      // want to go through the index failure policy to determine what action
-                      // to perform. We currently cannot ignore this lock failure as we lack
-                      // the ability to keep that state (PHOENIX-4055).
-                      for (int j = i; j < miniBatchOp.size(); j++) {
-                          miniBatchOp.setOperationStatus(j,FAILURE);
-                      }
-                  }
-              }
+              context.rowLocks.add(lockManager.lockRow(m.getRow(), rowLockWaitDuration));
               Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
                       defaultDurability : m.getDurability();
               if (effectiveDurablity.ordinal() > durability.ordinal()) {
@@ -551,7 +536,7 @@ public class Indexer extends BaseRegionObserver {
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
           if (!indexUpdates.isEmpty()) {
-              setIndexUpdates(c, indexUpdates);
+              context.indexUpdates = indexUpdates;
               // write index updates to WAL
               if (durability != Durability.SKIP_WAL) {
                   // we have all the WAL durability, so we just update the WAL entry and move on
@@ -563,16 +548,16 @@ public class Indexer extends BaseRegionObserver {
       }
   }
 
-  private void setIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c, Collection<Pair<Mutation, byte[]>> indexUpdates) {
-      this.indexUpdates.set(indexUpdates);
+  private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
+      this.batchMutateContext.set(context);
   }
   
-  private Collection<Pair<Mutation, byte[]>> getIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c) {
-      return this.indexUpdates.get();
+  private BatchMutateContext getBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c) {
+      return this.batchMutateContext.get();
   }
   
-  private void removeIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c) {
-      this.indexUpdates.remove();
+  private void removeBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c) {
+      this.batchMutateContext.remove();
   }
 
   @Override
@@ -583,21 +568,21 @@ public class Indexer extends BaseRegionObserver {
           return;
       }
       long start = EnvironmentEdgeManager.currentTimeMillis();
+      BatchMutateContext context = getBatchMutateContext(c);
+      if (context == null) {
+          return;
+      }
       try {
-          for (int i = 0; i < miniBatchOp.size(); i++) {
-              OperationStatus status = miniBatchOp.getOperationStatus(i);
-              if (status != IGNORE && status != FAILURE) {
-                  lockManager.unlockRow(miniBatchOp.getOperation(i).getRow());
-              }
+          for (RowLock rowLock : context.rowLocks) {
+              rowLock.release();
           }
           this.builder.batchCompleted(miniBatchOp);
 
           if (success) { // if miniBatchOp was successfully written, write index updates
-              //each batch operation, only the first one will have anything useful, so we can just grab that
-              Mutation mutation = miniBatchOp.getOperation(0);
-              doPost(c, mutation);
+              doPost(c, context);
           }
        } finally {
+           removeBatchMutateContext(c);
            long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
            if (duration >= slowIndexWriteThreshold) {
                if (LOG.isDebugEnabled()) {
@@ -609,9 +594,9 @@ public class Indexer extends BaseRegionObserver {
        }
   }
 
-  private void doPost(ObserverContext<RegionCoprocessorEnvironment> c, Mutation m) throws IOException {
+  private void doPost(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) throws IOException {
       try {
-        doPostWithExceptions(c,m);
+        doPostWithExceptions(c,context);
         return;
       } catch (Throwable e) {
         rethrowIndexingException(e);
@@ -620,10 +605,10 @@ public class Indexer extends BaseRegionObserver {
           "Somehow didn't complete the index update, but didn't return succesfully either!");
     }
 
-  private void doPostWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c, Mutation m)
+  private void doPostWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context)
           throws IOException {
       //short circuit, if we don't need to do any work
-      if (!this.builder.isEnabled(m)) {
+      if (context == null || context.indexUpdates.isEmpty()) {
           return;
       }
 
@@ -634,39 +619,27 @@ public class Indexer extends BaseRegionObserver {
               current = NullSpan.INSTANCE;
           }
           long start = EnvironmentEdgeManager.currentTimeMillis();
-
           
-          Collection<Pair<Mutation, byte[]>> indexUpdates = getIndexUpdates(c);
-          if (indexUpdates == null) {
-              return;
-          }
+          Collection<Pair<Mutation, byte[]>> indexUpdates = context.indexUpdates;
 
-          // the WAL edit is kept in memory and we already specified the factory when we created the
-          // references originally - therefore, we just pass in a null factory here and use the ones
-          // already specified on each reference
-          try {
-    		  current.addTimelineAnnotation("Actually doing index update for first time");
-              Collection<Pair<Mutation, byte[]>> localUpdates =
-                      new ArrayList<Pair<Mutation, byte[]>>();
-              Collection<Pair<Mutation, byte[]>> remoteUpdates =
-                      new ArrayList<Pair<Mutation, byte[]>>();
-    		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
-    			  if (Bytes.toString(mutation.getSecond()).equals(
-    					  environment.getRegion().getTableDesc().getNameAsString())) {
-    				  localUpdates.add(mutation);
-    			  } else {
-                      remoteUpdates.add(mutation);
-    			  }
-    		  }
-              if(!remoteUpdates.isEmpty()) {
-                  writer.writeAndKillYourselfOnFailure(remoteUpdates, false);
-              }
-              if(!localUpdates.isEmpty()) {
-                  writer.writeAndKillYourselfOnFailure(localUpdates, true);
-              }
-          } finally { // With a custom kill policy, we may throw instead of kill the server.
-              // mark the batch as having been written so it won't be written again
-              removeIndexUpdates(c);
+		  current.addTimelineAnnotation("Actually doing index update for first time");
+          Collection<Pair<Mutation, byte[]>> localUpdates =
+                  new ArrayList<Pair<Mutation, byte[]>>();
+          Collection<Pair<Mutation, byte[]>> remoteUpdates =
+                  new ArrayList<Pair<Mutation, byte[]>>();
+		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
+			  if (Bytes.toString(mutation.getSecond()).equals(
+					  environment.getRegion().getTableDesc().getNameAsString())) {
+				  localUpdates.add(mutation);
+			  } else {
+                  remoteUpdates.add(mutation);
+			  }
+		  }
+          if(!remoteUpdates.isEmpty()) {
+              writer.writeAndKillYourselfOnFailure(remoteUpdates, false);
+          }
+          if(!localUpdates.isEmpty()) {
+              writer.writeAndKillYourselfOnFailure(localUpdates, true);
           }
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
