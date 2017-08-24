@@ -27,9 +27,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 /**
  * 
