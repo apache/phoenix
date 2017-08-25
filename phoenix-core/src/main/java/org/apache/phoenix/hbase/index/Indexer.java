@@ -25,6 +25,7 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -87,12 +88,18 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Lists;
@@ -828,6 +835,44 @@ public class Indexer extends BaseRegionObserver {
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
     desc.addCoprocessor(Indexer.class.getName(), null, priority, properties);
+  }
+  
+  @Override
+  public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+          final InternalScanner scanner, final ScanType scanType) throws IOException {
+      // Compaction and split upcalls run with the effective user context of the requesting user.
+      // This will lead to failure of cross cluster RPC if the effective user is not
+      // the login user. Switch to the login user context to ensure we have the expected
+      // security context.
+      return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+          @Override
+          public InternalScanner run() throws Exception {
+              InternalScanner internalScanner = scanner;
+              if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+                  String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+                  try {
+                      PhoenixConnection conn =  QueryUtil.getConnectionOnServer(c.getEnvironment().getConfiguration()).unwrap(PhoenixConnection.class);
+                      PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+                      for (PTable index : table.getIndexes()) {
+                          if (index.getIndexDisableTimestamp() != 0) {
+                              try {
+                                  IndexUtil.updateIndexState(conn, index.getName().getString(), PIndexState.DISABLE, Long.valueOf(0L));
+                              } catch (SQLException e) {
+                                  LOG.warn("Unable to permanently disable index " + index.getName().getString(), e);
+                              }
+                          }
+                      }
+                  } catch (Exception e) {
+                      // If we can't reach the stats table, don't interrupt the normal
+                    // compaction operation, just log a warning.
+                    if (LOG.isWarnEnabled()) {
+                        LOG.warn("Unable to permanently disable indexes being partially rebuild for " + fullTableName, e);
+                    }
+                  }
+              }
+              return internalScanner;
+          }
+      });
   }
 }
 
