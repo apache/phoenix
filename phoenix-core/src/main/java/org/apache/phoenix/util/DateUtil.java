@@ -52,7 +52,7 @@ import com.sun.istack.NotNull;
 
 @SuppressWarnings({ "serial", "deprecation" })
 public class DateUtil {
-    public static final String DEFAULT_TIME_ZONE_ID = "GMT";
+    public static final String DEFAULT_TIME_ZONE_ID = TimeZone.getDefault().getID();
     public static final String LOCAL_TIME_ZONE_ID = "LOCAL";
     private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
     
