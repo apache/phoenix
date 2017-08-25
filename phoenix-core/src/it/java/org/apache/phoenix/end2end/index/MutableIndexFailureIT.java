@@ -83,9 +83,6 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MutableIndexFailureIT extends BaseTest {
-    public static final String INDEX_NAME = "IDX";
-    public static final String TABLE_NAME = "T";
-
     public static volatile boolean FAIL_WRITE = false;
     public static volatile String fullTableName;
     
@@ -321,6 +318,8 @@ public class MutableIndexFailureIT extends BaseTest {
                 }
 
             }
+        } finally {
+            FAIL_WRITE = false;
         }
     }
 
