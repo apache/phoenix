@@ -245,6 +245,38 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @Test
+    public void testCompactionDuringRebuild() throws Throwable {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        final MyClock clock = new MyClock(1000);
+        // Use our own clock to prevent race between partial rebuilder and compaction
+        EnvironmentEdgeManager.injectEdge(clock);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true, GUIDE_POSTS_WIDTH=1000");
+            clock.time += 1000;
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+            clock.time += 1000;
+            conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(1, 2, 3)");
+            conn.commit();
+            clock.time += 1000;
+            long disableTS = EnvironmentEdgeManager.currentTimeMillis();
+            HTableInterface metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+            IndexUtil.updateIndexState(fullIndexName, disableTS, metaTable, PIndexState.DISABLE);
+            TestUtil.doMajorCompaction(conn, fullIndexName);
+            assertFalse(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, 0L));
+            TestUtil.analyzeTable(conn, fullTableName);
+            assertFalse(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, 0L));
+            TestUtil.doMajorCompaction(conn, fullTableName);
+            assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, 0L));
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
+        }
+    }
+
+    @Test
     @Repeat(5)
     public void testDeleteAndUpsertAfterFailure() throws Throwable {
         final int nRows = 10;
