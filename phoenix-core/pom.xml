@@ -470,5 +470,10 @@
         <artifactId>joni</artifactId>
         <version>${joni.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.clearspring.analytics</groupId>
+      <artifactId>stream</artifactId>
+      <version>2.9.5</version>
+    </dependency>
   </dependencies>
 </project>
