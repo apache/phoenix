@@ -27,9 +27,11 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 
 public class QueryUtilTest {
 
@@ -94,7 +96,21 @@ public class QueryUtilTest {
                 "SELECT \"ID\",\"NAME\" FROM \"a\".\"mytab\"",
                 QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
-    
+
+    @Test
+    public void testConstructSelectWithHint() {
+        assertEquals(
+            "SELECT /*+ NO_INDEX */ \"col1\",\"col2\" FROM MYTAB WHERE (\"col2\"=? and \"col3\" is null)",
+            QueryUtil.constructSelectStatement("MYTAB", Lists.newArrayList("col1", "col2"),
+                "\"col2\"=? and \"col3\" is null", Hint.NO_INDEX, true));
+    }
+
+    @Test
+    public void testConstructParameterizedInClause() {
+        assertEquals("((?,?,?),(?,?,?))", QueryUtil.constructParameterizedInClause(3, 2));
+        assertEquals("((?))", QueryUtil.constructParameterizedInClause(1, 1));
+    }
+
     /**
      * Test that we create connection strings from the HBase Configuration that match the
      * expected syntax. Expected to log exceptions as it uses ZK host names that don't exist
