@@ -30,6 +30,7 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -203,27 +204,71 @@ public final class QueryUtil {
      * @return Select Query 
      */
     public static String constructSelectStatement(String fullTableName, List<ColumnInfo> columnInfos,final String conditions) {
-        Preconditions.checkNotNull(fullTableName,"Table name cannot be null");
-        if(columnInfos == null || columnInfos.isEmpty()) {
-             throw new IllegalArgumentException("At least one column must be provided");
+        List<String> columns = Lists.transform(columnInfos, new Function<ColumnInfo, String>(){
+            @Override
+            public String apply(ColumnInfo input) {
+                return input.getColumnName();
+            }});
+        return constructSelectStatement(fullTableName, columns , conditions, null, false);
+    }
+
+    /**
+     *
+     * @param fullTableName name of the table for which the select statement needs to be created.
+     * @param columns list of columns to be projected in the select statement.
+     * @param conditions The condition clause to be added to the WHERE condition
+     * @param hint hint to use
+     * @param escapeCols whether to escape the projected columns
+     * @return Select Query
+     */
+    public static String constructSelectStatement(String fullTableName, List<String> columns,
+            final String conditions, Hint hint, boolean escapeCols) {
+        Preconditions.checkNotNull(fullTableName, "Table name cannot be null");
+        if (columns == null || columns.isEmpty()) {
+            throw new IllegalArgumentException("At least one column must be provided");
         }
         StringBuilder query = new StringBuilder();
         query.append("SELECT ");
-        for (ColumnInfo cinfo : columnInfos) {
-            if (cinfo != null) {
-                String fullColumnName = getEscapedFullColumnName(cinfo.getColumnName());
+
+        String hintStr = "";
+        if (hint != null) {
+            final HintNode node = new HintNode(hint.name());
+            hintStr = node.toString();
+        }
+        query.append(hintStr);
+
+        for (String col : columns) {
+            if (col != null) {
+                String fullColumnName = col;
+                if (escapeCols) {
+                    fullColumnName = getEscapedFullColumnName(col);
+                }
                 query.append(fullColumnName);
                 query.append(",");
-             }
-         }
+            }
+        }
         // Remove the trailing comma
         query.setLength(query.length() - 1);
         query.append(" FROM ");
         query.append(fullTableName);
-        if(conditions != null && conditions.length() > 0) {
+        if (conditions != null && conditions.length() > 0) {
             query.append(" WHERE (").append(conditions).append(")");
         }
         return query.toString();
+    }
+
+    /**
+     * Constructs parameterized filter for an IN clause e.g. passing in numWhereCols=2, numBatches=3
+     * results in ((?,?),(?,?),(?,?))
+     * @param numWhereCols number of WHERE columns
+     * @param numBatches number of column batches
+     * @return paramterized IN filter
+     */
+    public static String constructParameterizedInClause(int numWhereCols, int numBatches) {
+        Preconditions.checkArgument(numWhereCols > 0);
+        Preconditions.checkArgument(numBatches > 0);
+        String batch = "(" + StringUtils.repeat("?", ",", numWhereCols) + ")";
+        return "(" + StringUtils.repeat(batch, ",", numBatches) + ")";
     }
 
     /**
