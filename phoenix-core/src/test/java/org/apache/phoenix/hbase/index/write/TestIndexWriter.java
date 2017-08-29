@@ -52,12 +52,16 @@ import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+
+import com.google.common.collect.LinkedListMultimap;
+import com.google.common.collect.Multimap;
 
 public class TestIndexWriter {
   private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
@@ -159,17 +163,9 @@ public class TestIndexWriter {
     ExecutorService exec = Executors.newFixedThreadPool(3);
     Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
     FakeTableFactory factory = new FakeTableFactory(tables);
-
     // updates to two different tables
     byte[] tableName = Bytes.add(this.testName.getTableName(), new byte[] { 1, 2, 3, 4 });
-    Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     byte[] tableName2 = this.testName.getTableName();// this will sort after the first tablename
-    List<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
-    indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
-    indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName2));
-    indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName2));
-
     // first table will fail
     HTableInterface table = Mockito.mock(HTableInterface.class);
     Mockito.when(table.batch(Mockito.anyList())).thenThrow(
@@ -209,8 +205,17 @@ public class TestIndexWriter {
     policy.setup(stop, abort);
     IndexWriter writer = new IndexWriter(committer, policy);
     try {
-      writer.write(indexUpdates);
-      fail("Should not have successfully completed all index writes");
+        Put m = new Put(row);
+        m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+        HTableInterfaceReference ht1 = new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
+        HTableInterfaceReference ht2 = new HTableInterfaceReference(new ImmutableBytesPtr(tableName2));
+        // We need to apply updates first for table1 and then table2.
+        Multimap<HTableInterfaceReference, Mutation> indexUpdates = LinkedListMultimap.create();
+        indexUpdates.put(ht1, m);
+        indexUpdates.put(ht2, m);
+        indexUpdates.put(ht2, m);
+        writer.write(indexUpdates, false);
+        fail("Should not have successfully completed all index writes");
     } catch (SingleIndexWriteFailureException s) {
       LOG.info("Correctly got a failure to reach the index", s);
       // should have correctly gotten the correct abort, so let the next task execute
