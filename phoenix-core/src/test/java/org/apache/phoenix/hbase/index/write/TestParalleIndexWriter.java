@@ -20,7 +20,7 @@ package org.apache.phoenix.hbase.index.write;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -87,7 +87,7 @@ public class TestParalleIndexWriter {
     Stoppable stop = Mockito.mock(Stoppable.class);
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, HTableInterface> tables =
-        new HashMap<ImmutableBytesPtr, HTableInterface>();
+        new LinkedHashMap<ImmutableBytesPtr, HTableInterface>();
     FakeTableFactory factory = new FakeTableFactory(tables);
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
