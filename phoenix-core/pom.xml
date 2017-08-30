@@ -473,7 +473,7 @@
     <dependency>
       <groupId>com.clearspring.analytics</groupId>
       <artifactId>stream</artifactId>
-      <version>2.9.5</version>
+      <version>${stream.version}</version>
     </dependency>
   </dependencies>
 </project>

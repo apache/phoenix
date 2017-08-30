@@ -133,6 +133,7 @@
                   <include>it.unimi.dsi:fastutil</include>
                   <include>io.dropwizard.metrics:metrics-core</include>
                   <include>org.apache.thrift:libthrift</include>
+                  <include>com.clearspring.analytics:stream</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>
