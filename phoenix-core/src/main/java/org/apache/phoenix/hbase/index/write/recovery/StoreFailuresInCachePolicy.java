@@ -30,6 +30,7 @@ import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
+import org.apache.phoenix.hbase.index.write.TrackingParallelWriterIndexCommitter;
 
 /**
  * Tracks any failed writes in The {@link PerRegionIndexWriteCache}, given a

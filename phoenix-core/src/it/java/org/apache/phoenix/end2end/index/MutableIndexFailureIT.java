@@ -46,7 +46,9 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.execute.CommitException;
+import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
+import org.apache.phoenix.hbase.index.write.TrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
@@ -173,7 +175,7 @@ public class MutableIndexFailureIT extends BaseTest {
     @Test
     public void testIndexWriteFailure() throws Exception {
         String secondIndexName = "B_" + FailingRegionObserver.FAIL_INDEX_NAME;
-//        String thirdIndexName = "C_" + INDEX_NAME;
+        String thirdIndexName = "C_" + "IDX";
 //        String thirdFullIndexName = SchemaUtil.getTableName(schema, thirdIndexName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, String.valueOf(isNamespaceMapped));
@@ -197,8 +199,8 @@ public class MutableIndexFailureIT extends BaseTest {
             // check the drop index.
             conn.createStatement().execute(
                     "CREATE "  + (!localIndex ? "LOCAL " : "") + " INDEX " + secondIndexName + " ON " + fullTableName + " (v2) INCLUDE (v1)");
-//            conn.createStatement().execute(
-//                    "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + thirdIndexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+            conn.createStatement().execute(
+                    "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + thirdIndexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
 
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
@@ -248,6 +250,10 @@ public class MutableIndexFailureIT extends BaseTest {
             } else {
                 String indexState = rs.getString("INDEX_STATE");
                 assertTrue(PIndexState.DISABLE.toString().equals(indexState) || PIndexState.INACTIVE.toString().equals(indexState));
+                // non-failing index should remain active
+                ResultSet thirdRs = conn.createStatement().executeQuery(getSysCatQuery(thirdIndexName));
+                assertTrue(thirdRs.next());
+                assertEquals(PIndexState.ACTIVE.getSerializedValue(), thirdRs.getString(1));
             }
             assertFalse(rs.next());
 
@@ -308,10 +314,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 waitForIndexRebuild(conn, fullIndexName, PIndexState.DISABLE);
                 // verify that the index was marked as disabled and the index disable
                 // timestamp set to 0
-                String q =
-                        "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
-                                + schema + "' AND TABLE_NAME = '" + indexName + "'"
-                                + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
+                String q = getSysCatQuery(indexName);
                 try (ResultSet r = conn.createStatement().executeQuery(q)) {
                     assertTrue(r.next());
                     assertEquals(PIndexState.DISABLE.getSerializedValue(), r.getString(1));
@@ -323,6 +326,14 @@ public class MutableIndexFailureIT extends BaseTest {
         } finally {
             FAIL_WRITE = false;
         }
+    }
+
+    private String getSysCatQuery(String iName) {
+        String q =
+                "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
+                        + schema + "' AND TABLE_NAME = '" + iName + "'"
+                        + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
+        return q;
     }
 
     private void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
