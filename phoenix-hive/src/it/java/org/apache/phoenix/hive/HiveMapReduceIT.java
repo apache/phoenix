@@ -20,12 +20,11 @@ package org.apache.phoenix.hive;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
+import org.junit.Ignore;
 
-@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
-public abstract class HiveMapReduceIT extends HivePhoenixStoreIT {
+public class HiveMapReduceIT extends HivePhoenixStoreIT {
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
