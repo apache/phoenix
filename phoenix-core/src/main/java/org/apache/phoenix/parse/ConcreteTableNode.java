@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.commons.math3.exception.OutOfRangeException;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**
@@ -43,7 +42,7 @@ public abstract class ConcreteTableNode extends TableNode {
         if(tableSamplingRate==null){
         	this.tableSamplingRate=DEFAULT_TABLE_SAMPLING_RATE;
         }else if(tableSamplingRate<0d||tableSamplingRate>100d){
-        	throw new OutOfRangeException(tableSamplingRate, 0d, 100d);
+        	throw new IllegalArgumentException("TableSamplingRate is out of bound of 0 and 100");
         }else{
         	this.tableSamplingRate=tableSamplingRate;
         }
