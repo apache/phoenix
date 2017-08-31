@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
