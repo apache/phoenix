@@ -131,7 +131,7 @@ public class TestIndexWriter {
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // setup the writer and failure policy
-    TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
+    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, e);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
@@ -139,6 +139,91 @@ public class TestIndexWriter {
     writer.write(indexUpdates);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
+    writer.stop(this.testName.getTableNameString() + " finished");
+    assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
+    assertTrue("ExectorService isn't terminated after writer#stop!", exec.isShutdown());
+  }
+
+  /**
+   * Index updates can potentially be queued up if there aren't enough writer threads. If a running
+   * index write fails, then we should early exit the pending indexupdate, when it comes up (if the
+   * pool isn't already shutdown).
+   * <p>
+   * This test is a little bit racey - we could actually have the failure of the first task before
+   * the third task is even submitted. However, we should never see the third task attempt to make
+   * the batch write, so we should never see a failure here.
+   * @throws Exception on failure
+   */
+  @SuppressWarnings({ "unchecked", "deprecation" })
+  @Test
+  public void testFailureOnRunningUpdateAbortsPending() throws Exception {
+    Abortable abort = new StubAbortable();
+    Stoppable stop = Mockito.mock(Stoppable.class);
+    // single thread factory so the older request gets queued
+    ExecutorService exec = Executors.newFixedThreadPool(3);
+    Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
+    FakeTableFactory factory = new FakeTableFactory(tables);
+    // updates to two different tables
+    byte[] tableName = Bytes.add(this.testName.getTableName(), new byte[] { 1, 2, 3, 4 });
+    byte[] tableName2 = this.testName.getTableName();// this will sort after the first tablename
+    // first table will fail
+    HTableInterface table = Mockito.mock(HTableInterface.class);
+    Mockito.when(table.batch(Mockito.anyList())).thenThrow(
+      new IOException("Intentional IOException for failed first write."));
+    Mockito.when(table.getTableName()).thenReturn(tableName);
+    RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
+    Configuration conf =new Configuration();
+    Mockito.when(e.getConfiguration()).thenReturn(conf);
+    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    // second table just blocks to make sure that the abort propagates to the third task
+    final CountDownLatch waitOnAbortedLatch = new CountDownLatch(1);
+    final boolean[] failed = new boolean[] { false };
+    HTableInterface table2 = Mockito.mock(HTableInterface.class);
+    Mockito.when(table2.getTableName()).thenReturn(tableName2);
+    Mockito.when(table2.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        waitOnAbortedLatch.await();
+        return null;
+      }
+    }).thenAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        failed[0] = true;
+        throw new RuntimeException(
+            "Unexpected exception - second index table shouldn't have been written to");
+      }
+    });
+
+    // add the tables to the set of tables, so its returned to the writer
+    tables.put(new ImmutableBytesPtr(tableName), table);
+    tables.put(new ImmutableBytesPtr(tableName2), table2);
+
+    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
+    committer.setup(factory, exec, abort, stop, e);
+    KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
+    policy.setup(stop, abort);
+    IndexWriter writer = new IndexWriter(committer, policy);
+    try {
+        Put m = new Put(row);
+        m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+        HTableInterfaceReference ht1 = new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
+        HTableInterfaceReference ht2 = new HTableInterfaceReference(new ImmutableBytesPtr(tableName2));
+        // We need to apply updates first for table1 and then table2.
+        Multimap<HTableInterfaceReference, Mutation> indexUpdates = LinkedListMultimap.create();
+        indexUpdates.put(ht1, m);
+        indexUpdates.put(ht2, m);
+        indexUpdates.put(ht2, m);
+        writer.write(indexUpdates, false);
+        fail("Should not have successfully completed all index writes");
+    } catch (SingleIndexWriteFailureException s) {
+      LOG.info("Correctly got a failure to reach the index", s);
+      // should have correctly gotten the correct abort, so let the next task execute
+      waitOnAbortedLatch.countDown();
+    }
+    assertFalse(
+      "Third set of index writes never have been attempted - should have seen the abort before done!",
+      failed[0]);
     writer.stop(this.testName.getTableNameString() + " finished");
     assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
     assertTrue("ExectorService isn't terminated after writer#stop!", exec.isShutdown());
@@ -194,7 +279,7 @@ public class TestIndexWriter {
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 
     // setup the writer
-    TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
+    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, e );
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
