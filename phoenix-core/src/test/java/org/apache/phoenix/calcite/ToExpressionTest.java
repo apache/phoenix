@@ -17,6 +17,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.schema.SchemaVersion;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser;
@@ -220,12 +221,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
         }
 
         @Override
-        public boolean contentsHaveChangedSince(long lastCheck, long now) {
-            return false;
-        }
-
-        @Override
-        public Schema snapshot(long now) {
+        public Schema snapshot(SchemaVersion version) {
             return this;
         }
 	    

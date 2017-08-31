@@ -24,6 +24,7 @@ import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaFactory;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.schema.SchemaVersion;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.TableFunctionImpl;
 import org.apache.calcite.schema.impl.ViewTable;
@@ -551,15 +552,10 @@ public class PhoenixSchema implements Schema {
     }
 
     @Override
-    public boolean contentsHaveChangedSince(long lastCheck, long now) {
-        return lastCheck != now;
-    }
-
-    @Override
-    public Schema snapshot(long now) {
+    public Schema snapshot(SchemaVersion version) {
         return new PhoenixSchema(name, schemaName, parentSchema, pc, typeFactory);
     }
-    
+
     public void defineIndexesAsMaterializations(SchemaPlus parentSchema) {
         SchemaPlus schema = parentSchema.getSubSchema(this.name);
         SchemaPlus viewSqlSchema =

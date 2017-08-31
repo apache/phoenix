@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.calcite;
 
-import org.apache.calcite.sql.validate.SqlConformance;
+import org.apache.calcite.sql.validate.SqlAbstractConformance;
 
-public class PhoenixSqlConformance implements SqlConformance {
+public class PhoenixSqlConformance extends SqlAbstractConformance {
 
     public static final PhoenixSqlConformance INSTANCE =
             new PhoenixSqlConformance();
@@ -37,11 +37,6 @@ public class PhoenixSqlConformance implements SqlConformance {
     }
 
     @Override
-    public boolean isSortByAliasObscures() {
-        return false;
-    }
-
-    @Override
     public boolean isFromRequired() {
         return false;
     }
@@ -49,16 +44,6 @@ public class PhoenixSqlConformance implements SqlConformance {
     @Override
     public boolean isBangEqualAllowed() {
         return true;
-    }
-
-    @Override
-    public boolean isMinusAllowed() {
-        return false;
-    }
-
-    @Override
-    public boolean isApplyAllowed() {
-        return false;
     }
 
     @Override
@@ -89,10 +74,5 @@ public class PhoenixSqlConformance implements SqlConformance {
     @Override
     public boolean allowExtend() {
         return true;
-    }
-
-    @Override
-    public boolean isLimitStartCountAllowed() {
-        return false;
     }
 }
