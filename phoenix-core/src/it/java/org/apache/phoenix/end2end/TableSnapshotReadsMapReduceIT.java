@@ -65,6 +65,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
 
     private static List<List<Object>> result;
     private String tableName;
+
     private MyClock clock;
 
     @Before
@@ -90,7 +91,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
+        Path tmpDir = getUtility().getRandomDir();
 
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
             tmpDir, null, FIELD1, FIELD2, FIELD3);
@@ -110,7 +111,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
+        Path tmpDir = getUtility().getRandomDir();
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
             tmpDir, FIELD3 + " > 0001", FIELD1, FIELD2, FIELD3);
 
@@ -130,7 +131,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
+        Path tmpDir = getUtility().getRandomDir();
         // Running limit with order by on non pk column
         String inputQuery = "SELECT * FROM " + tableName + " ORDER BY FIELD2 LIMIT 1";
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
@@ -156,6 +157,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
             // verify the result, should match the values at the corresponding timestamp
             Properties props = new Properties();
             props.setProperty("CurrentSCN", Long.toString(clock.time));
+
             StringBuilder selectQuery = new StringBuilder("SELECT * FROM " + tableName);
             if (condition != null) {
                 selectQuery.append(" WHERE " + condition);
@@ -178,7 +180,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
             }
 
             assertFalse(
-                "Should only have stored " + result.size() + "rows in the table for the timestamp!",
+                "Should only have stored" + result.size() + "rows in the table for the timestamp!",
                 rs.next());
         } finally {
             deleteSnapshotAndTable(tableName);
@@ -240,6 +242,10 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
         HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         admin.deleteSnapshot(SNAPSHOT_NAME);
+
+        conn.createStatement().execute("DROP TABLE " + tableName);
+        conn.close();
+
     }
 
     public static class TableSnapshotMapper extends
