@@ -414,4 +414,20 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
             assertEquals(expectedCount, i);
         }
     }
+
+    @Test
+    public void testParameterizedLikeExpression() throws Exception {
+        final Connection conn = DriverManager.getConnection(getUrl());
+        final PreparedStatement select = conn.prepareStatement(
+                "select k from " + tableName + " where k like ?");
+        select.setString(1, "12%");
+        ResultSet rs = select.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("123n7-app-2-", rs.getString(1));
+        assertFalse(rs.next());
+
+        select.setString(1, null);
+        rs = select.executeQuery();
+        assertFalse(rs.next());
+    }
 }
