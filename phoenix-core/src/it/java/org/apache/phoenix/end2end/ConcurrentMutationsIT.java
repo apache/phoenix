@@ -64,16 +64,24 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     private final Object lock = new Object();
     private long scn = 100;
 
-    private static void addDelayingCoprocessor(Connection conn, String tableName) throws SQLException, IOException {
+    private static void addDelayingCoprocessor(Connection conn, String tableName) throws Exception {
         int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         descriptor.addCoprocessor(DelayingRegionObserver.class.getName(), null, priority, null);
-        HBaseAdmin admin = services.getAdmin();
-        try {
+        int numTries = 10;
+        try (HBaseAdmin admin = services.getAdmin()) {
             admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-        } finally {
-            admin.close();
+            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+                    && numTries > 0) {
+                numTries--;
+                if (numTries == 0) {
+                    throw new Exception(
+                            "Check to detect if delaying co-processor was added failed after "
+                                    + numTries + " retries.");
+                }
+                Thread.sleep(1000);
+            }
         }
     }
     
