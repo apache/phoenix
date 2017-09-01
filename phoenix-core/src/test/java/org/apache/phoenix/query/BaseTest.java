@@ -423,13 +423,6 @@ public abstract class BaseTest {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, serverProps);
             clusterInitialized = true;
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-                @Override
-                public void run() {
-                    logger.info("SHUTDOWN: halting JVM now");
-                    Runtime.getRuntime().halt(0);
-                }
-            });
         }
         return url;
     }
