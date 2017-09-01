@@ -556,10 +556,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, Region region,
             long clientTimeStamp) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-        RegionScanner scanner = region.getScanner(scan);
-
         Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
-        try {
+        try (RegionScanner scanner = region.getScanner(scan)) {
             PTable oldTable = (PTable)metaDataCache.getIfPresent(cacheKey);
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP-1 : oldTable.getTimeStamp();
             PTable newTable;
@@ -581,8 +579,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 metaDataCache.put(cacheKey, newTable);
             }
             return newTable;
-        } finally {
-            scanner.close();
         }
     }
 
@@ -599,13 +595,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         ScanRanges scanRanges = ScanRanges.createPointLookup(keyRanges);
         scanRanges.initializeScan(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
-
-        RegionScanner scanner = region.getScanner(scan);
-
         Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         List<PFunction> functions = new ArrayList<PFunction>();
         PFunction function = null;
-        try {
+        try (RegionScanner scanner = region.getScanner(scan)) {
             for(int i = 0; i< keys.size(); i++) {
                 function = null;
                 function =
@@ -622,8 +615,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 functions.add(function);
             }
             return functions;
-        } finally {
-            scanner.close();
         }
     }
 
@@ -640,13 +631,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         ScanRanges scanRanges = ScanRanges.createPointLookup(keyRanges);
         scanRanges.initializeScan(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
-
-        RegionScanner scanner = region.getScanner(scan);
-
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         List<PSchema> schemas = new ArrayList<PSchema>();
         PSchema schema = null;
-        try {
+        try (RegionScanner scanner = region.getScanner(scan)) {
             for (int i = 0; i < keys.size(); i++) {
                 schema = null;
                 schema = getSchema(scanner, clientTimeStamp);
@@ -655,8 +643,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 schemas.add(schema);
             }
             return schemas;
-        } finally {
-            scanner.close();
         }
     }
 
@@ -1706,14 +1692,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // TableName systemCatalogTableName = region.getTableDesc().getTableName();
         // HTableInterface hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
-        HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
-                region.getTableDesc().getTableName().getName());
-        try {
+        try (HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
+            region.getTableDesc().getTableName().getName())) {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<ViewInfo> viewInfoList = Lists.newArrayList();
-            ResultScanner scanner = hTable.getScanner(scan);
-            try {
+            try (ResultScanner scanner = hTable.getScanner(scan)) {
                 for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                     numOfChildViews++;
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -1735,11 +1719,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     tableViewFinderResult.setAllViewsNotInSingleRegion();
                 }
                 return tableViewFinderResult;
-            } finally {
-                    scanner.close();
             }
-        } finally {
-            hTable.close();
         }
     }
     
@@ -1761,14 +1741,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // TableName systemCatalogTableName = region.getTableDesc().getTableName();
         // HTableInterface hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
-        HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
-                region.getTableDesc().getTableName().getName());
-        try {
+        try (HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
+            region.getTableDesc().getTableName().getName())) {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<ViewInfo> viewInfoList = Lists.newArrayList();
-            ResultScanner scanner = hTable.getScanner(scan);
-            try {
+            try (ResultScanner scanner = hTable.getScanner(scan)) {
                 for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                     numOfChildViews++;
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -1790,11 +1768,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     tableViewFinderResult.setAllViewsNotInSingleRegion();
                 }
                 return tableViewFinderResult;
-            } finally {
-                    scanner.close();
             }
-        } finally {
-            hTable.close();
         }
     }
     
