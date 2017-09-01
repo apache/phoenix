@@ -315,4 +315,32 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private int getArrayValueForOffset(int arrayOffset) {
       return arrayOffset * 2 + 1;
   }
+
+  @Test
+  public void testParameterizedLikeExpression() throws Exception {
+    final Connection conn = DriverManager.getConnection(CONN_STRING);
+    final String tableName = generateUniqueName();
+    conn.createStatement().execute(
+            "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)");
+    conn.commit();
+
+    final PreparedStatement upsert = conn.prepareStatement(
+            "UPSERT INTO " + tableName + " VALUES (?, ?)");
+    upsert.setString(1, "123n7-app-2-");
+    upsert.setInt(2, 1);
+    upsert.executeUpdate();
+    conn.commit();
+
+    final PreparedStatement select = conn.prepareStatement(
+            "select k from " + tableName + " where k like ?");
+    select.setString(1, "12%");
+    ResultSet rs = select.executeQuery();
+    assertTrue(rs.next());
+    assertEquals("123n7-app-2-", rs.getString(1));
+    assertFalse(rs.next());
+
+    select.setString(1, null);
+    rs = select.executeQuery();
+    assertFalse(rs.next());
+  }
 }
