@@ -478,6 +478,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             if(needToWrite) {
                 synchronized (lock) {
                     scansReferenceCount++;
+                    lock.notifyAll();
                 }
             }
             region.startRegionOperation();
@@ -729,18 +730,27 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
         } finally {
-            if(needToWrite) {
+            if (needToWrite) {
                 synchronized (lock) {
                     scansReferenceCount--;
+                    if (scansReferenceCount < 0) {
+                        logger.warn(
+                            "Scan reference count went below zero. Something isn't correct. Resetting it back to zero");
+                        scansReferenceCount = 0;
+                    }
+                    lock.notifyAll();
                 }
             }
-            if (targetHTable != null) {
-                targetHTable.close();
-            }
             try {
-                innerScanner.close();
+                if (targetHTable != null) {
+                    targetHTable.close();
+                }
             } finally {
-                if (acquiredLock) region.closeRegionOperation();
+                try {
+                    innerScanner.close();
+                } finally {
+                    if (acquiredLock) region.closeRegionOperation();
+                }
             }
         }
         if (logger.isDebugEnabled()) {
@@ -957,7 +967,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
             @Override
             public void close() throws IOException {
-                // no-op because we want to manage closing of the inner scanner ourselves.
+                innerScanner.close();
             }
 
             @Override
@@ -1015,7 +1025,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
             @Override
             public void close() throws IOException {
-                // no-op because we want to manage closing of the inner scanner ourselves.
+                // No-op because we want to manage closing of the inner scanner ourselves.
+                // This happens inside StatsCollectionCallable.
             }
 
             @Override
@@ -1175,7 +1186,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Don't allow splitting if operations need read and write to same region are going on in the
         // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
         synchronized (lock) {
-            if (scansReferenceCount != 0) {
+            if (scansReferenceCount > 0) {
                 throw new IOException("Operations like local index building/delete/upsert select"
                         + " might be going on so not allowing to split.");
             }
@@ -1188,7 +1199,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Don't allow bulkload if operations need read and write to same region are going on in the
         // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
         synchronized (lock) {
-            if (scansReferenceCount != 0) {
+            if (scansReferenceCount > 0) {
                 throw new DoNotRetryIOException("Operations like local index building/delete/upsert select"
                         + " might be going on so not allowing to bulkload.");
             }
@@ -1199,8 +1210,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
             throws IOException {
         synchronized (lock) {
-            while (scansReferenceCount != 0) {
-                isRegionClosing = true;
+            isRegionClosing = true;
+            while (scansReferenceCount > 0) {
                 try {
                     lock.wait(1000);
                 } catch (InterruptedException e) {
