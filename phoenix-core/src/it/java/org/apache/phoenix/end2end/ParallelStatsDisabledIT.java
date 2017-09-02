@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
@@ -34,5 +35,10 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
     @BeforeClass
     public static void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    }
+
+    @AfterClass
+    public static void tearDownMiniCluster() throws Exception {
+        BaseTest.tearDownMiniClusterIfBeyondThreshold();
     }
 }
