@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
@@ -398,8 +399,23 @@ public abstract class BaseTest {
     protected static PhoenixTestDriver driver;
     protected static boolean clusterInitialized = false;
     private static HBaseTestingUtility utility;
-    protected static final Configuration config = HBaseConfiguration.create(); 
-    
+    protected static final Configuration config = HBaseConfiguration.create();
+
+    private static class TearDownMiniClusterThreadFactory implements ThreadFactory {
+        private static final AtomicInteger threadNumber = new AtomicInteger(1);
+        private static final String NAME_PREFIX = "PHOENIX-TEARDOWN-MINICLUSTER-thread-";
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, NAME_PREFIX + threadNumber.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        }
+    }
+
+    private static ExecutorService tearDownClusterService =
+            Executors.newSingleThreadExecutor(new TearDownMiniClusterThreadFactory());
+
     protected static String getUrl() {
         if (!clusterInitialized) {
             throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
@@ -426,7 +442,7 @@ public abstract class BaseTest {
         }
         return url;
     }
-    
+
     private static void checkTxManagerInitialized(ReadOnlyProps clientProps) throws SQLException, IOException {
         setupTxManager();
     }
@@ -445,10 +461,12 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void destroyDriver() throws Exception {
+    protected static void destroyDriver() {
         if (driver != null) {
             try {
                 assertTrue(destroyDriver(driver));
+            } catch (Throwable t) {
+                logger.error("Exception caught when destroying phoenix test driver", t);
             } finally {
                 driver = null;
             }
@@ -463,38 +481,56 @@ public abstract class BaseTest {
         }
     }
 
-    public static void tearDownMiniCluster() throws Exception {
+    public static void tearDownMiniClusterAsync(final int numTables) {
+        final HBaseTestingUtility u = utility;
         try {
             destroyDriver();
-        } finally {
             try {
                 tearDownTxManager();
-            } finally {
-                try {
-                    if (utility != null) {
+            } catch (Throwable t) {
+                logger.error("Exception caught when shutting down tx manager", t);
+            }
+            utility = null;
+            clusterInitialized = false;
+        } finally {
+            tearDownClusterService.submit(new Callable<Void>() {
+                @Override
+                public Void call() throws Exception {
+                    long startTime = System.currentTimeMillis();
+                    if (u != null) {
                         try {
-                            utility.shutdownMiniMapReduceCluster();
+                            u.shutdownMiniMapReduceCluster();
+                        } catch (Throwable t) {
+                            logger.error(
+                                "Exception caught when shutting down mini map reduce cluster", t);
                         } finally {
-                            utility.shutdownMiniCluster();
+                            try {
+                                u.shutdownMiniCluster();
+                            } catch (Throwable t) {
+                                logger.error("Exception caught when shutting down mini cluster", t);
+                            } finally {
+                                logger.info(
+                                    "Time in seconds spent in shutting down mini cluster with "
+                                            + numTables + " tables: "
+                                            + (System.currentTimeMillis() - startTime) / 1000);
+                            }
                         }
                     }
-                } finally {
-                    utility = null;
-                    clusterInitialized = false;
+                    return null;
                 }
-            }
+            });
         }
     }
-            
+
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
         setUpTestDriver(props, props);
     }
     
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
-        setTxnConfigs();
-        String url = checkClusterInitialized(serverProps);
-        checkTxManagerInitialized(serverProps);
         if (driver == null) {
+            setTxnConfigs();
+            String url = checkClusterInitialized(serverProps);
+            checkTxManagerInitialized(serverProps);
             driver = initAndRegisterTestDriver(url, clientProps);
         }
     }
@@ -596,6 +632,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         return conf;
     }
 
@@ -676,14 +713,38 @@ public abstract class BaseTest {
 
     private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
     private static final int MAX_SUFFIX_VALUE = 1000000;
-    
+
+    /**
+     * Counter to track number of tables we have created. This isn't really accurate since this
+     * counter will be incremented when we call {@link #generateUniqueName()}for getting unique
+     * schema and sequence names too. But this will have to do.
+     */
+    private static final AtomicInteger TABLE_COUNTER = new AtomicInteger(0);
+    /*
+     * Threshold to monitor if we need to restart mini-cluster since we created too many tables.
+     * Note, we can't have this value too high since we don't want the shutdown to take too
+     * long a time either.
+     */
+    private static final int TEARDOWN_THRESHOLD = 30;
+
     public static String generateUniqueName() {
         int nextName = NAME_SUFFIX.incrementAndGet();
         if (nextName >= MAX_SUFFIX_VALUE) {
             throw new IllegalStateException("Used up all unique names");
         }
+        TABLE_COUNTER.incrementAndGet();
         return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
-        //return RandomStringUtils.randomAlphabetic(20).toUpperCase();
+    }
+
+    public static void tearDownMiniClusterIfBeyondThreshold() throws Exception {
+        if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
+            int numTables = TABLE_COUNTER.get();
+            TABLE_COUNTER.set(0);
+            logger.info(
+                "Shutting down mini cluster because number of tables on this mini cluster is likely greater than "
+                        + TEARDOWN_THRESHOLD);
+            tearDownMiniClusterAsync(numTables);
+        }
     }
 
     protected static void createTestTable(String url, String ddl) throws SQLException {

@@ -248,12 +248,6 @@
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -283,12 +277,6 @@
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -307,12 +295,6 @@
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
                 <shutdown>kill</shutdown>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -349,12 +331,6 @@
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
                  <shutdown>kill</shutdown>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
