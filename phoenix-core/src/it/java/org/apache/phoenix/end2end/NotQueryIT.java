@@ -52,7 +52,7 @@ import com.google.common.primitives.Floats;
 @RunWith(Parameterized.class)
 public class NotQueryIT extends BaseQueryIT {
 
-    public NotQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public NotQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
     
