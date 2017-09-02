@@ -48,7 +48,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class GroupByIT extends BaseQueryIT {
 
-    public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, true);
     }
     

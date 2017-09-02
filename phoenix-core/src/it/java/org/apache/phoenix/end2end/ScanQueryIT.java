@@ -62,7 +62,7 @@ public class ScanQueryIT extends BaseQueryIT {
         return QueryIT.data();
     }
 
-    public ScanQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public ScanQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
     

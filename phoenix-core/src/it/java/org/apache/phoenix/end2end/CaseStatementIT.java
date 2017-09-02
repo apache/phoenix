@@ -54,7 +54,7 @@ import com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class CaseStatementIT extends BaseQueryIT {
 
-    public CaseStatementIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public CaseStatementIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
     

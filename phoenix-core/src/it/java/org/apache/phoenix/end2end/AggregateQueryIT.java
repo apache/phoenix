@@ -45,7 +45,7 @@ import org.junit.Test;
 
 public class AggregateQueryIT extends BaseQueryIT {
 
-    public AggregateQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public AggregateQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
 
