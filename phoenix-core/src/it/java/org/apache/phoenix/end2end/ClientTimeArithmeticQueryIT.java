@@ -60,7 +60,7 @@ import com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
 
-    public ClientTimeArithmeticQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public ClientTimeArithmeticQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
     

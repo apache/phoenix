@@ -30,7 +30,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -44,6 +43,8 @@ import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -95,7 +96,10 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected String tableName;
     protected String indexName;
     
-    public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded, boolean keepDeletedCells) {
+    private static final Logger logger = LoggerFactory.getLogger(BaseQueryIT.class);
+
+    public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded,
+            boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             optionBuilder.append("COLUMN_ENCODED_BYTES=0");
@@ -114,19 +118,29 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             optionBuilder.append("KEEP_DELETED_CELLS=true");
         }
         this.tableDDLOptions = optionBuilder.toString();
+        this.ts = nextTimestamp();
         try {
-            this.ts = nextTimestamp();
-            this.tableName = initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
-            this.indexName = generateUniqueName();
-            if (idxDdl.length() > 0) {
-                this.indexDDL = String.format(idxDdl, indexName, tableName, keepDeletedCells ? "KEEP_DELETED_CELLS=true" : "KEEP_DELETED_CELLS=false");
-                Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-                Connection conn = DriverManager.getConnection(getUrl(), props);
-                conn.createStatement().execute(this.indexDDL);
-            }
+            this.tableName =
+                    initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
+                        date = new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            logger.error("Exception when creating aTable ", e);
+            throw e;
+        }
+        this.indexName = generateUniqueName();
+        if (idxDdl.length() > 0) {
+            this.indexDDL =
+                    String.format(idxDdl, indexName, tableName,
+                        keepDeletedCells ? "KEEP_DELETED_CELLS=true" : "KEEP_DELETED_CELLS=false");
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+
+            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                conn.createStatement().execute(this.indexDDL);
+            } catch (Exception e) {
+                logger.error("Exception while creating index: " + indexDDL, e);
+                throw e;
+            }
         }
     }
     

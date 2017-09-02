@@ -62,7 +62,7 @@ public class MutableQueryIT extends BaseQueryIT {
         return testCases;
     }
     
-    public MutableQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public MutableQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, true);
     }
     

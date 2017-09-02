@@ -34,7 +34,7 @@ import org.junit.Test;
 
 public class PointInTimeQueryIT extends BaseQueryIT {
 
-    public PointInTimeQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public PointInTimeQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, true);
     }
     
