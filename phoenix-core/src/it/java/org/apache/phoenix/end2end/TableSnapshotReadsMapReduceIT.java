@@ -70,6 +70,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
     @Before
     public void injectMyClock() {
         clock = new MyClock(1000);
+        // Use our own clock to prevent race between partial rebuilder and compaction
         EnvironmentEdgeManager.injectEdge(clock);
     }
 
@@ -89,7 +90,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDir(SNAPSHOT_NAME);
+        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
 
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
             tmpDir, null, FIELD1, FIELD2, FIELD3);
@@ -109,7 +110,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDir(SNAPSHOT_NAME);
+        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
             tmpDir, FIELD3 + " > 0001", FIELD1, FIELD2, FIELD3);
 
@@ -129,7 +130,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDir(SNAPSHOT_NAME);
+        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
         // Running limit with order by on non pk column
         String inputQuery = "SELECT * FROM " + tableName + " ORDER BY FIELD2 LIMIT 1";
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
@@ -155,7 +156,6 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
             // verify the result, should match the values at the corresponding timestamp
             Properties props = new Properties();
             props.setProperty("CurrentSCN", Long.toString(clock.time));
-
             StringBuilder selectQuery = new StringBuilder("SELECT * FROM " + tableName);
             if (condition != null) {
                 selectQuery.append(" WHERE " + condition);
@@ -178,10 +178,23 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
             }
 
             assertFalse(
-                "Should only have stored" + result.size() + "rows in the table for the timestamp!",
+                "Should only have stored " + result.size() + "rows in the table for the timestamp!",
                 rs.next());
         } finally {
             deleteSnapshotAndTable(tableName);
+        }
+    }
+
+    private static class MyClock extends EnvironmentEdge {
+        public volatile long time;
+
+        public MyClock(long time) {
+            this.time = time;
+        }
+
+        @Override
+        public long currentTime() {
+            return time;
         }
     }
 
@@ -227,23 +240,6 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
         HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         admin.deleteSnapshot(SNAPSHOT_NAME);
-
-        conn.createStatement().execute("DROP TABLE " + tableName);
-        conn.close();
-
-    }
-
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock(long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
     }
 
     public static class TableSnapshotMapper extends
