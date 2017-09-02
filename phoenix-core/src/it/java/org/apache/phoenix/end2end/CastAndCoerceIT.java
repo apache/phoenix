@@ -43,7 +43,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class CastAndCoerceIT extends BaseQueryIT {
 
-    public CastAndCoerceIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+    public CastAndCoerceIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
     
