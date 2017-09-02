@@ -90,7 +90,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
+        Path tmpDir = new Path("/tmp");
 
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
             tmpDir, null, FIELD1, FIELD2, FIELD3);
@@ -110,7 +110,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
+        Path tmpDir = new Path("/tmp");
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
             tmpDir, FIELD3 + " > 0001", FIELD1, FIELD2, FIELD3);
 
@@ -130,7 +130,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
         // configure Phoenix M/R job to read snapshot
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        Path tmpDir = getUtility().getDataTestDirOnTestFS(SNAPSHOT_NAME);
+        Path tmpDir = new Path("/tmp");
         // Running limit with order by on non pk column
         String inputQuery = "SELECT * FROM " + tableName + " ORDER BY FIELD2 LIMIT 1";
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, SNAPSHOT_NAME, tableName,
