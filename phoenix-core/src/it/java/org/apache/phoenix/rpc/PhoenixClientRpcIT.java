@@ -53,7 +53,6 @@ public class PhoenixClientRpcIT extends BaseUniqueNamesOwnClusterIT {
     @AfterClass
     public static void cleanUpAfterTestSuite() throws Exception {
         TestPhoenixIndexRpcSchedulerFactory.reset();
-        tearDownMiniCluster();
     }
     
     @Before
