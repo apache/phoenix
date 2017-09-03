@@ -149,6 +149,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -401,20 +402,7 @@ public abstract class BaseTest {
     private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create();
 
-    private static class TearDownMiniClusterThreadFactory implements ThreadFactory {
-        private static final AtomicInteger threadNumber = new AtomicInteger(1);
-        private static final String NAME_PREFIX = "PHOENIX-TEARDOWN-MINICLUSTER-thread-";
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, NAME_PREFIX + threadNumber.getAndIncrement());
-            t.setDaemon(true);
-            return t;
-        }
-    }
-
-    private static ExecutorService tearDownClusterService =
-            Executors.newSingleThreadExecutor(new TearDownMiniClusterThreadFactory());
+    private static ExecutorService tearDownClusterService = MoreExecutors.sameThreadExecutor();
 
     protected static String getUrl() {
         if (!clusterInitialized) {
