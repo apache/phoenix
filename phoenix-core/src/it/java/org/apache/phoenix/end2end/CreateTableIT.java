@@ -42,14 +42,12 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -58,94 +56,88 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class CreateTableIT extends BaseClientManagedTimeIT {
-    
+public class CreateTableIT extends ParallelStatsDisabledIT {
+
     @Test
     public void testStartKeyStopKey() throws SQLException {
-        long ts = nextTimestamp();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE start_stop_test (pk char(2) not null primary key) SPLIT ON ('EA','EZ')");
+        String tableName = generateUniqueName();
+        conn.createStatement().execute("CREATE TABLE " + tableName
+                + " (pk char(2) not null primary key) SPLIT ON ('EA','EZ')");
         conn.close();
-        
-        String query = "select count(*) from start_stop_test where pk >= 'EA' and pk < 'EZ'";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+
+        String query = "select count(*) from  " + tableName + "  where pk >= 'EA' and pk < 'EZ'";
         conn = DriverManager.getConnection(getUrl(), props);
         Statement statement = conn.createStatement();
         statement.execute(query);
         PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
-        List<KeyRange>splits = pstatement.getQueryPlan().getSplits();
+        List<KeyRange> splits = pstatement.getQueryPlan().getSplits();
         assertTrue(splits.size() > 0);
     }
-    
+
     @Test
     public void testCreateTable() throws Exception {
-        long ts = nextTimestamp();
         String schemaName = "TEST";
-        String tableName = schemaName + ".M_INTERFACE_JOB";
+        String tableName = schemaName + generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        
-        String ddl = "CREATE TABLE " + tableName + "(                data.addtime VARCHAR ,\n" + 
-                "                data.dir VARCHAR ,\n" + 
-                "                data.end_time VARCHAR ,\n" + 
-                "                data.file VARCHAR ,\n" + 
-                "                data.fk_log VARCHAR ,\n" + 
-                "                data.host VARCHAR ,\n" + 
-                "                data.r VARCHAR ,\n" + 
-                "                data.size VARCHAR ,\n" + 
-                "                data.start_time VARCHAR ,\n" + 
-                "                data.stat_date DATE ,\n" + 
-                "                data.stat_hour VARCHAR ,\n" + 
-                "                data.stat_minute VARCHAR ,\n" + 
-                "                data.state VARCHAR ,\n" + 
-                "                data.title VARCHAR ,\n" + 
-                "                data.\"user\" VARCHAR ,\n" + 
-                "                data.inrow VARCHAR ,\n" + 
-                "                data.jobid VARCHAR ,\n" + 
-                "                data.jobtype VARCHAR ,\n" + 
-                "                data.level VARCHAR ,\n" + 
-                "                data.msg VARCHAR ,\n" + 
-                "                data.outrow VARCHAR ,\n" + 
-                "                data.pass_time VARCHAR ,\n" + 
-                "                data.type VARCHAR ,\n" + 
-                "                id INTEGER not null primary key desc\n" + 
-                "                ) ";
+
+        String ddl =
+                "CREATE TABLE " + tableName + "(                data.addtime VARCHAR ,\n"
+                        + "                data.dir VARCHAR ,\n"
+                        + "                data.end_time VARCHAR ,\n"
+                        + "                data.file VARCHAR ,\n"
+                        + "                data.fk_log VARCHAR ,\n"
+                        + "                data.host VARCHAR ,\n"
+                        + "                data.r VARCHAR ,\n"
+                        + "                data.size VARCHAR ,\n"
+                        + "                data.start_time VARCHAR ,\n"
+                        + "                data.stat_date DATE ,\n"
+                        + "                data.stat_hour VARCHAR ,\n"
+                        + "                data.stat_minute VARCHAR ,\n"
+                        + "                data.state VARCHAR ,\n"
+                        + "                data.title VARCHAR ,\n"
+                        + "                data.\"user\" VARCHAR ,\n"
+                        + "                data.inrow VARCHAR ,\n"
+                        + "                data.jobid VARCHAR ,\n"
+                        + "                data.jobtype VARCHAR ,\n"
+                        + "                data.level VARCHAR ,\n"
+                        + "                data.msg VARCHAR ,\n"
+                        + "                data.outrow VARCHAR ,\n"
+                        + "                data.pass_time VARCHAR ,\n"
+                        + "                data.type VARCHAR ,\n"
+                        + "                id INTEGER not null primary key desc\n"
+                        + "                ) ";
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
         }
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         assertNotNull(admin.getTableDescriptor(Bytes.toBytes(tableName)));
-        HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
         assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
             fail();
         } catch (TableAlreadyExistsException e) {
             // expected
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + tableName);
         }
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("CREATE SCHEMA " + schemaName);
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
-            assertNotEquals(null,
-                    admin.getTableDescriptor(SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName()));
+            assertNotEquals(null, admin.getTableDescriptor(
+                SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName()));
         } finally {
             admin.close();
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + tableName);
@@ -154,17 +146,17 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCreateMultiTenantTable() throws Exception {
-        long ts = nextTimestamp();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "CREATE TABLE m_multi_tenant_test(                TenantId UNSIGNED_INT NOT NULL ,\n" +
-                "                Id UNSIGNED_INT NOT NULL ,\n" +
-                "                val VARCHAR ,\n" +
-                "                CONSTRAINT pk PRIMARY KEY(TenantId, Id) \n" +
-                "                ) MULTI_TENANT=true";
+        String tableName = generateUniqueName();
+        String ddl =
+                "CREATE TABLE  " + tableName
+                        + " (                TenantId UNSIGNED_INT NOT NULL ,\n"
+                        + "                Id UNSIGNED_INT NOT NULL ,\n"
+                        + "                val VARCHAR ,\n"
+                        + "                CONSTRAINT pk PRIMARY KEY(TenantId, Id) \n"
+                        + "                ) MULTI_TENANT=true";
         conn.createStatement().execute(ddl);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(ddl);
@@ -172,360 +164,290 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         } catch (TableAlreadyExistsException e) {
             // expected
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("DROP TABLE m_multi_tenant_test");
+        conn.createStatement().execute("DROP TABLE  " + tableName);
     }
-    
+
     /**
      * Test that when the ddl only has PK cols, ttl is set.
      */
     @Test
     public void testCreateTableColumnFamilyHBaseAttribs1() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST1 ("
-    		    + " id char(1) NOT NULL,"
-    		    + " col1 integer NOT NULL,"
-    		    + " col2 bigint NOT NULL,"
-    		    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
-    		    + " ) TTL=86400, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                        + " ) TTL=86400, SALT_BUCKETS = 4";
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST1")).getColumnFamilies();
-    	assertEquals(1, columnFamilies.length);
-    	assertEquals(86400, columnFamilies[0].getTimeToLive());
-    }
-    
-    /**
-     * Tests that when:
-     * 1) DDL has both pk as well as key value columns
-     * 2) Key value columns have different column family names
-     * 3) TTL specifier doesn't have column family name.
-     * 
-     * Then:
-     * 1)TTL is set.
-     * 2)All column families have the same TTL.  
-     */
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs2() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST2 ("
-    			+ " id char(1) NOT NULL,"
-    			+ " col1 integer NOT NULL,"
-    			+ " b.col2 bigint,"
-    			+ " c.col3 bigint, "
-    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) TTL=86400, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
-    	Properties props = new Properties();
-    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-    	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST2")).getColumnFamilies();
-    	assertEquals(2, columnFamilies.length);
-    	assertEquals(86400, columnFamilies[0].getTimeToLive());
-    	assertEquals("B", columnFamilies[0].getNameAsString());
-    	assertEquals(86400, columnFamilies[1].getTimeToLive());
-    	assertEquals("C", columnFamilies[1].getNameAsString());
-    }
-    
-    /**
-     * Tests that when:
-     * 1) DDL has both pk as well as key value columns
-     * 2) Key value columns have both default and explicit column family names
-     * 3) TTL specifier doesn't have column family name.
-     * 
-     * Then:
-     * 1)TTL is set.
-     * 2)All column families have the same TTL.  
-     */
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs3() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST3 ("
-    			+ " id char(1) NOT NULL,"
-    			+ " col1 integer NOT NULL,"
-    			+ " b.col2 bigint,"
-    			+ " col3 bigint, "
-    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) TTL=86400, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
-    	Properties props = new Properties();
-    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-    	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST3")).getColumnFamilies();
-    	assertEquals(2, columnFamilies.length);
-    	assertEquals("0", columnFamilies[0].getNameAsString());
-    	assertEquals(86400, columnFamilies[0].getTimeToLive());
-    	assertEquals("B", columnFamilies[1].getNameAsString());
-    	assertEquals(86400, columnFamilies[1].getTimeToLive());
-    }
-    
-    /**
-     * Tests that when:
-     * 1) DDL has both pk as well as key value columns
-     * 2) Key value columns have both default and explicit column family names
-     * 3) Replication scope specifier has the explicit column family name.
-     * 
-     * Then:
-     * 1)REPLICATION_SCOPE is set.
-     * 2)The default column family has DEFAULT_REPLICATION_SCOPE.
-     * 3)The explicit column family has the REPLICATION_SCOPE specified in DDL.  
-     */
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs4() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST4 ("
-    			+ " id char(1) NOT NULL,"
-    			+ " col1 integer NOT NULL,"
-    			+ " b.col2 bigint,"
-    			+ " col3 bigint, "
-    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) b.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
-    	Properties props = new Properties();
-    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-    	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST4")).getColumnFamilies();
-    	assertEquals(2, columnFamilies.length);
-    	assertEquals("0", columnFamilies[0].getNameAsString());
-    	assertEquals(DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
-    	assertEquals("B", columnFamilies[1].getNameAsString());
-    	assertEquals(1, columnFamilies[1].getScope());
-    }
-    
-    /**
-     * Tests that when:
-     * 1) DDL has both pk as well as key value columns
-     * 2) Key value columns have explicit column family names
-     * 3) Different REPLICATION_SCOPE specifiers for different column family names.
-     * 
-     * Then:
-     * 1)REPLICATION_SCOPE is set.
-     * 2)Each explicit column family has the REPLICATION_SCOPE as specified in DDL.  
-     */
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs5() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST5 ("
-    			+ " id char(1) NOT NULL,"
-    			+ " col1 integer NOT NULL,"
-    			+ " b.col2 bigint,"
-    			+ " c.col3 bigint, "
-    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) b.REPLICATION_SCOPE=0, c.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
-    	Properties props = new Properties();
-    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-    	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST5")).getColumnFamilies();
-    	assertEquals(2, columnFamilies.length);
-    	assertEquals("B", columnFamilies[0].getNameAsString());
-    	assertEquals(0, columnFamilies[0].getScope());
-    	assertEquals("C", columnFamilies[1].getNameAsString());
-    	assertEquals(1, columnFamilies[1].getScope());
-    }
-    
-    /**
-     * Tests that when:
-     * 1) DDL has both pk as well as key value columns
-     * 2) There is a default column family specified.
-     *  
-     * Then:
-     * 1)TTL is set for the specified default column family.
-     * 
-     */
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs6() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST6 ("
-    			+ " id char(1) NOT NULL,"
-    			+ " col1 integer NOT NULL,"
-    			+ " col2 bigint,"
-    			+ " col3 bigint, "
-    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
-    	Properties props = new Properties();
-    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-    	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST6")).getColumnFamilies();
-    	assertEquals(1, columnFamilies.length);
-    	assertEquals("a", columnFamilies[0].getNameAsString());
-    	assertEquals(10000, columnFamilies[0].getTimeToLive());
-    }
-    
-    /**
-     * Tests that when:
-     * 1) DDL has only pk columns
-     * 2) There is a default column family specified.
-     *  
-     * Then:
-     * 1)TTL is set for the specified default column family.
-     * 
-     */
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs7() throws Exception {
-    	String ddl = "create table IF NOT EXISTS TEST7 ("
-    			+ " id char(1) NOT NULL,"
-    			+ " col1 integer NOT NULL,"
-    			+ " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-    			+ " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
-    	long ts = nextTimestamp();
-    	Properties props = new Properties();
-    	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-    	Connection conn = DriverManager.getConnection(getUrl(), props);
-    	conn.createStatement().execute(ddl);
-    	HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-    	HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST7")).getColumnFamilies();
-    	assertEquals(1, columnFamilies.length);
-    	assertEquals("a", columnFamilies[0].getNameAsString());
-    	assertEquals(10000, columnFamilies[0].getTimeToLive());
-    }
-    
-    @Test
-    public void testCreateTableColumnFamilyHBaseAttribs8() throws Exception {
-        String ddl = "create table IF NOT EXISTS TEST8 ("
-                + " id char(1) NOT NULL,"
-                + " col1 integer NOT NULL,"
-                + " col2 bigint NOT NULL,"
-                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
-                + " ) BLOOMFILTER = 'ROW', SALT_BUCKETS = 4";
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST8")).getColumnFamilies();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(1, columnFamilies.length);
+        assertEquals(86400, columnFamilies[0].getTimeToLive());
+    }
+
+    /**
+     * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
+     * different column family names 3) TTL specifier doesn't have column family name. Then: 1)TTL
+     * is set. 2)All column families have the same TTL.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs2() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " b.col2 bigint," + " c.col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) TTL=86400, SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(2, columnFamilies.length);
+        assertEquals(86400, columnFamilies[0].getTimeToLive());
+        assertEquals("B", columnFamilies[0].getNameAsString());
+        assertEquals(86400, columnFamilies[1].getTimeToLive());
+        assertEquals("C", columnFamilies[1].getNameAsString());
+    }
+
+    /**
+     * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
+     * both default and explicit column family names 3) TTL specifier doesn't have column family
+     * name. Then: 1)TTL is set. 2)All column families have the same TTL.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs3() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) TTL=86400, SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(2, columnFamilies.length);
+        assertEquals("0", columnFamilies[0].getNameAsString());
+        assertEquals(86400, columnFamilies[0].getTimeToLive());
+        assertEquals("B", columnFamilies[1].getNameAsString());
+        assertEquals(86400, columnFamilies[1].getTimeToLive());
+    }
+
+    /**
+     * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
+     * both default and explicit column family names 3) Replication scope specifier has the explicit
+     * column family name. Then: 1)REPLICATION_SCOPE is set. 2)The default column family has
+     * DEFAULT_REPLICATION_SCOPE. 3)The explicit column family has the REPLICATION_SCOPE specified
+     * in DDL.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs4() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) b.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(2, columnFamilies.length);
+        assertEquals("0", columnFamilies[0].getNameAsString());
+        assertEquals(DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
+        assertEquals("B", columnFamilies[1].getNameAsString());
+        assertEquals(1, columnFamilies[1].getScope());
+    }
+
+    /**
+     * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
+     * explicit column family names 3) Different REPLICATION_SCOPE specifiers for different column
+     * family names. Then: 1)REPLICATION_SCOPE is set. 2)Each explicit column family has the
+     * REPLICATION_SCOPE as specified in DDL.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs5() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " b.col2 bigint," + " c.col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) b.REPLICATION_SCOPE=0, c.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(2, columnFamilies.length);
+        assertEquals("B", columnFamilies[0].getNameAsString());
+        assertEquals(0, columnFamilies[0].getScope());
+        assertEquals("C", columnFamilies[1].getNameAsString());
+        assertEquals(1, columnFamilies[1].getScope());
+    }
+
+    /**
+     * Tests that when: 1) DDL has both pk as well as key value columns 2) There is a default column
+     * family specified. Then: 1)TTL is set for the specified default column family.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs6() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " col2 bigint," + " col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(1, columnFamilies.length);
+        assertEquals("a", columnFamilies[0].getNameAsString());
+        assertEquals(10000, columnFamilies[0].getTimeToLive());
+    }
+
+    /**
+     * Tests that when: 1) DDL has only pk columns 2) There is a default column family specified.
+     * Then: 1)TTL is set for the specified default column family.
+     */
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs7() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) DEFAULT_COLUMN_FAMILY='a', TTL=10000, SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(1, columnFamilies.length);
+        assertEquals("a", columnFamilies[0].getNameAsString());
+        assertEquals(10000, columnFamilies[0].getTimeToLive());
+    }
+
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs8() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                        + " ) BLOOMFILTER = 'ROW', SALT_BUCKETS = 4";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies =
+                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
         assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
     }
-    
-    
+
     /**
      * Test to ensure that NOT NULL constraint isn't added to a non primary key column.
      * @throws Exception
      */
     @Test
     public void testNotNullConstraintForNonPKColumn() throws Exception {
-        
-        String ddl = "CREATE TABLE IF NOT EXISTS EVENT.APEX_LIMIT ( " +
-                " ORGANIZATION_ID CHAR(15) NOT NULL, " +
-                " EVENT_TIME DATE NOT NULL, USER_ID CHAR(15) NOT NULL, " +
-                " ENTRY_POINT_ID CHAR(15) NOT NULL, ENTRY_POINT_TYPE CHAR(2) NOT NULL , " +
-                " APEX_LIMIT_ID CHAR(15) NOT NULL,  USERNAME CHAR(80),  " +
-                " NAMESPACE_PREFIX VARCHAR, ENTRY_POINT_NAME VARCHAR  NOT NULL , " +
-                " EXECUTION_UNIT_NO VARCHAR, LIMIT_TYPE VARCHAR, " +
-                " LIMIT_VALUE DOUBLE  " +
-                " CONSTRAINT PK PRIMARY KEY (" + 
-                "     ORGANIZATION_ID, EVENT_TIME,USER_ID,ENTRY_POINT_ID, ENTRY_POINT_TYPE, APEX_LIMIT_ID " +
-                " ) ) VERSIONS=1";
-                    
+        String tableName = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " ( "
+                        + " ORGANIZATION_ID CHAR(15) NOT NULL, "
+                        + " EVENT_TIME DATE NOT NULL, USER_ID CHAR(15) NOT NULL, "
+                        + " ENTRY_POINT_ID CHAR(15) NOT NULL, ENTRY_POINT_TYPE CHAR(2) NOT NULL , "
+                        + " APEX_LIMIT_ID CHAR(15) NOT NULL,  USERNAME CHAR(80),  "
+                        + " NAMESPACE_PREFIX VARCHAR, ENTRY_POINT_NAME VARCHAR  NOT NULL , "
+                        + " EXECUTION_UNIT_NO VARCHAR, LIMIT_TYPE VARCHAR, "
+                        + " LIMIT_VALUE DOUBLE  " + " CONSTRAINT PK PRIMARY KEY ("
+                        + "     ORGANIZATION_ID, EVENT_TIME,USER_ID,ENTRY_POINT_ID, ENTRY_POINT_TYPE, APEX_LIMIT_ID "
+                        + " ) ) VERSIONS=1";
+
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            conn.createStatement().execute(ddl);    
+            conn.createStatement().execute(ddl);
             fail(" Non pk column ENTRY_POINT_NAME has a NOT NULL constraint");
-        } catch( SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
+        } catch (SQLException sqle) {
+            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+                sqle.getErrorCode());
         }
-   }
+    }
 
     @Test
     public void testNotNullConstraintForWithSinglePKCol() throws Exception {
-        
-        String ddl = "create table test.testing(k integer primary key, v bigint not null)";
-                    
+        String tableName = generateUniqueName();
+        String ddl = "create table  " + tableName + " (k integer primary key, v bigint not null)";
+
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            conn.createStatement().execute(ddl);    
+            conn.createStatement().execute(ddl);
             fail(" Non pk column V has a NOT NULL constraint");
-        } catch( SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
+        } catch (SQLException sqle) {
+            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+                sqle.getErrorCode());
         }
-   }
-    
+    }
+
     @Test
     public void testSpecifyingColumnFamilyForTTLFails() throws Exception {
-        String ddl = "create table IF NOT EXISTS TESTXYZ ("
-                + " id char(1) NOT NULL,"
-                + " col1 integer NOT NULL,"
-                + " CF.col2 integer,"
-                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-                + " ) DEFAULT_COLUMN_FAMILY='a', CF.TTL=10000, SALT_BUCKETS = 4";
-        long ts = nextTimestamp();
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " CF.col2 integer,"
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) DEFAULT_COLUMN_FAMILY='a', CF.TTL=10000, SALT_BUCKETS = 4";
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute(ddl);
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),sqle.getErrorCode());
+            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),
+                sqle.getErrorCode());
         }
-    }
-    
-    @Test
-    public void testAlterDeletedTable() throws Exception {
-        String ddl = "create table T ("
-                + " K varchar primary key,"
-                + " V1 varchar)";
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute(ddl);
-        conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+50));
-        Connection connAt50 = DriverManager.getConnection(getUrl(), props);
-        connAt50.createStatement().execute("DROP TABLE T");
-        connAt50.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+20));
-        Connection connAt20 = DriverManager.getConnection(getUrl(), props);
-        connAt20.createStatement().execute("UPDATE STATISTICS T"); // Invalidates from cache
-        try {
-            connAt20.createStatement().execute("ALTER TABLE T ADD V2 VARCHAR");
-            fail();
-        } catch (NewerTableAlreadyExistsException e) {
-            
-        }
-        connAt20.close();
     }
 
     @Test
     public void testCreateTableWithoutSchema() throws Exception {
-        long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
-        String createSchemaDDL = "CREATE SCHEMA T_SCHEMA";
-        String createTableDDL = "CREATE TABLE T_SCHEMA.TEST(pk INTEGER PRIMARY KEY)";
-        String dropTableDDL = "DROP TABLE T_SCHEMA.TEST";
+        String schemaName = generateUniqueName();
+        String createSchemaDDL = "CREATE SCHEMA " + schemaName;
+        ;
+        String tableName = generateUniqueName();
+        String createTableDDL =
+                "CREATE TABLE " + schemaName + "." + tableName + " (pk INTEGER PRIMARY KEY)";
+        String dropTableDDL = "DROP TABLE " + schemaName + "." + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             try {
                 conn.createStatement().execute(createTableDDL);
                 fail();
             } catch (SchemaNotFoundException snfe) {
-                //expected
+                // expected
             }
             conn.createStatement().execute(createSchemaDDL);
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL);
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+20));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(dropTableDDL);
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+30));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(false));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(createTableDDL);
@@ -533,181 +455,178 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             fail();
         }
     }
-    
+
     @Test
     public void testCreateTableIfNotExistsForEncodedColumnNames() throws Exception {
-        long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        String tableName = "testCreateTableIfNotExistsForEncodedColumnNames".toUpperCase();
-        String createTableDDL = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk INTEGER PRIMARY KEY)";
+        String tableName = generateUniqueName();
+        String createTableDDL =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (pk INTEGER PRIMARY KEY)";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL);
-            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
         // Execute the ddl again
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL);
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
-            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
-        // Now execute the ddl with a different COLUMN_ENCODED_BYTES. This shouldn't change the original encoded bytes setting.
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        // Now execute the ddl with a different COLUMN_ENCODED_BYTES. This shouldn't change the
+        // original encoded bytes setting.
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL + " COLUMN_ENCODED_BYTES = 1");
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
-            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
-        // Now execute the ddl where COLUMN_ENCODED_BYTES=0. This shouldn't change the original encoded bytes setting.
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        // Now execute the ddl where COLUMN_ENCODED_BYTES=0. This shouldn't change the original
+        // encoded bytes setting.
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL + " COLUMN_ENCODED_BYTES = 0");
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
-            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
 
     }
 
     private void assertColumnEncodingMetadata(QualifierEncodingScheme expectedEncodingScheme,
-            ImmutableStorageScheme expectedStorageScheme, String tableName,
-            Connection conn) throws Exception {
+            ImmutableStorageScheme expectedStorageScheme, String tableName, Connection conn)
+            throws Exception {
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
         PTable table = phxConn.getTable(new PTableKey(null, tableName));
         assertEquals(expectedEncodingScheme, table.getEncodingScheme());
         assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
     }
-    
+
     @Test
     public void testMultiTenantImmutableTableMetadata() throws Exception {
-        long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        String nonEncodedOneCellPerColumnMultiTenantTable = "nonEncodedOneCellPerColumnMultiTenantTable".toUpperCase();
-        String twoByteQualifierEncodedOneCellPerColumnMultiTenantTable = "twoByteQualifierEncodedOneCellPerColumnMultiTenantTable"
-                .toUpperCase();
-        String oneByteQualifierEncodedOneCellPerColumnMultiTenantTable = "oneByteQualifierEncodedOneCellPerColumnMultiTenantTable"
-                .toUpperCase();
-        String twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable = "twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable"
-                .toUpperCase();
-        String oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable = "oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable"
-                .toUpperCase();
+        String nonEncodedOneCellPerColumnMultiTenantTable = generateUniqueName();
+        String twoByteQualifierEncodedOneCellPerColumnMultiTenantTable = generateUniqueName();
+        String oneByteQualifierEncodedOneCellPerColumnMultiTenantTable = generateUniqueName();
+        String twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable = generateUniqueName();
+        String oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable = generateUniqueName();
         String createTableDDL;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTableDDL = "create IMMUTABLE TABLE " + nonEncodedOneCellPerColumnMultiTenantTable + " ("
-                    + " id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0";
+            createTableDDL =
+                    "create IMMUTABLE TABLE " + nonEncodedOneCellPerColumnMultiTenantTable + " ("
+                            + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                            + " col2 bigint NOT NULL,"
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0";
             conn.createStatement().execute(createTableDDL);
             assertColumnEncodingMetadata(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
-                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN, nonEncodedOneCellPerColumnMultiTenantTable, conn);
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                nonEncodedOneCellPerColumnMultiTenantTable, conn);
         }
-        ts = nextTimestamp();
         props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTableDDL = "create IMMUTABLE table " + twoByteQualifierEncodedOneCellPerColumnMultiTenantTable + " ("
-                    + " id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true";
+            createTableDDL =
+                    "create IMMUTABLE table "
+                            + twoByteQualifierEncodedOneCellPerColumnMultiTenantTable + " ("
+                            + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                            + " col2 bigint NOT NULL,"
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true";
             conn.createStatement().execute(createTableDDL);
             assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
-                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
-                    twoByteQualifierEncodedOneCellPerColumnMultiTenantTable, conn);
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                twoByteQualifierEncodedOneCellPerColumnMultiTenantTable, conn);
         }
-        ts = nextTimestamp();
         props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTableDDL = "create IMMUTABLE table " + oneByteQualifierEncodedOneCellPerColumnMultiTenantTable + " ("
-                    + " id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES = 1";
+            createTableDDL =
+                    "create IMMUTABLE table "
+                            + oneByteQualifierEncodedOneCellPerColumnMultiTenantTable + " ("
+                            + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                            + " col2 bigint NOT NULL,"
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES = 1";
             conn.createStatement().execute(createTableDDL);
             assertColumnEncodingMetadata(QualifierEncodingScheme.ONE_BYTE_QUALIFIERS,
-                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
-                    oneByteQualifierEncodedOneCellPerColumnMultiTenantTable, conn);
+                ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                oneByteQualifierEncodedOneCellPerColumnMultiTenantTable, conn);
         }
-        ts = nextTimestamp();
         props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTableDDL = "create IMMUTABLE table "
-                    + twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable
-                    + " ("
-                    + " id char(1) NOT NULL,"
-                    + " col1 integer NOT NULL,"
-                    + " col2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+            createTableDDL =
+                    "create IMMUTABLE table "
+                            + twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable + " ("
+                            + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                            + " col2 bigint NOT NULL,"
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
             conn.createStatement().execute(createTableDDL);
             assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
-                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
-                    twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
+                ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
         }
-        ts = nextTimestamp();
         props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTableDDL = "create IMMUTABLE table "
-                    + oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable
-                    + " ("
-                    + " id char(1) NOT NULL,"
-                    + " col1 integer NOT NULL,"
-                    + " col2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=1";
+            createTableDDL =
+                    "create IMMUTABLE table "
+                            + oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable + " ("
+                            + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                            + " col2 bigint NOT NULL,"
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=1";
             conn.createStatement().execute(createTableDDL);
             assertColumnEncodingMetadata(QualifierEncodingScheme.ONE_BYTE_QUALIFIERS,
-                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
-                    oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
+                ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
 
         }
     }
 
     @Test
     public void testCreateTableWithUpdateCacheFrequencyAttrib() throws Exception {
-      Connection connection = null;
-      String TABLE_NAME = "UPDATECACHEDEFAULTVALUE";
-      try {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        connection = DriverManager.getConnection(getUrl(), props);
+        Connection connection = null;
+        String tableName = generateUniqueName();
+        try {
+            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+            connection = DriverManager.getConnection(getUrl(), props);
 
-        //Assert update cache frequency to default value zero
-        connection.createStatement().execute(
-          "create table "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        String readSysCatQuery =
-            "select TABLE_NAME,UPDATE_CACHE_FREQUENCY from SYSTEM.CATALOG where "
-            + "TABLE_NAME = '"+TABLE_NAME+"'  AND TABLE_TYPE='u'";
-        ResultSet rs = connection.createStatement().executeQuery(readSysCatQuery);
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(0, rs.getLong(2));
-        connection.createStatement().execute("drop table "+TABLE_NAME);
-        connection.close();
+            // Assert update cache frequency to default value zero
+            connection.createStatement().execute(
+                "create table " + tableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            String readSysCatQuery =
+                    "select TABLE_NAME,UPDATE_CACHE_FREQUENCY from SYSTEM.CATALOG where "
+                            + "TABLE_NAME = '" + tableName + "'  AND TABLE_TYPE='u'";
+            ResultSet rs = connection.createStatement().executeQuery(readSysCatQuery);
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(0, rs.getLong(2));
+            connection.createStatement().execute("drop table " + tableName);
+            connection.close();
 
-        //Assert update cache frequency to configured default value 10sec
-        int defaultUpdateCacheFrequency = 10000;
-        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, ""+defaultUpdateCacheFrequency);
-        connection = DriverManager.getConnection(getUrl(), props);
-        connection.createStatement().execute(
-            "create table "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        rs = connection.createStatement().executeQuery(readSysCatQuery);
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(defaultUpdateCacheFrequency, rs.getLong(2));
-        connection.createStatement().execute("drop table "+TABLE_NAME);
+            // Assert update cache frequency to configured default value 10sec
+            int defaultUpdateCacheFrequency = 10000;
+            props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB,
+                "" + defaultUpdateCacheFrequency);
+            connection = DriverManager.getConnection(getUrl(), props);
+            connection.createStatement().execute(
+                "create table " + tableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            rs = connection.createStatement().executeQuery(readSysCatQuery);
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(defaultUpdateCacheFrequency, rs.getLong(2));
+            connection.createStatement().execute("drop table " + tableName);
 
-        //Assert update cache frequency to table specific  value 30sec
-        int tableSpecificUpdateCacheFrequency = 30000;
-        connection.createStatement().execute(
-          "create table "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
-              + "UPDATE_CACHE_FREQUENCY="+tableSpecificUpdateCacheFrequency);
-        rs = connection.createStatement().executeQuery(readSysCatQuery);
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(tableSpecificUpdateCacheFrequency, rs.getLong(2));
-      } finally {
-        if(connection!=null){
-          connection.createStatement().execute("drop table if exists "+TABLE_NAME);
-          connection.close();
+            // Assert update cache frequency to table specific value 30sec
+            int tableSpecificUpdateCacheFrequency = 30000;
+            connection.createStatement()
+                    .execute("create table " + tableName
+                            + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
+                            + "UPDATE_CACHE_FREQUENCY=" + tableSpecificUpdateCacheFrequency);
+            rs = connection.createStatement().executeQuery(readSysCatQuery);
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(tableSpecificUpdateCacheFrequency, rs.getLong(2));
+        } finally {
+            if (connection != null) {
+                connection.createStatement().execute("drop table if exists " + tableName);
+                connection.close();
+            }
         }
-      }
     }
 
     @Test
@@ -728,9 +647,10 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 conn.createStatement().execute(
                     "CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-                assertTrue(QueryUtil.getExplainPlan(
-                    conn.createStatement().executeQuery("explain select * from " + table))
-                    .contains(NS + ":" + TBL));
+                assertTrue(QueryUtil
+                        .getExplainPlan(
+                            conn.createStatement().executeQuery("explain select * from " + table))
+                        .contains(NS + ":" + TBL));
 
                 conn.createStatement().execute("DROP TABLE " + table);
             }
@@ -741,9 +661,10 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 conn.createStatement().execute(
                     "CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-                assertTrue(QueryUtil.getExplainPlan(
-                    conn.createStatement().executeQuery("explain select * from " + table))
-                    .contains(NS + "." + TBL));
+                assertTrue(QueryUtil
+                        .getExplainPlan(
+                            conn.createStatement().executeQuery("explain select * from " + table))
+                        .contains(NS + "." + TBL));
 
                 conn.createStatement().execute("DROP TABLE " + table);
             }
@@ -754,9 +675,10 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 conn.createStatement().execute(
                     "CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-                assertTrue(QueryUtil.getExplainPlan(
-                    conn.createStatement().executeQuery("explain select * from " + table))
-                    .contains(NS + ":" + NS + "." + TBL));
+                assertTrue(QueryUtil
+                        .getExplainPlan(
+                            conn.createStatement().executeQuery("explain select * from " + table))
+                        .contains(NS + ":" + NS + "." + TBL));
 
                 conn.createStatement().execute("DROP TABLE " + table);
             }
@@ -764,26 +686,24 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("DROP SCHEMA " + NS);
         }
     }
+
     @Test
     public void testSetHTableDescriptorPropertyOnView() throws Exception {
-        long ts = nextTimestamp();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         final String dataTableFullName = generateUniqueName();
-        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
-                +"ID1 VARCHAR(15) NOT NULL,\n"
-                +"ID2 VARCHAR(15) NOT NULL,\n"
-                +"CREATED_DATE DATE,\n"
-                +"CREATION_TIME BIGINT,\n"
-                +"LAST_USED DATE,\n"
-                +"CONSTRAINT PK PRIMARY KEY (ID1, ID2)) ";
+        String ddl =
+                "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+                        + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
+                        + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
+                        + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) ";
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.createStatement().execute(ddl);
         conn1.close();
         final String viewFullName = generateUniqueName();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
         Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        ddl = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE CREATION_TIME = 1 THROW_INDEX_WRITE_FAILURE = FALSE";
+        ddl =
+                "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName
+                        + " WHERE CREATION_TIME = 1 THROW_INDEX_WRITE_FAILURE = FALSE";
         try {
             conn2.createStatement().execute(ddl);
             fail();
