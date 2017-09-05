@@ -69,6 +69,10 @@ public abstract class BaseLocalIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     protected void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {
+        createBaseTable(tableName, saltBuckets, splits, null);
+    }
+
+    protected void createBaseTable(String tableName, Integer saltBuckets, String splits, String cf) throws SQLException {
         Connection conn = getConnection();
         if (isNamespaceMapped) {
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
@@ -77,7 +81,7 @@ public abstract class BaseLocalIndexIT extends BaseUniqueNamesOwnClusterIT {
                 "k1 INTEGER NOT NULL,\n" +
                 "k2 INTEGER NOT NULL,\n" +
                 "k3 INTEGER,\n" +
-                "v1 VARCHAR,\n" +
+                (cf != null ? (cf+'.') : "") + "v1 VARCHAR,\n" +
                 "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
                         + (saltBuckets != null && splits == null ? (" salt_buckets=" + saltBuckets) : ""
                         + (saltBuckets == null && splits != null ? (" split on " + splits) : ""));

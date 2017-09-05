@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
@@ -86,6 +87,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
@@ -899,24 +901,23 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException e2) {
-                            scanPairItr.remove();
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
                                 services.clearTableRegionCache(physicalTableName);
                                 context.getOverallQueryMetrics().cacheRefreshedDueToSplits();
                             }
-                            // Resubmit just this portion of work again
-                            Scan oldScan = scanPair.getFirst();
-                            byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
-                            byte[] endKey = oldScan.getStopRow();
-                            
-                            List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
-                            // Add any concatIterators that were successful so far
-                            // as we need these to be in order
-                            addIterator(iterators, concatIterators);
-                            concatIterators = Lists.newArrayList();
-                            getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
-                                    maxQueryEndTime, newNestedScans.size(), previousScan);
+                            concatIterators =
+                                    recreateIterators(services, isLocalIndex, allIterators,
+                                        iterators, isReverse, maxQueryEndTime, previousScan,
+                                        clearedCache, concatIterators, scanPairItr, scanPair);
+                        } catch(ColumnFamilyNotFoundException cfnfe) {
+                            if (scanPair.getFirst().getAttribute(LOCAL_INDEX_BUILD) != null) {
+                                Thread.sleep(1000);
+                                concatIterators =
+                                        recreateIterators(services, isLocalIndex, allIterators,
+                                            iterators, isReverse, maxQueryEndTime, previousScan,
+                                            clearedCache, concatIterators, scanPairItr, scanPair);
+                            }
                         }
                     }
                 }
@@ -967,6 +968,29 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
         return null; // Not reachable
+    }
+
+    private List<PeekingResultIterator> recreateIterators(ConnectionQueryServices services,
+            boolean isLocalIndex, Queue<PeekingResultIterator> allIterators,
+            List<PeekingResultIterator> iterators, boolean isReverse, long maxQueryEndTime,
+            ScanWrapper previousScan, boolean clearedCache,
+            List<PeekingResultIterator> concatIterators,
+            Iterator<Pair<Scan, Future<PeekingResultIterator>>> scanPairItr,
+            Pair<Scan, Future<PeekingResultIterator>> scanPair) throws SQLException {
+        scanPairItr.remove();
+        // Resubmit just this portion of work again
+        Scan oldScan = scanPair.getFirst();
+        byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
+        byte[] endKey = oldScan.getStopRow();
+
+        List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
+        // Add any concatIterators that were successful so far
+        // as we need these to be in order
+        addIterator(iterators, concatIterators);
+        concatIterators = Lists.newArrayList();
+        getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
+                maxQueryEndTime, newNestedScans.size(), previousScan);
+        return concatIterators;
     }
     
 
