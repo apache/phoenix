@@ -1115,7 +1115,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             long rowCount = 0;
             try {
                 if (!compactionRunning) {
-                    stats.init();
+                    stats.init(false);
                     synchronized (innerScanner) {
                         do {
                             List<Cell> results = new ArrayList<Cell>();
