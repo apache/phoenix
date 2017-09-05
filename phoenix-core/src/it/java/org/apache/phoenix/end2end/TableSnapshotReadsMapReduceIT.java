@@ -18,11 +18,26 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.apache.hadoop.io.NullWritable;
@@ -32,20 +47,14 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexDBWritable;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
-import org.junit.*;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
-import java.io.IOException;
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
+import com.google.common.collect.Maps;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
-public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
+public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private final static String SNAPSHOT_NAME = "FOO";
   private static final String FIELD1 = "FIELD1";
   private static final String FIELD2 = "FIELD2";
@@ -58,6 +67,11 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
   private long timestamp;
   private String tableName;
 
+  @BeforeClass
+  public static void doSetup() throws Exception {
+      Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+      setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
 
   @Test
   public void testMapReduceSnapshots() throws Exception {
@@ -155,7 +169,7 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
 
       assertFalse("Should only have stored" + result.size() + "rows in the table for the timestamp!", rs.next());
     } finally {
-      deleteSnapshotAndTable(tableName);
+      deleteSnapshot(tableName);
     }
   }
 
@@ -195,15 +209,13 @@ public class TableSnapshotReadsMapReduceIT extends ParallelStatsDisabledIT {
     conn.commit();
   }
 
-  public void deleteSnapshotAndTable(String tableName) throws Exception {
-    Connection conn = DriverManager.getConnection(getUrl());
-    HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-    admin.deleteSnapshot(SNAPSHOT_NAME);
-
-    conn.createStatement().execute("DROP TABLE " + tableName);
-    conn.close();
-
-  }
+    public void deleteSnapshot(String tableName) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                HBaseAdmin admin =
+                        conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+            admin.deleteSnapshot(SNAPSHOT_NAME);
+        }
+    }
 
   public static class TableSnapshotMapper extends Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, NullWritable> {
 
