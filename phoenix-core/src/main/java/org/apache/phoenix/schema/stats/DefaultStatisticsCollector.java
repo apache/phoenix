@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -41,13 +42,16 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
@@ -109,9 +113,10 @@ class DefaultStatisticsCollector implements StatisticsCollector {
         }
     }
     
-    private void initGuidepostDepth() throws IOException {
+    private void initGuidepostDepth(boolean isMajorCompaction) throws IOException {
         // First check is if guidepost info set on statement itself
-        if (guidePostPerRegionBytes != null || guidePostWidthBytes != null) {
+        boolean guidepostOnStatement = guidePostPerRegionBytes != null || guidePostWidthBytes != null;
+        if (guidepostOnStatement) {
             int guidepostPerRegion = 0;
             long guidepostWidth = QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES;
             if (guidePostPerRegionBytes != null) {
@@ -122,20 +127,48 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             }
             this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
                     env.getRegion().getTableDesc());
-        } else {
+        }
+        
+        if (!guidepostOnStatement || isMajorCompaction) {
             long guidepostWidth = -1;
             HTableInterface htable = null;
             try {
-                // Next check for GUIDE_POST_WIDTH on table
-                htable = env.getTable(
-                        SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
+                // Next check for GUIDE_POST_WIDTH and INDEX_DISABLE_TIMESTAMP on table
+                TableName htableName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration());
+                htable = env.getTable(htableName);
                 Get get = new Get(ptableKey);
                 get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+                get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES);
                 Result result = htable.get(get);
                 if (!result.isEmpty()) {
-                    Cell cell = result.listCells().get(0);
-                    guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
+                    Cell gpwCell = result.getColumnLatestCell(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+                    if (gpwCell != null) {
+                        guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(gpwCell.getValueArray(), gpwCell.getValueOffset(), SortOrder.getDefault());
+                    }
+                    if (isMajorCompaction) {
+                        Cell idtsCell = result.getColumnLatestCell(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES);
+                        if (idtsCell != null) {
+                            long indexDisableTimestamp = PLong.INSTANCE.getCodec().decodeLong(idtsCell.getValueArray(), idtsCell.getValueOffset(), SortOrder.getDefault());
+                            // If we have a non zero value for INDEX_DISABLE_TIMESTAMP, that means that our global mutable
+                            // secondary index needs to be partially rebuilt. If we're  compacting, though, we may cleanup
+                            // the delete markers of an index *before* the puts for the same row occur during replay. At
+                            // this point the partially index rebuild would leave the index out of sync with the data
+                            // table. In that case, it's better to just permanently disable the index and force it to be
+                            // manually rebuilt
+                            if (indexDisableTimestamp != 0) {
+                                MutationCode mutationCode = IndexUtil.updateIndexState(ptableKey, 0L, htable, PIndexState.DISABLE).getMutationCode();
+                                if (mutationCode != MutationCode.TABLE_ALREADY_EXISTS && mutationCode != MutationCode.TABLE_NOT_FOUND) {
+                                    LOG.warn("Attempt to permanently disable index " + env.getRegionInfo().getTable().getNameAsString() + 
+                                            " during compaction failed with code = " + mutationCode);
+                                }
+                            }
+                        }
+                    }
                 }
+            } catch (IOException e) {
+                throw e;
+            } catch (Throwable t) {
+                throw new IOException(t);
             } finally {
                 if (htable != null) {
                     try {
@@ -145,19 +178,21 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     }
                 }
             }
-            if (guidepostWidth >= 0) {
-                this.guidePostDepth = guidepostWidth;
-            } else {
-                // Last use global config value
-                Configuration config = env.getConfiguration();
-                this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
-                        config.getInt(
-                            QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION),
-                        config.getLong(
-                            QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
-                        env.getRegion().getTableDesc());
+            if (!guidepostOnStatement) {
+                if (guidepostWidth >= 0) {
+                    this.guidePostDepth = guidepostWidth;
+                } else {
+                    // Last use global config value
+                    Configuration config = env.getConfiguration();
+                    this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
+                            config.getInt(
+                                QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION),
+                            config.getLong(
+                                QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                                QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
+                            env.getRegion().getTableDesc());
+                }
             }
         }
     }
@@ -315,13 +350,13 @@ class DefaultStatisticsCollector implements StatisticsCollector {
         StatisticsScanner scanner = new StatisticsScanner(this, statsWriter, env, internalScan, family);
         // We need to initialize the scanner synchronously and potentially perform a cross region Get
         // in order to use the correct guide posts width for the table being compacted.
-        init();
+        init(true);
         return scanner;
     }
 
     @Override
-    public void init() throws IOException {
-        initGuidepostDepth();
+    public void init(boolean isMajorCompaction) throws IOException {
+        initGuidepostDepth(isMajorCompaction);
     }
 
     @Override
