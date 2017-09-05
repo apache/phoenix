@@ -87,6 +87,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -104,6 +105,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     private static Map<PName, Long> batchExecutedPerTableMap = new HashMap<PName, Long>();
     @GuardedBy("MetaDataRegionObserver.class")
     private static Properties rebuildIndexConnectionProps;
+    // Added for test purposes
+    private long initialRebuildTaskDelay;
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -135,6 +138,10 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 config.getLong(
                     QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB,
                     QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
+        initialRebuildTaskDelay =
+                config.getLong(
+                    QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY,
+                    QueryServicesOptions.DEFAULT_INDEX_REBUILD_TASK_INITIAL_DELAY);
     }
     
     @Override
@@ -190,7 +197,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
             // starts index rebuild schedule work
             BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
-            executor.scheduleWithFixedDelay(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
+            executor.scheduleWithFixedDelay(task, initialRebuildTaskDelay, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
         } catch (ClassNotFoundException ex) {
             LOG.error("BuildIndexScheduleTask cannot start!", ex);
         }
@@ -537,7 +544,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 				put);
 	}
 
-    private static synchronized void initRebuildIndexConnectionProps(Configuration config) {
+    @VisibleForTesting
+    public static synchronized void initRebuildIndexConnectionProps(Configuration config) {
         if (rebuildIndexConnectionProps == null) {
             Properties props = new Properties();
             long indexRebuildQueryTimeoutMs =
