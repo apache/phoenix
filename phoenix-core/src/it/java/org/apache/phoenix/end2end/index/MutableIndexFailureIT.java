@@ -44,15 +44,21 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -100,6 +106,10 @@ public class MutableIndexFailureIT extends BaseTest {
     private final boolean throwIndexWriteFailure;
     private String schema = generateUniqueName();
     private List<CommitException> exceptions = Lists.newArrayList();
+    private static RegionCoprocessorEnvironment indexRebuildTaskRegionEnvironment;
+    private static final int forwardOverlapMs = 1000;
+    private static final int disableTimestampThresholdMs = 10000;
+    private static final int numRpcRetries = 2;
 
     public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, Boolean rebuildIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
         this.transactional = transactional;
@@ -128,15 +138,27 @@ public class MutableIndexFailureIT extends BaseTest {
         serverProps.put(IndexWriterUtils.INDEX_WRITER_RPC_PAUSE, "5000");
         serverProps.put("data.tx.snapshot.dir", "/tmp");
         serverProps.put("hbase.balancer.period", String.valueOf(Integer.MAX_VALUE));
-        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB, Boolean.TRUE.toString());
-        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, "4000");
-        serverProps.put(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD, "30000"); // give up rebuilding after 30 seconds
         // need to override rpc retries otherwise test doesn't pass
-        serverProps.put(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, Long.toString(1));
-        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(1000));
+        serverProps.put(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, Long.toString(numRpcRetries));
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(forwardOverlapMs));
+        /*
+         * Effectively disable running the index rebuild task by having an infinite delay
+         * because we want to control it's execution ourselves
+         */
+        serverProps.put(QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY, Long.toString(Long.MAX_VALUE));
+        serverProps.put(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD, Long.toString(disableTimestampThresholdMs));
         Map<String, String> clientProps = Collections.singletonMap(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        indexRebuildTaskRegionEnvironment =
+                (RegionCoprocessorEnvironment) getUtility()
+                        .getRSForFirstRegionInTable(
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
+                        .getOnlineRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
+                        .get(0).getCoprocessorHost()
+                        .findCoprocessorEnvironment(MetaDataRegionObserver.class.getName());
+        MetaDataRegionObserver.initRebuildIndexConnectionProps(
+            indexRebuildTaskRegionEnvironment.getConfiguration());
     }
 
     @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},rebuildIndexOnWriteFailure={4},failRebuildTask={5},throwIndexWriteFailure={6}") // name is used by failsafe as file name in reports
@@ -166,6 +188,43 @@ public class MutableIndexFailureIT extends BaseTest {
                 { false, false, true, true, true, true, false},
                 } 
         );
+    }
+
+    private void runRebuildTask(Connection conn) throws InterruptedException, SQLException {
+        BuildIndexScheduleTask task =
+                new MetaDataRegionObserver.BuildIndexScheduleTask(
+                        indexRebuildTaskRegionEnvironment);
+        dumpStateOfIndexes(conn, fullTableName, true);
+        task.run();
+        dumpStateOfIndexes(conn, fullTableName, false);
+        Thread.sleep(forwardOverlapMs + 100);
+        if (failRebuildTask) {
+            Thread.sleep(disableTimestampThresholdMs + 100);
+        }
+        dumpStateOfIndexes(conn, fullTableName, true);
+        task.run();
+        dumpStateOfIndexes(conn, fullTableName, false);
+    }
+
+    private static final void dumpStateOfIndexes(Connection conn, String tableName,
+            boolean beforeRebuildTaskRun) throws SQLException {
+        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+        PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
+        List<PTable> indexes = table.getIndexes();
+        String s = beforeRebuildTaskRun ? "before rebuild run" : "after rebuild run";
+        System.out.println("************Index state in connection " + s + "******************");
+        for (PTable idx : indexes) {
+            System.out.println(
+                "Index Name: " + idx.getName().getString() + " State: " + idx.getIndexState()
+                        + " Disable timestamp: " + idx.getIndexDisableTimestamp());
+        }
+        System.out.println("************Index state from server  " + s + "******************");
+        table = PhoenixRuntime.getTableNoCache(phxConn, fullTableName);
+        for (PTable idx : table.getIndexes()) {
+            System.out.println(
+                "Index Name: " + idx.getName().getString() + " State: " + idx.getIndexState()
+                        + " Disable timestamp: " + idx.getIndexDisableTimestamp());
+        }
     }
 
     @Test
@@ -282,8 +341,9 @@ public class MutableIndexFailureIT extends BaseTest {
                 // re-enable index table
                 FailingRegionObserver.FAIL_WRITE = false;
                 if (rebuildIndexOnWriteFailure) {
+                    runRebuildTask(conn);
                     // wait for index to be rebuilt automatically
-                    waitForIndexRebuild(conn,fullIndexName, PIndexState.ACTIVE);
+                    checkStateAfterRebuild(conn, fullIndexName, PIndexState.ACTIVE);
                 } else {
                     // simulate replaying failed mutation
                     replayMutations();
@@ -303,7 +363,8 @@ public class MutableIndexFailureIT extends BaseTest {
                 // Wait for index to be rebuilt automatically. This should fail because
                 // we haven't flipped the FAIL_WRITE flag to false and as a result this
                 // should cause index rebuild to fail too.
-                waitForIndexRebuild(conn, fullIndexName, PIndexState.DISABLE);
+                runRebuildTask(conn);
+                checkStateAfterRebuild(conn, fullIndexName, PIndexState.DISABLE);
                 // verify that the index was marked as disabled and the index disable
                 // timestamp set to 0
                 String q =
@@ -323,9 +384,9 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
-    private void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+    private void checkStateAfterRebuild(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
         if (!transactional) {
-            TestUtil.waitForIndexRebuild(conn, fullIndexName, expectedIndexState);
+            assertTrue(TestUtil.checkIndexState(conn,fullIndexName, expectedIndexState, 0l));
         }
     }
     
