@@ -75,8 +75,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         super(isNamespaceMapped);
     }
     
-    @Ignore
-    //FIXME: PHOENIX-3496 
+    @Test
     public void testLocalIndexRoundTrip() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
