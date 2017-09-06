@@ -549,7 +549,10 @@
               <goal>test</goal>
             </goals>
             <configuration>
-              <parallel>true</parallel>
+              <!-- Need this false until we can switch to JUnit 4.13 due to
+              https://github.com/junit-team/junit4/issues/1223
+              -->
+              <parallel>false</parallel>
               <tagsToExclude>Integration-Test</tagsToExclude>
               <argLine>-Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m</argLine>
             </configuration>

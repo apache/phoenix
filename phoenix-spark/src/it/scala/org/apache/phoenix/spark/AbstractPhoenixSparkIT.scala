@@ -20,7 +20,7 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.util.PhoenixRuntime
 import org.apache.spark.{SparkConf, SparkContext}
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}
 
 
 // Helper object to access the protected abstract static methods hidden in BaseHBaseManagedTimeIT
@@ -33,7 +33,10 @@ object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
     BaseHBaseManagedTimeIT.doSetup()
   }
 
-  def doTeardown = BaseHBaseManagedTimeIT.doTeardown()
+  def doTeardown = {
+    BaseHBaseManagedTimeIT.doTeardown()
+    BaseTest.tmpFolder.delete()
+  }
 
   def getUrl = BaseTest.getUrl
 }
@@ -41,7 +44,7 @@ object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
 /**
   * Base class for PhoenixSparkIT
   */
-class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
+class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfter with BeforeAndAfterAll {
 
   // A global tenantId we can use across tests
   final val TenantId = "theTenant"
@@ -62,9 +65,8 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterA
   // Optional argument tenantId used for running tenant-specific SQL
   def setupTables(sqlSource: String, tenantId: Option[String]): Unit = {
     val props = new Properties
-    val id = tenantId match {
-      case Some(tid) => props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tid)
-      case _ =>
+    if(tenantId.isDefined) {
+      props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId.get)
     }
 
     conn = DriverManager.getConnection(PhoenixSparkITHelper.getUrl, props)
@@ -88,7 +90,7 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterA
     PhoenixSparkITHelper.doSetup
 
     // We pass in null for TenantId here since these tables will be globally visible
-    setupTables("globalSetup.sql", null)
+    setupTables("globalSetup.sql", None)
     // We pass in a TenantId to allow the DDL to create tenant-specific tables/views
     setupTables("tenantSetup.sql", Some(TenantId))
 
@@ -103,6 +105,7 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterA
   override def afterAll() {
     conn.close()
     sc.stop()
+    PhoenixSparkITHelper.cleanUpAfterTest()
     PhoenixSparkITHelper.doTeardown
   }
 }
