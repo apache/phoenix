@@ -258,23 +258,25 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         EnvironmentEdgeManager.injectEdge(clock);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true, GUIDE_POSTS_WIDTH=1000");
-            clock.time += 1000;
+            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-            clock.time += 1000;
+            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName2 + " ON " + fullTableName + " (v2) INCLUDE (v1)");
-            clock.time += 1000;
+            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(1, 2, 3)");
             conn.commit();
-            clock.time += 1000;
+            clock.time += 100;
             long disableTS = EnvironmentEdgeManager.currentTimeMillis();
             HTableInterface metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName1, disableTS, metaTable, PIndexState.DISABLE);
             IndexUtil.updateIndexState(fullIndexName2, disableTS, metaTable, PIndexState.DISABLE);
+            clock.time += 100;
             TestUtil.doMajorCompaction(conn, fullIndexName1);
+            clock.time += 100;
             assertTrue(TestUtil.checkIndexState(conn, fullIndexName1, PIndexState.DISABLE, 0L));
-            TestUtil.analyzeTable(conn, fullTableName);
             assertFalse(TestUtil.checkIndexState(conn, fullIndexName2, PIndexState.DISABLE, 0L));
             TestUtil.doMajorCompaction(conn, fullTableName);
+            clock.time += 100;
             assertTrue(TestUtil.checkIndexState(conn, fullIndexName2, PIndexState.DISABLE, 0L));
         } finally {
             EnvironmentEdgeManager.injectEdge(null);
