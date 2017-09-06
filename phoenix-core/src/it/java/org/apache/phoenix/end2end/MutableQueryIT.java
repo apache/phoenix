@@ -311,21 +311,18 @@ public class MutableQueryIT extends BaseQueryIT {
             "    A_INTEGER) " +
             "VALUES (?, ?, ?)";
         upsertConn.setAutoCommit(true); // Test auto commit
-        upsertConn.close();
-
         PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW4);
         stmt.setInt(3, 5);
         stmt.execute(); // should commit too
+        upsertConn.close();
         long upsert1Time = System.currentTimeMillis();
         long timeDelta = 100;
         Thread.sleep(timeDelta);
         
-        // Override value again, but should be ignored since it's past the SCN
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
         stmt = upsertConn.prepareStatement(upsertStmt);
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW4);
