@@ -66,7 +66,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testSimpleCaseStatement() throws Exception {
         String query = "SELECT CASE a_integer WHEN 1 THEN 'a' WHEN 2 THEN 'b' WHEN 3 THEN 'c' ELSE 'd' END, entity_id AS a FROM " + tableName + " WHERE organization_id=? AND a_integer < 6";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -89,7 +89,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN a_integer <= 2 THEN 1.5 WHEN a_integer = 3 THEN 2 WHEN a_integer <= 6 THEN 4.5 ELSE 5 END AS a FROM " + tableName + " WHERE organization_id=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -123,7 +123,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testPartialEvalCaseStatement() throws Exception {
         String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? and CASE WHEN 1234 = a_integer THEN 1 WHEN x_integer = 5 THEN 2 ELSE 3 END = 2";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -141,7 +141,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testFoundIndexOnPartialEvalCaseStatement() throws Exception {
         String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? and CASE WHEN a_integer = 1234 THEN 1 WHEN x_integer = 3 THEN y_integer ELSE 3 END = 300";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -160,7 +160,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testUnfoundMultiColumnCaseStatement() throws Exception {
         String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE organization_id=? and CASE WHEN a_integer = 1234 THEN 1 WHEN a_date < ? THEN y_integer WHEN x_integer = 4 THEN 4 ELSE 3 END = 4";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -179,7 +179,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testNonNullMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN entity_id = '000000000000000' THEN 1 WHEN entity_id = '000000000000001' THEN 2 ELSE 3 END FROM " + tableName + " WHERE organization_id=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -196,7 +196,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testNullMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN entity_id = '000000000000000' THEN 1 WHEN entity_id = '000000000000001' THEN 2 END FROM " + tableName + " WHERE organization_id=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -213,7 +213,7 @@ public class CaseStatementIT extends BaseQueryIT {
     @Test
     public void testNullabilityMultiCondCaseStatement() throws Exception {
         String query = "SELECT CASE WHEN a_integer <= 2 THEN ? WHEN a_integer = 3 THEN ? WHEN a_integer <= ? THEN ? ELSE 5 END AS a FROM " + tableName + " WHERE organization_id=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {

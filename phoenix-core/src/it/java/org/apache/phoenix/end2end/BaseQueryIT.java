@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -89,7 +88,6 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
-    protected long ts;
     protected Date date;
     private String indexDDL;
     private String tableDDLOptions;
@@ -118,11 +116,10 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             optionBuilder.append("KEEP_DELETED_CELLS=true");
         }
         this.tableDDLOptions = optionBuilder.toString();
-        this.ts = nextTimestamp();
         try {
             this.tableName =
                     initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
-                        date = new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
+                        date = new Date(System.currentTimeMillis()), null, getUrl(), tableDDLOptions);
         } catch (Exception e) {
             logger.error("Exception when creating aTable ", e);
             throw e;
@@ -133,8 +130,6 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
                     String.format(idxDdl, indexName, tableName,
                         keepDeletedCells ? "KEEP_DELETED_CELLS=true" : "KEEP_DELETED_CELLS=false");
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
                 conn.createStatement().execute(this.indexDDL);
             } catch (Exception e) {
