@@ -53,7 +53,6 @@ public class AggregateQueryIT extends BaseQueryIT {
     public void testGroupByPlusOne() throws Exception {
         String query = "SELECT a_integer+1 FROM " + tableName + " WHERE organization_id=? and a_integer = 5 GROUP BY a_integer+1";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -72,7 +71,6 @@ public class AggregateQueryIT extends BaseQueryIT {
         // Tests that you don't get an ambiguous column exception when using the same alias as the column name
         String query = "SELECT a_string, b_string, count(1) FROM " + tableName + " WHERE organization_id=? and entity_id<=? GROUP BY a_string,b_string";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         HBaseAdmin admin = null;
         try {
@@ -99,7 +97,7 @@ public class AggregateQueryIT extends BaseQueryIT {
             HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableNameBytes);
             htable.clearRegionCache();
             int nRegions = htable.getRegionLocations().size();
-            admin.split(tableNameBytes, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount())) + ts))); // vary split point with test run
+            admin.split(tableNameBytes, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount()))))); // vary split point with test run
             int retryCount = 0;
             do {
                 Thread.sleep(2000);
@@ -135,7 +133,6 @@ public class AggregateQueryIT extends BaseQueryIT {
     public void testCountIsNull() throws Exception {
         String query = "SELECT count(1) FROM " + tableName + " WHERE X_DECIMAL is null";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -153,8 +150,7 @@ public class AggregateQueryIT extends BaseQueryIT {
     public void testCountWithNoScanRanges() throws Exception {
         String query = "SELECT count(1) FROM " + tableName + " WHERE organization_id = 'not_existing_organization_id'";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-		Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
@@ -188,7 +184,6 @@ public class AggregateQueryIT extends BaseQueryIT {
     public void testCountIsNotNull() throws Exception {
         String query = "SELECT count(1) FROM " + tableName + " WHERE X_DECIMAL is not null";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -207,7 +202,7 @@ public class AggregateQueryIT extends BaseQueryIT {
     @Test
     public void testInFilterOnKey() throws Exception {
         String query = "SELECT count(entity_id) FROM " + tableName + " WHERE organization_id IN (?,?)";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
