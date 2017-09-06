@@ -3484,41 +3484,42 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 PIndexState currentState =
                         PIndexState.fromSerializedValue(currentStateKV.getValueArray()[currentStateKV
                                 .getValueOffset()]);
-
-                if ((currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0) &&
-                        (disableTimeStampKVIndex >= 0)) {
-                    long curTimeStampVal = (Long) PLong.INSTANCE.toObject(currentDisableTimeStamp.getValueArray(),
+                long curTimeStampVal = 0;
+                if ((currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0)) {
+                    curTimeStampVal = (Long) PLong.INSTANCE.toObject(currentDisableTimeStamp.getValueArray(),
                             currentDisableTimeStamp.getValueOffset(), currentDisableTimeStamp.getValueLength());
                     // new DisableTimeStamp is passed in
-                    Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
-                    long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
-                            newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
-                    // We never set the INDEX_DISABLE_TIMESTAMP to a positive value when we're setting the state to ACTIVE.
-                    // Instead, we're passing in what we expect the INDEX_DISABLE_TIMESTAMP to be currently. If it's
-                    // changed, it means that a data table row failed to write while we were partially rebuilding it
-                    // and we must rerun it.
-                    if (newState == PIndexState.ACTIVE && newDisableTimeStamp > 0) {
-                        // Don't allow setting to ACTIVE if the INDEX_DISABLE_TIMESTAMP doesn't match
-                        // what we expect.
-                        if (newDisableTimeStamp != Math.abs(curTimeStampVal)) {
-                            builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            done.run(builder.build());
-                            return;
-                       }
-                        // Reset INDEX_DISABLE_TIMESTAMP_BYTES to zero as we're good to go.
-                        newKVs.set(disableTimeStampKVIndex, 
-                                CellUtil.createCell(key, TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES, 
-                                        timeStamp, KeyValue.Type.Put.getCode(), PLong.INSTANCE.toBytes(0L)));
-                    }
-                    // We use the sign of the INDEX_DISABLE_TIMESTAMP to differentiate the keep-index-active (negative)
-                    // from block-writes-to-data-table case. In either case, we want to keep the oldest timestamp to
-                    // drive the partial index rebuild rather than update it with each attempt to update the index
-                    // when a new data table write occurs.
-                    if (curTimeStampVal != 0 && Math.abs(curTimeStampVal) < Math.abs(newDisableTimeStamp)) {
-                        // not reset disable timestamp
-                        newKVs.remove(disableTimeStampKVIndex);
-                        disableTimeStampKVIndex = -1;
+                    if (disableTimeStampKVIndex >= 0) {
+                        Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
+                        long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
+                                newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
+                        // We never set the INDEX_DISABLE_TIMESTAMP to a positive value when we're setting the state to ACTIVE.
+                        // Instead, we're passing in what we expect the INDEX_DISABLE_TIMESTAMP to be currently. If it's
+                        // changed, it means that a data table row failed to write while we were partially rebuilding it
+                        // and we must rerun it.
+                        if (newState == PIndexState.ACTIVE && newDisableTimeStamp > 0) {
+                            // Don't allow setting to ACTIVE if the INDEX_DISABLE_TIMESTAMP doesn't match
+                            // what we expect.
+                            if (newDisableTimeStamp != Math.abs(curTimeStampVal)) {
+                                builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
+                                builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                                done.run(builder.build());
+                                return;
+                           }
+                            // Reset INDEX_DISABLE_TIMESTAMP_BYTES to zero as we're good to go.
+                            newKVs.set(disableTimeStampKVIndex, 
+                                    CellUtil.createCell(key, TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES, 
+                                            timeStamp, KeyValue.Type.Put.getCode(), PLong.INSTANCE.toBytes(0L)));
+                        }
+                        // We use the sign of the INDEX_DISABLE_TIMESTAMP to differentiate the keep-index-active (negative)
+                        // from block-writes-to-data-table case. In either case, we want to keep the oldest timestamp to
+                        // drive the partial index rebuild rather than update it with each attempt to update the index
+                        // when a new data table write occurs.
+                        if (curTimeStampVal != 0 && Math.abs(curTimeStampVal) < Math.abs(newDisableTimeStamp)) {
+                            // not reset disable timestamp
+                            newKVs.remove(disableTimeStampKVIndex);
+                            disableTimeStampKVIndex = -1;
+                        }
                     }
                 }
                 // Detect invalid transitions
@@ -3530,8 +3531,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 } else if (currentState == PIndexState.DISABLE) {
+                    // Can't transition back to INACTIVE if INDEX_DISABLE_TIMESTAMP is 0
                     if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE &&
-                        newState != PIndexState.INACTIVE) {
+                        (newState != PIndexState.INACTIVE || curTimeStampVal == 0)) {
                         builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                         done.run(builder.build());
