@@ -51,6 +51,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.loadbalancer.service.LoadBalanceZookeeperConf;
 import org.apache.phoenix.queryserver.register.Registry;
+import org.apache.phoenix.util.InstanceResolver;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
@@ -373,8 +374,18 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   public void setRemoteUserExtractorIfNecessary(HttpServer.Builder builder, Configuration conf) {
     if (conf.getBoolean(QueryServices.QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR_ATTRIB,
             QueryServicesOptions.DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR)) {
-      builder.withRemoteUserExtractor(new PhoenixRemoteUserExtractor(conf));
+      builder.withRemoteUserExtractor(createRemoteUserExtractor(conf));
     }
+  }
+
+  private static final RemoteUserExtractorFactory DEFAULT_USER_EXTRACTOR =
+    new RemoteUserExtractorFactory.RemoteUserExtractorFactoryImpl();
+
+  @VisibleForTesting
+  RemoteUserExtractor createRemoteUserExtractor(Configuration conf) {
+    RemoteUserExtractorFactory factory =
+        InstanceResolver.getSingleton(RemoteUserExtractorFactory.class, DEFAULT_USER_EXTRACTOR);
+    return factory.createRemoteUserExtractor(conf);
   }
 
   /**
