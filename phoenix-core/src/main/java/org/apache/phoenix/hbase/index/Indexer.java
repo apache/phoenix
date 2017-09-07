@@ -63,6 +63,8 @@ import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.security.User;
@@ -838,21 +840,25 @@ public class Indexer extends BaseRegionObserver {
   }
   
   @Override
-  public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-          final InternalScanner scanner, final ScanType scanType) throws IOException {
-      // Compaction and split upcalls run with the effective user context of the requesting user.
-      // This will lead to failure of cross cluster RPC if the effective user is not
-      // the login user. Switch to the login user context to ensure we have the expected
-      // security context.
-      return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-          @Override
-          public InternalScanner run() throws Exception {
-              InternalScanner internalScanner = scanner;
-              if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+  public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+          final StoreFile resultFile, CompactionRequest request) throws IOException {
+      // If we're compacting all files, then delete markers are removed
+      // and we must permanently disable an index that needs to be
+      // partially rebuild because we're potentially losing the information
+      // we need to successfully rebuilt it.
+      if (request.isAllFiles() || request.isMajor()) {
+          // Compaction and split upcalls run with the effective user context of the requesting user.
+          // This will lead to failure of cross cluster RPC if the effective user is not
+          // the login user. Switch to the login user context to ensure we have the expected
+          // security context.
+          User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+              @Override
+              public Void run() throws Exception {
                   String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
                   try {
                       PhoenixConnection conn =  QueryUtil.getConnectionOnServer(c.getEnvironment().getConfiguration()).unwrap(PhoenixConnection.class);
                       PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+                      // FIXME: we may need to recurse into children of this table too
                       for (PTable index : table.getIndexes()) {
                           if (index.getIndexDisableTimestamp() != 0) {
                               try {
@@ -864,15 +870,15 @@ public class Indexer extends BaseRegionObserver {
                       }
                   } catch (Exception e) {
                       // If we can't reach the stats table, don't interrupt the normal
-                    // compaction operation, just log a warning.
-                    if (LOG.isWarnEnabled()) {
-                        LOG.warn("Unable to permanently disable indexes being partially rebuild for " + fullTableName, e);
-                    }
+                      // compaction operation, just log a warning.
+                      if (LOG.isWarnEnabled()) {
+                          LOG.warn("Unable to permanently disable indexes being partially rebuild for " + fullTableName, e);
+                      }
                   }
+                  return null;
               }
-              return internalScanner;
-          }
-      });
+          });
+      }
   }
 }
 

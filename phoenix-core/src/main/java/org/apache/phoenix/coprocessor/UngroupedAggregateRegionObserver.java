@@ -55,9 +55,12 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -69,11 +72,14 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
@@ -89,11 +95,13 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
@@ -899,6 +907,58 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         });
     }
 
+    @Override
+    public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> e, final Store store,
+            final StoreFile resultFile, CompactionRequest request) throws IOException {
+        // If we're compacting all files, then delete markers are removed
+        // and we must permanently disable an index that needs to be
+        // partially rebuild because we're potentially losing the information
+        // we need to successfully rebuilt it.
+        if (request.isAllFiles() || request.isMajor()) {
+            // Compaction and split upcalls run with the effective user context of the requesting user.
+            // This will lead to failure of cross cluster RPC if the effective user is not
+            // the login user. Switch to the login user context to ensure we have the expected
+            // security context.
+            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    MutationCode mutationCode = null;
+                    long disableIndexTimestamp = 0;
+                    
+                    try (HTableInterface htable = e.getEnvironment().getTable(
+                                SchemaUtil.getPhysicalTableName(
+                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                                        e.getEnvironment().getConfiguration()))) {
+                        String tableName = e.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+                        // FIXME: if this is an index on a view, we won't find a row for it in SYSTEM.CATALOG
+                        // Instead, we need to disable all indexes on the view.
+                        byte[] tableKey = SchemaUtil.getTableKeyFromFullName(tableName);
+                        Get get = new Get(tableKey);
+                        get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES);
+                        Result result = htable.get(get);
+                        if (!result.isEmpty()) {
+                            Cell cell = result.listCells().get(0);
+                            if (cell.getValueLength() > 0) {
+                                disableIndexTimestamp = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
+                                if (disableIndexTimestamp != 0) {
+                                    mutationCode = IndexUtil.updateIndexState(tableKey, 0L, htable, PIndexState.DISABLE).getMutationCode();
+                                }
+                            }
+                        }
+                    } catch (Throwable t) { // log, but swallow exception as we don't want to impact compaction
+                        logger.warn("Potential failure to permanently disable index during compaction " +  e.getEnvironment().getRegionInfo().getTable().getNameAsString(), t);
+                    } finally {
+                        if (disableIndexTimestamp != 0 && mutationCode != MutationCode.TABLE_ALREADY_EXISTS && mutationCode != MutationCode.TABLE_NOT_FOUND) {
+                            logger.warn("Attempt to permanently disable index " + e.getEnvironment().getRegionInfo().getTable().getNameAsString() + 
+                                    " during compaction" + (mutationCode == null ? "" : " failed with code = " + mutationCode));
+                        }
+                    }
+                    return null;
+                }
+            });
+        }
+    }
+
     private static PTable deserializeTable(byte[] b) {
         try {
             PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);
@@ -1115,7 +1175,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             long rowCount = 0;
             try {
                 if (!compactionRunning) {
-                    stats.init(false);
+                    stats.init();
                     synchronized (innerScanner) {
                         do {
                             List<Cell> results = new ArrayList<Cell>();
