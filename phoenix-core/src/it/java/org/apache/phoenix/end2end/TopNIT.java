@@ -26,8 +26,6 @@ import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -36,25 +34,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class TopNIT extends BaseClientManagedTimeIT {
+public class TopNIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultiOrderByExpr() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        String query = "SELECT entity_id FROM aTable ORDER BY b_string, entity_id LIMIT 5";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT entity_id FROM " + tableName + " ORDER BY b_string, entity_id LIMIT 5";
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -78,13 +69,10 @@ public class TopNIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDescMultiOrderByExpr() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        String query = "SELECT entity_id FROM aTable ORDER BY b_string || entity_id desc LIMIT 5";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT entity_id FROM  " + tableName + "  ORDER BY b_string || entity_id desc LIMIT 5";
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -117,42 +105,32 @@ public class TopNIT extends BaseClientManagedTimeIT {
     }
     
     private void testTopNDelete(boolean autoCommit) throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        String query = "DELETE FROM aTable ORDER BY b_string, entity_id LIMIT 5";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(autoCommit);
-        try {
+        String tableName =
+                initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
+                    null);
+        String query = "DELETE FROM  " + tableName + "  ORDER BY b_string, entity_id LIMIT 5";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(autoCommit);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.execute();
-            assertEquals(5,statement.getUpdateCount());
+            assertEquals(5, statement.getUpdateCount());
             if (!autoCommit) {
                 conn.commit();
             }
-        } finally {
-            conn.close();
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4)); // Execute at timestamp 4
-        conn = DriverManager.getConnection(getUrl(), props);
-        query = "SELECT entity_id FROM aTable ORDER BY b_string, x_decimal nulls last, 8-a_integer LIMIT 5";
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
+            query =
+                    "SELECT entity_id FROM  " + tableName + "  ORDER BY b_string, x_decimal nulls last, 8-a_integer LIMIT 5";
+            statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW8, rs.getString(1));
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW9, rs.getString(1));
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW6, rs.getString(1));
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW3, rs.getString(1));
-
             assertFalse(rs.next());
-        } finally {
-            conn.close();
         }
     }
     
