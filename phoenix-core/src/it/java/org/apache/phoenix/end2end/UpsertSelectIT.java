@@ -21,7 +21,6 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
-import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW6;
@@ -100,23 +99,54 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         byte[][] splits = getDefaultSplits(tenantId);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String aTable = initATableValues(tenantId, saltTable ? null : splits, null, ts-1, getUrl(), saltTable ? "salt_buckets = 2" : null);
 
         String customEntityTable = generateUniqueName();
-        ensureTableCreated(getUrl(), customEntityTable, CUSTOM_ENTITY_DATA_FULL_NAME, null, ts-1, saltTable ? "salt_buckets = 2" : null);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts - 1));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "create table " + customEntityTable +
+                "   (organization_id char(15) not null, \n" +
+                "    key_prefix char(3) not null,\n" +
+                "    custom_entity_data_id char(12) not null,\n" +
+                "    created_by varchar,\n" +
+                "    created_date date,\n" +
+                "    currency_iso_code char(3),\n" +
+                "    deleted char(1),\n" +
+                "    division decimal(31,10),\n" +
+                "    last_activity date,\n" +
+                "    last_update date,\n" +
+                "    last_update_by varchar,\n" +
+                "    name varchar(240),\n" +
+                "    owner varchar,\n" +
+                "    record_type_id char(15),\n" +
+                "    setup_owner varchar,\n" +
+                "    system_modstamp date,\n" +
+                "    b.val0 varchar,\n" +
+                "    b.val1 varchar,\n" +
+                "    b.val2 varchar,\n" +
+                "    b.val3 varchar,\n" +
+                "    b.val4 varchar,\n" +
+                "    b.val5 varchar,\n" +
+                "    b.val6 varchar,\n" +
+                "    b.val7 varchar,\n" +
+                "    b.val8 varchar,\n" +
+                "    b.val9 varchar\n" +
+                "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, custom_entity_data_id)) " + (saltTable ? "salt_buckets = 2"  : "");
+        conn.createStatement().execute(ddl);
+        conn.close();
+        
         String indexName = generateUniqueName();
         if (createIndex) {
-            Properties props = new Properties();
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute at timestamp 1
-            Connection conn = DriverManager.getConnection(getUrl(), props);
+            conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON " + aTable + "(a_string)" );
             conn.close();
         }
         PreparedStatement upsertStmt;
-        Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         props.setProperty(UPSERT_BATCH_SIZE_ATTRIB, Integer.toString(3)); // Trigger multiple batches
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String upsert = "UPSERT INTO " + customEntityTable + "(custom_entity_data_id, key_prefix, organization_id, created_by) " +
             "SELECT substr(entity_id, 4), substr(entity_id, 1, 3), organization_id, a_string  FROM " + aTable + " WHERE ?=a_string";

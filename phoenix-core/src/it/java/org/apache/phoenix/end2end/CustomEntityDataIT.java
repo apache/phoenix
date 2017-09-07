@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.ROW9;
@@ -32,26 +31,49 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
 
-public class CustomEntityDataIT extends BaseClientManagedTimeIT {
+public class CustomEntityDataIT extends ParallelStatsDisabledIT {
     
-    protected static void initTableValues(String tenantId, byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),CUSTOM_ENTITY_DATA_FULL_NAME,CUSTOM_ENTITY_DATA_FULL_NAME, ts-2);
-            
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+    private static void initTableValues(Connection conn, String tenantId, String tableName) throws Exception {
+        String ddl = "create table " + tableName +
+                "   (organization_id char(15) not null, \n" +
+                "    key_prefix char(3) not null,\n" +
+                "    custom_entity_data_id char(12) not null,\n" +
+                "    created_by varchar,\n" +
+                "    created_date date,\n" +
+                "    currency_iso_code char(3),\n" +
+                "    deleted char(1),\n" +
+                "    division decimal(31,10),\n" +
+                "    last_activity date,\n" +
+                "    last_update date,\n" +
+                "    last_update_by varchar,\n" +
+                "    name varchar(240),\n" +
+                "    owner varchar,\n" +
+                "    record_type_id char(15),\n" +
+                "    setup_owner varchar,\n" +
+                "    system_modstamp date,\n" +
+                "    b.val0 varchar,\n" +
+                "    b.val1 varchar,\n" +
+                "    b.val2 varchar,\n" +
+                "    b.val3 varchar,\n" +
+                "    b.val4 varchar,\n" +
+                "    b.val5 varchar,\n" +
+                "    b.val6 varchar,\n" +
+                "    b.val7 varchar,\n" +
+                "    b.val8 varchar,\n" +
+                "    b.val9 varchar\n" +
+                "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, custom_entity_data_id)) SPLIT ON ('" + tenantId + "00A','" + tenantId + "00B','" + tenantId + "00C')";
+
+        conn.createStatement().execute(ddl);
         // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "CORE.CUSTOM_ENTITY_DATA(" +
+                "upsert into " + tableName +
+                "(" +
                 "    ORGANIZATION_ID, " +
                 "    KEY_PREFIX, " +
                 "    CUSTOM_ENTITY_DATA_ID, " +
@@ -154,18 +176,16 @@ public class CustomEntityDataIT extends BaseClientManagedTimeIT {
         stmt.execute();
         
         conn.commit();
-        conn.close();
     }    
 
     @Test
     public void testUngroupedAggregation() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT count(1) FROM CORE.CUSTOM_ENTITY_DATA WHERE organization_id=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        String tableName = generateUniqueName();
+        String query = "SELECT count(1) FROM " + tableName + " WHERE organization_id=?";
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
-            initTableValues(tenantId, getDefaultSplits(getOrganizationId()), ts);
+            initTableValues(conn, tenantId, tableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
@@ -179,13 +199,12 @@ public class CustomEntityDataIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testScan() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT CREATED_BY,CREATED_DATE,CURRENCY_ISO_CODE,DELETED,DIVISION,LAST_UPDATE,LAST_UPDATE_BY,NAME,OWNER,SYSTEM_MODSTAMP,VAL0,VAL1,VAL2,VAL3,VAL4,VAL5,VAL6,VAL7,VAL8,VAL9 FROM CORE.CUSTOM_ENTITY_DATA WHERE organization_id=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        String tableName = generateUniqueName();
+        String query = "SELECT CREATED_BY,CREATED_DATE,CURRENCY_ISO_CODE,DELETED,DIVISION,LAST_UPDATE,LAST_UPDATE_BY,NAME,OWNER,SYSTEM_MODSTAMP,VAL0,VAL1,VAL2,VAL3,VAL4,VAL5,VAL6,VAL7,VAL8,VAL9 FROM " + tableName + " WHERE organization_id=?";
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
-            initTableValues(tenantId, getDefaultSplits(getOrganizationId()), ts);
+            initTableValues(conn, tenantId, tableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
@@ -203,14 +222,12 @@ public class CustomEntityDataIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testWhereStringConcatExpression() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initTableValues(tenantId, getDefaultSplits(getOrganizationId()), ts);
-        String query = "SELECT KEY_PREFIX||CUSTOM_ENTITY_DATA_ID FROM CORE.CUSTOM_ENTITY_DATA where '00A'||val0 LIKE '00A2%'";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String query = "SELECT KEY_PREFIX||CUSTOM_ENTITY_DATA_ID FROM " + tableName + " where '00A'||val0 LIKE '00A2%'";
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
+            initTableValues(conn, tenantId, tableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs=statement.executeQuery();
             assertTrue (rs.next());
