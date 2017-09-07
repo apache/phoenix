@@ -38,6 +38,7 @@ import java.sql.ResultSet;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;

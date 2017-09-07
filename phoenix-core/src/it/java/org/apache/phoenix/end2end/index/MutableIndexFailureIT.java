@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -100,6 +101,7 @@ public class MutableIndexFailureIT extends BaseTest {
     private final String tableDDLOptions;
     private final boolean isNamespaceMapped;
     private final boolean leaveIndexActiveOnFailure;
+    private final boolean rebuildIndexOnWriteFailure;
     private final boolean failRebuildTask;
     private final boolean throwIndexWriteFailure;
     private String schema = generateUniqueName();
@@ -109,11 +111,12 @@ public class MutableIndexFailureIT extends BaseTest {
     private static final int disableTimestampThresholdMs = 10000;
     private static final int numRpcRetries = 2;
 
-    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
+    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, Boolean rebuildIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
         this.transactional = transactional;
         this.localIndex = localIndex;
         this.tableDDLOptions = " SALT_BUCKETS=2 " + (transactional ? ", TRANSACTIONAL=true " : "") 
                 + (disableIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE + "=" + disableIndexOnWriteFailure))
+                + (rebuildIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.REBUILD_INDEX_ON_WRITE_FAILURE + "=" + rebuildIndexOnWriteFailure))
                 + (throwIndexWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.THROW_INDEX_WRITE_FAILURE + "=" + throwIndexWriteFailure));
         this.tableName = FailingRegionObserver.FAIL_TABLE_NAME;
         this.indexName = "A_" + FailingRegionObserver.FAIL_INDEX_NAME;
@@ -121,6 +124,7 @@ public class MutableIndexFailureIT extends BaseTest {
         this.fullIndexName = SchemaUtil.getTableName(schema, indexName);
         this.isNamespaceMapped = isNamespaceMapped;
         this.leaveIndexActiveOnFailure = ! (disableIndexOnWriteFailure == null ? QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX : disableIndexOnWriteFailure);
+        this.rebuildIndexOnWriteFailure = ! Boolean.FALSE.equals(rebuildIndexOnWriteFailure);
         this.failRebuildTask = failRebuildTask;
         this.throwIndexWriteFailure = ! Boolean.FALSE.equals(throwIndexWriteFailure);
     }
@@ -157,31 +161,31 @@ public class MutableIndexFailureIT extends BaseTest {
             indexRebuildTaskRegionEnvironment.getConfiguration());
     }
 
-    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
+    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},rebuildIndexOnWriteFailure={4},failRebuildTask={5},throwIndexWriteFailure={6}") // name is used by failsafe as file name in reports
     public static List<Object[]> data() {
         return Arrays.asList(new Object[][] { 
-                { false, false, false, true, false, false},
-                { false, false, true, true, false, null},
-                { false, false, true, true, false, true},
-                { false, false, false, true, false, null},
-                { true, false, false, true, false, null},
-                { true, false, true, true, false, null},
-                { false, true, true, true, false, null},
-                { false, true, false, null, false, null},
-                { true, true, false, true, false, null},
-                { true, true, true, null, false, null},
+                { false, false, false, true, true, false, false},
+                { false, false, true, true, true, false, null},
+                { false, false, true, true, true, false, true},
+                { false, false, false, true, true, false, null},
+                { true, false, false, true, true, false, null},
+                { true, false, true, true, true, false, null},
+                { false, true, true, true, true, false, null},
+                { false, true, false, null, null, false, null},
+                { true, true, false, true, null, false, null},
+                { true, true, true, null, true, false, null},
 
-                { false, false, false, false, false, null},
-                { false, true, false, false, false, null},
-                { false, false, false, false, false, null},
-                { false, false, false, true, false, null},
-                { false, false, false, true, false, null},
-                { false, true, false, true, false, null},
-                { false, true, false, true, false, null},
-                { false, false, false, true, true, null},
-                { false, false, true, true, true, null},
-                { false, false, false, true, true, false},
-                { false, false, true, true, true, false},
+                { false, false, false, false, true, false, null},
+                { false, true, false, false, null, false, null},
+                { false, false, false, false, false, false, null},
+                { false, false, false, true, true, false, null},
+                { false, false, false, true, true, false, null},
+                { false, true, false, true, true, false, null},
+                { false, true, false, true, true, false, null},
+                { false, false, false, true, true, true, null},
+                { false, false, true, true, true, true, null},
+                { false, false, false, true, true, true, false},
+                { false, false, true, true, true, true, false},
                 } 
         );
     }
@@ -336,9 +340,15 @@ public class MutableIndexFailureIT extends BaseTest {
             if (!failRebuildTask) {
                 // re-enable index table
                 FailingRegionObserver.FAIL_WRITE = false;
-                runRebuildTask(conn);
-                // wait for index to be rebuilt automatically
-                checkStateAfterRebuild(conn, fullIndexName, PIndexState.ACTIVE);
+                if (rebuildIndexOnWriteFailure) {
+                    runRebuildTask(conn);
+                    // wait for index to be rebuilt automatically
+                    checkStateAfterRebuild(conn, fullIndexName, PIndexState.ACTIVE);
+                } else {
+                    // simulate replaying failed mutation
+                    replayMutations();
+                }
+
                 // Verify UPSERT on data table still works after index table is caught up
                 PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
                 stmt.setString(1, "a3");
@@ -439,7 +449,25 @@ public class MutableIndexFailureIT extends BaseTest {
             assertFalse(rs.next());
         }
     }
-
+    
+    private void replayMutations() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        for (int i = 0; i < exceptions.size(); i++) {
+            CommitException e = exceptions.get(i);
+            long ts = e.getServerTimestamp();
+            props.setProperty(PhoenixRuntime.REPLAY_AT_ATTRIB, Long.toString(ts));
+            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                if (i == 0) {
+                    updateTable(conn, false);
+                } else if (i == 1) {
+                    updateTableAgain(conn, false);
+                } else {
+                    fail();
+                }
+            }
+        }
+    }
+    
     private void updateTable(Connection conn, boolean commitShouldFail) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
         // Insert new row

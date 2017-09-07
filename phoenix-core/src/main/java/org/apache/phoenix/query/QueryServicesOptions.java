@@ -329,8 +329,8 @@ public class QueryServicesOptions {
                                                                                     // 4.10, psql and CSVBulkLoad
                                                                                     // expects binary data to be base 64
                                                                                     // encoded
-    // RS -> RS calls for upsert select statements are disabled by default
-    public static final boolean DEFAULT_ENABLE_SERVER_UPSERT_SELECT = false;
+    // RS -> RS calls for upsert select statements are enabled by default
+    public static final boolean DEFAULT_ENABLE_SERVER_UPSERT_SELECT = true;
 
     private final Configuration config;
 
