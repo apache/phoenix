@@ -64,7 +64,7 @@ public interface StatisticsCollector extends Closeable {
      * Called before beginning the collection of statistics through {@link #collectStatistics(List)}
      * @throws IOException 
      */
-    void init(boolean isMajorCompaction) throws IOException;
+    void init() throws IOException;
 
     /**
      * Retrieve the calculated guide post info for the given column family.

@@ -61,7 +61,7 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override 
-    public void init(boolean isMajorCompaction) {
+    public void init() {
         // No-op
     }
 
