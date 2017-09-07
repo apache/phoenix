@@ -77,20 +77,30 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpsertSelectWithNoIndex() throws Exception {
-        testUpsertSelect(false);
+        testUpsertSelect(false, false);
     }
     
     @Test
     public void testUpsertSelecWithIndex() throws Exception {
-        testUpsertSelect(true);
+        testUpsertSelect(true, false);
     }
     
-    private void testUpsertSelect(boolean createIndex) throws Exception {
+    @Test
+    public void testUpsertSelecWithIndexWithSalt() throws Exception {
+        testUpsertSelect(true, true);
+    }
+
+    @Test
+    public void testUpsertSelecWithNoIndexWithSalt() throws Exception {
+        testUpsertSelect(false, true);
+    }
+
+    private void testUpsertSelect(boolean createIndex, boolean saltTable) throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         byte[][] splits = getDefaultSplits(tenantId);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String aTable = initATableValues(tenantId, splits, null, ts-1, getUrl(), null);
+        String aTable = initATableValues(tenantId, saltTable ? null : splits, null, ts-1, getUrl(), saltTable ? "salt_buckets = 2" : null);
 
         String customEntityTable = generateUniqueName();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts - 1));
@@ -122,12 +132,11 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 "    b.val7 varchar,\n" +
                 "    b.val8 varchar,\n" +
                 "    b.val9 varchar\n" +
-                "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, custom_entity_data_id))";
+                "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, custom_entity_data_id)) " + (saltTable ? "salt_buckets = 2"  : "");
         conn.createStatement().execute(ddl);
         conn.close();
         
         String indexName = generateUniqueName();
-
         if (createIndex) {
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute at timestamp 1
             conn = DriverManager.getConnection(getUrl(), props);
