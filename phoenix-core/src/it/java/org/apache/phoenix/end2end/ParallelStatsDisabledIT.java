@@ -39,6 +39,6 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @AfterClass
     public static void tearDownMiniCluster() throws Exception {
-        BaseTest.tearDownMiniClusterIfBeyondThreshold();
+        BaseTest.dropNonSystemTables(false);
     }
 }

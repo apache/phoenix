@@ -175,8 +175,9 @@ public abstract class BaseTest {
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
     private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
+    private static final int DROP_HTABLE_SERVICE_THREADS = 10;
     private static final ExecutorService dropHTableService = Executors
-            .newSingleThreadExecutor(factory);
+            .newFixedThreadPool(DROP_HTABLE_SERVICE_THREADS, factory);
 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -473,9 +474,9 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void dropNonSystemTables() throws Exception {
+    protected static void dropNonSystemTables(boolean wait) throws Exception {
         try {
-            disableAndDropNonSystemTables();
+            disableAndDropNonSystemTables(wait);
         } finally {
             destroyDriver();
         }
@@ -1486,52 +1487,56 @@ public abstract class BaseTest {
     /**
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
-    private static void disableAndDropNonSystemTables() throws Exception {
+    private static void disableAndDropNonSystemTables(boolean wait) throws Exception {
         if (driver == null) return;
-        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
-        try {
+        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin()) {
             HTableDescriptor[] tables = admin.listTables();
+            Integer currentTableCount = null;
+            if (!wait) {
+                /*
+                 * We don't want to drop a table that may be getting created asynchronously. So we
+                 * need to cap the tables we are going to drop. Fortunately, we have the table
+                 * counter available with us that tells us the name of the last table that was
+                 * created.
+                 */
+                currentTableCount = NAME_SUFFIX.get();
+            }
             for (HTableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    disableAndDropTable(admin, table.getTableName());
+                    if (currentTableCount == null || (!table.getTableName().getNameAsString()
+                            .contains(currentTableCount + ""))) {
+                        disableAndDropTable(admin, table.getTableName(), wait);
+                    }
                 }
             }
-        } finally {
-            admin.close();
         }
     }
     
-    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName)
-            throws Exception {
+    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName,
+            boolean wait) throws Exception {
         Future<Void> future = null;
-        boolean success = false;
         try {
-            try {
-                future = dropHTableService.submit(new Callable<Void>() {
-                    @Override
-                    public Void call() throws Exception {
-                        if (admin.isTableEnabled(tableName)) {
-                            admin.disableTable(tableName);
-                            admin.deleteTable(tableName);
-                        }
-                        return null;
+            future = dropHTableService.submit(new Callable<Void>() {
+                @Override
+                public Void call() throws Exception {
+                    if (admin.isTableEnabled(tableName)) {
+                        admin.disableTable(tableName);
+                        admin.deleteTable(tableName);
                     }
-                });
+                    return null;
+                }
+            });
+            if (wait) {
                 future.get(dropTableTimeout, TimeUnit.SECONDS);
-                success = true;
-            } catch (TimeoutException e) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
-                .setMessage(
-                    "Not able to disable and delete table " + tableName.getNameAsString()
-                    + " in " + dropTableTimeout + " seconds.").build().buildException();
-            } catch (Exception e) {
-                throw e;
             }
-        } finally { 
-            if (future != null && !success) {
-                future.cancel(true);
-            }
+        } catch (TimeoutException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
+                    .setMessage("Not able to disable and delete table "
+                            + tableName.getNameAsString() + " in " + dropTableTimeout + " seconds.")
+                    .build().buildException();
+        } catch (Throwable e) {
+            logger.error("Exception caught when dropping table: " + tableName, e);
         }
     }
     
