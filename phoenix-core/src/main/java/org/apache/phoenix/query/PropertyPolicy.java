@@ -36,10 +36,12 @@ import java.util.Properties;
  *      final Set<String> offendingProperties = new HashSet<>();
  *
  *      for(Object k:properties.keySet()){
- *          if (propertiesKeyDisAllowed.contains(k)) offendingProperties.put((String)k,properties.getProperty((String)k));
+ *          if (propertiesKeyDisAllowed.contains(k)) offendingProperties
+ *          .put((String)k,properties.getProperty((String)k));
  *      }
  *
- *      if (offendingProperties.size()>0) throw new IllegalArgumentException("properties not allowed. offending properties" + offendingProperties);
+ *      if (offendingProperties.size()>0) throw new IllegalArgumentException(
+ *      "properties not allowed. offending properties" + offendingProperties);
  *  }
  *}
  *</code>
