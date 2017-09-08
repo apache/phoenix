@@ -909,7 +909,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2){
-                            scanPairItr.remove();
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
                                 services.clearTableRegionCache(physicalTableName);
@@ -931,7 +930,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             concatIterators =
                                     recreateIterators(services, isLocalIndex, allIterators,
                                         iterators, isReverse, maxQueryEndTime, previousScan,
-                                        clearedCache, concatIterators, scanPairItr, scanPair, retryCount);
+                                        clearedCache, concatIterators, scanPairItr, scanPair, retryCount-1);
                         } catch(ColumnFamilyNotFoundException cfnfe) {
                             if (scanPair.getFirst().getAttribute(LOCAL_INDEX_BUILD) != null) {
                                 Thread.sleep(1000);

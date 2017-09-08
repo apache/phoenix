@@ -18,54 +18,44 @@
 package org.apache.phoenix.end2end;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.cache.GlobalCache;
-import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class HashJoinCacheIT extends HashJoinIT {
     
-    public HashJoinCacheIT(String[] indexDDL, String[] plans) {
+    public HashJoinCacheIT(String[] indexDDL, String[] plans) throws Exception {
         super(indexDDL, plans);
     }
     
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
-        serverProps.put("hbase.coprocessor.region.classes", InvalidateHashCacheRandomly.class.getName());
-        serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
-        serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
-        serverProps.put("hbase.client.pause", "5000");
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
-        clientProps.put(ServerCacheClient.HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER, "true");
-        NUM_SLAVES_BASE = 4;
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+    protected String getTableName(Connection conn, String virtualName) throws Exception {
+        String realName = super.getTableName(conn, virtualName);
+        TestUtil.addCoprocessor(conn, SchemaUtil.normalizeFullTableName(realName), InvalidateHashCache.class);
+        return realName;
     }
-    
+        
     @Parameters
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
@@ -437,7 +427,7 @@ public class HashJoinCacheIT extends HashJoinIT {
 		// TODO: We will enable this test once PHOENIX-3163
 	}
     
-    public static class InvalidateHashCacheRandomly extends SimpleRegionObserver {
+    public static class InvalidateHashCache extends SimpleRegionObserver {
         public static Random rand= new Random();
         public static List<ImmutableBytesPtr> lastRemovedJoinIds=new ArrayList<ImmutableBytesPtr>();
         @Override

@@ -690,7 +690,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                 conn.commit();
                 doneSignal.await(30, TimeUnit.SECONDS);
                 // Install coprocessor that will simulate an index write failure during index rebuild
-                addWriteFailingCoprocessor(conn,fullIndexName);
+                TestUtil.addCoprocessor(conn,fullIndexName,WriteFailingRegionObserver.class);
                 clock.time += WAIT_AFTER_DISABLED;
                 doneSignal.await(30, TimeUnit.SECONDS);
                 WAIT_FOR_REBUILD_TO_START.await(30, TimeUnit.SECONDS);
@@ -841,27 +841,6 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         Thread t = new Thread(r);
         t.setDaemon(true);
         t.start();
-    }
-    
-    private static void addWriteFailingCoprocessor(Connection conn, String tableName) throws Exception {
-        int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
-        descriptor.addCoprocessor(WriteFailingRegionObserver.class.getName(), null, priority, null);
-        int numTries = 10;
-        try (HBaseAdmin admin = services.getAdmin()) {
-            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
-                    && numTries > 0) {
-                numTries--;
-                if (numTries == 0) {
-                    throw new Exception(
-                            "Check to detect if delaying co-processor was added failed after "
-                                    + numTries + " retries.");
-                }
-                Thread.sleep(1000);
-            }
-        }
     }
     
     private static void removeWriteFailingCoprocessor(Connection conn, String tableName) throws Exception {
