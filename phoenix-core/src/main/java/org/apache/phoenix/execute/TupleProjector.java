@@ -280,12 +280,20 @@ public class TupleProjector {
     }
     
     public ProjectedValueTuple projectResults(Tuple tuple, boolean useNewValueQualifier) {
+        long maxTS = tuple.getValue(0).getTimestamp();
+        int nCells = tuple.size();
+        for (int i = 1; i < nCells; i++) {
+            long ts = tuple.getValue(i).getTimestamp();
+            if (ts > maxTS) {
+                maxTS = ts;
+            }
+        }
         byte[] bytesValue = schema.toBytes(tuple, getExpressions(), valueSet, ptr);
         Cell base = tuple.getValue(0);
         if (useNewValueQualifier) {
-            return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
+            return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), maxTS, bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
         } else {
-            return new OldProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
+            return new OldProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), maxTS, bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
         }
     }
     
