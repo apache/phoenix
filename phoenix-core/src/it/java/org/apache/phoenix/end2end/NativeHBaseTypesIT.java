@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
-import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,6 +33,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -43,15 +42,15 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 
@@ -65,37 +64,27 @@ import org.junit.Test;
  * @since 0.1
  */
 
-public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
-    private static final byte[] HBASE_NATIVE_BYTES = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE);
-    private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
-    private static final byte[][] SPLITS = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
-    private static final long ts = nextTimestamp();
+public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     
-    @BeforeClass
-    public static void doBeforeTestSetup() throws Exception {
+    @SuppressWarnings("deprecation")
+    private String initTableValues() throws Exception {
+        final String tableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+        final byte[] tableBytes = tableName.getBytes();
+        final byte[] familyName = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
+        final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
-            try {
-                admin.disableTable(HBASE_NATIVE_BYTES);
-                admin.deleteTable(HBASE_NATIVE_BYTES);
-            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            }
-            @SuppressWarnings("deprecation")
-            HTableDescriptor descriptor = new HTableDescriptor(HBASE_NATIVE_BYTES);
-            HColumnDescriptor columnDescriptor =  new HColumnDescriptor(FAMILY_NAME);
+            HTableDescriptor descriptor = new HTableDescriptor(tableBytes);
+            HColumnDescriptor columnDescriptor =  new HColumnDescriptor(familyName);
             columnDescriptor.setKeepDeletedCells(true);
             descriptor.addFamily(columnDescriptor);
-            admin.createTable(descriptor, SPLITS);
-            initTableValues();
+            admin.createTable(descriptor, splits);
         } finally {
             admin.close();
         }
-    }
-    
-    @SuppressWarnings("deprecation")
-    private static void initTableValues() throws Exception {
+        
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE));
+        HTableInterface hTable = services.getTable(tableBytes);
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             List<Row> mutations = new ArrayList<Row>();
@@ -105,41 +94,42 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
             byte[] key, bKey;
             Put put;
             
-            key = ByteUtil.concat(Bytes.toBytes(10), Bytes.toBytes(100L), Bytes.toBytes("a"));
-            put = new Put(key);
-            put.add(family, uintCol, ts-2, Bytes.toBytes(5));
-            put.add(family, ulongCol, ts-2, Bytes.toBytes(50L));
-            mutations.add(put);
-            put = new Put(key);
-            put.add(family, uintCol, ts, Bytes.toBytes(10));
-            put.add(family, ulongCol, ts, Bytes.toBytes(100L));
-            mutations.add(put);
-            
             bKey = key = ByteUtil.concat(Bytes.toBytes(20), Bytes.toBytes(200L), Bytes.toBytes("b"));
             put = new Put(key);
-            put.add(family, uintCol, ts-4, Bytes.toBytes(5000));
-            put.add(family, ulongCol, ts-4, Bytes.toBytes(50000L));
+            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5000));
+            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50000L));
             mutations.add(put);
             // FIXME: the version of the Delete constructor without the lock args was introduced
             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
             // of the client.
-            Delete del = new Delete(key, ts-2);
+            long ts = EnvironmentEdgeManager.currentTimeMillis();
+            Delete del = new Delete(key, ts);
             mutations.add(del);
             put = new Put(key);
-            put.add(family, uintCol, ts, Bytes.toBytes(2000));
-            put.add(family, ulongCol, ts, Bytes.toBytes(20000L));
+            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(2000));
+            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(20000L));
+            mutations.add(put);
+            
+            key = ByteUtil.concat(Bytes.toBytes(10), Bytes.toBytes(100L), Bytes.toBytes("a"));
+            put = new Put(key);
+            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5));
+            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50L));
+            mutations.add(put);
+            put = new Put(key);
+            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
+            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(30), Bytes.toBytes(300L), Bytes.toBytes("c"));
             put = new Put(key);
-            put.add(family, uintCol, ts, Bytes.toBytes(3000));
-            put.add(family, ulongCol, ts, Bytes.toBytes(30000L));
+            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(3000));
+            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(30000L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(40), Bytes.toBytes(400L), Bytes.toBytes("d"));
             put = new Put(key);
-            put.add(family, uintCol, ts, Bytes.toBytes(4000));
-            put.add(family, ulongCol, ts, Bytes.toBytes(40000L));
+            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(4000));
+            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
             mutations.add(put);
             
             hTable.batch(mutations);
@@ -151,15 +141,28 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
         }
         // Create Phoenix table after HBase table was created through the native APIs
         // The timestamp of the table creation must be later than the timestamp of the data
-        ensureTableCreated(getUrl(),HBASE_NATIVE,HBASE_NATIVE,null, ts+1, null);
+        String ddl = "create table " + tableName +
+                "   (uint_key unsigned_int not null," +
+                "    ulong_key unsigned_long not null," +
+                "    string_key varchar not null,\n" +
+                "    \"1\".uint_col unsigned_int," +
+                "    \"1\".ulong_col unsigned_long" +
+                "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
+                     HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'";
+        
+        try (Connection conn = DriverManager.getConnection(url)) {
+            conn.createStatement().execute(ddl);
+        } 
+        
+        return tableName;
     }
     
     @Test
     public void testRangeQuery1() throws Exception {
-        String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE uint_key > 20 and ulong_key >= 400";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String tableName = initTableValues();
+        String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and ulong_key >= 400";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -175,10 +178,10 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testRangeQuery2() throws Exception {
-        String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE uint_key > 20 and uint_key < 40";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String tableName = initTableValues();
+        String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and uint_key < 40";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -194,10 +197,10 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testRangeQuery3() throws Exception {
-        String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE ulong_key > 200 and ulong_key < 400";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String tableName = initTableValues();
+        String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE ulong_key > 200 and ulong_key < 400";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -213,10 +216,9 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testNegativeAgainstUnsignedNone() throws Exception {
-        String query = "SELECT uint_key, ulong_key, string_key FROM HBASE_NATIVE WHERE ulong_key < -1";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        String tableName = initTableValues();
+        String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE ulong_key < -1";
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -228,10 +230,9 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testNegativeAgainstUnsignedAll() throws Exception {
-        String query = "SELECT string_key FROM HBASE_NATIVE WHERE ulong_key > -100";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        String tableName = initTableValues();
+        String query = "SELECT string_key FROM " + tableName + " WHERE ulong_key > -100";
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -251,11 +252,10 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testNegativeAddNegativeValue() throws Exception {
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        String tableName = initTableValues();
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO HBASE_NATIVE(uint_key,ulong_key,string_key, uint_col) VALUES(?,?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + "(uint_key,ulong_key,string_key, uint_col) VALUES(?,?,?,?)");
             stmt.setInt(1, -1);
             stmt.setLong(2, 2L);
             stmt.setString(3,"foo");
@@ -270,11 +270,10 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
     @SuppressWarnings("deprecation")
     @Test
     public void testNegativeCompareNegativeValue() throws Exception {
-        String query = "SELECT string_key FROM HBASE_NATIVE WHERE uint_key > 100000";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 7); // Run query at timestamp 7
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        PhoenixConnection conn = DriverManager.getConnection(url, props).unwrap(PhoenixConnection.class);
-        HTableInterface hTable = conn.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, HBASE_NATIVE));
+        String tableName = initTableValues();
+        String query = "SELECT string_key FROM " + tableName + " WHERE uint_key > 100000";
+        PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        HTableInterface hTable = conn.getQueryServices().getTable(tableName.getBytes());
         
         List<Row> mutations = new ArrayList<Row>();
         byte[] family = Bytes.toBytes("1");
@@ -287,11 +286,9 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
         // negative number for an unsigned type
         key = ByteUtil.concat(Bytes.toBytes(-10), Bytes.toBytes(100L), Bytes.toBytes("e"));
         put = new Put(key);
-        // Insert at later timestamp than other queries in this test are using, so that
-        // we don't affect them
-        put.add(family, uintCol, ts+6, Bytes.toBytes(10));
-        put.add(family, ulongCol, ts+6, Bytes.toBytes(100L));
-        put.add(family, QueryConstants.EMPTY_COLUMN_BYTES, ts+6, ByteUtil.EMPTY_BYTE_ARRAY);
+        put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
+        put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
+        put.add(family, QueryConstants.EMPTY_COLUMN_BYTES, HConstants.LATEST_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
         hTable.batch(mutations);
     
