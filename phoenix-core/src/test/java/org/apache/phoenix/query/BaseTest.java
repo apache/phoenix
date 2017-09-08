@@ -44,7 +44,6 @@ import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.FUNKY_NAME;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
-import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
@@ -111,13 +110,11 @@ import javax.annotation.Nonnull;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -300,14 +297,6 @@ public abstract class BaseTest {
                 "    e.cpu_utilization decimal(31,10),\n" +
                 "    f.response_time bigint,\n" +
                 "    g.response_time bigint)");
-        builder.put(HBASE_NATIVE,"create table " + HBASE_NATIVE +
-                "   (uint_key unsigned_int not null," +
-                "    ulong_key unsigned_long not null," +
-                "    string_key varchar not null,\n" +
-                "    \"1\".uint_col unsigned_int," +
-                "    \"1\".ulong_col unsigned_long" +
-                "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
-                     HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'");
         builder.put(HBASE_DYNAMIC_COLUMNS,"create table " + HBASE_DYNAMIC_COLUMNS + 
                 "   (entry varchar not null," +
                 "    F varchar," +
