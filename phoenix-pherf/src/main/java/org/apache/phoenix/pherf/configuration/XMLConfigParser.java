@@ -29,6 +29,10 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.transform.stream.StreamSource;
 
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.exception.FileLoaderException;
@@ -108,16 +112,19 @@ public class XMLConfigParser {
      * @param file Name of File
      * @return {@link org.apache.phoenix.pherf.configuration.DataModel} Returns DataModel from
      * XML configuration
-     * @throws JAXBException
      */
     // TODO Remove static calls
-    public static DataModel readDataModel(Path file) throws JAXBException {
+    public static DataModel readDataModel(Path file) throws JAXBException, XMLStreamException {
+        XMLInputFactory xif = XMLInputFactory.newFactory();
+        xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModel.class);
         Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
         String fName = PherfConstants.RESOURCE_SCENARIO + "/" + file.getFileName().toString();
         logger.info("Open config file: " + fName);
-        return (DataModel) jaxbUnmarshaller
-                .unmarshal(XMLConfigParser.class.getResourceAsStream(fName));
+        XMLStreamReader xmlReader = xif.createXMLStreamReader(
+            new StreamSource(XMLConfigParser.class.getResourceAsStream(fName)));
+        return (DataModel) jaxbUnmarshaller.unmarshal(xmlReader);
     }
 
     // TODO Remove static calls
