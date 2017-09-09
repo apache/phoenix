@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
 
@@ -96,10 +97,11 @@ public class HashJoinRegionScanner implements RegionScanner {
                 continue;
             }
             HashCache hashCache = (HashCache)cache.getServerCache(joinId);
-            if (hashCache == null)
-                throw new DoNotRetryIOException("Could not find hash cache for joinId: " 
-                        + Bytes.toString(joinId.get(), joinId.getOffset(), joinId.getLength()) 
-                        + ". The cache might have expired and have been removed.");
+            if (hashCache == null) {
+                Exception cause = new HashJoinCacheNotFoundException(
+                        Bytes.toLong(ByteUtil.copyKeyBytesIfNecessary(joinId)));
+                throw new DoNotRetryIOException(cause.getMessage(), cause);
+            }
             hashCaches[i] = hashCache;
             tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
         }

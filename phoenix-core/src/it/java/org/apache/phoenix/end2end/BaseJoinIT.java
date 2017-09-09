@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -28,16 +29,23 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Map;
+import java.util.Properties;
 import java.util.regex.Pattern;
 
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 
 public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
+	
     protected static final String JOIN_SCHEMA = "Join";
     protected static final String JOIN_ORDER_TABLE = "OrderTable";
     protected static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
@@ -442,6 +450,12 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
         conn.commit();
     }
 
+	protected Connection getConnection() throws SQLException {
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		props.put(ServerCacheClient.HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER, "true");
+		return DriverManager.getConnection(getUrl(), props);
+	}
+	
     protected void createIndexes(Connection conn, String virtualName, String realName) throws Exception {
         if (indexDDL != null && indexDDL.length > 0) {
             for (String ddl : indexDDL) {
