@@ -82,7 +82,7 @@
                     <maxValue>2019-09-15 11:00:00.000</maxValue>
                 </datavalue>
                 <datavalue distribution="10">
-                    <value>2019-09-19 00:01:00</value>
+                    <value>2019-09-19 00:01:00.000</value>
                 </datavalue>
                 <datavalue distribution="10">
                     <minValue>2019-09-22 00:01:00.000</minValue>
