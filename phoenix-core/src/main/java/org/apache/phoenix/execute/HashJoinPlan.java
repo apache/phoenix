@@ -24,6 +24,7 @@ import static org.apache.phoenix.util.NumberUtil.add;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -51,6 +52,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -73,10 +75,10 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class HashJoinPlan extends DelegateQueryPlan {
@@ -88,7 +90,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private final boolean recompileWhereClause;
     private final Set<TableRef> tableRefs;
     private final int maxServerCacheTimeToLive;
-    private final List<SQLCloseable> dependencies = Lists.newArrayList();
+    private final Map<ImmutableBytesPtr,ServerCache> dependencies = Maps.newHashMap();
     private HashCacheClient hashClient;
     private AtomicLong firstJobEndTime;
     private List<Expression> keyRangeExpressions;
@@ -99,7 +101,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     public static HashJoinPlan create(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
         if (!(plan instanceof HashJoinPlan))
-            return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null, Collections.<SQLCloseable>emptyList());
+            return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null, Collections.<ImmutableBytesPtr,ServerCache>emptyMap());
         
         HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
         assert (hashJoinPlan.joinInfo == null && hashJoinPlan.delegate instanceof BaseQueryPlan);
@@ -115,9 +117,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
     
     private HashJoinPlan(SelectStatement statement, 
-            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause, List<SQLCloseable> dependencies) throws SQLException {
+            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause, Map<ImmutableBytesPtr,ServerCache> dependencies) throws SQLException {
         super(plan);
-        this.dependencies.addAll(dependencies);
+        this.dependencies.putAll(dependencies);
         this.statement = statement;
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
@@ -182,7 +184,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             try {
                 ServerCache result = futures.get(i).get();
                 if (result != null) {
-                    dependencies.add(result);
+                    dependencies.put(new ImmutableBytesPtr(result.getId()),result);
                 }
                 subPlans[i].postProcess(result, this);
             } catch (InterruptedException e) {
@@ -198,7 +200,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             }
         }
         if (firstException != null) {
-            SQLCloseables.closeAllQuietly(dependencies);
+            SQLCloseables.closeAllQuietly(dependencies.values());
             throw firstException;
         }
         
