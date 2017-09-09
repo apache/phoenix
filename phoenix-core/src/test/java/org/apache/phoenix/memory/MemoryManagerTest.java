@@ -19,17 +19,15 @@ package org.apache.phoenix.memory;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.spy;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.mockito.Mockito;
 
 /**
  *
@@ -42,7 +40,7 @@ import org.mockito.Mockito;
 public class MemoryManagerTest {
     @Test
     public void testOverGlobalMemoryLimit() throws Exception {
-        GlobalMemoryManager gmm = new GlobalMemoryManager(250,1);
+        GlobalMemoryManager gmm = new GlobalMemoryManager(250);
         try {
             gmm.allocate(300);
             fail();
@@ -64,157 +62,9 @@ public class MemoryManagerTest {
         assertTrue(rmm1.getAvailableMemory() == rmm1.getMaxMemory());
     }
 
-
-    private static void sleepFor(long time) {
-        try {
-            Thread.sleep(time);
-        } catch (InterruptedException x) {
-            fail();
-        }
-    }
-
-    @Ignore("See PHOENIX-2840")
-    @Test
-    public void testWaitForMemoryAvailable() throws Exception {
-        final GlobalMemoryManager gmm = spy(new GlobalMemoryManager(100, 80));
-        final ChildMemoryManager rmm1 = new ChildMemoryManager(gmm,100);
-        final ChildMemoryManager rmm2 = new ChildMemoryManager(gmm,100);
-        final CountDownLatch latch = new CountDownLatch(2);
-        Thread t1 = new Thread() {
-            @Override
-            public void run() {
-                MemoryChunk c1 = rmm1.allocate(50);
-                MemoryChunk c2 = rmm1.allocate(50);
-                sleepFor(40);
-                c1.close();
-                sleepFor(20);
-                c2.close();
-                latch.countDown();
-            }
-        };
-        Thread t2 = new Thread() {
-            @Override
-            public void run() {
-                sleepFor(20);
-                // Will require waiting for a bit of time before t1 frees the requested memory
-                MemoryChunk c3 = rmm2.allocate(50);
-                Mockito.verify(gmm, atLeastOnce()).waitForBytesToFree(anyLong(), anyLong());
-                c3.close();
-                latch.countDown();
-            }
-        };
-        t2.start();
-        t1.start();
-        latch.await(1, TimeUnit.SECONDS);
-        // Main thread competes with others to get all memory, but should wait
-        // until both threads are complete (since that's when the memory will
-        // again be all available.
-        ChildMemoryManager rmm = new ChildMemoryManager(gmm,100);
-        MemoryChunk c = rmm.allocate(100);
-        c.close();
-        assertTrue(rmm.getAvailableMemory() == rmm.getMaxMemory());
-        assertTrue(rmm1.getAvailableMemory() == rmm1.getMaxMemory());
-        assertTrue(rmm2.getAvailableMemory() == rmm2.getMaxMemory());
-    }
-
-    @Ignore("See PHOENIX-2840")
-    @Test
-    public void testResizeWaitForMemoryAvailable() throws Exception {
-        final GlobalMemoryManager gmm = spy(new GlobalMemoryManager(100, 80));
-        final ChildMemoryManager rmm1 = new ChildMemoryManager(gmm,100);
-        final ChildMemoryManager rmm2 = new ChildMemoryManager(gmm,100);
-        final CountDownLatch latch = new CountDownLatch(2);
-        Thread t1 = new Thread() {
-            @Override
-            public void run() {
-                MemoryChunk c1 = rmm1.allocate(50);
-                MemoryChunk c2 = rmm1.allocate(40);
-                sleepFor(40);
-                c1.close();
-                sleepFor(20);
-                c2.close();
-                latch.countDown();
-            }
-        };
-        Thread t2 = new Thread() {
-            @Override
-            public void run() {
-                sleepFor(20);
-                MemoryChunk c3 = rmm2.allocate(10);
-                // Will require waiting for a bit of time before t1 frees the requested memory
-                c3.resize(50);
-                Mockito.verify(gmm, atLeastOnce()).waitForBytesToFree(anyLong(), anyLong());
-                c3.close();
-                latch.countDown();
-            }
-        };
-        t1.start();
-        t2.start();
-        latch.await(1, TimeUnit.SECONDS);
-        // Main thread competes with others to get all memory, but should wait
-        // until both threads are complete (since that's when the memory will
-        // again be all available.
-        ChildMemoryManager rmm = new ChildMemoryManager(gmm,100);
-        MemoryChunk c = rmm.allocate(100);
-        c.close();
-        assertTrue(rmm.getAvailableMemory() == rmm.getMaxMemory());
-        assertTrue(rmm1.getAvailableMemory() == rmm1.getMaxMemory());
-        assertTrue(rmm2.getAvailableMemory() == rmm2.getMaxMemory());
-    }
-
-    @Ignore("See PHOENIX-2840")
-    @Test
-    public void testWaitUntilResize() throws Exception {
-        final GlobalMemoryManager gmm = spy(new GlobalMemoryManager(100, 80));
-        final ChildMemoryManager rmm1 = new ChildMemoryManager(gmm,100);
-        final MemoryChunk c1 = rmm1.allocate(70);
-        final CountDownLatch latch = new CountDownLatch(2);
-
-        Thread t1 = new Thread() {
-            @Override
-            public void run() {
-                MemoryChunk c2 = rmm1.allocate(20);
-                sleepFor(40);
-                c1.resize(20); // resize down to test that other thread is notified
-                sleepFor(20);
-                c2.close();
-                c1.close();
-                assertTrue(rmm1.getAvailableMemory() == rmm1.getMaxMemory());
-                latch.countDown();
-            }
-        };
-        Thread t2 = new Thread() {
-            @Override
-            public void run() {
-                sleepFor(20);
-                ChildMemoryManager rmm2 = new ChildMemoryManager(gmm,100);
-                MemoryChunk c3 = rmm2.allocate(10);
-                long startTime = System.currentTimeMillis();
-                c3.resize(60); // Test that resize waits if memory not available
-                assertTrue(c1.getSize() == 20); // c1 was resized not closed
-                // we waited some time before the allocate happened
-
-                Mockito.verify(gmm, atLeastOnce()).waitForBytesToFree(anyLong(), anyLong());
-                c3.close();
-                assertTrue(rmm2.getAvailableMemory() == rmm2.getMaxMemory());
-                latch.countDown();
-            }
-        };
-        t1.start();
-        t2.start();
-        latch.await(1, TimeUnit.SECONDS);
-        // Main thread competes with others to get all memory, but should wait
-        // until both threads are complete (since that's when the memory will
-        // again be all available.
-        ChildMemoryManager rmm = new ChildMemoryManager(gmm,100);
-        MemoryChunk c = rmm.allocate(100);
-        c.close();
-        assertTrue(rmm.getAvailableMemory() == rmm.getMaxMemory());
-    }
-
     @Test
     public void testChildDecreaseAllocation() throws Exception {
-        MemoryManager gmm = spy(new GlobalMemoryManager(100, 1));
+        MemoryManager gmm = spy(new GlobalMemoryManager(100));
         ChildMemoryManager rmm1 = new ChildMemoryManager(gmm,100);
         ChildMemoryManager rmm2 = new ChildMemoryManager(gmm,10);
         MemoryChunk c1 = rmm1.allocate(50);
@@ -229,7 +79,7 @@ public class MemoryManagerTest {
 
     @Test
     public void testOverChildMemoryLimit() throws Exception {
-        MemoryManager gmm = new GlobalMemoryManager(100,1);
+        MemoryManager gmm = new GlobalMemoryManager(100);
         ChildMemoryManager rmm1 = new ChildMemoryManager(gmm,25);
         ChildMemoryManager rmm2 = new ChildMemoryManager(gmm,25);
         ChildMemoryManager rmm3 = new ChildMemoryManager(gmm,25);
@@ -280,5 +130,51 @@ public class MemoryManagerTest {
         assertTrue(rmm2.getAvailableMemory() == rmm2.getMaxMemory());
         assertTrue(rmm3.getAvailableMemory() == rmm3.getMaxMemory());
         assertTrue(rmm4.getAvailableMemory() == rmm4.getMaxMemory());
+    }
+
+    @Test
+    public void testConcurrentAllocation() throws Exception {
+        int THREADS = 100;
+
+        // each thread will attempt up to 100 allocations on average.
+        final GlobalMemoryManager gmm = new GlobalMemoryManager(THREADS * 1000);
+        final AtomicInteger count = new AtomicInteger(0);
+        final CountDownLatch barrier = new CountDownLatch(THREADS);
+        final CountDownLatch barrier2 = new CountDownLatch(THREADS);
+        final CountDownLatch signal = new CountDownLatch(1);
+        /*
+         * each thread will allocate chunks of 10 bytes, until no more memory is available.
+         */
+        for (int i = 0; i < THREADS; i++) {
+            new Thread(new Runnable() {
+                List<MemoryChunk> chunks = new ArrayList<>();
+                @Override
+                public void run() {
+                    try {
+                        while(true) {
+                            Thread.sleep(1);
+                            chunks.add(gmm.allocate(10));
+                            count.incrementAndGet();
+                        }
+                    } catch (InsufficientMemoryException e) {
+                        barrier.countDown();
+                        // wait for the signal to go ahead
+                        try {signal.await();} catch (InterruptedException ix) {}
+                        for (MemoryChunk chunk : chunks) {
+                            chunk.close();
+                        }
+                        barrier2.countDown();
+                    } catch (InterruptedException ix) {}
+                }
+            }).start();
+        }
+        // wait until all threads failed an allocation
+        barrier.await();
+        // make sure all memory was used
+        assertTrue(gmm.getAvailableMemory() == 0);
+        // let the threads end, and free their memory
+        signal.countDown(); barrier2.await();
+        // make sure all memory is freed
+        assertTrue(gmm.getAvailableMemory() == gmm.getMaxMemory());
     }
 }
