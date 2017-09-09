@@ -36,6 +36,7 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -56,6 +57,7 @@ import com.google.common.collect.Lists;
  */
 public class HashCacheClient  {
     private final ServerCacheClient serverCache;
+
     /**
      * Construct client used to create a serialized cached snapshot of a table and send it to each region server
      * for caching during hash join processing.
@@ -81,7 +83,22 @@ public class HashCacheClient  {
          */
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         serialize(ptr, iterator, estimatedSize, onExpressions, singleValueOnly, keyRangeRhsExpression, keyRangeRhsValues);
-        return serverCache.addServerCache(keyRanges, ptr, ByteUtil.EMPTY_BYTE_ARRAY, new HashCacheFactory(), cacheUsingTableRef);
+        ServerCache cache = serverCache.addServerCache(keyRanges, ptr, ByteUtil.EMPTY_BYTE_ARRAY, new HashCacheFactory(), cacheUsingTableRef, true);
+        return cache;
+    }
+    
+    /**
+     * Should only be used to resend the hash table cache to the regionserver.
+     *  
+     * @param startkeyOfRegion start key of any region hosted on a regionserver which needs hash cache
+     * @param cacheId Id of the cache which needs to be sent
+     * @param pTable
+     * @return
+     * @throws Exception
+     */
+    public boolean addHashCacheToServer(byte[] startkeyOfRegion, ServerCache cache, PTable pTable) throws Exception{
+        if (cache == null) { return false; }
+        return serverCache.addServerCache(startkeyOfRegion, cache, new HashCacheFactory(), ByteUtil.EMPTY_BYTE_ARRAY, pTable);
     }
     
     private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, Expression keyRangeRhsExpression, List<Expression> keyRangeRhsValues) throws SQLException {
@@ -179,4 +196,5 @@ public class HashCacheClient  {
         // might be coerced later.
         return new RowValueConstructorExpression(values, false);
     }
+
 }

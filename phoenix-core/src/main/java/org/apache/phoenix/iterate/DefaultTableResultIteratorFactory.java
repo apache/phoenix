@@ -18,10 +18,13 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.TableRef;
 
@@ -30,9 +33,9 @@ public class DefaultTableResultIteratorFactory implements TableResultIteratorFac
        @Override
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
             Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         return new TableResultIterator(mutationState, scan, scanMetricsHolder, renewLeaseThreshold,
-                plan, scanGrouper);
+                plan, scanGrouper, caches);
     }
 
 }

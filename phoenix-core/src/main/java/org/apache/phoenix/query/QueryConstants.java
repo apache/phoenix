@@ -399,4 +399,6 @@ public interface QueryConstants {
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
     public static final String LAST_SCAN = "LAST_SCAN";
     public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
+    public static final String HASH_JOIN_CACHE_RETRIES = "hashjoin.client.retries.number";
+    public static final int DEFAULT_HASH_JOIN_CACHE_RETRIES = 5;
 }
