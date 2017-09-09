@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.pherf;
 
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -129,7 +128,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
         return resourceUrl;
     }
 
-    private List<Scenario> getScenarios() throws URISyntaxException, JAXBException{
+    private List<Scenario> getScenarios() throws Exception {
         DataModel data = getDataModel();
         List<Scenario> scenarioList = data.getScenarios();
         assertTrue("Could not load the scenarios from xml.",
@@ -137,7 +136,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
         return scenarioList;
     }
 
-    private DataModel getDataModel() throws URISyntaxException, JAXBException {
+    private DataModel getDataModel() throws Exception {
         Path resourcePath = Paths.get(getResourceUrl().toURI());
         return XMLConfigParser.readDataModel(resourcePath);
     }
