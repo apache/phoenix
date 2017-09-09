@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.memory;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.http.annotation.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,18 +32,14 @@ public class GlobalMemoryManager implements MemoryManager {
 
     private final Object sync = new Object();
     private final long maxMemoryBytes;
-    private final int maxWaitMs;
     @GuardedBy("sync")
     private volatile long usedMemoryBytes;
-    public GlobalMemoryManager(long maxBytes, int maxWaitMs) {
+    public GlobalMemoryManager(long maxBytes) {
         if (maxBytes <= 0) {
-            throw new IllegalStateException("Total number of available bytes (" + maxBytes + ") must be greater than zero");
-        }
-        if (maxWaitMs < 0) {
-            throw new IllegalStateException("Maximum wait time (" + maxWaitMs + ") must be greater than or equal to zero");
+            throw new IllegalStateException(
+                    "Total number of available bytes (" + maxBytes + ") must be greater than zero");
         }
         this.maxMemoryBytes = maxBytes;
-        this.maxWaitMs = maxWaitMs;
         this.usedMemoryBytes = 0;
     }
 
@@ -61,43 +56,32 @@ public class GlobalMemoryManager implements MemoryManager {
     }
 
 
-    // TODO: Work on fairness: One big memory request can cause all others to block here.
+    // TODO: Work on fairness: One big memory request can cause all others to fail here.
     private long allocateBytes(long minBytes, long reqBytes) {
         if (minBytes < 0 || reqBytes < 0) {
-            throw new IllegalStateException("Minimum requested bytes (" + minBytes + ") and requested bytes (" + reqBytes + ") must be greater than zero");
+            throw new IllegalStateException("Minimum requested bytes (" + minBytes
+                    + ") and requested bytes (" + reqBytes + ") must be greater than zero");
         }
-        if (minBytes > maxMemoryBytes) { // No need to wait, since we'll never have this much available
-            throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes is larger than global pool of " + maxMemoryBytes + " bytes.");
+        if (minBytes > maxMemoryBytes) {
+            throw new InsufficientMemoryException("Requested memory of " + minBytes
+                    + " bytes is larger than global pool of " + maxMemoryBytes + " bytes.");
         }
-        long startTimeMs = System.currentTimeMillis(); // Get time outside of sync block to account for waiting for lock
         long nBytes;
         synchronized(sync) {
-            while (usedMemoryBytes + minBytes > maxMemoryBytes) { // Only wait if minBytes not available
-                waitForBytesToFree(minBytes, startTimeMs);
+            if (usedMemoryBytes + minBytes > maxMemoryBytes) {
+                throw new InsufficientMemoryException("Requested memory of " + minBytes
+                        + " bytes could not be allocated. Using memory of " + usedMemoryBytes
+                        + " bytes from global pool of " + maxMemoryBytes);
             }
             // Allocate at most reqBytes, but at least minBytes
             nBytes = Math.min(reqBytes, maxMemoryBytes - usedMemoryBytes);
             if (nBytes < minBytes) {
-                throw new IllegalStateException("Allocated bytes (" + nBytes + ") should be at least the minimum requested bytes (" + minBytes + ")");
+                throw new IllegalStateException("Allocated bytes (" + nBytes
+                        + ") should be at least the minimum requested bytes (" + minBytes + ")");
             }
             usedMemoryBytes += nBytes;
         }
         return nBytes;
-    }
-
-    @VisibleForTesting
-    void waitForBytesToFree(long minBytes, long startTimeMs) {
-        try {
-            logger.debug("Waiting for " + (usedMemoryBytes + minBytes - maxMemoryBytes) + " bytes to be free " + startTimeMs);
-            long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
-            if (remainingWaitTimeMs <= 0) { // Ran out of time waiting for some memory to get freed up
-                throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated. Using memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
-            }
-            sync.wait(remainingWaitTimeMs);
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted allocation of " + minBytes + " bytes", ie);
-        }
     }
 
     @Override
@@ -130,9 +114,7 @@ public class GlobalMemoryManager implements MemoryManager {
 
         @Override
         public long getSize() {
-            synchronized(sync) {
-                return size; // TODO: does this need to be synchronized?
-            }
+            return size;
         }
 
         @Override
@@ -145,7 +127,6 @@ public class GlobalMemoryManager implements MemoryManager {
                 if (nAdditionalBytes < 0) {
                     usedMemoryBytes += nAdditionalBytes;
                     size = nBytes;
-                    sync.notifyAll();
                 } else {
                     allocateBytes(nAdditionalBytes, nAdditionalBytes);
                     size = nBytes;
@@ -174,7 +155,6 @@ public class GlobalMemoryManager implements MemoryManager {
             synchronized(sync) {
                 usedMemoryBytes -= size;
                 size = 0;
-                sync.notifyAll();
             }
         }
         

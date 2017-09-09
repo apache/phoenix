@@ -48,7 +48,6 @@ import static org.apache.phoenix.query.QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_
 import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_WAIT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
@@ -128,7 +127,6 @@ public class QueryServicesOptions {
 	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
     public static final String DEFAULT_SPOOL_DIRECTORY = System.getProperty("java.io.tmpdir");
 	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
-	public static final int DEFAULT_MAX_MEMORY_WAIT_MS = 10000;
 	public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
 	public static final long DEFAULT_MAX_SERVER_CACHE_SIZE = 1024*1024*100;  // 100 Mb
     public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
@@ -362,7 +360,6 @@ public class QueryServicesOptions {
             .setIfUnset(SPOOL_THRESHOLD_BYTES_ATTRIB, DEFAULT_SPOOL_THRESHOLD_BYTES)
             .setIfUnset(SPOOL_DIRECTORY, DEFAULT_SPOOL_DIRECTORY)
             .setIfUnset(MAX_MEMORY_PERC_ATTRIB, DEFAULT_MAX_MEMORY_PERC)
-            .setIfUnset(MAX_MEMORY_WAIT_MS_ATTRIB, DEFAULT_MAX_MEMORY_WAIT_MS)
             .setIfUnset(MAX_TENANT_MEMORY_PERC_ATTRIB, DEFAULT_MAX_TENANT_MEMORY_PERC)
             .setIfUnset(MAX_SERVER_CACHE_SIZE_ATTRIB, DEFAULT_MAX_SERVER_CACHE_SIZE)
             .setIfUnset(SCAN_CACHE_SIZE_ATTRIB, DEFAULT_SCAN_CACHE_SIZE)
@@ -475,10 +472,6 @@ public class QueryServicesOptions {
         return set(MAX_MEMORY_PERC_ATTRIB, maxMemoryPerc);
     }
 
-    public QueryServicesOptions setMaxMemoryWaitMs(int maxMemoryWaitMs) {
-        return set(MAX_MEMORY_WAIT_MS_ATTRIB, maxMemoryWaitMs);
-    }
-
     public QueryServicesOptions setMaxTenantMemoryPerc(int maxTenantMemoryPerc) {
         return set(MAX_TENANT_MEMORY_PERC_ATTRIB, maxTenantMemoryPerc);
     }
@@ -566,10 +559,6 @@ public class QueryServicesOptions {
 
     public int getMaxMemoryPerc() {
         return config.getInt(MAX_MEMORY_PERC_ATTRIB, DEFAULT_MAX_MEMORY_PERC);
-    }
-
-    public int getMaxMemoryWaitMs() {
-        return config.getInt(MAX_MEMORY_WAIT_MS_ATTRIB, DEFAULT_MAX_MEMORY_WAIT_MS);
     }
 
     public int getMaxMutateSize() {
