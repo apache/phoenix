@@ -439,7 +439,8 @@ public enum SQLExceptionCode {
         " of connections to the target cluster."),
     
     MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
-    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes");
+    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes"), 
+    HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found");
 
     private final int errorCode;
     private final String sqlState;

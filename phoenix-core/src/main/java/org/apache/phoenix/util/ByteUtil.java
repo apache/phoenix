@@ -25,6 +25,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -576,5 +577,19 @@ public class ByteUtil {
         default:
             throw new IllegalArgumentException("Unknown operator " + op);
         }
+    }
+    
+    public static boolean contains(List<byte[]> keys, byte[] key) {
+        for (byte[] k : keys) {
+            if (Arrays.equals(k, key)) { return true; }
+        }
+        return false;
+    }
+
+    public static boolean contains(List<ImmutableBytesPtr> keys, ImmutableBytesPtr key) {
+        for (ImmutableBytesPtr k : keys) {
+            if (key.compareTo(k) == 0) { return true; }
+        }
+        return false;
     }
 }
