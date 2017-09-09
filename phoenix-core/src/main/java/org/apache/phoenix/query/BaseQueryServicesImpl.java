@@ -47,8 +47,7 @@ public abstract class BaseQueryServicesImpl implements QueryServices {
                 options.getQueueSize(),
                 options.isGlobalMetricsEnabled());
         this.memoryManager = new GlobalMemoryManager(
-                Runtime.getRuntime().maxMemory() * options.getMaxMemoryPerc() / 100,
-                options.getMaxMemoryWaitMs());
+                Runtime.getRuntime().maxMemory() * options.getMaxMemoryPerc() / 100);
         this.props = options.getProps(defaultProps);
         this.queryOptimizer = new QueryOptimizer(this);
     }
