@@ -219,6 +219,10 @@
 								<include>com.googlecode.java-diff-utils:diffutils</include>
 								<include>org.apache.commons:commons-lang3</include>
 								<include>org.apache.commons:commons-math3</include>
+								<include>commons-cli:commons-cli</include>
+								<include>joda-time:joda-time</include>
+								<include>org.apache.commons:commons-csv</include>
+								<include>commons-lang:commons-lang</include>
 							</includes>
 						</artifactSet>
 						<filters>

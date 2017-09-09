@@ -24,6 +24,10 @@ import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.transform.stream.StreamSource;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -66,12 +70,19 @@ public class XMLResultHandler extends DefaultResultHandler{
 
     @Override
     public synchronized List<Result> read() throws Exception {
+        return readFromResultFile(new File(resultFileName));
+    }
 
+    List<Result> readFromResultFile(File resultsFile) throws Exception {
+        XMLInputFactory xif = XMLInputFactory.newFactory();
+        xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModelResult.class);
         Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
-        File XMLfile = new File(resultFileName);
-        List<ResultValue> resultValue = new ArrayList();
-        resultValue.add(new ResultValue<>((DataModelResult) jaxbUnmarshaller.unmarshal(XMLfile)));
+        @SuppressWarnings("rawtypes")
+        List<ResultValue> resultValue = new ArrayList<>();
+        XMLStreamReader xmlReader = xif.createXMLStreamReader(new StreamSource(resultsFile));
+        resultValue.add(new ResultValue<>(jaxbUnmarshaller.unmarshal(xmlReader)));
         List<Result> results = new ArrayList<>();
         results.add(new Result(ResultFileDetails.XML, null, resultValue));
         return results;
