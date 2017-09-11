@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.query;
 
-import org.apache.hadoop.conf.Configuration;
+import static java.util.Arrays.asList;
 
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 
-import static java.util.Arrays.asList;
+import org.apache.hadoop.conf.Configuration;
 
 /**
  * Configuration factory that populates an {@link Configuration} with static and runtime
@@ -39,7 +39,7 @@ public class TestPropertyPolicy implements PropertyPolicy {
 
     for (Object k : properties.keySet()) {
       if (propertiesKeyDisAllowed.contains(k))
-        offendingProperties.put((String) k, properties.getProperty((String) k));
+        offendingProperties.put(k, properties.getProperty((String) k));
     }
 
     if (offendingProperties.size() > 0) throw new PropertyNotAllowedException(offendingProperties);
