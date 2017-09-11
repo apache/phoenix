@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -33,14 +31,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.text.ParseException;
-import java.util.Properties;
 
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
-public class TruncateFunctionIT extends BaseClientManagedTimeIT {
+public class TruncateFunctionIT extends ParallelStatsDisabledIT {
     private static final String DS1 = "1970-01-10 00:58:01.587";
     private static final String DS2 = "1970-01-20 01:02:45.906";
     private static final String DS3 = "1970-01-30 01:30:24.353";
@@ -55,16 +53,13 @@ public class TruncateFunctionIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testTruncate() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        ensureTableCreated(getUrl(), ATABLE_NAME,ATABLE_NAME, ts-5);
-        Properties props = new Properties();
-        props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
+        String tableName = generateUniqueName();
+        ensureTableCreated(url, tableName, TestUtil.ATABLE_NAME, null, null, null);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "ATABLE(" +
+                    "upsert into " + tableName + 
+                    "(" +
                     "    ORGANIZATION_ID, " +
                     "    ENTITY_ID, " +
                     "    A_DATE, " +
@@ -86,11 +81,8 @@ public class TruncateFunctionIT extends BaseClientManagedTimeIT {
             stmt.setTimestamp(4, toTimestamp(DS3));
             stmt.execute();
             conn.commit();
-            conn.close();
             
-            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts+1));
-            conn = DriverManager.getConnection(getUrl(), props);
-            String query = "SELECT entity_id, trunc(a_date, 'day', 7), trunc(a_timestamp, 'second', 10) FROM ATABLE WHERE organization_id = ?";
+            String query = "SELECT entity_id, trunc(a_date, 'day', 7), trunc(a_timestamp, 'second', 10) FROM " + tableName + " WHERE organization_id = ?";
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
@@ -111,8 +103,6 @@ public class TruncateFunctionIT extends BaseClientManagedTimeIT {
             assertEquals(toTimestamp("1970-01-30 01:30:20.000"), rs.getTimestamp(3));
             
             assertFalse(rs.next());
-        } finally {
-            conn.close();
         }
     }
 
