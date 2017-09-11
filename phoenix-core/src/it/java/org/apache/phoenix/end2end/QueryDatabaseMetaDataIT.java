@@ -275,6 +275,19 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals("BAS", rs.getString("TABLE_NAME"));
         assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
         assertFalse(rs.next());
+        
+        rs = dbmd.getTables(null, "B", null, new String[] {PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE});
+        assertTrue(rs.next());
+        assertNull(rs.getString("TABLE_CAT"));
+        assertEquals("B", rs.getString("TABLE_SCHEM"));
+        assertEquals("S1", rs.getString("TABLE_NAME"));
+        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+        assertTrue(rs.next());
+        assertNull(rs.getString("TABLE_CAT"));
+        assertEquals("B", rs.getString("TABLE_SCHEM"));
+        assertEquals("S3", rs.getString("TABLE_NAME"));
+        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+        assertFalse(rs.next());
     }
     
     @Test

@@ -1031,10 +1031,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         public Integer getScale() {
             return null;
         }
-		@Override
-		public SortOrder getSortOrder() {
-			return SortOrder.getDefault();
-		}
+        @Override
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
+        }
     };
     private static final RowProjector TABLE_TYPE_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(
             new ExpressionProjector(TABLE_TYPE, SYSTEM_CATALOG,
@@ -1160,10 +1160,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             StringBuilder whereClause = new StringBuilder();
             addTenantIdFilter(whereClause, catalog);
             if (schemaPattern != null) {
-                whereClause.append(" and " + SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'\n" ));
+                appendConjunction(whereClause);
+                whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'\n" ));
             }
             if (tableNamePattern != null) {
-                whereClause.append(" and " + SEQUENCE_NAME + " like '" + StringUtil.escapeStringConstant(tableNamePattern) + "'\n" );
+                appendConjunction(whereClause);
+                whereClause.append(SEQUENCE_NAME + " like '" + StringUtil.escapeStringConstant(tableNamePattern) + "'\n" );
             }
             if (whereClause.length() > 0) {
                 buf.append(" where\n");
