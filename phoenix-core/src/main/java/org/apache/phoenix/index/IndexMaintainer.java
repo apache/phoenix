@@ -784,7 +784,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         assert (isLocalIndex);
         ImmutableBytesPtr ptr =
                 new ImmutableBytesPtr(indexRowKeyPtr.get(),( indexRowKeyPtr.getOffset()
-                        + (nIndexSaltBuckets > 0 ? 1 : 0)), viewIndexId.length);
+                        + (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0)), viewIndexId.length);
         return ptr.copyBytesIfNecessary();
     }
 
