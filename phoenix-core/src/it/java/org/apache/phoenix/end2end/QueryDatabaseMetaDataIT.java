@@ -101,6 +101,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             delete = "DELETE FROM \"SYSTEM\".\"SEQUENCE\"";
             conn.createStatement().executeUpdate(delete);
             conn.commit();
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
         }
     }
 
