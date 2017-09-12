@@ -22,14 +22,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TAB
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
-import static org.apache.phoenix.util.TestUtil.ATABLE_SCHEMA_NAME;
-import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_NAME;
-import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_SCHEMA_NAME;
-import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.MDTEST_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
@@ -57,17 +50,13 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -77,265 +66,289 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Test;
 
 
-public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
-	
-    private static void createMDTestTable(Connection conn, String tableName, String extraProps) throws SQLException {
-        String ddl = "create table if not exists " + tableName +
-                "   (id char(1) primary key,\n" +
-                "    a.col1 integer,\n" +
-                "    b.col2 bigint,\n" +
-                "    b.col3 decimal,\n" +
-                "    b.col4 decimal(5),\n" +
-                "    b.col5 decimal(6,3))\n" +
-                "    a." + HConstants.VERSIONS + "=" + 1 + "," + "a." + HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE +  "'";
+public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
+
+    private static void createMDTestTable(Connection conn, String tableName, String extraProps)
+            throws SQLException {
+        String ddl =
+                "create table if not exists " + tableName + "   (id char(1) primary key,\n"
+                        + "    a.col1 integer,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
+                        + "    b.col4 decimal(5),\n" + "    b.col5 decimal(6,3))\n" + "    a."
+                        + HConstants.VERSIONS + "=" + 1 + "," + "a."
+                        + HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
+                        + "'";
         if (extraProps != null && extraProps.length() > 0) {
             ddl += "," + extraProps;
         }
         conn.createStatement().execute(ddl);
     }
 
+    @Before
+    // We need to clean up phoenix metadata to ensure tests don't step on each other
+    public void deleteMetadata() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String delete =
+                    "DELETE FROM SYSTEM.CATALOG WHERE TABLE_SCHEM IS NULL OR TABLE_SCHEM = '' OR TABLE_SCHEM != 'SYSTEM'";
+            conn.createStatement().executeUpdate(delete);
+            conn.commit();
+            delete = "DELETE FROM \"SYSTEM\".\"SEQUENCE\"";
+            conn.createStatement().executeUpdate(delete);
+            conn.commit();
+        }
+    }
+
     @Test
     public void testTableMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, ts);
-        ensureTableCreated(getUrl(), STABLE_NAME, STABLE_NAME, ts);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
-        
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        DatabaseMetaData dbmd = conn.getMetaData();
-        String aTableName = StringUtil.escapeLike(TestUtil.ATABLE_NAME);
-        String aSchemaName = TestUtil.ATABLE_SCHEMA_NAME;
-        ResultSet rs = dbmd.getTables(null, aSchemaName, aTableName, null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_NAME"),aTableName);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertEquals(rs.getString(3),aTableName);
-        assertEquals(PTableType.TABLE.toString(), rs.getString(4));
-        assertFalse(rs.next());
-        
-        rs = dbmd.getTables(null, null, null, null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
-        assertEquals(rs.getString("TABLE_NAME"),SYSTEM_CATALOG_TABLE);
-        assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
-        assertEquals(rs.getString("TABLE_NAME"),SYSTEM_FUNCTION_TABLE);
-        assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
-        assertEquals(rs.getString("TABLE_NAME"),TYPE_SEQUENCE);
-        assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),SYSTEM_CATALOG_SCHEMA);
-        assertEquals(rs.getString("TABLE_NAME"),PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
-        assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),ATABLE_NAME);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),STABLE_NAME);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertEquals("false", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
-        assertEquals(Boolean.FALSE, rs.getBoolean(PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED));
+        String tableAName = generateUniqueName() + "TABLE";
+        String tableASchema = "";
+        ensureTableCreated(getUrl(), tableAName, ATABLE_NAME, null);
+        String tableS = generateUniqueName() + "TABLE";
+        ensureTableCreated(getUrl(), tableS, STABLE_NAME, null);
+        String tableC = generateUniqueName();
+        String tableCSchema = generateUniqueName();
+        ensureTableCreated(getUrl(), tableCSchema + "." + tableC, CUSTOM_ENTITY_DATA_FULL_NAME,
+            null);
 
-        rs = dbmd.getTables(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, null);
-        assertTrue(rs.next());
-        try {
-            rs.getString("RANDOM_COLUMN_NAME");
-            fail();
-        } catch (ColumnNotFoundException e) {
-            // expected
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getTables(null, tableASchema, tableAName, null);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_NAME"), tableAName);
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertEquals(rs.getString(3), tableAName);
+            assertEquals(PTableType.TABLE.toString(), rs.getString(4));
+            assertFalse(rs.next());
+
+            rs = dbmd.getTables(null, null, null, null);
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(SYSTEM_CATALOG_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(SYSTEM_FUNCTION_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(TYPE_SEQUENCE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(tableAName, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(tableS, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(tableCSchema, rs.getString("TABLE_SCHEM"));
+            assertEquals(tableC, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertEquals("false", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
+            assertEquals(Boolean.FALSE, rs.getBoolean(PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED));
+
+            rs = dbmd.getTables(null, tableCSchema, tableC, null);
+            assertTrue(rs.next());
+            try {
+                rs.getString("RANDOM_COLUMN_NAME");
+                fail();
+            } catch (ColumnNotFoundException e) {
+                // expected
+            }
+            assertEquals(tableCSchema, rs.getString("TABLE_SCHEM"));
+            assertEquals(tableC, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
+
+            rs = dbmd.getTables(null, "", "%TABLE", new String[] { PTableType.TABLE.toString() });
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(tableAName, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(tableS, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
         }
-        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_NAME"),CUSTOM_ENTITY_DATA_NAME);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertFalse(rs.next());
-        
-        rs = dbmd.getTables(null, "", "_TABLE", new String[] {PTableType.TABLE.toString()});
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),ATABLE_NAME);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),STABLE_NAME);
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertFalse(rs.next());
     }
 
     @Test
     public void testTableTypes() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        DatabaseMetaData dbmd = conn.getMetaData();
-        ResultSet rs = dbmd.getTableTypes();
-        assertTrue(rs.next());
-        assertEquals("INDEX",rs.getString(1));
-        assertTrue(rs.next());
-        assertEquals("SEQUENCE",rs.getString(1));
-        assertTrue(rs.next());
-        assertEquals("SYSTEM TABLE",rs.getString(1));
-        assertTrue(rs.next());
-        assertEquals("TABLE",rs.getString(1));
-        assertTrue(rs.next());
-        assertEquals("VIEW",rs.getString(1));
-        assertFalse(rs.next());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getTableTypes();
+            assertTrue(rs.next());
+            assertEquals("INDEX", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("SEQUENCE", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("SYSTEM TABLE", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("TABLE", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("VIEW", rs.getString(1));
+            assertFalse(rs.next());
+        }
     }
-    
+
     @Test
     public void testSequenceMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SEQUENCE b.s1");
-        conn.createStatement().execute("CREATE SEQUENCE a.s2");
-        conn.createStatement().execute("CREATE SEQUENCE b.s3");
-        conn.createStatement().execute("CREATE SEQUENCE c.s1");
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(getUrl(), props);
-        DatabaseMetaData dbmd = conn.getMetaData();
-        ResultSet rs = dbmd.getTables(null, null, null, new String[] {"FOO"});
-        assertFalse(rs.next());
-        
-        rs = dbmd.getTables(null, null, null, new String[] {"FOO",PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE});
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("A", rs.getString("TABLE_SCHEM"));
-        assertEquals("S2", rs.getString("TABLE_NAME"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("B", rs.getString("TABLE_SCHEM"));
-        assertEquals("S1", rs.getString("TABLE_NAME"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("B", rs.getString("TABLE_SCHEM"));
-        assertEquals("S3", rs.getString("TABLE_NAME"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("C", rs.getString("TABLE_SCHEM"));
-        assertEquals("S1", rs.getString("TABLE_NAME"));
-        assertFalse(rs.next());
-        
-        conn.createStatement().execute("CREATE TABLE foo (k bigint primary key)");
-        conn.createStatement().execute("CREATE TABLE z.bas (k bigint primary key)");
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(getUrl(), props);
-        dbmd = conn.getMetaData();
-        rs = dbmd.getTables(null, null, null, new String[] {PTableType.TABLE.toString(),PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE});
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("A", rs.getString("TABLE_SCHEM"));
-        assertEquals("S2", rs.getString("TABLE_NAME"));
-        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("B", rs.getString("TABLE_SCHEM"));
-        assertEquals("S1", rs.getString("TABLE_NAME"));
-        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("B", rs.getString("TABLE_SCHEM"));
-        assertEquals("S3", rs.getString("TABLE_NAME"));
-        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("C", rs.getString("TABLE_SCHEM"));
-        assertEquals("S1", rs.getString("TABLE_NAME"));
-        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertNull(rs.getString("TABLE_SCHEM"));
-        assertEquals("FOO", rs.getString("TABLE_NAME"));
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("Z", rs.getString("TABLE_SCHEM"));
-        assertEquals("BAS", rs.getString("TABLE_NAME"));
-        assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
-        assertFalse(rs.next());
-        
-        rs = dbmd.getTables(null, "B", null, new String[] {PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE});
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("B", rs.getString("TABLE_SCHEM"));
-        assertEquals("S1", rs.getString("TABLE_NAME"));
-        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
-        assertTrue(rs.next());
-        assertNull(rs.getString("TABLE_CAT"));
-        assertEquals("B", rs.getString("TABLE_SCHEM"));
-        assertEquals("S3", rs.getString("TABLE_NAME"));
-        assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
-        assertFalse(rs.next());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String schema1 = "B" + generateUniqueName();
+            String seq1 = generateUniqueName();
+            String seq1FullName = schema1 + "." + seq1;
+            String schema2 = generateUniqueName();
+            String seq2 = generateUniqueName();
+            String seq2FullName = schema2 + "." + seq2;
+            String schema3 = schema1;
+            String seq3 = generateUniqueName();
+            String seq3FullName = schema3 + "." + seq3;
+            String schema4 = generateUniqueName();
+            String seq4 = seq1;
+            String seq4FullName = schema4 + "." + seq4;
+            conn.createStatement().execute("CREATE SEQUENCE " + seq1FullName);
+            conn.createStatement().execute("CREATE SEQUENCE " + seq2FullName);
+            conn.createStatement().execute("CREATE SEQUENCE " + seq3FullName);
+            conn.createStatement().execute("CREATE SEQUENCE " + seq4FullName);
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getTables(null, null, null, new String[] { "FOO" });
+            assertFalse(rs.next());
+            rs =
+                    dbmd.getTables(null, null, null,
+                        new String[] { "FOO", PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE });
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq1, rs.getString("TABLE_NAME"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema3, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq3, rs.getString("TABLE_NAME"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq2, rs.getString("TABLE_NAME"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema4, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq4, rs.getString("TABLE_NAME"));
+            assertFalse(rs.next());
+
+            String foo = generateUniqueName();
+            String basSchema = generateUniqueName();
+            String bas = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + foo + " (k bigint primary key)");
+            conn.createStatement()
+                    .execute("CREATE TABLE " + basSchema + "." + bas + " (k bigint primary key)");
+
+            dbmd = conn.getMetaData();
+            rs =
+                    dbmd.getTables(null, null, null, new String[] { PTableType.TABLE.toString(),
+                            PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE });
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq1, rs.getString("TABLE_NAME"));
+            assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema3, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq3, rs.getString("TABLE_NAME"));
+            assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq2, rs.getString("TABLE_NAME"));
+            assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema4, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq4, rs.getString("TABLE_NAME"));
+            assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertNull(rs.getString("TABLE_SCHEM"));
+            assertEquals(foo, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(basSchema, rs.getString("TABLE_SCHEM"));
+            assertEquals(bas, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
+
+            rs =
+                    dbmd.getTables(null, "B%", null,
+                        new String[] { PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE });
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq1, rs.getString("TABLE_NAME"));
+            assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertNull(rs.getString("TABLE_CAT"));
+            assertEquals(schema3, rs.getString("TABLE_SCHEM"));
+            assertEquals(seq3, rs.getString("TABLE_NAME"));
+            assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
+        }
     }
-    
+
     @Test
     public void testSchemaMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
-        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts);
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        DatabaseMetaData dbmd = conn.getMetaData();
-        ResultSet rs;
-        rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertTrue(rs.next());
-        assertEquals(rs.getString(1),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString(2),null);
-        assertFalse(rs.next());
+        String table1 = generateUniqueName();
+        String schema1 = generateUniqueName();
+        String fullTable1 = schema1 + "." + table1;
+        ensureTableCreated(getUrl(), fullTable1, CUSTOM_ENTITY_DATA_FULL_NAME, null);
+        String fullTable2 = generateUniqueName();
+        ensureTableCreated(getUrl(), fullTable2, PTSDB_NAME, null);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs;
+            rs = dbmd.getSchemas(null, schema1);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), schema1);
+            assertEquals(rs.getString(2), null);
+            assertFalse(rs.next());
 
-        rs = dbmd.getSchemas(null, null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertFalse(rs.next());
+            rs = dbmd.getSchemas(null, null);
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(null, rs.getString("TABLE_CATALOG"));
+            assertTrue(rs.next());
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                rs.getString("TABLE_SCHEM"));
+            assertEquals(null, rs.getString("TABLE_CATALOG"));
+            assertTrue(rs.next());
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(null, rs.getString("TABLE_CATALOG"));
+            assertFalse(rs.next());
+        }
     }
 
     @Test
     public void testColumnMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        createMDTestTable(conn, MDTEST_NAME, "");
-        conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
+        String table = generateUniqueName();
+        createMDTestTable(conn, table, "");
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
-        rs = dbmd.getColumns(null, "", MDTEST_NAME, null);
+        rs = dbmd.getColumns(null, "", table, null);
         assertTrue(rs.next());
-
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(null, rs.getString("TABLE_CAT"));
         assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNoNulls, rs.getShort("NULLABLE"));
@@ -345,8 +358,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(0, rs.getInt("DECIMAL_DIGITS"));
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -358,8 +371,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -371,8 +384,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -384,8 +397,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -395,8 +408,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(0, rs.getInt("DECIMAL_DIGITS"));
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -408,10 +421,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
 
         // Look up only columns in a column family
-        rs = dbmd.getColumns(null, "", MDTEST_NAME, "A.");
+        rs = dbmd.getColumns(null, "", table, "A.");
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -425,10 +438,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
 
         // Look up KV columns in a column family
-        rs = dbmd.getColumns("", "", MDTEST_NAME, "%.COL%");
+        rs = dbmd.getColumns("", "", table, "%.COL%");
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -440,8 +453,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -453,8 +466,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -466,8 +479,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertTrue(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -478,8 +491,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertFalse(rs.wasNull());
 
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
@@ -489,790 +502,564 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(3, rs.getInt("DECIMAL_DIGITS"));
 
         assertFalse(rs.next());
-        
+
         // Look up KV columns in a column family
-        rs = dbmd.getColumns("", "", MDTEST_NAME, "B.COL2");
+        rs = dbmd.getColumns("", "", table, "B.COL2");
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertFalse(rs.next());
 
-        ensureTableCreated(getUrl(), TABLE_WITH_SALTING, TABLE_WITH_SALTING, ts);
-        rs = dbmd.getColumns("", "", TABLE_WITH_SALTING, StringUtil.escapeLike("A_INTEGER"));
+        String table2 = generateUniqueName();
+        ensureTableCreated(getUrl(), table2, TABLE_WITH_SALTING, null);
+        rs = dbmd.getColumns("", "", table2, StringUtil.escapeLike("A_INTEGER"));
         assertTrue(rs.next());
         assertEquals(1, rs.getInt("ORDINAL_POSITION"));
         assertFalse(rs.next());
-    
+
     }
 
     @Test
     public void testPrimaryKeyMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        createMDTestTable(conn, MDTEST_NAME, "");
-        conn.close();
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(getUrl(), props);
-        DatabaseMetaData dbmd = conn.getMetaData();
-        ResultSet rs;
-        rs = dbmd.getPrimaryKeys(null, "", MDTEST_NAME);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(MDTEST_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
-        assertEquals(1, rs.getInt("KEY_SEQ"));
-        assertEquals(null, rs.getString("PK_NAME"));
-        assertFalse(rs.next());
-        
-        rs = dbmd.getPrimaryKeys(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME);
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("custom_entity_data_id"), rs.getString("COLUMN_NAME"));
-        assertEquals(3, rs.getInt("KEY_SEQ"));
-        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME"));
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String table1 = generateUniqueName();
+            createMDTestTable(conn, table1, "");
+            String schema2 = generateUniqueName();
+            String table2 = generateUniqueName();
+            String fullTable2 = schema2 + "." + table2;
+            ensureTableCreated(getUrl(), fullTable2, CUSTOM_ENTITY_DATA_FULL_NAME, null);
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs;
+            rs = dbmd.getPrimaryKeys(null, "", table1);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(table1, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
+            assertEquals(1, rs.getInt("KEY_SEQ"));
+            assertEquals(null, rs.getString("PK_NAME"));
+            assertFalse(rs.next());
 
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
-        assertEquals(2, rs.getInt("KEY_SEQ"));
-        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME"));
-        
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("organization_id"), rs.getString("COLUMN_NAME"));
-        assertEquals(1, rs.getInt("KEY_SEQ"));
-        assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME")); // TODO: this is on the table row
-        
-        assertFalse(rs.next());
+            rs = dbmd.getPrimaryKeys(null, schema2, table2);
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("custom_entity_data_id"),
+                rs.getString("COLUMN_NAME"));
+            assertEquals(3, rs.getInt("KEY_SEQ"));
+            assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME"));
 
-        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, null);
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("organization_id"), rs.getString("COLUMN_NAME"));
-        assertEquals(rs.getInt("COLUMN_SIZE"), 15);
-        
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
-        assertEquals(rs.getInt("COLUMN_SIZE"), 3);
-        
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("custom_entity_data_id"), rs.getString("COLUMN_NAME"));
-        
-        // The above returns all columns, starting with the PK columns
-        assertTrue(rs.next());
-        
-        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, "KEY_PREFIX");
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
-        
-        rs = dbmd.getColumns("", CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, "KEY_PREFIX");
-        assertTrue(rs.next());
-        assertEquals(CUSTOM_ENTITY_DATA_SCHEMA_NAME, rs.getString("TABLE_SCHEM"));
-        assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
-        
-        assertFalse(rs.next());
-        
-        conn.createStatement().execute("CREATE TABLE SALTEDTABLE123 (k INTEGER PRIMARY KEY, v VARCHAR) SALT_BUCKETS=3");
-        conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(getUrl(), props);
-        dbmd = conn.getMetaData();
-        rs = dbmd.getPrimaryKeys(null, "", "SALTEDTABLE123");
-        assertTrue(rs.next());
-        assertEquals(null, rs.getString("TABLE_SCHEM"));
-        assertEquals("SALTEDTABLE123", rs.getString("TABLE_NAME"));
-        assertEquals(null, rs.getString("TABLE_CAT"));
-        assertEquals("K", rs.getString("COLUMN_NAME"));
-        assertEquals(1, rs.getInt("KEY_SEQ"));
-        assertEquals(null, rs.getString("PK_NAME"));
-        assertFalse(rs.next());
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
+            assertEquals(2, rs.getInt("KEY_SEQ"));
+            assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME"));
+
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("organization_id"),
+                rs.getString("COLUMN_NAME"));
+            assertEquals(1, rs.getInt("KEY_SEQ"));
+            assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME")); // TODO:
+                                                                                         // this is
+                                                                                         // on the
+                                                                                         // table
+                                                                                         // row
+
+            assertFalse(rs.next());
+
+            rs = dbmd.getColumns("", schema2, table2, null);
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("organization_id"),
+                rs.getString("COLUMN_NAME"));
+            assertEquals(rs.getInt("COLUMN_SIZE"), 15);
+
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
+            assertEquals(rs.getInt("COLUMN_SIZE"), 3);
+
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("custom_entity_data_id"),
+                rs.getString("COLUMN_NAME"));
+
+            // The above returns all columns, starting with the PK columns
+            assertTrue(rs.next());
+
+            rs = dbmd.getColumns("", schema2, table2, "KEY_PREFIX");
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
+
+            rs = dbmd.getColumns("", schema2, table2, "KEY_PREFIX");
+            assertTrue(rs.next());
+            assertEquals(schema2, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
+
+            assertFalse(rs.next());
+
+            String table3 = generateUniqueName();
+            conn.createStatement().execute(
+                "CREATE TABLE " + table3 + " (k INTEGER PRIMARY KEY, v VARCHAR) SALT_BUCKETS=3");
+            dbmd = conn.getMetaData();
+            rs = dbmd.getPrimaryKeys(null, "", table3);
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(table3, rs.getString("TABLE_NAME"));
+            assertEquals(null, rs.getString("TABLE_CAT"));
+            assertEquals("K", rs.getString("COLUMN_NAME"));
+            assertEquals(1, rs.getInt("KEY_SEQ"));
+            assertEquals(null, rs.getString("PK_NAME"));
+            assertFalse(rs.next());
+        }
     }
-    
+
     @Test
     public void testMultiTableColumnsMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        createGroupByTestTable(conn, GROUPBYTEST_NAME);
-        createMDTestTable(conn, MDTEST_NAME, "");
-        conn.close();
-        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(getUrl(), props);
-        DatabaseMetaData dbmd = conn.getMetaData();
-        ResultSet rs = dbmd.getColumns(null, "", "%TEST%", null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),GROUPBYTEST_NAME);
-        assertEquals(null, rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),GROUPBYTEST_NAME);
-        assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("uri"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),GROUPBYTEST_NAME);
-        assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("appcpu"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(null, rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_NAME"),MDTEST_NAME);
-        assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
-        assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
-        assertFalse(rs.next());
-    }
-    
-    @Test
-    public void testCreateDropTable() throws Exception {
-        long ts = nextTimestamp();
-        String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
-        
-        ensureTableCreated(getUrl(), BTABLE_NAME, BTABLE_NAME, ts-2);
-        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-2);
-        
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT a_string FROM aTable";
-        // Data should still be there b/c we only dropped the schema
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
-        assertTrue(conn5.prepareStatement(query).executeQuery().next());
-        conn5.createStatement().executeUpdate("DROP TABLE " + ATABLE_NAME);
-        
-        // Confirm that data is no longer there because we dropped the table
-        // This needs to be done natively b/c the metadata is gone
-        HTableInterface htable = conn5.unwrap(PhoenixConnection.class).getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(ATABLE_SCHEMA_NAME, ATABLE_NAME));
-        Scan scan = new Scan();
-        scan.setFilter(new FirstKeyOnlyFilter());
-        scan.setTimeRange(0, ts+9);
-        assertNull(htable.getScanner(scan).next());
-        conn5.close();
-
-        // Still should work b/c we're at an earlier timestamp than when table was deleted
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        assertTrue(conn2.prepareStatement(query).executeQuery().next());
-        conn2.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn10 = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn10.prepareStatement(query).executeQuery().next();
-            fail();
-        } catch (TableNotFoundException e) {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String table1 = "TEST" + generateUniqueName();
+            String table2 = "TEST" + generateUniqueName();
+            createGroupByTestTable(conn, table1);
+            createMDTestTable(conn, table2, "");
+            String table3 = generateUniqueName();
+            ensureTableCreated(getUrl(), table3, PTSDB_NAME, null);
+            String table4 = generateUniqueName();
+            ensureTableCreated(getUrl(), table4, CUSTOM_ENTITY_DATA_FULL_NAME, null);
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getColumns(null, "", "%TEST%", null);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table1);
+            assertEquals(null, rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table1);
+            assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("uri"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table1);
+            assertEquals(PhoenixDatabaseMetaData.TABLE_FAMILY, rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("appcpu"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table2);
+            assertEquals(null, rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("id"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table2);
+            assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table2);
+            assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table2);
+            assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("col3"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table2);
+            assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("col4"), rs.getString("COLUMN_NAME"));
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_SCHEM"), null);
+            assertEquals(rs.getString("TABLE_NAME"), table2);
+            assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
+            assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
+            assertFalse(rs.next());
         }
     }
- 
+
     @Test
     public void testCreateOnExistingTable() throws Exception {
-        long ts = nextTimestamp();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        String tableName = MDTEST_NAME;
-        String schemaName = MDTEST_SCHEMA_NAME;
-        byte[] cfA = Bytes.toBytes(SchemaUtil.normalizeIdentifier("a"));
-        byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
-        byte[] cfC = Bytes.toBytes("c");
-        byte[][] familyNames = new byte[][] {cfB, cfC};
-        byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-        HBaseAdmin admin = pconn.getQueryServices().getAdmin();
-        try {
-            admin.disableTable(htableName);
-            admin.deleteTable(htableName);
-            admin.enableTable(htableName);
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-        }
-        
-        @SuppressWarnings("deprecation")
-        HTableDescriptor descriptor = new HTableDescriptor(htableName);
-        for (byte[] familyName : familyNames) {
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-            descriptor.addFamily(columnDescriptor);
-        }
-        admin.createTable(descriptor);
-            
-        ts = nextTimestamp();
-        props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        props.setProperty(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, Boolean.TRUE.toString());
-        PhoenixConnection conn0 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        createMDTestTable(conn0,tableName, "a." + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
-        conn0.close();
-        
-        descriptor = admin.getTableDescriptor(htableName);
-        assertEquals(3,descriptor.getColumnFamilies().length);
-        HColumnDescriptor cdA = descriptor.getFamily(cfA);
-        assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
-        assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using WITH
-        assertEquals(1,cdA.getMaxVersions());// Overriden using WITH
-        HColumnDescriptor cdB = descriptor.getFamily(cfB);
-        // Allow KEEP_DELETED_CELLS to be false for VIEW
-        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
-        assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the original value.
-        // CF c should stay the same since it's not a Phoenix cf.
-        HColumnDescriptor cdC = descriptor.getFamily(cfC);
-        assertNotNull("Column family not found", cdC);
-        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
-        assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
-        assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
-        assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
-        assertTrue(descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName()));
-        admin.close();
-         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        props.setProperty(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, Boolean.TRUE.toString());
-        PhoenixConnection conn1 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        int rowCount = 5;
-        String upsert = "UPSERT INTO " + tableName + "(id,col1,col2) VALUES(?,?,?)";
-        PreparedStatement ps = conn1.prepareStatement(upsert);
-        for (int i = 0; i < rowCount; i++) {
-            ps.setString(1, Integer.toString(i));
-            ps.setInt(2, i+1);
-            ps.setInt(3, i+2);
-            ps.execute();
-        }
-        conn1.commit();
-        conn1.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT count(1) FROM " + tableName;
-        ResultSet rs = conn2.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals(rowCount, rs.getLong(1));
-        
-        query = "SELECT id, col1,col2 FROM " + tableName;
-        rs = conn2.createStatement().executeQuery(query);
-        for (int i = 0; i < rowCount; i++) {
+        try (PhoenixConnection pconn =
+                DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+            String tableName = generateUniqueName();// MDTEST_NAME;
+            String schemaName = "";// MDTEST_SCHEMA_NAME;
+            byte[] cfA = Bytes.toBytes(SchemaUtil.normalizeIdentifier("a"));
+            byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
+            byte[] cfC = Bytes.toBytes("c");
+            byte[][] familyNames = new byte[][] { cfB, cfC };
+            byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
+            HBaseAdmin admin = pconn.getQueryServices().getAdmin();
+            try {
+                admin.disableTable(htableName);
+                admin.deleteTable(htableName);
+                admin.enableTable(htableName);
+            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+            }
+
+            @SuppressWarnings("deprecation")
+            HTableDescriptor descriptor = new HTableDescriptor(htableName);
+            for (byte[] familyName : familyNames) {
+                HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
+                descriptor.addFamily(columnDescriptor);
+            }
+            admin.createTable(descriptor);
+            createMDTestTable(pconn, tableName,
+                "a." + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
+
+            descriptor = admin.getTableDescriptor(htableName);
+            assertEquals(3, descriptor.getColumnFamilies().length);
+            HColumnDescriptor cdA = descriptor.getFamily(cfA);
+            assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+            assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using
+                                                                              // WITH
+            assertEquals(1, cdA.getMaxVersions());// Overriden using WITH
+            HColumnDescriptor cdB = descriptor.getFamily(cfB);
+            // Allow KEEP_DELETED_CELLS to be false for VIEW
+            assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
+            assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the
+                                                                              // original value.
+            // CF c should stay the same since it's not a Phoenix cf.
+            HColumnDescriptor cdC = descriptor.getFamily(cfC);
+            assertNotNull("Column family not found", cdC);
+            assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
+            assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
+            assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
+            assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
+            assertTrue(descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName()));
+            admin.close();
+
+            int rowCount = 5;
+            String upsert = "UPSERT INTO " + tableName + "(id,col1,col2) VALUES(?,?,?)";
+            PreparedStatement ps = pconn.prepareStatement(upsert);
+            for (int i = 0; i < rowCount; i++) {
+                ps.setString(1, Integer.toString(i));
+                ps.setInt(2, i + 1);
+                ps.setInt(3, i + 2);
+                ps.execute();
+            }
+            pconn.commit();
+            String query = "SELECT count(1) FROM " + tableName;
+            ResultSet rs = pconn.createStatement().executeQuery(query);
             assertTrue(rs.next());
-            assertEquals(Integer.toString(i),rs.getString(1));
-            assertEquals(i+1, rs.getInt(2));
-            assertEquals(i+2, rs.getInt(3));
+            assertEquals(rowCount, rs.getLong(1));
+
+            query = "SELECT id, col1,col2 FROM " + tableName;
+            rs = pconn.createStatement().executeQuery(query);
+            for (int i = 0; i < rowCount; i++) {
+                assertTrue(rs.next());
+                assertEquals(Integer.toString(i), rs.getString(1));
+                assertEquals(i + 1, rs.getInt(2));
+                assertEquals(i + 2, rs.getInt(3));
+            }
+            assertFalse(rs.next());
         }
-        assertFalse(rs.next());
-        conn2.close();
     }
 
     @SuppressWarnings("deprecation")
     @Test
     public void testCreateViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        String tableName = MDTEST_NAME;
-        String schemaName = MDTEST_SCHEMA_NAME;
-        byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
-        byte[] cfC = Bytes.toBytes("c");
-        byte[][] familyNames = new byte[][] {cfB, cfC};
-        byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-        HBaseAdmin admin = pconn.getQueryServices().getAdmin();
-        try {
-            admin.disableTable(htableName);
-            admin.deleteTable(htableName);
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+        try (PhoenixConnection pconn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))
+                        .unwrap(PhoenixConnection.class)) {
+            String tableName = generateUniqueName();// MDTEST_NAME;
+            String schemaName = "";// MDTEST_SCHEMA_NAME;
+            byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
+            byte[] cfC = Bytes.toBytes("c");
+            byte[][] familyNames = new byte[][] { cfB, cfC };
+            byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
+            try (HBaseAdmin admin = pconn.getQueryServices().getAdmin()) {
+                try {
+                    admin.disableTable(htableName);
+                    admin.deleteTable(htableName);
+                } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                }
+
+                HTableDescriptor descriptor = new HTableDescriptor(htableName);
+                for (byte[] familyName : familyNames) {
+                    HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
+                    descriptor.addFamily(columnDescriptor);
+                }
+                admin.createTable(descriptor);
+            }
+            String createStmt =
+                    "create view " + generateUniqueName() + "  (id char(1) not null primary key,\n"
+                            + "    a.col1 integer,\n" + "    d.col2 bigint)\n";
+            try {
+                pconn.createStatement().execute(createStmt);
+                fail();
+            } catch (TableNotFoundException e) {
+                // expected to fail b/c table doesn't exist
+            } catch (ReadOnlyTableException e) {
+                // expected to fail b/c table doesn't exist
+            }
+
+            createStmt =
+                    "create view " + tableName + "   (id char(1) not null primary key,\n"
+                            + "    a.col1 integer,\n" + "    b.col2 bigint)\n";
+            try {
+                pconn.createStatement().execute(createStmt);
+                fail();
+            } catch (ReadOnlyTableException e) {
+                // expected to fail b/c cf a doesn't exist
+            }
+            createStmt =
+                    "create view " + tableName + "   (id char(1) not null primary key,\n"
+                            + "    b.col1 integer,\n" + "    c.col2 bigint)\n";
+            try {
+                pconn.createStatement().execute(createStmt);
+                fail();
+            } catch (ReadOnlyTableException e) {
+                // expected to fail b/c cf C doesn't exist (case issue)
+            }
+
+            createStmt =
+                    "create view " + tableName + "   (id char(1) not null primary key,\n"
+                            + "    b.col1 integer,\n"
+                            + "    \"c\".col2 bigint) IMMUTABLE_ROWS=true \n";
+            // should be ok now
+            pconn.createStatement().execute(createStmt);
+            ResultSet rs = pconn.getMetaData().getTables(null, null, tableName, null);
+            assertTrue(rs.next());
+            assertEquals(ViewType.MAPPED.name(), rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE));
+            assertFalse(rs.next());
+
+            String deleteStmt = "DELETE FROM " + tableName;
+            PreparedStatement ps = pconn.prepareStatement(deleteStmt);
+            try {
+                ps.execute();
+                fail();
+            } catch (ReadOnlyTableException e) {
+                // expected to fail b/c table is read-only
+            }
+
+            String upsert = "UPSERT INTO " + tableName + "(id,col1,col2) VALUES(?,?,?)";
+            ps = pconn.prepareStatement(upsert);
+            try {
+                ps.setString(1, Integer.toString(0));
+                ps.setInt(2, 1);
+                ps.setInt(3, 2);
+                ps.execute();
+                fail();
+            } catch (ReadOnlyTableException e) {
+                // expected to fail b/c table is read-only
+            }
+
+            HTableInterface htable =
+                    pconn.getQueryServices()
+                            .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+            Put put = new Put(Bytes.toBytes("0"));
+            put.add(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
+            put.add(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
+            htable.put(put);
+
+            // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
+            pconn.createStatement().execute("CREATE INDEX idx ON " + tableName + "(B.COL1)");
+            String select = "SELECT col1 FROM " + tableName + " WHERE col2=?";
+            ps = pconn.prepareStatement(select);
+            ps.setInt(1, 2);
+            rs = ps.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+
+            String dropTable = "DROP TABLE " + tableName;
+            ps = pconn.prepareStatement(dropTable);
+            try {
+                ps.execute();
+                fail();
+            } catch (TableNotFoundException e) {
+                // expected to fail b/c it is a view
+            }
+            String alterView = "alter view " + tableName + " drop column \"c\".col2";
+            pconn.createStatement().execute(alterView);
         }
-        
-        HTableDescriptor descriptor = new HTableDescriptor(htableName);
-        for (byte[] familyName : familyNames) {
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-            descriptor.addFamily(columnDescriptor);
-        }
-        admin.createTable(descriptor);
-        admin.close();
-            
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        String createStmt = "create view bogusTable" + 
-        "   (id char(1) not null primary key,\n" + 
-        "    a.col1 integer,\n" +
-        "    d.col2 bigint)\n";
-        try {
-            conn1.createStatement().execute(createStmt);
-            fail();
-        } catch (TableNotFoundException e) {
-            // expected to fail b/c table doesn't exist
-        } catch (ReadOnlyTableException e) {
-          // expected to fail b/c table doesn't exist
-        }
-        
-        createStmt = "create view " + MDTEST_NAME + 
-                "   (id char(1) not null primary key,\n" + 
-                "    a.col1 integer,\n" +
-                "    b.col2 bigint)\n";
-        try {
-            conn1.createStatement().execute(createStmt);
-            fail();
-        } catch (ReadOnlyTableException e) {
-            // expected to fail b/c cf a doesn't exist
-        }
-        createStmt = "create view " + MDTEST_NAME + 
-        "   (id char(1) not null primary key,\n" + 
-        "    b.col1 integer,\n" +
-        "    c.col2 bigint)\n";
-        try {
-            conn1.createStatement().execute(createStmt);
-            fail();
-        } catch (ReadOnlyTableException e) {
-            // expected to fail b/c cf C doesn't exist (case issue)
-        }
-
-        createStmt = "create view " + MDTEST_NAME + 
-        "   (id char(1) not null primary key,\n" + 
-        "    b.col1 integer,\n" +
-        "    \"c\".col2 bigint) IMMUTABLE_ROWS=true \n";
-        // should be ok now
-        conn1.createStatement().execute(createStmt);
-        conn1.close();
-                 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        PhoenixConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        
-        ResultSet rs = conn2.getMetaData().getTables(null, null, MDTEST_NAME, null);
-        assertTrue(rs.next());
-        assertEquals(ViewType.MAPPED.name(), rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE));
-        assertFalse(rs.next());
-
-        String deleteStmt = "DELETE FROM " + MDTEST_NAME;
-        PreparedStatement ps = conn2.prepareStatement(deleteStmt);
-        try {
-            ps.execute();
-            fail();
-        } catch (ReadOnlyTableException e) {
-            // expected to fail b/c table is read-only
-        }
-
-        String upsert = "UPSERT INTO " + MDTEST_NAME + "(id,col1,col2) VALUES(?,?,?)";
-        ps = conn2.prepareStatement(upsert);
-        try {
-            ps.setString(1, Integer.toString(0));
-            ps.setInt(2, 1);
-            ps.setInt(3, 2);
-            ps.execute();
-            fail();
-        } catch (ReadOnlyTableException e) {
-            // expected to fail b/c table is read-only
-        }
-
-        HTableInterface htable = conn2.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
-        Put put = new Put(Bytes.toBytes("0"));
-        put.add(cfB, Bytes.toBytes("COL1"), ts+6, PInteger.INSTANCE.toBytes(1));
-        put.add(cfC, Bytes.toBytes("COL2"), ts+6, PLong.INSTANCE.toBytes(2));
-        htable.put(put);
-        conn2.close();
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        Connection conn7 = DriverManager.getConnection(getUrl(), props);
-        // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
-        conn7.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
-        String select = "SELECT col1 FROM " + MDTEST_NAME + " WHERE col2=?";
-        ps = conn7.prepareStatement(select);
-        ps.setInt(1, 2);
-        rs = ps.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        assertFalse(rs.next());
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 12));
-        Connection conn75 = DriverManager.getConnection(getUrl(), props);
-        String dropTable = "DROP TABLE " + MDTEST_NAME ;
-        ps = conn75.prepareStatement(dropTable);
-        try {
-            ps.execute();
-            fail();
-        } catch (TableNotFoundException e) {
-            // expected to fail b/c it is a view
-        }
-
-        String dropView = "DROP VIEW " + MDTEST_NAME ;
-        ps = conn75.prepareStatement(dropView);
-        ps.execute();
-        conn75.close();
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-        Connection conn8 = DriverManager.getConnection(getUrl(), props);
-        createStmt = "create view " + MDTEST_NAME +
-                "   (id char(1) not null primary key,\n" +
-                "    b.col1 integer,\n" +
-                "    \"c\".col2 bigint) IMMUTABLE_ROWS=true\n";
-        // should be ok to create a view with IMMUTABLE_ROWS = true
-        conn8.createStatement().execute(createStmt);
-        conn8.close();
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        Connection conn9 = DriverManager.getConnection(getUrl(), props);
-        conn9.createStatement().execute("CREATE INDEX idx ON " + MDTEST_NAME + "(B.COL1)");
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        Connection conn91 = DriverManager.getConnection(getUrl(), props);
-        ps = conn91.prepareStatement(dropView);
-        ps.execute();
-        conn91.close();
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 35));
-        Connection conn92 = DriverManager.getConnection(getUrl(), props);
-        createStmt = "create view " + MDTEST_NAME +
-                "   (id char(1) not null primary key,\n" +
-                "    b.col1 integer,\n" +
-                "    \"c\".col2 bigint) as\n" +
-                " select * from " + MDTEST_NAME +
-                " where b.col1 = 1";
-        conn92.createStatement().execute(createStmt);
-        conn92.close();
-
-        put = new Put(Bytes.toBytes("1"));
-        put.add(cfB, Bytes.toBytes("COL1"), ts+39, PInteger.INSTANCE.toBytes(3));
-        put.add(cfC, Bytes.toBytes("COL2"), ts+39, PLong.INSTANCE.toBytes(4));
-        htable.put(put);
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-        Connection conn92a = DriverManager.getConnection(getUrl(), props);
-        rs = conn92a.createStatement().executeQuery("select count(*) from " + MDTEST_NAME);
-        assertTrue(rs.next());
-        assertEquals(1,rs.getInt(1));
-        conn92a.close();
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 45));
-        Connection conn93 = DriverManager.getConnection(getUrl(), props);
-        try {
-            String alterView = "alter view " + MDTEST_NAME + " drop column b.col1";
-            conn93.createStatement().execute(alterView);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
-        }
-        conn93.close();
-
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
-        Connection conn94 = DriverManager.getConnection(getUrl(), props);
-        String alterView = "alter view " + MDTEST_NAME + " drop column \"c\".col2";
-        conn94.createStatement().execute(alterView);
-        conn94.close();
-
     }
-    
+
     @Test
     public void testAddKVColumnToExistingFamily() throws Throwable {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        // Failed attempt to repro table not found bug
-//        TestUtil.clearMetaDataCache(conn1);
-//        PhoenixConnection pconn = conn1.unwrap(PhoenixConnection.class);
-//        pconn.removeTable(ATABLE_SCHEMA_NAME, ATABLE_NAME);
-        conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD z_integer integer");
-        conn1.close();
- 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT z_integer FROM aTable";
-        assertTrue(conn2.prepareStatement(query).executeQuery().next());
-        conn2.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn3.prepareStatement(query).executeQuery().next();
-            fail();
-        } catch (ColumnNotFoundException e) {
+        String tableName = generateUniqueName();
+        initATableValues(tableName, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
+            null);
+        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+            conn1.createStatement()
+                    .executeUpdate("ALTER TABLE " + tableName + " ADD z_integer integer");
+            String query = "SELECT z_integer FROM " + tableName;
+            assertTrue(conn1.prepareStatement(query).executeQuery().next());
         }
     }
-    
+
     @Test
     public void testAddKVColumnToNewFamily() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD newcf.z_integer integer");
-        conn1.close();
- 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT z_integer FROM aTable";
-        assertTrue(conn2.prepareStatement(query).executeQuery().next());
-        conn2.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn3.prepareStatement(query).executeQuery().next();
-            fail();
-        } catch (ColumnNotFoundException e) {
+        String tableName =
+                initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
+                    null);
+        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+            conn1.createStatement()
+                    .executeUpdate("ALTER TABLE " + tableName + " ADD newcf.z_integer integer");
+            String query = "SELECT z_integer FROM " + tableName;
+            assertTrue(conn1.prepareStatement(query).executeQuery().next());
         }
     }
-    
+
     @Test
     public void testAddPKColumn() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD z_string varchar not null primary key");
-            fail();
-        } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 1006 (42J04): Only nullable columns may be added to a multi-part row key."));
-        }
-        conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD z_string varchar primary key");
-        conn1.close();
- 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT z_string FROM aTable";
-        assertTrue(conn2.prepareStatement(query).executeQuery().next());
-        conn2.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn3.prepareStatement(query).executeQuery().next();
-            fail();
-        } catch (ColumnNotFoundException e) {
+        String tableName =
+                initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
+                    null);
+        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+            try {
+                conn1.createStatement().executeUpdate(
+                    "ALTER TABLE " + tableName + " ADD z_string varchar not null primary key");
+                fail();
+            } catch (SQLException e) {
+                assertTrue(e.getMessage(), e.getMessage().contains(
+                    "ERROR 1006 (42J04): Only nullable columns may be added to a multi-part row key."));
+            }
+            conn1.createStatement().executeUpdate(
+                "ALTER TABLE " + tableName + " ADD z_string varchar primary key");
+
+            String query = "SELECT z_string FROM " + tableName;
+            assertTrue(conn1.prepareStatement(query).executeQuery().next());
         }
     }
-    
+
     @Test
     public void testDropKVColumn() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        assertTrue(conn5.createStatement().executeQuery("SELECT 1 FROM atable WHERE b_string IS NOT NULL").next());
-        conn5.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN b_string");
-        conn5.close();
- 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT b_string FROM aTable";
-        try {
-            conn2.prepareStatement(query).executeQuery().next();
-            fail();
-        } catch (ColumnNotFoundException e) {
-        }
-        conn2.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(getUrl(), props);
-        assertTrue(conn3.prepareStatement(query).executeQuery().next());
-        conn3.close();
+        String tableName =
+                initATableValues(null, tenantId, getDefaultSplits(tenantId), null, null, getUrl(),
+                    null);
+        try (Connection conn5 = DriverManager.getConnection(getUrl())) {
+            assertTrue(conn5.createStatement()
+                    .executeQuery("SELECT 1 FROM " + tableName + " WHERE b_string IS NOT NULL")
+                    .next());
+            conn5.createStatement()
+                    .executeUpdate("ALTER TABLE " + tableName + " DROP COLUMN b_string");
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 7));
-        Connection conn7 = DriverManager.getConnection(getUrl(), props);
-        conn7.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " ADD b_string VARCHAR");
-        conn7.close();
-    
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
-        Connection conn8 = DriverManager.getConnection(getUrl(), props);
-        assertFalse(conn8.createStatement().executeQuery("SELECT 1 FROM atable WHERE b_string IS NOT NULL").next());
-        conn8.close();
-        
+            String query = "SELECT b_string FROM " + tableName;
+            try {
+                conn5.prepareStatement(query).executeQuery().next();
+                fail();
+            } catch (ColumnNotFoundException e) {
+            }
+
+            conn5.createStatement()
+                    .executeUpdate("ALTER TABLE " + tableName + " ADD b_string VARCHAR");
+            assertFalse(conn5.createStatement()
+                    .executeQuery("SELECT 1 FROM  " + tableName + "  WHERE b_string IS NOT NULL")
+                    .next());
+        }
+
     }
-    
+
     @Test
     public void testDropPKColumn() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
-        
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn1.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN entity_id");
+        String tableName =
+                initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId), null,
+                    null, getUrl(), null);
+        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+            conn1.createStatement()
+                    .executeUpdate("ALTER TABLE " + tableName + " DROP COLUMN entity_id");
             fail();
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 506 (42817): Primary key column may not be dropped."));
+            assertTrue(e.getMessage(), e.getMessage()
+                    .contains("ERROR 506 (42817): Primary key column may not be dropped."));
         }
-        conn1.close();
     }
 
     @Test
     public void testDropAllKVCols() throws Exception {
         ResultSet rs;
-        long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        createMDTestTable(conn, MDTEST_NAME, "");
-        conn.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn2 = DriverManager.getConnection(getUrl(), props);
-        conn2.createStatement().executeUpdate("UPSERT INTO " + MDTEST_NAME + " VALUES('a',1,1)");
-        conn2.createStatement().executeUpdate("UPSERT INTO " + MDTEST_NAME + " VALUES('b',2,2)");
-        conn2.commit();
-        conn2.close();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateUniqueName();
+            createMDTestTable(conn, tableName, "");
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES('a',1,1)");
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES('b',2,2)");
+            conn.commit();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 3));
-        Connection conn3 = DriverManager.getConnection(getUrl(), props);
-        rs = conn3.createStatement().executeQuery("SELECT count(1) FROM " + MDTEST_NAME);
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        conn3.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        conn5.createStatement().executeUpdate("ALTER TABLE " + MDTEST_NAME + " DROP COLUMN col1");
-        conn5.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        Connection conn6 = DriverManager.getConnection(getUrl(), props);
-        rs = conn6.createStatement().executeQuery("SELECT count(1) FROM " + MDTEST_NAME);
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        conn6.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 7));
-        Connection conn7 = DriverManager.getConnection(getUrl(), props);
-        conn7.createStatement().executeUpdate("ALTER TABLE " + MDTEST_NAME + " DROP COLUMN col2");
-        conn7.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
-        Connection conn8 = DriverManager.getConnection(getUrl(), props);
-        rs = conn8.createStatement().executeQuery("SELECT count(1) FROM " + MDTEST_NAME);
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        conn8.close();
-    }
+            rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
 
-    @Test
-    public void testNewerTableDisallowed() throws Exception {
-        long ts = nextTimestamp();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("create table " + ATABLE_NAME + "(k varchar primary key, x_integer INTEGER, y_integer INTEGER)");
-        conn.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        conn5.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN x_integer");
-        try {
-            conn5.createStatement().executeUpdate("ALTER TABLE " + ATABLE_NAME + " DROP COLUMN y_integer");
-            fail();
-        } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 1013 (42M04): Table already exists. tableName=ATABLE"));
+            conn.createStatement().executeUpdate("ALTER TABLE " + tableName + " DROP COLUMN col1");
+
+            rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
+
+            conn.createStatement().executeUpdate("ALTER TABLE " + tableName + " DROP COLUMN col2");
+
+            rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
         }
-        conn5.close();
     }
-    
 
     @Test
     public void testTableWithScemaMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        
-        conn.createStatement().execute("create table foo.bar(k varchar primary key)");
-        conn.createStatement().execute("create table bar(k varchar primary key)");       
-        conn.close();
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(getUrl(), props);
-        
-        DatabaseMetaData metaData = conn.getMetaData();
-        ResultSet rs;
-        
-        // Tricky case that requires returning false for null AND true expression
-        rs = metaData.getTables(null, "FOO", "BAR", null);
-        assertTrue(rs.next());
-        assertEquals("FOO",rs.getString("TABLE_SCHEM"));
-        assertEquals("BAR", rs.getString("TABLE_NAME"));
-        assertFalse(rs.next());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String table1 = generateUniqueName();
+            String schema1 = generateUniqueName();
+            String fullTable1 = schema1 + "." + table1;
+            String table2 = table1;
 
-        // Tricky case that requires end key to maintain trailing nulls
-        rs = metaData.getTables("", "FOO", "BAR", null);
-        assertTrue(rs.next());
-        assertEquals("FOO",rs.getString("TABLE_SCHEM"));
-        assertEquals("BAR", rs.getString("TABLE_NAME"));
-        assertFalse(rs.next());
+            conn.createStatement()
+                    .execute("create table  " + fullTable1 + " (k varchar primary key)");
+            conn.createStatement().execute("create table " + table2 + " (k varchar primary key)");
+            DatabaseMetaData metaData = conn.getMetaData();
+            ResultSet rs;
 
-        rs = metaData.getTables("", null, "BAR", null);
-        assertTrue(rs.next());
-        assertEquals(null,rs.getString("TABLE_SCHEM"));
-        assertEquals("BAR", rs.getString("TABLE_NAME"));
-        assertTrue(rs.next());
-        assertEquals("FOO",rs.getString("TABLE_SCHEM"));
-        assertEquals("BAR", rs.getString("TABLE_NAME"));
-        assertFalse(rs.next());
+            // Tricky case that requires returning false for null AND true expression
+            rs = metaData.getTables(null, schema1, table1, null);
+            assertTrue(rs.next());
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(table1, rs.getString("TABLE_NAME"));
+            assertFalse(rs.next());
+
+            // Tricky case that requires end key to maintain trailing nulls
+            rs = metaData.getTables("", schema1, table1, null);
+            assertTrue(rs.next());
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(table1, rs.getString("TABLE_NAME"));
+            assertFalse(rs.next());
+
+            rs = metaData.getTables("", null, table2, null);
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString("TABLE_SCHEM"));
+            assertEquals(table2, rs.getString("TABLE_NAME"));
+            assertTrue(rs.next());
+            assertEquals(schema1, rs.getString("TABLE_SCHEM"));
+            assertEquals(table1, rs.getString("TABLE_NAME"));
+            assertFalse(rs.next());
+        }
     }
 
     @Test
     public void testRemarkColumn() throws SQLException {
-        long ts = nextTimestamp();
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-
+        Connection conn = DriverManager.getConnection(getUrl());
         // Retrieve the database metadata
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs = dbmd.getColumns(null, null, null, null);
@@ -1288,9 +1075,9 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
         // Iterate through metadata columns to find 'COLUMN_NAME' == 'REMARKS'
         boolean foundRemarksColumn = false;
-        while(rs.next()) {
+        while (rs.next()) {
             String colName = rs.getString("COLUMN_NAME");
-            if(PhoenixDatabaseMetaData.REMARKS.equals(colName)) {
+            if (PhoenixDatabaseMetaData.REMARKS.equals(colName)) {
                 foundRemarksColumn = true;
                 break;
             }
