@@ -58,6 +58,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -65,6 +66,7 @@ import com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class IndexScrutinyToolIT extends BaseTest {
 
     private static final String DATA_TABLE_DDL =

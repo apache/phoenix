@@ -18,9 +18,11 @@
 package org.apache.phoenix.hive;
 
 import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -31,6 +33,7 @@ import static org.junit.Assert.assertTrue;
  * Test methods only. All supporting methods should be placed to BaseHivePhoenixStoreIT
  */
 
+@Category(NeedsOwnMiniClusterTest.class)
 @Ignore("This class contains only test methods and should not be executed directly")
 public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
 

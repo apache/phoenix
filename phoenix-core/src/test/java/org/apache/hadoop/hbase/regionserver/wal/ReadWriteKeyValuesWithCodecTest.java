@@ -39,16 +39,18 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.codec.Codec;
 import org.apache.hadoop.hbase.io.util.LRUDictionary;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Simple test to read/write simple files via our custom {@link WALCellCodec} to ensure properly
  * encoding/decoding without going through a cluster.
  */
-public class ReadWriteKeyValuesWithCodecIT {
+public class ReadWriteKeyValuesWithCodecTest {
 
   private static final HBaseTestingUtility UTIL = new HBaseTestingUtility();
   private static final byte[] ROW = Bytes.toBytes("row");
