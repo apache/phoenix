@@ -25,12 +25,14 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
+import org.junit.experimental.categories.Category;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,6 +46,7 @@ import static org.junit.Assert.fail;
 /**
  * Base class for all Hive Phoenix integration tests that may be run with Tez or MR mini cluster
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class BaseHivePhoenixStoreIT {
 
     private static final Log LOG = LogFactory.getLog(BaseHivePhoenixStoreIT.class);
