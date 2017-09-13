@@ -46,7 +46,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.IndexScrutiny;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
@@ -106,7 +105,6 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
                             scn += 10;
                             PhoenixConnection conn = null;
                             try {
-                                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
                                 conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
                                 conn.setAutoCommit(true);
                                 conn.createStatement().execute("DELETE FROM " + tableName);
@@ -138,7 +136,6 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
                             scn += 10;
                             PhoenixConnection conn = null;
                             try {
-                                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
                                 conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
                                 conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (" + (i % 10) + ", 0, 1)");
                                 if ((i % 20) == 0 || i == nRowsToUpsert-1 ) {

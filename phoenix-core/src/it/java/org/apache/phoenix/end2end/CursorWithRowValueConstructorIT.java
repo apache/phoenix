@@ -35,7 +35,7 @@ import static org.junit.Assert.*;
 
 
 public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
-    private static final String TABLE_NAME = "CursorRVCTestTable";
+    private static final String TABLE_NAME = generateUniqueName();
     protected static final Log LOG = LogFactory.getLog(CursorWithRowValueConstructorIT.class);
 
     public void createAndInitializeTestTable() throws SQLException {
@@ -205,11 +205,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsWithBindings() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        final String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id AND (a_integer, x_integer) = (7, 5)";
+        String query = "SELECT a_integer, x_integer FROM "+ aTable +" WHERE ?=organization_id AND (a_integer, x_integer) = (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -232,11 +232,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsInWhereWithEqualsExpression() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id AND (a_integer, x_integer) = (7, 5)";
+        String query = "SELECT a_integer, x_integer FROM "+aTable+" WHERE '"+tenantId+"'=organization_id AND (a_integer, x_integer) = (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -264,11 +264,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsInWhereWithGreaterThanExpression() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= (4, 4)";
+        String query = "SELECT a_integer, x_integer FROM "+aTable+" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= (4, 4)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -296,11 +296,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsInWhereWithUnEqualNumberArgs() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer, y_integer) >= (7, 5)";
+        String query = "SELECT a_integer, x_integer FROM "+ aTable+" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer, y_integer) >= (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -332,11 +332,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsOnLHSAndLiteralExpressionOnRHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= 7";
+        String query = "SELECT a_integer, x_integer FROM "+ aTable +" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= 7";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -363,11 +363,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsOnRHSLiteralExpressionOnLHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND 7 <= (a_integer, x_integer)";
+        String query = "SELECT a_integer, x_integer FROM "+ aTable+" WHERE '"+tenantId+"'=organization_id  AND 7 <= (a_integer, x_integer)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -394,11 +394,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsOnBuiltInFunctionOperatingOnIntegerLiteral() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= to_number('7')";
+        String query = "SELECT a_integer, x_integer FROM "+aTable+" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= to_number('7')";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String cursor = "DECLARE testCursor CURSOR FOR "+query;
         try {
@@ -444,7 +444,6 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
         initEntityHistoryTableValues(tenantId, getDefaultSplits(tenantId), date, ts);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
 
@@ -505,16 +504,16 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsWithNonLeadingPkColsOfTypesTimeStampAndVarchar() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
         String updateStmt =
-                "upsert into " +
-                        "ATABLE(" +
+                "upsert into " + aTable+
+                        "(" +
                         "    ORGANIZATION_ID, " +
                         "    ENTITY_ID, " +
                         "    A_TIMESTAMP) " +
                         "VALUES (?, ?, ?)";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true);
@@ -525,12 +524,11 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         stmt.setTimestamp(3, tsValue);
         stmt.execute();
 
-        String query = "SELECT a_timestamp, a_string FROM aTable WHERE ?=organization_id  AND (a_timestamp, a_string) = (?, 'a')";
+        String query = "SELECT a_timestamp, a_string FROM "+aTable+" WHERE ?=organization_id  AND (a_timestamp, a_string) = (?, 'a')";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_TIMESTAMP_FORMAT).format(tsValue)+"')");
 
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String cursor = "DECLARE testCursor CURSOR FOR "+query;
@@ -559,12 +557,12 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsQueryMoreWithInListClausePossibleNullValues() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
         String updateStmt =
-                "upsert into " +
-                        "ATABLE(ORGANIZATION_ID, ENTITY_ID, Y_INTEGER, X_INTEGER) VALUES (?, ?, ?, ?)";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
+                "upsert into " +aTable+
+                        "(ORGANIZATION_ID, ENTITY_ID, Y_INTEGER, X_INTEGER) VALUES (?, ?, ?, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true);
@@ -576,11 +574,10 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         stmt.execute();
 
         //we have a row present in aTable where x_integer = 5 and y_integer = NULL which gets translated to 0 when retriving from HBase.
-        String query = "SELECT x_integer, y_integer FROM aTable WHERE ? = organization_id AND (x_integer) IN ((5))";
+        String query = "SELECT x_integer, y_integer FROM "+ aTable+" WHERE ? = organization_id AND (x_integer) IN ((5))";
 
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         try {
@@ -609,17 +606,17 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsWithColsOfTypesDecimal() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
-        String query = "SELECT x_decimal FROM aTable WHERE ?=organization_id AND entity_id IN (?,?,?)";
+        String query = "SELECT x_decimal FROM "+ aTable+" WHERE ?=organization_id AND entity_id IN (?,?,?)";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+ROW7+"'");
         query = query.replaceFirst("\\?", "'"+ROW8+"'");
         query = query.replaceFirst("\\?", "'"+ROW9+"'");
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String cursor = "DECLARE testCursor CURSOR FOR "+query;
@@ -648,16 +645,16 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     public void testCursorsWithColsOfTypesTinyintSmallintFloatDouble() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_byte,a_short,a_float,a_double FROM aTable WHERE ?=organization_id AND entity_id IN (?,?,?)";
+        String query = "SELECT a_byte,a_short,a_float,a_double FROM "+ aTable+" WHERE ?=organization_id AND entity_id IN (?,?,?)";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+ROW1+"'");
         query = query.replaceFirst("\\?", "'"+ROW2+"'");
         query = query.replaceFirst("\\?", "'"+ROW3+"'");
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String cursor = "DECLARE testCursor CURSOR FOR "+query;
