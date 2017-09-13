@@ -899,23 +899,23 @@ runTests () {
     {color:green}+1 core tests{color}.  The patch passed unit tests in $modules."
     BAD=0
   fi
-  ZOMBIE_TESTS_COUNT=`jps | grep surefirebooter | wc -l`
+  ZOMBIE_TESTS_COUNT=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | wc -l`
   if [[ $ZOMBIE_TESTS_COUNT != 0 ]] ; then
     #It seems sometimes the tests are not dying immediately. Let's give them 30s
     echo "Suspicious java process found - waiting 30s to see if there are just slow to stop"
     sleep 30
-    ZOMBIE_TESTS_COUNT=`jps | grep surefirebooter | wc -l`
+    ZOMBIE_TESTS_COUNT=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | wc -l`
     if [[ $ZOMBIE_TESTS_COUNT != 0 ]] ; then
       echo "There are $ZOMBIE_TESTS_COUNT zombie tests, they should have been killed by surefire but survived"
       echo "************ BEGIN zombies jstack extract"
-      ZB_STACK=`jps | grep surefirebooter | cut -d ' ' -f 1 | xargs -n 1 jstack | grep ".test" | grep "\.java"`
-      jps | grep surefirebooter | cut -d ' ' -f 1 | xargs -n 1 jstack
+      ZB_STACK=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | cut -d ' ' -f 1 | xargs -n 1 jstack | grep ".test" | grep "\.java"`
+      jps -m | grep surefirebooter | grep "phoenix-.*/target" | cut -d ' ' -f 1 | xargs -n 1 jstack
       echo "************ END  zombies jstack extract"
       JIRA_COMMENT="$JIRA_COMMENT
 
      {color:red}-1 core zombie tests{color}.  There are ${ZOMBIE_TESTS_COUNT} zombie test(s): ${ZB_STACK}"
       BAD=1
-      jps | grep surefirebooter | cut -d ' ' -f 1 | xargs kill -9
+      jps -m | grep surefirebooter | grep "phoenix-.*/target" | cut -d ' ' -f 1 | xargs kill -9
     else
       echo "We're ok: there is no zombie test, but some tests took some time to stop"
     fi
