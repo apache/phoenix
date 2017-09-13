@@ -47,7 +47,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -616,27 +615,22 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       ResultSet rs;
       String tName = generateUniqueName();
 
-      long ts = nextTimestamp();
       Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
       conn = DriverManager.getConnection(getUrl(), props);
       conn.createStatement()
               .execute(
                       "create table " + tName + " (ts timestamp primary key)");
       conn.close();
 
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
       conn = DriverManager.getConnection(getUrl(), props);
       stmt = conn.prepareStatement("upsert into " + tName + " values (?)");
       stmt.setTimestamp(1, new Timestamp(1995 - 1900, 4, 2, 1, 1, 1, 1));
       stmt.execute();
       conn.commit();
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts FROM " + tName + "");
       assertTrue(rs.next());
       assertEquals("1995-05-02 01:01:01.000000001",rs.getTimestamp(1).toString());
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts + 1 FROM " + tName + "");
       assertTrue(rs.next());
@@ -649,27 +643,22 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       PreparedStatement stmt;
       ResultSet rs;
       String tName = generateUniqueName();
-      long ts = nextTimestamp();
       Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
       conn = DriverManager.getConnection(getUrl(), props);
       conn.createStatement()
               .execute(
                       "create table " + tName + " (ts timestamp primary key)");
       conn.close();
 
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
       conn = DriverManager.getConnection(getUrl(), props);
       stmt = conn.prepareStatement("upsert into " + tName + " values (?)");
       stmt.setTimestamp(1, new Timestamp(1995 - 1900, 4, 2, 1, 1, 1, 1));
       stmt.execute();
       conn.commit();
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts FROM " + tName);
       assertTrue(rs.next());
       assertEquals("1995-05-02 01:01:01.000000001",rs.getTimestamp(1).toString());
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM " + tName);
       assertTrue(rs.next());
@@ -683,28 +672,23 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       ResultSet rs;
       String tName = generateUniqueName();
 
-      long ts = nextTimestamp();
       Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
       conn = DriverManager.getConnection(getUrl(), props);
       conn.createStatement()
               .execute(
                       "create table " + tName + " (ts time primary key)");
       conn.close();
 
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
       conn = DriverManager.getConnection(getUrl(), props);
       stmt = conn.prepareStatement("upsert into " + tName + " values (?)");
       Time time = new Time(1995 - 1900, 4, 2);
       stmt.setTime(1, time);
       stmt.execute();
       conn.commit();
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts FROM " + tName);
       assertTrue(rs.next());
       assertEquals(time.getTime(),rs.getTimestamp(1).getTime());
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts + 1 FROM " + tName);
       assertTrue(rs.next());
@@ -717,28 +701,23 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       PreparedStatement stmt;
       ResultSet rs;
       String tName = generateUniqueName();
-      long ts = nextTimestamp();
       Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
       conn = DriverManager.getConnection(getUrl(), props);
       conn.createStatement()
               .execute(
                       "create table " + tName + " (ts time primary key)");
       conn.close();
 
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
       conn = DriverManager.getConnection(getUrl(), props);
       stmt = conn.prepareStatement("upsert into " + tName + " values (?)");
       Time time = new Time(1995 - 1900, 4, 2);
       stmt.setTime(1, time);
       stmt.execute();
       conn.commit();
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts FROM " + tName + "");
       assertTrue(rs.next());
       assertEquals(time.getTime(),rs.getTimestamp(1).getTime());
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM " + tName);
       assertTrue(rs.next());
@@ -752,27 +731,22 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       ResultSet rs;
       String tName = generateUniqueName();
 
-      long ts = nextTimestamp();
       Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
       conn = DriverManager.getConnection(getUrl(), props);
       conn.createStatement()
               .execute(
                       "create table " + tName + " (ts date primary key)");
       conn.close();
 
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
       conn = DriverManager.getConnection(getUrl(), props);
       stmt = conn.prepareStatement("upsert into " + tName + " values (?)");
       stmt.setDate(1, new Date(1995 - 1900, 4, 2));
       stmt.execute();
       conn.commit();
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts FROM " + tName);
       assertTrue(rs.next());
       assertEquals("1995-05-02",rs.getDate(1).toString());
-      props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM " + tName);
       assertTrue(rs.next());
