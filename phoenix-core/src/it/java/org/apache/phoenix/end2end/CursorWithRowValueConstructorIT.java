@@ -17,42 +17,56 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.util.*;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID3;
+import static org.apache.phoenix.util.TestUtil.ENTITYHISTID7;
+import static org.apache.phoenix.util.TestUtil.PARENTID3;
+import static org.apache.phoenix.util.TestUtil.PARENTID7;
+import static org.apache.phoenix.util.TestUtil.ROW1;
+import static org.apache.phoenix.util.TestUtil.ROW2;
+import static org.apache.phoenix.util.TestUtil.ROW3;
+import static org.apache.phoenix.util.TestUtil.ROW4;
+import static org.apache.phoenix.util.TestUtil.ROW7;
+import static org.apache.phoenix.util.TestUtil.ROW8;
+import static org.apache.phoenix.util.TestUtil.ROW9;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Properties;
 import java.util.Random;
 
-import static org.apache.phoenix.util.TestUtil.*;
-import static org.junit.Assert.*;
+import org.apache.phoenix.util.CursorUtil;
+import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Test;
 
 
 public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
-    private static final String TABLE_NAME = "CursorRVCTestTable";
-    protected static final Log LOG = LogFactory.getLog(CursorWithRowValueConstructorIT.class);
+    private String tableName = generateUniqueName();
 
     public void createAndInitializeTestTable() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-
-        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + TABLE_NAME +
+        tableName = generateUniqueName();
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE " + tableName +
                 "(a_id INTEGER NOT NULL, " +
                 "a_data INTEGER, " +
                 "CONSTRAINT my_pk PRIMARY KEY (a_id))");
         stmt.execute();
-        synchronized (conn){
-            conn.commit();
-        }
+        conn.commit();
 
         //Upsert test values into the test table
         Random rand = new Random();
-        stmt = conn.prepareStatement("UPSERT INTO " + TABLE_NAME +
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName +
                 "(a_id, a_data) VALUES (?,?)");
         int rowCount = 0;
         while(rowCount < 100){
@@ -61,363 +75,340 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
             stmt.execute();
             ++rowCount;
         }
-        synchronized (conn){
-            conn.commit();
-        }
-    }
-
-    public void deleteTestTable() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement("DROP TABLE IF EXISTS " + TABLE_NAME);
-        stmt.execute();
-        synchronized (conn){
-            conn.commit();
-        }
+        conn.commit();
+        conn.close();
     }
 
     @Test
     public void testCursorsOnTestTablePK() throws SQLException {
-        try{
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             createAndInitializeTestTable();
-            String querySQL = "SELECT a_id FROM " + TABLE_NAME;
+            String querySQL = "SELECT a_id FROM " + tableName;
 
             //Test actual cursor implementation
-            String cursorSQL = "DECLARE testCursor CURSOR FOR " + querySQL;
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "OPEN testCursor";
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "FETCH NEXT FROM testCursor";
-            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+            String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR " + querySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN " + cursorName;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "FETCH NEXT FROM " + cursorName;
+            ResultSet rs = conn.prepareStatement(cursorSQL).executeQuery();
             int rowID = 0;
             while(rs.next()){
                 assertEquals(rowID,rs.getInt(1));
                 ++rowID;
-                rs = DriverManager.getConnection(getUrl()).createStatement().executeQuery(cursorSQL);
+                rs = conn.createStatement().executeQuery(cursorSQL);
             }
-        } finally{
-            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
-            deleteTestTable();
+            conn.prepareStatement("CLOSE " + cursorName).execute();
         }
 
     }
 
     @Test
     public void testCursorsOnRandomTableData() throws SQLException {
-        try{
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             createAndInitializeTestTable();
-            String querySQL = "SELECT a_id,a_data FROM " + TABLE_NAME + " ORDER BY a_data";
-            String cursorSQL = "DECLARE testCursor CURSOR FOR " + querySQL;
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "OPEN testCursor";
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "FETCH NEXT FROM testCursor";
-            ResultSet cursorRS = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
-            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(querySQL).executeQuery();
+            String querySQL = "SELECT a_id,a_data FROM " + tableName + " ORDER BY a_data";
+            String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR " + querySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN " + cursorName;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "FETCH NEXT FROM " + cursorName;
+            ResultSet cursorRS = conn.prepareStatement(cursorSQL).executeQuery();
+            ResultSet rs = conn.prepareStatement(querySQL).executeQuery();
             int rowCount = 0;
             while(rs.next() && cursorRS.next()){
                 assertEquals(rs.getInt(2),cursorRS.getInt(2));
                 ++rowCount;
-                cursorRS = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+                cursorRS = conn.prepareStatement(cursorSQL).executeQuery();
             }
             assertEquals(100, rowCount);
-        } finally{
-            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
-            deleteTestTable();
+            conn.prepareStatement("CLOSE " + cursorName).execute();
         }
     }
 
     @Test
     public void testCursorsOnTestTablePKDesc() throws SQLException {
-        try{
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             createAndInitializeTestTable();
-            String dummySQL = "SELECT a_id FROM " + TABLE_NAME + " ORDER BY a_id DESC";
+            String dummySQL = "SELECT a_id FROM " + tableName + " ORDER BY a_id DESC";
 
-            String cursorSQL = "DECLARE testCursor CURSOR FOR " + dummySQL;
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "OPEN testCursor";
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "FETCH NEXT FROM testCursor";
-            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+            String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR " + dummySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN " + cursorName;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "FETCH NEXT FROM " + cursorName;
+            ResultSet rs = conn.prepareStatement(cursorSQL).executeQuery();
             int rowCount = 0;
             while(rs.next()){
                 assertEquals(99-rowCount, rs.getInt(1));
-                rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+                rs = conn.prepareStatement(cursorSQL).executeQuery();
                 ++rowCount;
             }
             assertEquals(100, rowCount);
-        } finally{
-            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
-            deleteTestTable();
+            conn.prepareStatement("CLOSE " + cursorName).execute();
         }
     }
 
     @Test
     public void testCursorsOnTestTableNonPKDesc() throws SQLException {
-        try{
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             createAndInitializeTestTable();
-            String dummySQL = "SELECT a_data FROM " + TABLE_NAME + " ORDER BY a_data DESC";
+            String dummySQL = "SELECT a_data FROM " + tableName + " ORDER BY a_data DESC";
 
-            String cursorSQL = "DECLARE testCursor CURSOR FOR " + dummySQL;
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "OPEN testCursor";
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "FETCH NEXT FROM testCursor";
-            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+            String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR " + dummySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN " + cursorName;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "FETCH NEXT FROM " + cursorName;
+            ResultSet rs = conn.prepareStatement(cursorSQL).executeQuery();
             int rowCount = 0;
             while(rs.next()){
-                rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+                rs = conn.prepareStatement(cursorSQL).executeQuery();
                 ++rowCount;
             }
             assertEquals(100, rowCount);
-        } finally{
-            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
-            deleteTestTable();
+            conn.prepareStatement("CLOSE " + cursorName).execute();
         }
     }
 
     @Test
     public void testCursorsOnWildcardSelect() throws SQLException {
-        try{
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             createAndInitializeTestTable();
-            String querySQL = "SELECT * FROM " + TABLE_NAME;
-            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(querySQL).executeQuery();
+            String querySQL = "SELECT * FROM " + tableName;
+            ResultSet rs = conn.prepareStatement(querySQL).executeQuery();
 
-            String cursorSQL = "DECLARE testCursor CURSOR FOR "+querySQL;
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "OPEN testCursor";
-            DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).execute();
-            cursorSQL = "FETCH NEXT FROM testCursor";
-            ResultSet cursorRS = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+            String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR "+querySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN " + cursorName;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "FETCH NEXT FROM " + cursorName;
+            ResultSet cursorRS = conn.prepareStatement(cursorSQL).executeQuery();
             int rowCount = 0;
             while(rs.next() && cursorRS.next()){
                 assertEquals(rs.getInt(1),cursorRS.getInt(1));
                 ++rowCount;
-                cursorRS = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+                cursorRS = conn.prepareStatement(cursorSQL).executeQuery();
             }
             assertEquals(100, rowCount);
-        } finally{
-            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
-            deleteTestTable();
+            conn.prepareStatement("CLOSE " + cursorName).execute();
         }
     }
 
     @Test
     public void testCursorsWithBindings() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id AND (a_integer, x_integer) = (7, 5)";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            PreparedStatement statement = conn.prepareStatement(cursor);
-            statement.setString(1, tenantId);
-            statement.execute();
-        }catch(SQLException e){
-            assertTrue(e.getMessage().equalsIgnoreCase("Cannot declare cursor, internal SELECT statement contains bindings!"));
-            assertTrue(!CursorUtil.cursorDeclared("testCursor"));
-            return;
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
+        String cursorName = generateUniqueName();
+        final String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+ aTable +" WHERE ?=organization_id AND (a_integer, x_integer) = (7, 5)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                PreparedStatement statement = conn.prepareStatement(cursor);
+                statement.setString(1, tenantId);
+                statement.execute();
+            }catch(SQLException e){
+                assertTrue(e.getMessage().equalsIgnoreCase("Cannot declare cursor, internal SELECT statement contains bindings!"));
+                assertFalse(CursorUtil.cursorDeclared(cursorName));
+                return;
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
+            }
+            fail();
         }
-        fail();
     }
 
     @Test
     public void testCursorsInWhereWithEqualsExpression() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id AND (a_integer, x_integer) = (7, 5)";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+aTable+" WHERE '"+tenantId+"'=organization_id AND (a_integer, x_integer) = (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
-            conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
-            ResultSet rs = conn.prepareStatement(cursor).executeQuery();
-            int count = 0;
-            while(rs.next()) {
-                assertTrue(rs.getInt(1) == 7);
-                assertTrue(rs.getInt(2) == 5);
-                count++;
-                rs = conn.prepareStatement(cursor).executeQuery();
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                conn.prepareStatement(cursor).execute();
+                cursor = "OPEN " + cursorName;
+                conn.prepareStatement(cursor).execute();
+                cursor = "FETCH NEXT FROM " + cursorName;
+                ResultSet rs = conn.prepareStatement(cursor).executeQuery();
+                int count = 0;
+                while(rs.next()) {
+                    assertTrue(rs.getInt(1) == 7);
+                    assertTrue(rs.getInt(2) == 5);
+                    count++;
+                    rs = conn.prepareStatement(cursor).executeQuery();
+                }
+                assertTrue(count == 1);
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
             }
-            assertTrue(count == 1);
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
         }
     }
 
     @Test
     public void testCursorsInWhereWithGreaterThanExpression() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= (4, 4)";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+aTable+" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= (4, 4)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
-            conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
-            ResultSet rs = conn.prepareStatement(cursor).executeQuery();
-            int count = 0;
-            while(rs.next()) {
-                assertTrue(rs.getInt(1) >= 4);
-                assertTrue(rs.getInt(1) == 4 ? rs.getInt(2) >= 4 : rs.getInt(2) >= 0);
-                count++;
-                rs = conn.prepareStatement(cursor).executeQuery();
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                conn.prepareStatement(cursor).execute();
+                cursor = "OPEN " + cursorName;
+                conn.prepareStatement(cursor).execute();
+                cursor = "FETCH NEXT FROM " + cursorName;
+                ResultSet rs = conn.prepareStatement(cursor).executeQuery();
+                int count = 0;
+                while(rs.next()) {
+                    assertTrue(rs.getInt(1) >= 4);
+                    assertTrue(rs.getInt(1) == 4 ? rs.getInt(2) >= 4 : rs.getInt(2) >= 0);
+                    count++;
+                    rs = conn.prepareStatement(cursor).executeQuery();
+                }
+                assertTrue(count == 5);
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
             }
-            assertTrue(count == 5);
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
         }
     }
 
     @Test
     public void testCursorsInWhereWithUnEqualNumberArgs() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer, y_integer) >= (7, 5)";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+ aTable+" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer, y_integer) >= (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            double startTime = System.nanoTime();
-            conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
-            conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
-            ResultSet rs = conn.prepareStatement(cursor).executeQuery();
-            int count = 0;
-            while(rs.next()) {
-                assertTrue(rs.getInt(1) >= 7);
-                assertTrue(rs.getInt(1) == 7 ? rs.getInt(2) >= 5 : rs.getInt(2) >= 0);
-                count++;
-                rs = conn.prepareStatement(cursor).executeQuery();
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                double startTime = System.nanoTime();
+                conn.prepareStatement(cursor).execute();
+                cursor = "OPEN " + cursorName;
+                conn.prepareStatement(cursor).execute();
+                cursor = "FETCH NEXT FROM " + cursorName;
+                ResultSet rs = conn.prepareStatement(cursor).executeQuery();
+                int count = 0;
+                while(rs.next()) {
+                    assertTrue(rs.getInt(1) >= 7);
+                    assertTrue(rs.getInt(1) == 7 ? rs.getInt(2) >= 5 : rs.getInt(2) >= 0);
+                    count++;
+                    rs = conn.prepareStatement(cursor).executeQuery();
+                }
+                // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
+                assertTrue(count == 3);
+                double endTime = System.nanoTime();
+                System.out.println("Method Time in milliseconds: "+Double.toString((endTime-startTime)/1000000));
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
             }
-            // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
-            assertTrue(count == 3);
-            double endTime = System.nanoTime();
-            System.out.println("Method Time in milliseconds: "+Double.toString((endTime-startTime)/1000000));
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
         }
     }
 
     @Test
     public void testCursorsOnLHSAndLiteralExpressionOnRHS() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= 7";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+ aTable +" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= 7";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
-            conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
-            ResultSet rs = conn.prepareStatement(cursor).executeQuery();
-            int count = 0;
-            while(rs.next()) {
-                count++;
-                rs = conn.prepareStatement(cursor).executeQuery();
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                conn.prepareStatement(cursor).execute();
+                cursor = "OPEN " + cursorName;
+                conn.prepareStatement(cursor).execute();
+                cursor = "FETCH NEXT FROM " + cursorName;
+                ResultSet rs = conn.prepareStatement(cursor).executeQuery();
+                int count = 0;
+                while(rs.next()) {
+                    count++;
+                    rs = conn.prepareStatement(cursor).executeQuery();
+                }
+                // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
+                assertTrue(count == 3);
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
             }
-            // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
-            assertTrue(count == 3);
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
         }
     }
 
     @Test
     public void testCursorsOnRHSLiteralExpressionOnLHS() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND 7 <= (a_integer, x_integer)";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+ aTable+" WHERE '"+tenantId+"'=organization_id  AND 7 <= (a_integer, x_integer)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
-            conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
-            ResultSet rs = conn.prepareStatement(cursor).executeQuery();
-            int count = 0;
-            while(rs.next()) {
-                count++;
-                rs = conn.prepareStatement(cursor).executeQuery();
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                conn.prepareStatement(cursor).execute();
+                cursor = "OPEN " + cursorName;
+                conn.prepareStatement(cursor).execute();
+                cursor = "FETCH NEXT FROM " + cursorName;
+                ResultSet rs = conn.prepareStatement(cursor).executeQuery();
+                int count = 0;
+                while(rs.next()) {
+                    count++;
+                    rs = conn.prepareStatement(cursor).executeQuery();
+                }
+                // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
+                assertTrue(count == 3);
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
             }
-            // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
-            assertTrue(count == 3);
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
         }
     }
 
     @Test
     public void testCursorsOnBuiltInFunctionOperatingOnIntegerLiteral() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_integer, x_integer FROM aTable WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= to_number('7')";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_integer, x_integer FROM "+aTable+" WHERE '"+tenantId+"'=organization_id  AND (a_integer, x_integer) >= to_number('7')";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
-        try {
-            conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
-            conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
-            ResultSet rs = conn.prepareStatement(cursor).executeQuery();
-            int count = 0;
-            while(rs.next()) {
-                count++;
-                rs = conn.prepareStatement(cursor).executeQuery();
+        String cursorName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
+            try {
+                conn.prepareStatement(cursor).execute();
+                cursor = "OPEN " + cursorName;
+                conn.prepareStatement(cursor).execute();
+                cursor = "FETCH NEXT FROM " + cursorName;
+                ResultSet rs = conn.prepareStatement(cursor).executeQuery();
+                int count = 0;
+                while(rs.next()) {
+                    count++;
+                    rs = conn.prepareStatement(cursor).executeQuery();
+                }
+                // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
+                assertEquals(3, count);
+            } finally {
+                cursor = "CLOSE " + cursorName;
+                conn.prepareStatement(cursor).execute();
             }
-            // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
-            assertEquals(3, count);
-        } finally {
-            cursor = "CLOSE testCursor";
-            conn.prepareStatement(cursor).execute();
-            conn.close();
         }
     }
 
@@ -426,7 +417,6 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
      * Test for the precision of Date datatype when used as part of a filter within the internal Select statement.
      */
     public void testCursorsWithDateDatatypeFilter() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         long currentTime = System.currentTimeMillis();
         java.sql.Date date = new java.sql.Date(currentTime);
@@ -442,13 +432,12 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         java.sql.Date midnight = new Date(currentTime+1);
 
 
-        initEntityHistoryTableValues(tenantId, getDefaultSplits(tenantId), date, ts);
+        String tableName = initEntityHistoryTableValues(null, tenantId, getDefaultSplits(tenantId), date, null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
 
-        String query = "select parent_id from " + ENTITY_HISTORY_TABLE_NAME +
+        String query = "select parent_id from " + tableName +
                 " WHERE (organization_id, parent_id, created_date, entity_history_id) IN ((?,?,?,?),(?,?,?,?))";
 
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
@@ -459,12 +448,13 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         query = query.replaceFirst("\\?", "'"+PARENTID7+"'");
         query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(date)+"')");
         query = query.replaceFirst("\\?", "'"+ENTITYHISTID7+"'");
-        String cursor = "DECLARE testCursor CURSOR FOR "+query;
+        String cursorName = generateUniqueName();
+        String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
 
         conn.prepareStatement(cursor).execute();
-        cursor = "OPEN testCursor";
+        cursor = "OPEN " + cursorName;
         conn.prepareStatement(cursor).execute();
-        cursor = "FETCH NEXT FROM testCursor";
+        cursor = "FETCH NEXT FROM " + cursorName;
 
         ResultSet rs = conn.prepareStatement(cursor).executeQuery();
         assertTrue(rs.next());
@@ -476,7 +466,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
         //Test against the same table for the same records, but this time use the 'midnight' java.sql.Date instance.
         //'midnight' is identical to 'date' to the tens of millisecond precision.
-        query = "select parent_id from " + ENTITY_HISTORY_TABLE_NAME +
+        query = "select parent_id from " + tableName +
                 " WHERE (organization_id, parent_id, created_date, entity_history_id) IN ((?,?,?,?),(?,?,?,?))";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+PARENTID3+"'");
@@ -486,35 +476,35 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         query = query.replaceFirst("\\?", "'"+PARENTID7+"'");
         query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(midnight)+"')");
         query = query.replaceFirst("\\?", "'"+ENTITYHISTID7+"'");
-        cursor = "DECLARE testCursor2 CURSOR FOR "+query;
+        String cursorName2 = generateUniqueName();
+        cursor = "DECLARE " + cursorName2 + " CURSOR FOR "+query;
 
         conn.prepareStatement(cursor).execute();
-        cursor = "OPEN testCursor2";
+        cursor = "OPEN " + cursorName2;
         conn.prepareStatement(cursor).execute();
-        cursor = "FETCH NEXT FROM testCursor2";
+        cursor = "FETCH NEXT FROM " + cursorName2;
 
         rs = conn.prepareStatement(cursor).executeQuery();
         assertTrue(!rs.next());
-        String sql = "CLOSE testCursor";
+        String sql = "CLOSE " + cursorName;
         conn.prepareStatement(sql).execute();
-        sql = "CLOSE testCursor2";
+        sql = "CLOSE " + cursorName2;
         conn.prepareStatement(sql).execute();
     }
 
     @Test
     public void testCursorsWithNonLeadingPkColsOfTypesTimeStampAndVarchar() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        String cursorName = generateUniqueName();
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         String updateStmt =
-                "upsert into " +
-                        "ATABLE(" +
+                "upsert into " + aTable+
+                        "(" +
                         "    ORGANIZATION_ID, " +
                         "    ENTITY_ID, " +
                         "    A_TIMESTAMP) " +
                         "VALUES (?, ?, ?)";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true);
@@ -525,19 +515,18 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         stmt.setTimestamp(3, tsValue);
         stmt.execute();
 
-        String query = "SELECT a_timestamp, a_string FROM aTable WHERE ?=organization_id  AND (a_timestamp, a_string) = (?, 'a')";
+        String query = "SELECT a_timestamp, a_string FROM "+aTable+" WHERE ?=organization_id  AND (a_timestamp, a_string) = (?, 'a')";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_TIMESTAMP_FORMAT).format(tsValue)+"')");
 
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String cursor = "DECLARE testCursor CURSOR FOR "+query;
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
             conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
+            cursor = "OPEN " + cursorName;
             conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
+            cursor = "FETCH NEXT FROM " + cursorName;
 
             ResultSet rs = conn.prepareStatement(cursor).executeQuery();
             int count = 0;
@@ -549,7 +538,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
             }
             assertTrue(count == 1);
         } finally {
-            String sql = "CLOSE testCursor";
+            String sql = "CLOSE " + cursorName;
             conn.prepareStatement(sql).execute();
             conn.close();
         }
@@ -557,14 +546,13 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCursorsQueryMoreWithInListClausePossibleNullValues() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        String cursorName = generateUniqueName();
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         String updateStmt =
-                "upsert into " +
-                        "ATABLE(ORGANIZATION_ID, ENTITY_ID, Y_INTEGER, X_INTEGER) VALUES (?, ?, ?, ?)";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
+                "upsert into " +aTable+
+                        "(ORGANIZATION_ID, ENTITY_ID, Y_INTEGER, X_INTEGER) VALUES (?, ?, ?, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true);
@@ -576,19 +564,18 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         stmt.execute();
 
         //we have a row present in aTable where x_integer = 5 and y_integer = NULL which gets translated to 0 when retriving from HBase.
-        String query = "SELECT x_integer, y_integer FROM aTable WHERE ? = organization_id AND (x_integer) IN ((5))";
+        String query = "SELECT x_integer, y_integer FROM "+ aTable+" WHERE ? = organization_id AND (x_integer) IN ((5))";
 
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         try {
-            String cursor = "DECLARE testCursor CURSOR FOR "+query;
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
             conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
+            cursor = "OPEN " + cursorName;
             conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
+            cursor = "FETCH NEXT FROM " + cursorName;
 
             ResultSet rs = conn.prepareStatement(cursor).executeQuery();
             assertTrue(rs.next());
@@ -599,7 +586,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
             assertEquals(5, rs.getInt(1));
             assertEquals(0, rs.getInt(2));
         } finally {
-            String sql = "CLOSE testCursor";
+            String sql = "CLOSE " + cursorName;
             conn.prepareStatement(sql).execute();
             conn.close();
         }
@@ -607,26 +594,25 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCursorsWithColsOfTypesDecimal() throws Exception {
-        long ts = nextTimestamp();
+        String cursorName = generateUniqueName();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
-        String query = "SELECT x_decimal FROM aTable WHERE ?=organization_id AND entity_id IN (?,?,?)";
+        String query = "SELECT x_decimal FROM "+ aTable+" WHERE ?=organization_id AND entity_id IN (?,?,?)";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+ROW7+"'");
         query = query.replaceFirst("\\?", "'"+ROW8+"'");
         query = query.replaceFirst("\\?", "'"+ROW9+"'");
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String cursor = "DECLARE testCursor CURSOR FOR "+query;
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
             conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
+            cursor = "OPEN " + cursorName;
             conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
+            cursor = "FETCH NEXT FROM " + cursorName;
 
             ResultSet rs = conn.prepareStatement(cursor).executeQuery();
             int count = 0;
@@ -638,7 +624,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
             }
             assertTrue(count == 3);
         } finally {
-            String sql = "CLOSE testCursor";
+            String sql = "CLOSE " + cursorName;
             conn.prepareStatement(sql).execute();
             conn.close();
         }
@@ -646,25 +632,24 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCursorsWithColsOfTypesTinyintSmallintFloatDouble() throws Exception {
-        long ts = nextTimestamp();
+        String cursorName = generateUniqueName();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
-        String query = "SELECT a_byte,a_short,a_float,a_double FROM aTable WHERE ?=organization_id AND entity_id IN (?,?,?)";
+        String aTable = initATableValues(null, tenantId,
+            getDefaultSplits(tenantId), null, null, getUrl(), null);
+        String query = "SELECT a_byte,a_short,a_float,a_double FROM "+ aTable+" WHERE ?=organization_id AND entity_id IN (?,?,?)";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+ROW1+"'");
         query = query.replaceFirst("\\?", "'"+ROW2+"'");
         query = query.replaceFirst("\\?", "'"+ROW3+"'");
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String cursor = "DECLARE testCursor CURSOR FOR "+query;
+            String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
             conn.prepareStatement(cursor).execute();
-            cursor = "OPEN testCursor";
+            cursor = "OPEN " + cursorName;
             conn.prepareStatement(cursor).execute();
-            cursor = "FETCH NEXT FROM testCursor";
+            cursor = "FETCH NEXT FROM " + cursorName;
 
             ResultSet rs = conn.prepareStatement(cursor).executeQuery();
             int count = 0;
@@ -679,7 +664,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
             }
             assertTrue(count == 3);
         } finally {
-            String sql = "CLOSE testCursor";
+            String sql = "CLOSE " + cursorName;
             conn.prepareStatement(sql).execute();
             conn.close();
         }

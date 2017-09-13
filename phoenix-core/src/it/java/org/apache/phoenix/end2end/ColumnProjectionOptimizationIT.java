@@ -52,7 +52,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
@@ -62,12 +61,10 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelect() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId));
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         // Table wildcard query
@@ -229,9 +226,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         }
         admin.createTable(descriptor);
 
-        long ts = nextTimestamp();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
 
         String createStmt = "create view " + table + " (id integer not null primary key,"
@@ -239,7 +234,6 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute(createStmt);
         conn1.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
         PhoenixConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         byte[] c1 = Bytes.toBytes("COL1");
         byte[] c2 = Bytes.toBytes("COL2");
@@ -248,24 +242,23 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         try {
             htable = conn2.getQueryServices().getTable(htableName);
             Put put = new Put(PInteger.INSTANCE.toBytes(1));
-            put.add(cfB, c1, ts + 6, PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(2));
+            put.add(cfB, c1, PInteger.INSTANCE.toBytes(1));
+            put.add(cfC, c2, PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
             put = new Put(PInteger.INSTANCE.toBytes(2));
-            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(10));
-            put.add(cfC, c3, ts + 6, PVarchar.INSTANCE.toBytes("abcd"));
+            put.add(cfC, c2, PLong.INSTANCE.toBytes(10));
+            put.add(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             put = new Put(PInteger.INSTANCE.toBytes(3));
-            put.add(cfB, c1, ts + 6, PInteger.INSTANCE.toBytes(3));
-            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(10));
-            put.add(cfC, c3, ts + 6, PVarchar.INSTANCE.toBytes("abcd"));
+            put.add(cfB, c1, PInteger.INSTANCE.toBytes(3));
+            put.add(cfC, c2, PLong.INSTANCE.toBytes(10));
+            put.add(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             conn2.close();
 
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
             Connection conn7 = DriverManager.getConnection(getUrl(), props);
             String select = "SELECT id, b.col1 FROM " + table + " WHERE c.col2=?";
             PreparedStatement ps = conn7.prepareStatement(select);
@@ -312,11 +305,10 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
     }
 
     
-    private static String initMultiCFTable(long ts) throws Exception {
+    private static String initMultiCFTable() throws Exception {
         String url = getUrl();
         String tableName = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         String ddl = "create table " + tableName +
                 "   (id char(15) not null primary key,\n" +
                 "    a.unique_user_count integer,\n" +
@@ -330,7 +322,6 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
         }
         props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement stmt = conn.prepareStatement(
@@ -361,11 +352,9 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectWithConditionOnMultiCF() throws Exception {
-        long ts = nextTimestamp();
-        String tableName = initMultiCFTable(ts);
+        String tableName = initMultiCFTable();
         
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String query = "SELECT c.db_cpu_utilization FROM " + tableName + " WHERE a.unique_user_count = ? and b.unique_org_count = ?";

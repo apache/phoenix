@@ -1020,6 +1020,10 @@ public abstract class BaseTest {
         }
     }
 
+    protected static String initATableValues(String tenantId, byte[][] splits) throws Exception {
+        return initATableValues(tenantId, splits, null, null, getUrl());
+    }
+    
     protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
         return initATableValues(tenantId, splits, date, ts, getUrl());
     }
