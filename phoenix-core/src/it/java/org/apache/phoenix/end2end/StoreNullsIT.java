@@ -205,6 +205,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             
             rs.close();
             historicalStmt.close();
+            conn.close();
             historicalConn.close();
         }
 
@@ -244,6 +245,9 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             rs = historicalStmt.executeQuery("SELECT name FROM " + dataTableName + " WHERE id = 1");
             assertFalse(rs.next());
             rs.close();
+            conn.close();
+            historicalStmt.close();
+            historicalConn.close();
         }
     }
 
@@ -263,51 +267,28 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        long ts = 1000;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);     
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, "
                 + "CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=" + storeNulls + (columnEncoded ? "" : ",COLUMN_ENCODED_BYTES=0"));
-        conn.close();
-
-        ts = 1010;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
-        conn.close();
-        
-        ts = 1020;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        conn = DriverManager.getConnection(getUrl(), props);        
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
         stmt.setTimestamp(1, new Timestamp(1000L));
         stmt.executeUpdate();
         conn.commit();
-        conn.close();
         
         Timestamp expectedTimestamp;
-        ts = 1030;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
         expectedTimestamp = null;
         stmt.setTimestamp(1, expectedTimestamp);
         stmt.executeUpdate();
         conn.commit();
         
-        ts = 1040;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
         expectedTimestamp = null;
         stmt.setTimestamp(1, expectedTimestamp);
         stmt.executeUpdate();
         conn.commit();
 
-        ts = 1050;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        conn = DriverManager.getConnection(getUrl(), props);
-        
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
         TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
 
