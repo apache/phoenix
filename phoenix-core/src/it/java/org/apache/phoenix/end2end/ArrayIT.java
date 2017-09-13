@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -63,9 +62,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     
     private static void initTablesWithArrays(String tableName, String tenantId, Date date, Long ts, boolean useNull, String url) throws Exception {
         Properties props = new Properties();
-        if (ts != null) {
-            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
-        }
         Connection conn = DriverManager.getConnection(url, props);
         try {
             // Insert all rows at ts
@@ -148,8 +144,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM " + tableName + " WHERE ?=organization_id and ?=a_float";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-		        Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
         //TODO: samarth do we need this
 		analyzeTable(conn, tableName);
@@ -193,8 +187,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM " + tableName + " WHERE ?=organization_id and ?=a_byte_array";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		//TODO: samarth do we need this?
 		analyzeTable(conn, tableName);
@@ -236,8 +228,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM  " + tableName + "  WHERE ?=organization_id and ?=a_string_array";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -279,8 +269,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_string_array FROM  " + tableName;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -311,8 +299,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
 		String query = "SELECT ARRAY_ELEM(a_double_array,2) FROM  " + tableName;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -339,8 +325,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array[3] FROM  " + tableName;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -366,8 +350,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         initTablesWithArrays(tableName, tenantId, null, ts, false, getUrl());
         String query = "SELECT CASE WHEN A_INTEGER = 1 THEN a_double_array ELSE null END [3] FROM  " + tableName;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -392,7 +374,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String query = "upsert into  " + tableName + " (ORGANIZATION_ID,ENTITY_ID,a_double_array) values('" + tenantId
                 + "','00A123122312312',ARRAY[2.0,345.8])";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -404,7 +385,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             conn.close();
             // create another connection
             props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM  " + tableName;
             statement = conn.prepareStatement(query);
@@ -432,7 +412,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table2 = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table2, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "upsert into " + table1 + " (ORGANIZATION_ID,ENTITY_ID,a_double_array) "
                     + "SELECT organization_id, entity_id, a_double_array  FROM " + table2
@@ -445,7 +424,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             conn.close();
             // create another connection
             props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM " + table1;
             statement = conn.prepareStatement(query);
@@ -474,7 +452,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + table
                     + " WHERE a_double_array[2] = 89.96 or a_char_array[0] = 'a'";
@@ -503,7 +480,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + table
                     + " WHERE CAST(89.96 AS DOUBLE) = ANY(a_double_array)";
@@ -531,7 +507,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + table
                     + " WHERE CAST(64.87 as DOUBLE) = ALL(a_double_array)";
@@ -554,7 +529,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1]  FROM " + table
                     + " WHERE  a_char_array[0] = 'f' or CAST(89.96 AS DOUBLE) > ANY(a_double_array)";
@@ -582,7 +556,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_double_array[1], a_double_array[2]  FROM " + table
                     + " WHERE  a_char_array[0] = 'f' or CAST(100.0 AS DOUBLE) > ALL(a_double_array)";
@@ -613,7 +586,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table = createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "SELECT a_string_array[1]  FROM " + table
                     + " WHERE 'XYZWER' = ANY(a_string_array)";
@@ -648,7 +620,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String query = "SELECT a_integer,ARRAY[1,2,a_integer] FROM " + table + " where organization_id =  '"
                 + tenantId + "'";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -680,7 +651,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String query = "SELECT b_string,ARRAY['abc','defgh',b_string] FROM " + table + " where organization_id =  '"
                 + tenantId + "'";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -715,7 +685,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String query = "SELECT b_string,ARRAY['abc',null,'bcd',null,null,b_string] FROM " + table + " where organization_id =  '"
                 + tenantId + "'";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -753,7 +722,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             String table2 = createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(table2, tenantId, null, ts, false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "upsert into " + table1 + " (ORGANIZATION_ID,ENTITY_ID, a_unsigned_double, a_double_array) "
                     + "SELECT organization_id, entity_id, x_double, ARRAY[23.4, 22.1, x_double]  FROM " + table2
@@ -766,7 +734,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             conn.close();
             // create another connection
             props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM " + table1;
             statement = conn.prepareStatement(query);
@@ -794,7 +761,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         initSimpleArrayTable(table, tenantId, null, ts, false);
         String query = "SELECT a_char_array[2] FROM " + table;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -816,14 +782,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement().execute(
                 "CREATE TABLE  " + table + "  ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC)) \n");
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO " + table + " VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -837,7 +801,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT b_string_array FROM  " + table);
         assertTrue(rs.next());
@@ -854,20 +817,17 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a Float ARRAY[])");
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES('a',ARRAY[2.0,3.0])");
         int res = stmt.executeUpdate();
         assertEquals(1, res);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT ARRAY_ELEM(a,2) FROM  " + table);
         assertTrue(rs.next());
@@ -883,20 +843,17 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a VARCHAR ARRAY[])");
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES('a',ARRAY['a',null])");
         int res = stmt.executeUpdate();
         assertEquals(1, res);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT ARRAY_ELEM(a,2) FROM  " + table);
         assertTrue(rs.next());
@@ -911,13 +868,11 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?)");
         stmt.setString(1, "a");
@@ -927,7 +882,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT k, CAST(a[2] AS DOUBLE) FROM  " + table);
         assertTrue(rs.next());
@@ -949,7 +903,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 
         // populate the table with data
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt =
                 conn.prepareStatement("UPSERT INTO "
@@ -994,7 +947,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt =
                 conn.prepareStatement("SELECT organization_id, entity_id, boolean_array, byte_array, double_array, float_array, int_array, long_array, short_array, string_array FROM "
@@ -1032,13 +984,11 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName(); 
         conn.createStatement().execute("CREATE TABLE " + table + " ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?)");
         stmt.setString(1, "a");
@@ -1048,7 +998,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT CAST(a AS DOUBLE []) FROM  " + table);
         assertTrue(rs.next());
@@ -1067,12 +1016,10 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a VARCHAR(5) ARRAY)");
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?)");
         stmt.setString(1, "a");
@@ -1083,7 +1030,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT CAST(a AS CHAR ARRAY) FROM  " + table);
         assertTrue(rs.next());
@@ -1104,20 +1050,17 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a CHAR(5) ARRAY)");
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.getMetaData().getColumns(null, null, table, "A");
         assertTrue(rs.next());
         assertEquals(5, rs.getInt("COLUMN_SIZE"));
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?)");
         stmt.setString(1, "a");
@@ -1128,7 +1071,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT k, a[2] FROM  " + table);
         assertTrue(rs.next());
@@ -1146,8 +1088,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array FROM  " + table + "  WHERE a_double_array = CAST(ARRAY [ 25.343, 36.763, 37.56,386.63] AS DOUBLE ARRAY)";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1178,8 +1118,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		int a_index = 0;
 		String query = "SELECT a_double_array[2] FROM  " + table + "  where a_double_array["+a_index+"2]<?";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1209,8 +1147,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array[2] FROM " + table + "  GROUP BY a_double_array[2]";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1238,8 +1174,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, true, getUrl());
 		String query = "SELECT a_string_array[2] FROM  " + table;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1263,8 +1197,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
         String query = "SELECT a_string_array[3],A_INTEGER FROM  " + table;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1291,8 +1223,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
         String query = "SELECT A_INTEGER, a_string_array[3] FROM  " + table;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1319,8 +1249,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
         String query = "SELECT  a_string_array[3], a_double_array[2] FROM  " + table;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1351,8 +1279,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
                 "a_string_array[3], a_double_array[1], a_double_array[2], a_double_array[3] " +
                 "FROM  " + table;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1379,8 +1305,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
         String query = "SELECT a_string_array[3], a_string_array[3] FROM " + table;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1407,8 +1331,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_string_array[3] FROM  " + table;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1433,8 +1355,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array[100] FROM  " + table;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1456,8 +1376,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
 		String query = "SELECT ARRAY_LENGTH(a_string_array) FROM " + table;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1481,8 +1399,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 		initTablesWithArrays(table, tenantId, null, ts, false, getUrl());
 		String query = "SELECT ARRAY_LENGTH(a_double_array) FROM " + table;
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
 		try {
 			PreparedStatement statement = conn.prepareStatement(query);
@@ -1503,8 +1419,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String table = createTableWithArray(getUrl(),
                 getDefaultSplits(tenantId), null, ts - 2);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs = conn.getMetaData().getColumns(null, null, StringUtil.escapeLike(table), StringUtil.escapeLike(SchemaUtil.normalizeIdentifier("x_long_array")));
@@ -1535,7 +1449,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement()
@@ -1543,7 +1456,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
                         "CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -1557,7 +1469,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT k, a_string_array[2] FROM  " + table + "  where a_string_array=b_string_array");
         assertTrue(rs.next());
@@ -1574,14 +1485,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement()
                 .execute(
                         "CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -1595,7 +1504,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery(
                 "SELECT k, a_string_array[2] FROM  " + table + "  where a_string_array<b_string_array");
@@ -1613,14 +1521,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement()
                 .execute(
                         "CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4])");
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -1634,7 +1540,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery(
                 "SELECT k, a_string_array[2] FROM  " + table + "  where a_string_array>b_string_array");
@@ -1652,7 +1557,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String query = "upsert into  " + table + " (ORGANIZATION_ID,ENTITY_ID,a_double_array) values('" + tenantId
                 + "','00A123122312312',null)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -1664,7 +1568,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             conn.close();
             // create another connection
             props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM  " + table;
             statement = conn.prepareStatement(query);
@@ -1689,7 +1592,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String table = createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
         String query = "upsert into  " + table + " (ORGANIZATION_ID,ENTITY_ID,a_string_array) values(?, ?, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -1704,7 +1606,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
             conn.close();
             // create another connection
             props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_string_array,1) FROM  " + table;
             statement = conn.prepareStatement(query);
@@ -1728,7 +1629,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement()
@@ -1736,7 +1636,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
                         "CREATE TABLE  " + table + "  ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array)) \n");
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES(?,?,?)");
         stmt.setString(1, "a");
@@ -1750,7 +1649,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery(
                 "SELECT k, a_string_array[2] FROM  " + table + "  where b_string_array[8]='xxx'");
@@ -1765,7 +1663,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         Connection conn;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         try {
@@ -1788,7 +1685,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         Connection conn;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement stmt = conn.prepareStatement("select ?[2] from \"SYSTEM\".\"catalog\" limit 1");
@@ -1874,9 +1770,7 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
 
 	protected static void initSimpleArrayTable(String tableName, String tenantId, Date date, Long ts, boolean useNull) throws Exception {
    	 Properties props = new Properties();
-        if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
-        }
+
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // Insert all rows at ts
@@ -1917,14 +1811,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testArrayConstructorWithMultipleRows1() throws Exception {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE  " + table + "  (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
         conn.createStatement().execute(ddl);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table + " (region_name, a, b) VALUES('a', 6,3)");
         stmt.execute();
@@ -1934,7 +1826,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT ARRAY[a,b]) from  " + table);
@@ -1946,14 +1837,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testArrayConstructorWithMultipleRows2() throws Exception {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE  " + table + "  (region_name VARCHAR PRIMARY KEY, a INTEGER, b INTEGER)";
         conn.createStatement().execute(ddl);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table + " (region_name, a, b) VALUES('a', 6,3)");
         stmt.execute();
@@ -1963,7 +1852,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY[a,b] from  " + table + " ");
@@ -1983,14 +1871,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testArrayConstructorWithMultipleRows3() throws Exception {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE  " + table + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
         conn.createStatement().execute(ddl);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table + " (region_name, a, b) VALUES('a', 'foo', 'abc')");
         stmt.execute();
@@ -2000,7 +1886,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY[a,b] from  " + table + " ");
@@ -2020,14 +1905,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testArrayConstructorWithMultipleRows4() throws Exception {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE  " + table + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
         conn.createStatement().execute(ddl);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table + " (region_name, a, b) VALUES('a', 'foo', 'abc')");
         stmt.execute();
@@ -2037,7 +1920,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT COUNT(DISTINCT ARRAY[a,b]) from  " + table);
@@ -2049,14 +1931,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testArrayConstructorWithMultipleRows5() throws Exception {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (region_name VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)";
         conn.createStatement().execute(ddl);
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + " (region_name, a, b) VALUES('a', 'foo', 'abc')");
         stmt.execute();
@@ -2066,7 +1946,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         stmt.execute();
         conn.commit();
         conn.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(ARRAY[a,b], 'oo') from   " + table);
@@ -2089,7 +1968,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs;
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         conn.createStatement()
@@ -2097,7 +1975,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
                         "CREATE TABLE   " + table + "  ( a VARCHAR ARRAY PRIMARY KEY DESC)\n");
         conn.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES(?)");
         Array a1 = conn.createArrayOf("VARCHAR", new String[] { "a", "ba" });
@@ -2109,7 +1986,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT a FROM   " + table + "  ORDER BY a DESC");
         assertTrue(rs.next());
@@ -2119,7 +1995,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         assertFalse(rs.next());
         conn.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES(?)");
         Array a3 = conn.createArrayOf("VARCHAR", new String[] { "a", "b" });
@@ -2128,7 +2003,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT a FROM   " + table + "  ORDER BY a DESC");
         assertTrue(rs.next());
@@ -2145,21 +2019,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc1()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k varchar array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array['a', 'c'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k >= array['a', 'b']");
@@ -2171,21 +2042,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc2()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k varchar array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array['a', 'c'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k >= array['a', 'c']");
@@ -2197,21 +2065,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc3()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k varchar array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array['a', 'c'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k > array['a', 'b']");
@@ -2223,21 +2088,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc4()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k varchar array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array['a', 'b'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k <= array['a', 'c']");
@@ -2249,21 +2111,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc5()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k varchar array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array['a', 'b'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k <= array['a', 'b']");
@@ -2275,21 +2134,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc6()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k varchar array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array['a', 'b'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k < array['a', 'c']");
@@ -2301,21 +2157,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc7()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k integer array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array[1, 2])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k < array[1, 4]");
@@ -2327,21 +2180,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testComparisonOperatorsForDesc8()throws Exception{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "create table   " + table + "  (k integer array primary key desc)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("upsert into   " + table + "  values (array[1, 2])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("select * from   " + table + "  where k <= array[1, 2]");
@@ -2353,21 +2203,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection1() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1] FROM   " + table);
@@ -2382,21 +2229,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection2() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY, arr3 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1], arr3[1] from   " + table);
@@ -2412,21 +2256,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection3() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY, arr3 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1], arr3, arr3[1] from   " + table);
@@ -2443,21 +2284,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection4() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 VARCHAR ARRAY, arr3 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY['a', 'b'], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], arr2[1], ARRAY_APPEND(arr3, 4), arr3[1] from   " + table);
@@ -2474,21 +2312,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection5() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr3 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_APPEND(arr1, arr3[1]) from   " + table);
@@ -2503,21 +2338,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection6() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_APPEND(arr1, arr2[1]), p from   " + table);
@@ -2533,21 +2365,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection7() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_APPEND(ARRAY_APPEND(arr1, arr2[2]), arr2[1]), p from   " + table);
@@ -2563,21 +2392,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection8() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from   " + table);
@@ -2594,21 +2420,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection9() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER ARRAY PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (ARRAY[5, 6], ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from   " + table);
@@ -2625,21 +2448,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection10() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT arr1[1] + 5, arr2[1] FROM   " + table);
@@ -2653,14 +2473,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection11() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
@@ -2673,7 +2491,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT CASE WHEN p = 1 THEN arr1[1] WHEN p = 2 THEN arr1[2] WHEN p = 3 THEN arr2[1] ELSE arr2[2] END FROM   " + table);
@@ -2693,14 +2510,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection12() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
@@ -2713,7 +2528,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT CASE WHEN p = 1 THEN arr1[1] WHEN p = 2 THEN arr1[2] WHEN p = 3 THEN arr2[1] ELSE arr2[2] END, ARRAY_APPEND(arr1, arr1[1]) FROM   " + table);
@@ -2737,14 +2551,12 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection13() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (1, ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
@@ -2757,7 +2569,6 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT CASE WHEN arr1[1] = 1 THEN 1 WHEN arr1[2] = 2 THEN 2 WHEN arr2[1] = 2 THEN 2 ELSE arr2[2] END FROM   " + table);
@@ -2777,21 +2588,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testServerArrayElementProjection14() throws SQLException {
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + "  (p INTEGER ARRAY PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (ARRAY[5, 6], ARRAY[1, 2], ARRAY[2, 3])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT ARRAY_ELEM(ARRAY_PREPEND(arr2[1], ARRAY_CAT(arr1, ARRAY[arr2[2],3])), 1), arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from   " + table);
@@ -2808,21 +2616,18 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
     public void testCharPrimaryKey() throws SQLException{
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
         String ddl = "CREATE TABLE   " + table + " (testCharArray CHAR(3)[], CONSTRAINT test_pk PRIMARY KEY(testCharArray)) DEFAULT_COLUMN_FAMILY='T'";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO   " + table + "  VALUES (ARRAY['aaa', 'bbb', 'ccc'])");
         stmt.execute();
         conn.commit();
         conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
         stmt = conn.prepareStatement("SELECT testCharArray from   " + table);
@@ -2836,19 +2641,16 @@ public class ArrayIT extends BaseUniqueNamesOwnClusterIT {
         String tableName = generateUniqueName();
         long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String ddl = "CREATE IMMUTABLE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY, ZIP VARCHAR ARRAY[10])";
             conn.createStatement().execute(ddl);
         }
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " (region_name,zip) VALUES('SF Bay Area',ARRAY['94115','94030','94125'])");
             conn.commit();
         }
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String sql = "SELECT ZIP[2] FROM " + tableName;
             try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
