@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.CoprocessorHConnection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
@@ -67,6 +68,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -98,6 +100,7 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -192,6 +195,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
     private Configuration upsertSelectConfig;
+    private Configuration compactionConfig;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -212,6 +216,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
          */
         upsertSelectConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
             InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
+
+        compactionConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
+        // lower the number of rpc retries, so we don't hang the compaction
+        compactionConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRIES_NUMBER,
+                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRIES_NUMBER));
+        compactionConfig.setInt(HConstants.HBASE_CLIENT_PAUSE,
+            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRY_PAUSE,
+                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRY_PAUSE));
     }
 
     private void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
@@ -924,11 +937,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 public Void run() throws Exception {
                     MutationCode mutationCode = null;
                     long disableIndexTimestamp = 0;
-                    
-                    try (HTableInterface htable = e.getEnvironment().getTable(
-                                SchemaUtil.getPhysicalTableName(
-                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                                        e.getEnvironment().getConfiguration()))) {
+
+                    try (CoprocessorHConnection coprocessorHConnection =
+                            new CoprocessorHConnection(compactionConfig,
+                                    (HRegionServer) e.getEnvironment()
+                                            .getRegionServerServices());
+                            HTableInterface htable =
+                                    coprocessorHConnection
+                                            .getTable(SchemaUtil.getPhysicalTableName(
+                                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                                                compactionConfig))) {
                         String tableName = e.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
                         // FIXME: if this is an index on a view, we won't find a row for it in SYSTEM.CATALOG
                         // Instead, we need to disable all indexes on the view.
@@ -941,6 +959,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             if (cell.getValueLength() > 0) {
                                 disableIndexTimestamp = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
                                 if (disableIndexTimestamp != 0) {
+                                    logger.info("Major compaction running while index on table is disabled.  Clearing index disable timestamp: " + tableName);
                                     mutationCode = IndexUtil.updateIndexState(tableKey, 0L, htable, PIndexState.DISABLE).getMutationCode();
                                 }
                             }

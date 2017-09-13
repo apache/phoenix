@@ -205,6 +205,11 @@ public class QueryServicesOptions {
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
 
+    // Retries when doing server side writes to SYSTEM.CATALOG
+    // 20 retries with 100 pause = 230 seconds total retry time
+    public static final int DEFAULT_METADATA_WRITE_RETRIES_NUMBER = 20;
+    public static final int DEFAULT_METADATA_WRITE_RETRY_PAUSE = 100;
+
     public static final int DEFAULT_TRACING_PAGE_SIZE = 100;
     /**
      * Configuration key to overwrite the tablename that should be used as the target table

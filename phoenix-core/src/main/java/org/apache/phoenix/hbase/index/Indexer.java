@@ -91,6 +91,7 @@ import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -194,6 +195,7 @@ public class Indexer extends BaseRegionObserver {
   private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
+  private Configuration compactionConfig;
   
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
@@ -248,6 +250,15 @@ public class Indexer extends BaseRegionObserver {
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
         this.metricSource = MetricsIndexerSourceFactory.getInstance().create();
         setSlowThresholds(e.getConfiguration());
+
+        compactionConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
+        // lower the number of rpc retries, so we don't hang the compaction
+        compactionConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRIES_NUMBER,
+                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRIES_NUMBER));
+        compactionConfig.setInt(HConstants.HBASE_CLIENT_PAUSE,
+            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRY_PAUSE,
+                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRY_PAUSE));
 
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
@@ -856,12 +867,13 @@ public class Indexer extends BaseRegionObserver {
               public Void run() throws Exception {
                   String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
                   try {
-                      PhoenixConnection conn =  QueryUtil.getConnectionOnServer(c.getEnvironment().getConfiguration()).unwrap(PhoenixConnection.class);
+                      PhoenixConnection conn =  QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class);
                       PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
                       // FIXME: we may need to recurse into children of this table too
                       for (PTable index : table.getIndexes()) {
                           if (index.getIndexDisableTimestamp() != 0) {
                               try {
+                                  LOG.info("Major compaction running while index on table is disabled.  Clearing index disable timestamp: " + fullTableName);
                                   IndexUtil.updateIndexState(conn, index.getName().getString(), PIndexState.DISABLE, Long.valueOf(0L));
                               } catch (SQLException e) {
                                   LOG.warn("Unable to permanently disable index " + index.getName().getString(), e);
