@@ -1250,27 +1250,31 @@ public abstract class BaseTest {
     }
 
     
-    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    protected static String initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        return initEntityHistoryTableValues(ENTITY_HISTORY_TABLE_NAME, tenantId, splits, date, ts, getUrl());
     }
     
-    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
-    }
-        
-    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, String url) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, null, null, url);
+    protected static String initEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        return initEntityHistoryTableValues(tableName, tenantId, splits, date, ts, getUrl());
     }
     
-    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, date, null, url);
+    protected static String initSaltedEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        return initSaltedEntityHistoryTableValues(tableName, tenantId, splits, date, ts, getUrl());
+    }
+
+    protected static String initEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, String url) throws Exception {
+        return initEntityHistoryTableValues(tableName, tenantId, splits, null, null, url);
     }
     
-    private static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    private static String initEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    	if (tableName == null) {
+    		tableName = generateUniqueName();
+    	}
+    	
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, null);
+            ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, ts-2, null);
+            ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, ts-2, null);
         }
         
         Properties props = new Properties();
@@ -1282,7 +1286,7 @@ public abstract class BaseTest {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " +
-                    ENTITY_HISTORY_TABLE_NAME+
+                    tableName +
                     "(" +
                     "    ORGANIZATION_ID, " +
                     "    PARENT_ID, " +
@@ -1368,13 +1372,19 @@ public abstract class BaseTest {
         } finally {
             conn.close();
         }
+        
+        return tableName;
     }
     
-    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    protected static String initSaltedEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    	if (tableName == null) {
+    		tableName = generateUniqueName();
+    	}
+    	
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
+            ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2, null);
+            ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2, null);
         }
         
         Properties props = new Properties();
@@ -1386,7 +1396,7 @@ public abstract class BaseTest {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " +
-                    ENTITY_HISTORY_SALTED_TABLE_NAME+
+                    tableName +
                     "(" +
                     "    ORGANIZATION_ID, " +
                     "    PARENT_ID, " +
@@ -1472,6 +1482,8 @@ public abstract class BaseTest {
         } finally {
             conn.close();
         }
+        
+        return tableName;
     }
     
     /**
