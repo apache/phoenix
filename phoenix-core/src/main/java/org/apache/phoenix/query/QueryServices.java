@@ -162,6 +162,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.metadata.rpc.priority";
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 
+    // Retries when doing server side writes to SYSTEM.CATALOG
+    public static final String METADATA_WRITE_RETRIES_NUMBER = "phoenix.metadata.rpc.retries.number";
+    public static final String METADATA_WRITE_RETRY_PAUSE = "phoenix.metadata.rpc.pause";
+
     // Config parameters for for configuring tracing
     public static final String TRACING_FREQ_ATTRIB = "phoenix.trace.frequency";
     public static final String TRACING_PAGE_SIZE_ATTRIB = "phoenix.trace.read.pagesize";
