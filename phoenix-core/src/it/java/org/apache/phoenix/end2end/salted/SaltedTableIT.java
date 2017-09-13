@@ -32,9 +32,11 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
 
@@ -42,12 +44,16 @@ import org.junit.Test;
  * Tests for table with transparent salting.
  */
 
-public class SaltedTableIT extends BaseClientManagedTimeIT {
+public class SaltedTableIT extends ParallelStatsDisabledIT {
 
-    private static void initTableValues(byte[][] splits, long ts) throws Exception {
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+	private static String getUniqueTableName() {
+		return SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+	}
+	
+    private static String initTableValues(byte[][] splits) throws Exception {
+    	String tableName = getUniqueTableName();    	
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         
         // Rows we inserted:
         // 1ab123abc111
@@ -58,8 +64,8 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
         // 4abc123jkl444
         try {
             // Upsert with no column specifies.
-            ensureTableCreated(getUrl(), TABLE_WITH_SALTING, TABLE_WITH_SALTING, splits, ts-2, null);
-            String query = "UPSERT INTO " + TABLE_WITH_SALTING + " VALUES(?,?,?,?,?)";
+            ensureTableCreated(getUrl(), tableName, TABLE_WITH_SALTING, splits, null, null);
+            String query = "UPSERT INTO " + tableName + " VALUES(?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setInt(1, 1);
             stmt.setString(2, "ab");
@@ -78,7 +84,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             conn.commit();
             
             // Test upsert when statement explicitly specifies the columns to upsert into.
-            query = "UPSERT INTO " + TABLE_WITH_SALTING +
+            query = "UPSERT INTO " + tableName +
                     " (a_integer, a_string, a_id, b_string, b_integer) " + 
                     " VALUES(?,?,?,?,?)";
             stmt = conn.prepareStatement(query);
@@ -100,7 +106,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             conn.commit();
             
             // Test upsert when order of column is shuffled.
-            query = "UPSERT INTO " + TABLE_WITH_SALTING +
+            query = "UPSERT INTO " + tableName +
                     " (a_string, a_integer, a_id, b_string, b_integer) " + 
                     " VALUES(?,?,?,?,?)";
             stmt = conn.prepareStatement(query);
@@ -122,16 +128,15 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
         } finally {
             conn.close();
         }
+        return tableName;
     }
 
     @Test
     public void testTableWithInvalidBucketNumber() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "create table salted_table (a_integer integer not null CONSTRAINT pk PRIMARY KEY (a_integer)) SALT_BUCKETS = 257";
+            String query = "create table " + getUniqueTableName() + " (a_integer integer not null CONSTRAINT pk PRIMARY KEY (a_integer)) SALT_BUCKETS = 257";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.execute();
             fail("Should have caught exception");
@@ -145,8 +150,8 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     @Test
     public void testTableWithSplit() throws Exception {
         try {
-            createTestTable(getUrl(), "create table salted_table (a_integer integer not null primary key) SALT_BUCKETS = 4",
-                    new byte[][] {{1}, {2,3}, {2,5}, {3}}, nextTimestamp());
+            createTestTable(getUrl(), "create table " + getUniqueTableName() + " (a_integer integer not null primary key) SALT_BUCKETS = 4",
+                    new byte[][] {{1}, {2,3}, {2,5}, {3}}, null);
             fail("Should have caught exception");
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 1022 (42Y81): Should not specify split points on salted table with default row key order."));
@@ -155,14 +160,12 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testSelectValueNoWhereClause() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
+            String tableName = initTableValues(null);
             
-            String query = "SELECT * FROM " + TABLE_WITH_SALTING;
+            String query = "SELECT * FROM " + tableName;
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             
@@ -216,18 +219,16 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectValueWithFullyQualifiedWhereClause() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
+            String tableName = initTableValues(null);
             String query;
             PreparedStatement stmt;
             ResultSet rs;
             
             // Variable length slot with bounded ranges.
-            query = "SELECT * FROM " + TABLE_WITH_SALTING + 
+            query = "SELECT * FROM " + tableName + 
                     " WHERE a_integer = 1 AND a_string >= 'ab' AND a_string < 'de' AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
@@ -240,7 +241,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // all single slots with one value.
-            query = "SELECT * FROM " + TABLE_WITH_SALTING + 
+            query = "SELECT * FROM " + tableName + 
                     " WHERE a_integer = 1 AND a_string = 'ab' AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             
@@ -254,7 +255,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // all single slots with multiple values.
-            query = "SELECT * FROM " + TABLE_WITH_SALTING + 
+            query = "SELECT * FROM " + tableName + 
                     " WHERE a_integer in (2, 4) AND a_string = 'abc' AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
@@ -274,7 +275,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertEquals(444, rs.getInt(5));
             assertFalse(rs.next());
             
-            query = "SELECT a_integer, a_string FROM " + TABLE_WITH_SALTING +
+            query = "SELECT a_integer, a_string FROM " + tableName +
                     " WHERE a_integer in (1,2,3,4) AND a_string in ('a', 'abc', 'de') AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
@@ -297,7 +298,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // fixed length slot with bounded ranges.
-            query = "SELECT a_string, a_id FROM " + TABLE_WITH_SALTING + 
+            query = "SELECT a_string, a_id FROM " + tableName + 
                     " WHERE a_integer > 1 AND a_integer < 4 AND a_string = 'abc' AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
@@ -311,7 +312,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // fixed length slot with unbound ranges.
-            query = "SELECT b_string, b_integer FROM " + TABLE_WITH_SALTING + 
+            query = "SELECT b_string, b_integer FROM " + tableName + 
                     " WHERE a_integer > 1 AND a_string = 'abc' AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
@@ -329,7 +330,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // Variable length slot with unbounded ranges.
-            query = "SELECT * FROM " + TABLE_WITH_SALTING + 
+            query = "SELECT * FROM " + tableName + 
                     " WHERE a_integer = 1 AND a_string > 'ab' AND a_id = '123'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
@@ -348,15 +349,13 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectValueWithNotFullyQualifiedWhereClause() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
+            String tableName = initTableValues(null);
             
             // Where without fully qualified key, point query.
-            String query = "SELECT * FROM " + TABLE_WITH_SALTING + " WHERE a_integer = ? AND a_string = ?";
+            String query = "SELECT * FROM " + tableName + " WHERE a_integer = ? AND a_string = ?";
             PreparedStatement stmt = conn.prepareStatement(query);
             
             stmt.setInt(1, 1);
@@ -371,7 +370,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // Where without fully qualified key, range query.
-            query = "SELECT * FROM " + TABLE_WITH_SALTING + " WHERE a_integer >= 2";
+            query = "SELECT * FROM " + tableName + " WHERE a_integer >= 2";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -397,7 +396,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // With point query.
-            query = "SELECT a_string FROM " + TABLE_WITH_SALTING + " WHERE a_string = ?";
+            query = "SELECT a_string FROM " + tableName + " WHERE a_string = ?";
             stmt = conn.prepareStatement(query);
             stmt.setString(1, "de");
             rs = stmt.executeQuery();
@@ -405,7 +404,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
             assertEquals("de", rs.getString(1));
             assertFalse(rs.next());
             
-            query = "SELECT a_id FROM " + TABLE_WITH_SALTING + " WHERE a_id = ?";
+            query = "SELECT a_id FROM " + tableName + " WHERE a_id = ?";
             stmt = conn.prepareStatement(query);
             stmt.setString(1, "456");
             rs = stmt.executeQuery();
@@ -419,14 +418,12 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectWithGroupBy() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
+            String tableName = initTableValues(null);
             
-            String query = "SELECT a_integer FROM " + TABLE_WITH_SALTING + " GROUP BY a_integer";
+            String query = "SELECT a_integer FROM " + tableName + " GROUP BY a_integer";
             PreparedStatement stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             int count = 0;
@@ -441,14 +438,12 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLimitScan() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
+            String tableName = initTableValues(null);
             
-            String query = "SELECT a_integer FROM " + TABLE_WITH_SALTING + " WHERE a_string='abc' LIMIT 1";
+            String query = "SELECT a_integer FROM " + tableName + " WHERE a_string='abc' LIMIT 1";
             PreparedStatement stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -461,18 +456,16 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testSelectWithOrderByRowKey() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
+            String tableName = initTableValues(null);
             
-            String query = "SELECT * FROM " + TABLE_WITH_SALTING + " ORDER  BY  a_integer, a_string, a_id";
+            String query = "SELECT * FROM " + tableName + " ORDER  BY  a_integer, a_string, a_id";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet explainPlan = statement.executeQuery("EXPLAIN " + query);
             // Confirm that ORDER BY in row key order will be optimized out for salted table
-            assertEquals("CLIENT PARALLEL 4-WAY FULL SCAN OVER TABLE_WITH_SALTING\n" + 
+            assertEquals("CLIENT PARALLEL 4-WAY FULL SCAN OVER " + tableName + "\n" + 
                     "CLIENT MERGE SORT", QueryUtil.getExplainPlan(explainPlan));
             ResultSet rs = statement.executeQuery();
             
