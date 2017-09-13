@@ -18,6 +18,8 @@
 # intellij stuff
 .idea/
 *.iml
+*.ipr
+*.iws
 
 #maven stuffs
 target/
