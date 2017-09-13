@@ -25,8 +25,10 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -34,8 +36,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -43,14 +43,14 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -62,36 +62,27 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     private static final int ROW_LOCK_WAIT_TIME = 10000;
     
     private final Object lock = new Object();
-    private long scn = 100;
 
-    private static void addDelayingCoprocessor(Connection conn, String tableName) throws Exception {
-        int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
-        descriptor.addCoprocessor(DelayingRegionObserver.class.getName(), null, priority, null);
-        int numTries = 10;
-        try (HBaseAdmin admin = services.getAdmin()) {
-            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
-                    && numTries > 0) {
-                numTries--;
-                if (numTries == 0) {
-                    throw new Exception(
-                            "Check to detect if delaying co-processor was added failed after "
-                                    + numTries + " retries.");
-                }
-                Thread.sleep(1000);
-            }
+    private static class MyClock extends EnvironmentEdge {
+        public volatile long time;
+
+        public MyClock (long time) {
+            this.time = time;
+        }
+
+        @Override
+        public long currentTime() {
+            return time;
         }
     }
-    
+
     @Test
     public void testSynchronousDeletesAndUpsertValues() throws Exception {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
-        addDelayingCoprocessor(conn, tableName);
+        TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         Runnable r1 = new Runnable() {
@@ -103,10 +94,8 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
                     for (int i = 0; i < 50; i++) {
                         Thread.sleep(20);
                         synchronized (lock) {
-                            scn += 10;
                             PhoenixConnection conn = null;
                             try {
-                                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
                                 conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
                                 conn.setAutoCommit(true);
                                 conn.createStatement().execute("DELETE FROM " + tableName);
@@ -135,10 +124,8 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
                     int nRowsToUpsert = 1000;
                     for (int i = 0; i < nRowsToUpsert; i++) {
                         synchronized(lock) {
-                            scn += 10;
                             PhoenixConnection conn = null;
                             try {
-                                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
                                 conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
                                 conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (" + (i % 10) + ", 0, 1)");
                                 if ((i % 20) == 0 || i == nRowsToUpsert-1 ) {
@@ -163,9 +150,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         t2.start();
         
         doneSignal.await(60, TimeUnit.SECONDS);
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertTrue("Expected table row count ( " + count1 + ") to match index row count (" + count2 + ")", count1 == count2);
+        IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
     }
 
     @Test
@@ -174,7 +159,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))");
-        addDelayingCoprocessor(conn, tableName);
+        TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         Runnable r1 = new Runnable() {
@@ -226,9 +211,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         t2.start();
         
         doneSignal.await(60, TimeUnit.SECONDS);
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertTrue("Expected table row count ( " + count1 + ") to match index row count (" + count2 + ")", count1 == count2);
+        IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
     }
     
     @Test
@@ -242,7 +225,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
-        addDelayingCoprocessor(conn, tableName);
+        TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
         Runnable[] runnables = new Runnable[nThreads];
@@ -288,7 +271,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
         
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
-        addDelayingCoprocessor(conn, tableName);
+        TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         final String[] failedMsg = new String[1];
@@ -335,6 +318,8 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         
         doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
         assertNull(failedMsg[0], failedMsg[0]);
+        long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        assertEquals(1, actualRowCount);
     }
 
     @Test
@@ -346,7 +331,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v,k)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('foo',0)");
         conn.commit();
-        addDelayingCoprocessor(conn, tableName);
+        TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
         final CountDownLatch doneSignal = new CountDownLatch(2);
         final String[] failedMsg = new String[1];
         Runnable r1 = new Runnable() {
@@ -389,27 +374,8 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         t2.start();
         
         doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
-        
-        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
-        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
-
-        long count1 = getRowCount(conn, tableName);
-        long count2 = getRowCount(conn, indexName);
-        assertTrue("Expected table row count ( " + count1 + ") to match index row count (" + count2 + ")", count1 == count2);
-        
-        ResultSet rs1 = conn.createStatement().executeQuery("SELECT * FROM " + indexName);
-        assertTrue(rs1.next());
-        ResultSet rs2 = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName + " WHERE k = '" + rs1.getString(2) + "'");
-        assertTrue("Could not find row in table where k = '" + rs1.getString(2) + "'", rs2.next());
-        assertEquals(rs1.getInt(1), rs2.getInt(2));
-        assertFalse(rs1.next());
-        assertFalse(rs2.next());
-    }
-
-    private static long getRowCount(Connection conn, String tableName) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + tableName);
-        assertTrue(rs.next());
-        return rs.getLong(1);
+        long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        assertEquals(1, actualRowCount);
     }
 
     public static class DelayingRegionObserver extends SimpleRegionObserver {
@@ -443,6 +409,322 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
                 lockedTableRow = false;
             }
             
+        }
+    }
+
+    @Test
+    @Ignore("PHOENIX-4058 Generate correct index updates when DeleteColumn processed before Put with same timestamp")
+    public void testSetIndexedColumnToNullAndValueAtSameTS() throws Exception {
+        try {
+            final MyClock clock = new MyClock(1000);
+            EnvironmentEdgeManager.injectEdge(clock);
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+            long ts = 1000;
+            clock.time = ts;
+            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
+            conn.close();
+
+            ts = 1010;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+            conn.close();
+
+            ts = 1020;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);        
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+            stmt.setTimestamp(1, new Timestamp(1000L));
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            Timestamp expectedTimestamp;
+            ts = 1040;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+            expectedTimestamp = null;
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            stmt.setTimestamp(1, new Timestamp(3000L));
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            ts = 1050;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);        
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals(expectedTimestamp, rs.getTimestamp(1));
+            assertEquals(null, rs.getString(2));
+            assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("SELECT \"0:TS\", \"0:V\" FROM " + indexName);
+            assertTrue(rs.next());
+            assertEquals(expectedTimestamp, rs.getTimestamp(1));
+            assertEquals(null, rs.getString(2));
+            assertFalse(rs.next());
+
+            conn.close();
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
+        }
+    }
+
+    @Test
+    public void testSetIndexedColumnToNullAndValueAtSameTSWithStoreNulls1() throws Exception {
+        try {
+            final MyClock clock = new MyClock(1000);
+            EnvironmentEdgeManager.injectEdge(clock);
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+            long ts = 1000;
+            clock.time = ts;
+            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+            conn.close();
+
+            ts = 1010;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+            conn.close();
+
+            ts = 1020;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);        
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+            stmt.setTimestamp(1, new Timestamp(1000L));
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            Timestamp expectedTimestamp;
+            ts = 1040;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+            expectedTimestamp = null;
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            expectedTimestamp = new Timestamp(3000L);
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            ts = 1050;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);        
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals(expectedTimestamp, rs.getTimestamp(1));
+            assertEquals(null, rs.getString(2));
+            assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("SELECT \"0:TS\", \"0:V\" FROM " + indexName);
+            assertTrue(rs.next());
+            assertEquals(expectedTimestamp, rs.getTimestamp(1));
+            assertEquals(null, rs.getString(2));
+            assertFalse(rs.next());
+
+            conn.close();
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
+        }
+    }
+
+    @Test
+    public void testSetIndexedColumnToNullAndValueAtSameTSWithStoreNulls2() throws Exception {
+        try {
+            final MyClock clock = new MyClock(1000);
+            EnvironmentEdgeManager.injectEdge(clock);
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+            long ts = 1000;
+            clock.time = ts;
+            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+            conn.close();
+
+            ts = 1010;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+            conn.close();
+
+            ts = 1020;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);        
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+            stmt.setTimestamp(1, new Timestamp(1000L));
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            Timestamp expectedTimestamp;
+            ts = 1040;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+            expectedTimestamp = new Timestamp(3000L);
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            expectedTimestamp = null;
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            ts = 1050;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);        
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals(expectedTimestamp, rs.getTimestamp(1));
+            assertEquals(null, rs.getString(2));
+            assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("SELECT \"0:TS\", \"0:V\" FROM " + indexName);
+            assertTrue(rs.next());
+            assertEquals(expectedTimestamp, rs.getTimestamp(1));
+            assertEquals(null, rs.getString(2));
+            assertFalse(rs.next());
+
+            conn.close();
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
+        }
+    }
+
+    @Test
+    public void testDeleteRowAndUpsertValueAtSameTS1() throws Exception {
+        try {
+            final MyClock clock = new MyClock(1000);
+            EnvironmentEdgeManager.injectEdge(clock);
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+            long ts = 1000;
+            clock.time = ts;
+            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, A.V VARCHAR, B.V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+            conn.close();
+
+            ts = 1010;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+            conn.close();
+
+            ts = 1020;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);        
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0','1')");
+            stmt.setTimestamp(1, new Timestamp(1000L));
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            Timestamp expectedTimestamp;
+            ts = 1040;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
+            stmt.executeUpdate();
+            conn.commit();
+            expectedTimestamp = new Timestamp(3000L);
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null,'3')");
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            ts = 1050;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            long rowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+            assertEquals(0,rowCount);
+
+            conn.close();
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
+        }
+    }
+
+    @Test
+    public void testDeleteRowAndUpsertValueAtSameTS2() throws Exception {
+        try {
+            final MyClock clock = new MyClock(1000);
+            EnvironmentEdgeManager.injectEdge(clock);
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+            long ts = 1000;
+            clock.time = ts;
+            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+            conn.close();
+
+            ts = 1010;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+            conn.close();
+
+            ts = 1020;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);        
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+            stmt.setTimestamp(1, new Timestamp(1000L));
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            Timestamp expectedTimestamp;
+            ts = 1040;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+            expectedTimestamp = new Timestamp(3000L);
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+            stmt.setTimestamp(1, expectedTimestamp);
+            stmt.executeUpdate();
+            conn.commit();
+            stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
+            stmt.executeUpdate();
+            conn.commit();
+            conn.close();
+
+            ts = 1050;
+            clock.time = ts;
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            long rowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+            assertEquals(0,rowCount);
+
+            conn.close();
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
         }
     }
 }
