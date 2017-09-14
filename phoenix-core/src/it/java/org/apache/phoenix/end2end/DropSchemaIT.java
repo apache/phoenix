@@ -33,12 +33,11 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,10 +47,13 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class DropSchemaIT extends BaseClientManagedTimeIT {
+public class DropSchemaIT extends BaseUniqueNamesOwnClusterIT {
     private String schema;
     
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    public DropSchemaIT(String schema) {
+        this.schema = schema;
+    }
+
     @BeforeClass 
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
@@ -60,61 +62,39 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-    
-    public DropSchemaIT(String schema) {
-        this.schema = schema;
-    }
+
 
     @Parameters(name = "DropSchemaIT_schema={0}") // name is used by failsafe as file name in reports
     public static Collection<String> data() {
-        return Arrays.asList("TEST_SCHEMA", "\"test_schema\"");
+        return Arrays.asList(generateUniqueName().toUpperCase(), "\"" + generateUniqueName().toLowerCase() + "\"");
     }
 
     @Test
     public void testDropSchema() throws Exception {
-        long ts = nextTimestamp();
-
-        String tableName = "TEST";
+        String tableName = generateUniqueName();
         Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         String normalizeSchemaIdentifier = SchemaUtil.normalizeIdentifier(schema);
         String ddl = "DROP SCHEMA " + schema;
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            try {
+                conn.createStatement().execute(ddl);
+                fail();
+            } catch (SchemaNotFoundException e) {
+                // expected
+            }
             conn.createStatement().execute("CREATE SCHEMA " + schema);
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("CREATE TABLE " + schema + "." + tableName + "(id INTEGER PRIMARY KEY)");
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-
             try {
                 conn.createStatement().execute(ddl);
                 fail();
             } catch (SQLException e) {
-                e.printStackTrace();
                 assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_SCHEMA.getErrorCode());
             }
             assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts - 20));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            conn.createStatement().execute(ddl);
-            fail();
-        } catch (SchemaNotFoundException e) {
-            // expected
-        }
-        assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + schema + "." + tableName);
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
             try {
                 admin.getNamespaceDescriptor(normalizeSchemaIdentifier);
@@ -122,28 +102,20 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
             } catch (NamespaceNotFoundException ne) {
                 // expected
             }
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            
             admin.createNamespace(NamespaceDescriptor.create(normalizeSchemaIdentifier).build());
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
             assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
             conn.createStatement().execute("CREATE SCHEMA " + schema);
-        }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 80));
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP SCHEMA " + schema);
+            try {
+                conn.createStatement().execute("DROP SCHEMA " + schema);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(e.getErrorCode(), SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode());
+            }
         }
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            conn.createStatement().execute("DROP SCHEMA " + schema);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(e.getErrorCode(), SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode());
-        }
-        admin.close();
     }
 }

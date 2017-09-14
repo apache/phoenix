@@ -51,6 +51,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -177,7 +178,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             stmt.execute(String.format(ddlFormat, dataTableName));
             stmt.executeUpdate("UPSERT INTO " + dataTableName + " VALUES (1, 'v1')");
             Thread.sleep(10L);
-            long afterFirstInsert = System.currentTimeMillis();
+            long afterFirstInsert = EnvironmentEdgeManager.currentTimeMillis();
             Thread.sleep(10L);
             
             stmt.executeUpdate("UPSERT INTO " + dataTableName + " VALUES (1, null)");
@@ -221,7 +222,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate("UPSERT INTO " + dataTableName + " VALUES (1, 'v1')");
     
             Thread.sleep(10L);
-            long afterFirstInsert = System.currentTimeMillis();
+            long afterFirstInsert = EnvironmentEdgeManager.currentTimeMillis();
             Thread.sleep(10L);
     
             stmt.executeUpdate("DELETE FROM " + dataTableName + " WHERE id = 1");
