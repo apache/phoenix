@@ -50,26 +50,6 @@
 	</properties>
 
 	<dependencies>
-		<!-- Transaction dependencies -->
-		<dependency>
-			<groupId>org.apache.tephra</groupId>
-			<artifactId>tephra-api</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.tephra</groupId>
-			<artifactId>tephra-core</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.tephra</groupId>
-			<artifactId>tephra-core</artifactId>
-			<type>test-jar</type>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.tephra</groupId>
-			<artifactId>tephra-hbase-compat-1.1</artifactId>
-		</dependency>
-
 		<!-- Make sure we have all the antlr dependencies -->
 		<dependency>
 			<groupId>org.antlr</groupId>
@@ -338,6 +318,12 @@
 			<groupId>org.apache.flume</groupId>
 			<artifactId>flume-ng-core</artifactId>
 		</dependency>
+                <dependency>
+                  <groupId>org.apache.tephra</groupId>
+                  <artifactId>tephra-core</artifactId>
+                  <type>test-jar</type>
+                  <scope>test</scope>
+                </dependency>
 	</dependencies>
 
 	<build>
