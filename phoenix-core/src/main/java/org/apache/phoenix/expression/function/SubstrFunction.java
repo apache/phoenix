@@ -26,12 +26,12 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.StringUtil;
 
 
@@ -99,6 +99,9 @@ public class SubstrFunction extends PrefixFunction {
         if (!offsetExpression.evaluate(tuple,  ptr)) {
             return false;
         }
+        if (ptr.getLength()==0) {
+            return true;
+        }
         int offset = offsetExpression.getDataType().getCodec().decodeInt(ptr, offsetExpression.getSortOrder());
         
         int length = -1;
@@ -106,6 +109,9 @@ public class SubstrFunction extends PrefixFunction {
             Expression lengthExpression = getLengthExpression();
             if (!lengthExpression.evaluate(tuple, ptr)) {
                 return false;
+            }
+            if (ptr.getLength()==0) {
+                return true;
             }
             length = lengthExpression.getDataType().getCodec().decodeInt(ptr, lengthExpression.getSortOrder());
             if (length <= 0) {
@@ -115,6 +121,9 @@ public class SubstrFunction extends PrefixFunction {
         
         if (!getStrExpression().evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength()==0) {
+            return true;
         }
     
         boolean isCharType = getStrExpression().getDataType() == PChar.INSTANCE;

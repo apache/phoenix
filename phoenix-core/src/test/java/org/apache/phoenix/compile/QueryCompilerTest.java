@@ -63,10 +63,8 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
-import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -783,11 +781,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testAmbiguousColumn() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT * from multi_cf G where RESPONSE_TIME = 2222";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -800,11 +796,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testTableAliasMatchesCFName() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT F.RESPONSE_TIME,G.RESPONSE_TIME from multi_cf G where G.RESPONSE_TIME-1 = F.RESPONSE_TIME";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -817,11 +811,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testCoelesceFunctionTypeMismatch() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT coalesce(x_integer,'foo') from atable";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -835,11 +827,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testOrderByNotInSelectDistinct() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT distinct a_string,b_string from atable order by x_integer";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -853,11 +843,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testSelectDistinctAndAll() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT all distinct a_string,b_string from atable order by x_integer";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -871,12 +859,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testSelectDistinctAndOrderBy() throws Exception {
-        long ts = nextTimestamp();
         String query = "select /*+ RANGE_SCAN */ count(distinct organization_id) from atable order by organization_id";
         String query1 = "select count(distinct organization_id) from atable order by organization_id";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -896,11 +882,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testOrderByNotInSelectDistinctAgg() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT distinct count(1) from atable order by x_integer";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -914,11 +898,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testSelectDistinctWithAggregation() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT distinct a_string,count(*) from atable";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -977,11 +959,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testStringConcatExpression() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT entity_id,a_string FROM atable where 2 || a_integer || ? like '2%'";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         byte []x=new byte[]{127,127,0,0};//Binary data
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -997,10 +977,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testDivideByBigDecimalZero() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT a_integer/x_integer/0.0 FROM atable";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -1014,10 +992,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testDivideByIntegerZero() throws Exception {
-        long ts = nextTimestamp();
         String query = "SELECT a_integer/0 FROM atable";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -1031,10 +1007,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testCreateNullableInPKMiddle() throws Exception {
-        long ts = nextTimestamp();
         String query = "CREATE TABLE foo(i integer not null, j integer null, k integer not null CONSTRAINT pk PRIMARY KEY(i,j,k))";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.execute();
@@ -1046,9 +1020,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testSetSaltBucketOnAlterTable() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
             fail();
@@ -1474,7 +1446,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
-        conn.close();
         try {
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
             stmt.addBatch();
@@ -2718,6 +2689,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_IMMUTABLE.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testOnDupKeyWithGlobalIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, v bigint)");
+            conn.createStatement().execute("CREATE INDEX idx ON t1 (v)");
+            conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_WITH_GLOBAL_IDX.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -4135,6 +4121,71 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             if(conn!=null) {
                 conn.close();
             }
+        }
+    }
+
+    @Test
+    public void testUnionDifferentColumnNumber() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement statement = conn.createStatement();
+        try {
+            String create = "CREATE TABLE s.t1 (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, " +
+                    "f2.v3 varchar, v4 varchar)";
+            statement.execute(create);
+            create = "CREATE TABLE s.t2 (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, f2.v3 varchar)";
+            statement.execute(create);
+            String query = "SELECT *  FROM s.t1 UNION ALL select * FROM s.t2";
+            statement.executeQuery(query);
+            fail("Should fail with different column numbers ");
+        } catch (SQLException e) {
+            assertEquals(e.getMessage(), "ERROR 525 (42902): SELECT column number differs in a Union All query " +
+                    "is not allowed. 1st query has 5 columns whereas 2nd query has 4");
+        } finally {
+            statement.execute("DROP TABLE IF EXISTS s.t1");
+            statement.execute("DROP TABLE IF EXISTS s.t2");
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testUnionDifferentColumnType() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement statement = conn.createStatement();
+        try {
+            String create = "CREATE TABLE s.t1 (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, " +
+                    "f2.v3 varchar, v4 varchar)";
+            statement.execute(create);
+            create = "CREATE TABLE s.t2 (k integer not null primary key, f1.v1 varchar, f1.v2 integer, " +
+                    "f2.v3 varchar, f2.v4 varchar)";
+            statement.execute(create);
+            String query = "SELECT *  FROM s.t1 UNION ALL select * FROM s.t2";
+            statement.executeQuery(query);
+            fail("Should fail with different column types ");
+        } catch (SQLException e) {
+            assertEquals(e.getMessage(), "ERROR 526 (42903): SELECT column types differ in a Union All query " +
+                    "is not allowed. Column # 2 is VARCHAR in 1st query where as it is INTEGER in 2nd query");
+        } finally {
+            statement.execute("DROP TABLE IF EXISTS s.t1");
+            statement.execute("DROP TABLE IF EXISTS s.t2");
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testCannotCreateStatementOnClosedConnection() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.close();
+        try {
+            conn.createStatement();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
+        }
+        try {
+            conn.prepareStatement("SELECT * FROM SYSTEM.CATALOG");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
         }
     }
 }

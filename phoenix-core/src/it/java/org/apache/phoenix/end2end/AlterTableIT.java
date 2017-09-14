@@ -953,7 +953,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column. columnName=COL5"));
+                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column. columnName="+dataTableFullName+".COL5"));
             }
 
             ddl = "ALTER TABLE " + dataTableFullName + " DROP COLUMN IF EXISTS col1";
@@ -997,7 +997,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         stmtInsert1.execute();
         conn1.commit();
         stmtInsert1.close();
-        conn1.close();
 
         // Do the alter through a separate client.
         conn3.createStatement().execute("alter table " + dataTableFullName + " add field2 BIGINT");
@@ -1417,6 +1416,13 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         assertEquals(20, pconn.getTable(new PTableKey(pconn.getTenantId(), viewFullName)).getUpdateCacheFrequency());
         assertImmutableRows(conn1, viewFullName, false);
         ddl = "ALTER VIEW " + viewFullName + " SET DISABLE_WAL = TRUE";
+        try {
+            conn1.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
+        }
+        ddl = "ALTER VIEW " + viewFullName + " SET THROW_INDEX_WRITE_FAILURE = FALSE";
         try {
             conn1.createStatement().execute(ddl);
             fail();

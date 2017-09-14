@@ -39,18 +39,14 @@ import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 public class MutableQueryIT extends BaseQueryIT {
     
@@ -66,31 +62,20 @@ public class MutableQueryIT extends BaseQueryIT {
         return testCases;
     }
     
-    @BeforeClass
-    @Shadower(classBeingShadowed = BaseQueryIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, Boolean.TRUE.toString());
-        BaseQueryIT.doSetup(props);
-    }
-
-    public MutableQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded);
+    public MutableQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
+        super(indexDDL, mutable, columnEncoded, true);
     }
     
     @Test
     public void testSumOverNullIntegerColumn() throws Exception {
         String query = "SELECT sum(a_integer) FROM " + tableName + " a";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) VALUES('" + getOrganizationId() + "','" + ROW3 + "',NULL)");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         analyzeTable(conn1, tableName);
         conn1.close();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -101,12 +86,10 @@ public class MutableQueryIT extends BaseQueryIT {
         } finally {
             conn.close();
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) SELECT organization_id, entity_id, CAST(null AS integer) FROM " + tableName);
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 90));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -121,7 +104,7 @@ public class MutableQueryIT extends BaseQueryIT {
     }
     
     private void testNoStringValue(String value) throws Exception {
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 10);
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
@@ -134,13 +117,11 @@ public class MutableQueryIT extends BaseQueryIT {
         stmt.execute(); // should commit too
         upsertConn.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         analyzeTable(conn1, tableName);
         conn1.close();
         
         String query = "SELECT a_string, b_string FROM " + tableName + " WHERE organization_id=? and a_integer = 5";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -169,13 +150,12 @@ public class MutableQueryIT extends BaseQueryIT {
     @Test
     public void testUnfoundSingleColumnCaseStatement() throws Exception {
         String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE organization_id=? and CASE WHEN a_integer = 0 or a_integer != 0 THEN 1 ELSE 0 END = 0";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         // Set ROW5.A_INTEGER to null so that we have one row
         // where the else clause of the CASE statement will
         // fire.
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
             "upsert into " + tableName +
@@ -203,7 +183,6 @@ public class MutableQueryIT extends BaseQueryIT {
     @Test
     public void testGroupByCondition() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
         statement.setString(1, tenantId);
@@ -221,8 +200,6 @@ public class MutableQueryIT extends BaseQueryIT {
             conn.close();
         }
 
-        
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
             statement = conn.prepareStatement("UPSERT into " + tableName + " (organization_id,entity_id,a_integer) values(?,?,null)");
@@ -233,7 +210,6 @@ public class MutableQueryIT extends BaseQueryIT {
         } finally {
             conn.close();
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
         conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
         statement.setString(1, tenantId);
@@ -272,7 +248,7 @@ public class MutableQueryIT extends BaseQueryIT {
             "VALUES (?, ?, ?)";
         
         // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
@@ -290,19 +266,26 @@ public class MutableQueryIT extends BaseQueryIT {
         stmt.execute();
         conn.commit();
         conn.close();
+        long firstDeleteTime = System.currentTimeMillis();
+        long timeDelta = 100; 
+        Thread.sleep(timeDelta); 
         
         // Delete row at timestamp 3. This should not be seen by the query executing
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
-        Connection futureConn = DriverManager.getConnection(getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3), props);
+        Connection futureConn = DriverManager.getConnection(getUrl());
         stmt = futureConn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW6);
         stmt.execute();
         futureConn.commit();
         futureConn.close();
+        
+        // query at a time which is beyong deleteTime1 but before the time at which above delete
+        // happened
+        long queryTime = firstDeleteTime + timeDelta / 2;
 
         String query = "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime)); // Execute at timestamp 2
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
@@ -317,7 +300,7 @@ public class MutableQueryIT extends BaseQueryIT {
     @Test
     public void testPointInTimeScan() throws Exception {
         // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 10);
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
@@ -328,24 +311,18 @@ public class MutableQueryIT extends BaseQueryIT {
             "    A_INTEGER) " +
             "VALUES (?, ?, ?)";
         upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
         PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW4);
         stmt.setInt(3, 5);
         stmt.execute(); // should commit too
-        
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);
-        Connection conn1 = DriverManager.getConnection(url, props);
-        analyzeTable(conn1, tableName);
-        conn1.close();
         upsertConn.close();
-
-        // Override value again, but should be ignored since it's past the SCN
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 30);
+        long upsert1Time = System.currentTimeMillis();
+        long timeDelta = 100;
+        Thread.sleep(timeDelta);
+        
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
         stmt = upsertConn.prepareStatement(upsertStmt);
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW4);
@@ -353,8 +330,9 @@ public class MutableQueryIT extends BaseQueryIT {
         stmt.execute(); // should commit too
         upsertConn.close();
         
+        long queryTime = upsert1Time + timeDelta / 2;
         String query = "SELECT organization_id, a_string AS a FROM " + tableName + " WHERE organization_id=? and a_integer = 5";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);
@@ -373,7 +351,7 @@ public class MutableQueryIT extends BaseQueryIT {
     @Test
     public void testPointInTimeLimitedScan() throws Exception {
         // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
@@ -391,9 +369,11 @@ public class MutableQueryIT extends BaseQueryIT {
         stmt.setInt(3, 6);
         stmt.execute(); // should commit too
         upsertConn.close();
+        long upsert1Time = System.currentTimeMillis();
+        long timeDelta = 100;
+        Thread.sleep(timeDelta);
 
-        // Override value again, but should be ignored since it's past the SCN
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
+        url = getUrl();
         upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true); // Test auto commit
         // Insert all rows at ts
@@ -404,8 +384,9 @@ public class MutableQueryIT extends BaseQueryIT {
         stmt.execute(); // should commit too
         upsertConn.close();
         
+        long queryTime = upsert1Time + timeDelta  / 2;
         String query = "SELECT a_integer,b_string FROM " + tableName + " WHERE organization_id=? and a_integer <= 5 limit 2";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         statement.setString(1, tenantId);

@@ -398,12 +398,34 @@ public class ParseNodeFactory {
         return new NamedNode(name);
     }
 
+    @Deprecated
     public NamedTableNode namedTable(String alias, TableName name) {
         return new NamedTableNode(alias, name);
     }
-
-    public NamedTableNode namedTable(String alias, TableName name ,List<ColumnDef> dyn_columns) {
+    
+    @Deprecated
+    public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns) {
         return new NamedTableNode(alias, name,dyn_columns);
+    }
+    
+    public NamedTableNode namedTable(String alias, TableName name, Double tableSamplingRate) {
+        return new NamedTableNode(alias, name, tableSamplingRate);
+    }
+    
+    public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, Double tableSamplingRate) {
+    	return new NamedTableNode(alias, name,dyn_columns, tableSamplingRate);
+    }
+    
+    public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, LiteralParseNode tableSampleNode) {
+    	Double tableSamplingRate;
+    	if(tableSampleNode==null||tableSampleNode.getValue()==null){
+    		tableSamplingRate=ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
+    	}else if(tableSampleNode.getValue() instanceof Integer){
+    		tableSamplingRate=(double)((int)tableSampleNode.getValue());
+    	}else{
+    		tableSamplingRate=((BigDecimal) tableSampleNode.getValue()).doubleValue();
+    	}
+    	return new NamedTableNode(alias, name, dyn_columns, tableSamplingRate);
     }
 
     public BindTableNode bindTable(String alias, TableName name) {
@@ -729,6 +751,26 @@ public class ParseNodeFactory {
             Map<String, UDFParseNode> udfParseNodes,
             List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
         return new UpsertStatement(table, hint, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
+    }
+
+    public CursorName cursorName(String name){
+        return new CursorName(name);
+    }
+
+    public DeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select){
+        return new DeclareCursorStatement(cursor, select);
+    }
+
+    public FetchStatement fetch(CursorName cursor, boolean isNext, int fetchLimit){
+        return new FetchStatement(cursor, isNext, fetchLimit);
+    }
+
+    public OpenStatement open(CursorName cursor){
+        return new OpenStatement(cursor);
+    }
+
+    public CloseStatement close(CursorName cursor){
+        return new CloseStatement(cursor);
     }
 
     public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {

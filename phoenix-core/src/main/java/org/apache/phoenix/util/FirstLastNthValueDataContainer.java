@@ -24,6 +24,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
+
 import org.apache.hadoop.hbase.util.Bytes;
 
 /**
@@ -111,10 +112,10 @@ public class FirstLastNthValueDataContainer {
         is ascending            | 1            | 1 = asc, 0 = desc
         length of order by vals | 4            | 0 if dynamic length, size otherwise
         length of values        | 4            | 0 if dynamic length, size otherwise
-      [ lenght of first order   | 4            | set if order is var length (optional) ]
+      [ length of first order   | 4            | set if order is var length (optional) ]
         first order value       | n            | order by val
-      [ lenght of first value   | 4            | set if value is var length (optional) ]
-        first order value       | n            | data val
+      [ length of first value   | 4            | set if value is var length (optional) ]
+        first value             | n            | data val
         ... and so on, repeat order by values and data values
 
 

@@ -64,7 +64,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
     public static final long DEFAULT_INDEX_POPULATION_WAIT_TIME = 0;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = true;
-
     
     /**
      * Set number of salt buckets lower for sequence table during testing, as a high
@@ -90,7 +89,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setThreadTimeoutMs(DEFAULT_THREAD_TIMEOUT_MS)
                 .setSpoolThresholdBytes(DEFAULT_SPOOL_THRESHOLD_BYTES)
                 .setSpoolDirectory(DEFAULT_SPOOL_DIRECTORY)
-                .setMaxMemoryWaitMs(DEFAULT_MAX_MEMORY_WAIT_MS)
                 .setMaxTenantMemoryPerc(DEFAULT_MAX_TENANT_MEMORY_PERC)
                 .setMaxServerCacheSize(DEFAULT_MAX_HASH_CACHE_SIZE)
                 .setMaxServerCacheTTLMs(DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS)

@@ -30,6 +30,7 @@ import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UN
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -39,16 +40,27 @@ import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
+import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.monitoring.CombinableMetric;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.join.HashCacheClient;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -64,14 +76,14 @@ import com.google.common.annotations.VisibleForTesting;
 public class TableResultIterator implements ResultIterator {
     private final Scan scan;
     private final HTableInterface htable;
-    private final CombinableMetric scanMetrics;
+    private final ScanMetricsHolder scanMetricsHolder;
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
     private final QueryPlan plan;
     private final ParallelScanGrouper scanGrouper;
+    private static final Logger logger = LoggerFactory.getLogger(TableResultIterator.class);
     private Tuple lastTuple = null;
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-
     @GuardedBy("renewLeaseLock")
     private ResultIterator scanIterator;
 
@@ -83,30 +95,45 @@ public class TableResultIterator implements ResultIterator {
     
     private final Lock renewLeaseLock = new ReentrantLock();
 
+    private int retry;
+    private Map<ImmutableBytesPtr,ServerCache> caches;
+    private HashCacheClient hashCacheClient;
+
     @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
     TableResultIterator() {
-        this.scanMetrics = null;
+        this.scanMetricsHolder = null;
         this.renewLeaseThreshold = 0;
         this.htable = null;
         this.scan = null;
         this.plan = null;
         this.scanGrouper = null;
+        this.caches = null;
+        this.retry = 0;
     }
 
     public static enum RenewLeaseStatus {
         RENEWED, NOT_RENEWED, CLOSED, UNINITIALIZED, THRESHOLD_NOT_REACHED, LOCK_NOT_ACQUIRED, NOT_SUPPORTED
     };
-
-    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics,
+    
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
             long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null);
+    }
+    
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         this.scan = scan;
-        this.scanMetrics = scanMetrics;
+        this.scanMetricsHolder = scanMetricsHolder;
         this.plan = plan;
         PTable table = plan.getTableRef().getTable();
         htable = mutationState.getHTable(table);
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
         this.scanGrouper = scanGrouper;
+        this.hashCacheClient = new HashCacheClient(plan.getContext().getConnection());
+        this.caches = caches;
+        this.retry=plan.getContext().getConnection().getQueryServices().getProps()
+        .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
     }
 
     @Override
@@ -144,7 +171,7 @@ public class TableResultIterator implements ResultIterator {
             } catch (SQLException e) {
                 try {
                     throw ServerUtil.parseServerException(e);
-                } catch(StaleRegionBoundaryCacheException e1) {
+                } catch(StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e1) {
                     if(ScanUtil.isNonAggregateScan(scan)) {
                         // For non aggregate queries if we get stale region boundary exception we can
                         // continue scanning from the next value of lasted fetched result.
@@ -162,8 +189,28 @@ public class TableResultIterator implements ResultIterator {
                             }
                         }
                         plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
-                        this.scanIterator =
-                                plan.iterator(scanGrouper, newScan);
+						if (e1 instanceof HashJoinCacheNotFoundException) {
+							logger.debug(
+									"Retrying when Hash Join cache is not found on the server ,by sending the cache again");
+							if (retry <= 0) {
+								throw e1;
+							}
+							retry--;
+							try {
+								Long cacheId = ((HashJoinCacheNotFoundException) e1).getCacheId();
+								if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(),
+										caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId))),
+										plan.getTableRef().getTable())) {
+									throw e1;
+								}
+								this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
+
+							} catch (Exception e2) {
+								throw new SQLException(e2);
+							}
+						} else {
+							this.scanIterator = plan.iterator(scanGrouper, newScan);
+						}
                         lastTuple = scanIterator.next();
                     } else {
                         throw e;
@@ -186,7 +233,7 @@ public class TableResultIterator implements ResultIterator {
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
+                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);
@@ -241,7 +288,7 @@ public class TableResultIterator implements ResultIterator {
     }
 
     private static long now() {
-        return System.currentTimeMillis();
+        return EnvironmentEdgeManager.currentTimeMillis();
     }
 
     @Override

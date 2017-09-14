@@ -17,11 +17,17 @@
  */
 package org.apache.phoenix.hbase.index.util;
 
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedHLogReader;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
+import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexCodec;
 import org.junit.Test;
 
 public class TestIndexManagementUtil {
@@ -62,5 +68,28 @@ public class TestIndexManagementUtil {
     // works with WALEditcodec
     conf.set(IndexManagementUtil.HLOG_READER_IMPL_KEY, IndexedHLogReader.class.getName());
     IndexManagementUtil.ensureMutableIndexingCorrectlyConfigured(conf);
+  }
+
+  /**
+   * Create the specified index table with the necessary columns
+   * @param admin {@link HBaseAdmin} to use when creating the table
+   * @param indexTable name of the index table.
+   * @throws IOException
+   */
+  public static void createIndexTable(HBaseAdmin admin, String indexTable) throws IOException {
+    createIndexTable(admin, new HTableDescriptor(indexTable));
+  }
+
+  /**
+   * @param admin to create the table
+   * @param index descriptor to update before creating table
+   */
+  public static void createIndexTable(HBaseAdmin admin, HTableDescriptor index) throws IOException {
+    HColumnDescriptor col =
+        new HColumnDescriptor(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY);
+    // ensure that we can 'see past' delete markers when doing scans
+    col.setKeepDeletedCells(true);
+    index.addFamily(col);
+    admin.createTable(index);
   }
 }

@@ -37,7 +37,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 

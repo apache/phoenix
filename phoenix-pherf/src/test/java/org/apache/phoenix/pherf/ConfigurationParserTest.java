@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.pherf;
 
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -129,7 +128,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
         return resourceUrl;
     }
 
-    private List<Scenario> getScenarios() throws URISyntaxException, JAXBException{
+    private List<Scenario> getScenarios() throws Exception {
         DataModel data = getDataModel();
         List<Scenario> scenarioList = data.getScenarios();
         assertTrue("Could not load the scenarios from xml.",
@@ -137,7 +136,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
         return scenarioList;
     }
 
-    private DataModel getDataModel() throws URISyntaxException, JAXBException {
+    private DataModel getDataModel() throws Exception {
         Path resourcePath = Paths.get(getResourceUrl().toURI());
         return XMLConfigParser.readDataModel(resourcePath);
     }
@@ -200,6 +199,11 @@ public class ConfigurationParserTest extends ResultBaseTest {
             data.setDataMappingColumns(columnList);
 
             Scenario scenario = new Scenario();
+            scenario.setTenantId("00DXXXXXX");
+        	List<Ddl> preScenarioDdls = new ArrayList<Ddl>();
+        	preScenarioDdls.add(new Ddl("CREATE INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER) ASYNC", "FHAIDX_NEWVAL_NUMBER"));
+        	preScenarioDdls.add(new Ddl("CREATE LOCAL INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER)", "FHAIDX_NEWVAL_NUMBER"));
+			scenario.setPreScenarioDdls(preScenarioDdls);
             scenario.setPhoenixProperties(new HashMap<String, String>());
             scenario.getPhoenixProperties().put("phoenix.query.threadPoolSize", "200");
             scenario.setDataOverride(new DataOverride());

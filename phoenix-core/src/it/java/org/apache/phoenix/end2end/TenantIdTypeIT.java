@@ -45,14 +45,11 @@ import com.google.common.collect.Lists;
 public class TenantIdTypeIT extends ParallelStatsDisabledIT {
 
     private Connection regularConnection(String url) throws SQLException {
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-        return DriverManager.getConnection(url, props);
+        return DriverManager.getConnection(url);
     }
 
     private Connection tenantConnection(String url) throws SQLException {
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         String tenantIdProperty = this.tenantId.replaceAll("\'", "");
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdProperty);
         return DriverManager.getConnection(url, props);
@@ -60,7 +57,6 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
 
     private Connection inconvertibleConnection(String url) throws SQLException {
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         String tenantIdProperty = "ABigOlString";
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdProperty);
         return DriverManager.getConnection(url, props);

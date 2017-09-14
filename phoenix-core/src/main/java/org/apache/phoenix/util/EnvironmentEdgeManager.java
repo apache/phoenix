@@ -55,6 +55,7 @@ public class EnvironmentEdgeManager {
    * @param edge the new edge.
    */
   public static void injectEdge(EnvironmentEdge edge) {
+    org.apache.hadoop.hbase.util.EnvironmentEdgeManager.injectEdge(edge);
     if (edge == null) {
       reset();
     } else {

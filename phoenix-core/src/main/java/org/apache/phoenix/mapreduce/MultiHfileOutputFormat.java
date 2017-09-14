@@ -69,6 +69,7 @@ import org.apache.hadoop.mapreduce.lib.partition.TotalOrderPartitioner;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -135,7 +136,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             private final Map<byte [], WriterLength> writers =
                     new TreeMap<byte [], WriterLength>(Bytes.BYTES_COMPARATOR);
             private byte [] previousRow = HConstants.EMPTY_BYTE_ARRAY;
-            private final byte [] now = Bytes.toBytes(System.currentTimeMillis());
+            private final byte [] now = Bytes.toBytes(EnvironmentEdgeManager.currentTimeMillis());
             private boolean rollRequested = false;
 
             @Override
@@ -271,7 +272,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
           private void close(final StoreFile.Writer w) throws IOException {
               if (w != null) {
                   w.appendFileInfo(StoreFile.BULKLOAD_TIME_KEY,
-                          Bytes.toBytes(System.currentTimeMillis()));
+                          Bytes.toBytes(EnvironmentEdgeManager.currentTimeMillis()));
                   w.appendFileInfo(StoreFile.BULKLOAD_TASK_KEY,
                           Bytes.toBytes(context.getTaskAttemptID().toString()));
                   w.appendFileInfo(StoreFile.MAJOR_COMPACTION_KEY,

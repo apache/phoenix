@@ -59,7 +59,6 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     private static final double unsignedDoubleUpserted = 1.264d;
     private static final float floatUpserted = 1.264f;
     private static final float unsignedFloatUpserted = 1.264f;
-
     private String tableName;
     
     @Before
@@ -647,33 +646,23 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testRoundOffFunction() throws SQLException {
-    long ts = nextTimestamp();
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
     Connection conn = DriverManager.getConnection(getUrl(), props);
-    String ddl = "create table round_test(k bigint primary key)";
+    String uniquetableName = generateUniqueName();
+    String ddl = "create table " + uniquetableName + "(k bigint primary key)";
     conn.createStatement().execute(ddl);
-    conn.close();
     
-    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-    conn = DriverManager.getConnection(getUrl(), props);
-    PreparedStatement stmt = conn.prepareStatement("upsert into round_test values(1380603308885)");
+    PreparedStatement stmt = conn.prepareStatement("upsert into " + uniquetableName + " values(1380603308885)");
     stmt.execute();
     conn.commit();
-    conn.close();
-    
 
-    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-    conn = DriverManager.getConnection(getUrl(), props);
     ResultSet rs;
-    stmt = conn.prepareStatement("select round(k/1000000,0) from round_test");
+    stmt = conn.prepareStatement("select round(k/1000000,0) from " + uniquetableName);
     rs = stmt.executeQuery();
     assertTrue(rs.next());
     assertEquals(1380603, rs.getLong(1));
     
-    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-    conn = DriverManager.getConnection(getUrl(), props);
-    stmt = conn.prepareStatement("select round(k/1000000,0) x from round_test group by x");
+    stmt = conn.prepareStatement("select round(k/1000000,0) x from " + uniquetableName + " group by x");
     rs = stmt.executeQuery();
     assertTrue(rs.next());
     assertEquals(1380603, rs.getLong(1));

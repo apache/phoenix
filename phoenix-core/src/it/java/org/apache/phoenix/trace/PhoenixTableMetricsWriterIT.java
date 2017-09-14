@@ -18,12 +18,16 @@
 package org.apache.phoenix.trace;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.util.Collection;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.metrics2.MetricsRecord;
+import org.apache.htrace.Span;
+import org.apache.htrace.Tracer;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
@@ -41,10 +45,8 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
      */
     @Test
     public void testCreatesTable() throws Exception {
-        PhoenixMetricsSink sink = new PhoenixMetricsSink();
+
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateUniqueName();
-        sink.initForTesting(conn, tableName);
 
         // check for existence of the tracing table
         try {
@@ -55,27 +57,19 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         } catch (Exception e) {
             // expected
         }
-
-        // initialize sink again, which should attempt to create the table, but not fail
-        try {
-            sink.initForTesting(conn, tableName);
-        } catch (Exception e) {
-            fail("Initialization shouldn't fail if table already exists!");
-        }
     }
 
     /**
      * Simple metrics writing and reading check, that uses the standard wrapping in the
-     * {@link PhoenixMetricsSink}
+     * {@link TraceWriter}
      * @throws Exception on failure
      */
     @Test
     public void writeMetrics() throws Exception {
-        // hook up a phoenix sink
-        PhoenixMetricsSink sink = new PhoenixMetricsSink();
+
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateUniqueName();
-        sink.initForTesting(conn, tableName);
+        latch = new CountDownLatch(1);
+        testTraceWriter.start();
 
         // create a simple metrics record
         long traceid = 987654;
@@ -84,19 +78,18 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         long parentid = 11;
         long startTime = 12;
         long endTime = 13;
+        String processid = "Some process";
         String annotation = "test annotation for a span";
-        String hostnameValue = "host-name.value";
-       MetricsRecord record =
-                createRecord(traceid, parentid, spanid, description, startTime, endTime,
-                    hostnameValue, annotation);
 
-        // actually write the record to the table
-        sink.putMetrics(record);
-        sink.flush();
+        Span span = createNewSpan(traceid, parentid, spanid, description, startTime, endTime,
+            processid, annotation);
+
+        Tracer.getInstance().deliver(span);
+        assertTrue("Span never committed to table", latch.await(30, TimeUnit.SECONDS));
 
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
         // stats for the update as well
-        TraceReader reader = new TraceReader(conn, tableName);
+        TraceReader reader = new TraceReader(conn, tracingTableName);
         Collection<TraceHolder> traces = reader.readAll(10);
         assertEquals("Wrong number of traces in the tracing table", 1, traces.size());
 
@@ -111,8 +104,8 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         assertEquals(parentid, spanInfo.getParentIdForTesting());
         assertEquals(startTime, spanInfo.start);
         assertEquals(endTime, spanInfo.end);
-        assertEquals(hostnameValue, spanInfo.hostname);
         assertEquals("Wrong number of tags", 0, spanInfo.tagCount);
         assertEquals("Wrong number of annotations", 1, spanInfo.annotationCount);
     }
+
 }

@@ -46,16 +46,15 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
             String ddl;
             ddl = "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
             conn.createStatement().execute(ddl);
-            conn.commit();
+            insertRow(conn, "123n7-app-2-", 1);
+            insertRow(conn, "132n7-App-2-", 2);
+            insertRow(conn, "213n7-app-2-", 4);
+            insertRow(conn, "231n7-App-2-", 8);
+            insertRow(conn, "312n7-app-2-", 16);
+            insertRow(conn, "321n7-App-2-", 32);
         } finally {
             closeStmtAndConn(stmt, conn);
         }
-        insertRow(conn, "123n7-app-2-", 1);
-        insertRow(conn, "132n7-App-2-", 2);
-        insertRow(conn, "213n7-app-2-", 4);
-        insertRow(conn, "231n7-App-2-", 8);
-        insertRow(conn, "312n7-app-2-", 16);
-        insertRow(conn, "321n7-App-2-", 32);
     }
 
     private void insertRow(Connection conn, String k, int i) throws SQLException {
@@ -293,6 +292,142 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(false, rs.getBoolean(1));
         assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testMultiCFLikeExpressionWithLimitOffset() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table " + tableName
+                        + " (id integer not null primary key, cf.col1 varchar, cf.col2 varchar, cf2.col3 varchar, cf2.col4 varchar)";
+        String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            for (int i = 1; i <= 10; i++) {
+                stmt.setInt(1, i);
+                stmt.setString(2, i + "col1");
+                stmt.setString(3, i + "col2");
+                stmt.setString(4, i + "col3");
+                stmt.setString(5, i + "col4");
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            String query =
+                    "select cf.* from " + tableName
+                            + " where cf.col1 like '%col1%' limit 10 offset 2";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            int expectedCount = 8;
+            int i = 0;
+            while (rs.next()) {
+                i++;
+                assertTrue(rs.getString("COL1").contains("col1"));
+                assertTrue(rs.getString("COL2").contains("col2"));
+            }
+            assertEquals(expectedCount, i);
+
+            query =
+                    "select cf.*, cf2.* from " + tableName
+                            + " where cf.col1 like '%col1%' limit 10 offset 2";
+            rs = conn.createStatement().executeQuery(query);
+            i = 0;
+            while (rs.next()) {
+                i++;
+                assertTrue(rs.getString("COL1").contains("col1"));
+                assertTrue(rs.getString("COL2").contains("col2"));
+                assertTrue(rs.getString("COL3").contains("col3"));
+                assertTrue(rs.getString("COL4").contains("col4"));
+            }
+            assertEquals(expectedCount, i);
+            query = "select * from " + tableName + " where cf.col1 like '%col1%' limit 10 offset 2";
+            rs = conn.createStatement().executeQuery(query);
+            i = 0;
+            while (rs.next()) {
+                i++;
+                assertTrue(rs.getString("COL1").contains("col1"));
+                assertTrue(rs.getString("COL2").contains("col2"));
+                assertTrue(rs.getString("COL3").contains("col3"));
+                assertTrue(rs.getString("COL4").contains("col4"));
+            }
+            assertEquals(expectedCount, i);
+        }
+    }
+
+    @Test
+    public void testSingleCFLikeExpressionWithLimitOffset() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table " + tableName
+                        + " (id integer not null primary key, cf.col1 varchar, cf.col2 varchar, cf.col3 varchar, cf.col4 varchar)";
+        String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            for (int i = 1; i <= 10; i++) {
+                stmt.setInt(1, i);
+                stmt.setString(2, i + "col1");
+                stmt.setString(3, i + "col2");
+                stmt.setString(4, i + "col3");
+                stmt.setString(5, i + "col4");
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            String query =
+                    "select cf.* from " + tableName
+                            + " where cf.col1 like '%col1%' limit 10 offset 2";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            int expectedCount = 8;
+            int i = 0;
+            while (rs.next()) {
+                i++;
+                assertTrue(rs.getString("COL1").contains("col1"));
+                assertTrue(rs.getString("COL2").contains("col2"));
+            }
+            assertEquals(expectedCount, i);
+
+            query =
+                    "select cf.* from " + tableName
+                            + " where cf.col1 like '%col1%' limit 10 offset 2";
+            rs = conn.createStatement().executeQuery(query);
+            i = 0;
+            while (rs.next()) {
+                i++;
+                assertTrue(rs.getString("COL1").contains("col1"));
+                assertTrue(rs.getString("COL2").contains("col2"));
+                assertTrue(rs.getString("COL3").contains("col3"));
+                assertTrue(rs.getString("COL4").contains("col4"));
+            }
+            assertEquals(expectedCount, i);
+            query = "select cf.* from " + tableName + " where cf.col1 like '%col1%' limit 10 offset 2";
+            rs = conn.createStatement().executeQuery(query);
+            i = 0;
+            while (rs.next()) {
+                i++;
+                assertTrue(rs.getString("COL1").contains("col1"));
+                assertTrue(rs.getString("COL2").contains("col2"));
+                assertTrue(rs.getString("COL3").contains("col3"));
+                assertTrue(rs.getString("COL4").contains("col4"));
+            }
+            assertEquals(expectedCount, i);
+        }
+    }
+
+    @Test
+    public void testParameterizedLikeExpression() throws Exception {
+        final Connection conn = DriverManager.getConnection(getUrl());
+        final PreparedStatement select = conn.prepareStatement(
+                "select k from " + tableName + " where k like ?");
+        select.setString(1, "12%");
+        ResultSet rs = select.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("123n7-app-2-", rs.getString(1));
+        assertFalse(rs.next());
+
+        select.setString(1, null);
+        rs = select.executeQuery();
         assertFalse(rs.next());
     }
 }

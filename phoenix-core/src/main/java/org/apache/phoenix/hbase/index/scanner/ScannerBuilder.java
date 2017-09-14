@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter;
+import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter.DeleteTracker;
 import org.apache.phoenix.hbase.index.covered.filter.ColumnTrackingNextLargestTimestampFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
@@ -57,7 +58,7 @@ public class ScannerBuilder {
     this.update = update;
   }
 
-  public Scanner buildIndexedColumnScanner(Collection<? extends ColumnReference> indexedColumns, ColumnTracker tracker, long ts, boolean returnNullIfRowNotFound) {
+  public CoveredDeleteScanner buildIndexedColumnScanner(Collection<? extends ColumnReference> indexedColumns, ColumnTracker tracker, long ts, boolean returnNullIfRowNotFound) {
 
     Filter columnFilters = getColumnFilters(indexedColumns);
     FilterList filters = new FilterList(Lists.newArrayList(columnFilters));
@@ -68,10 +69,11 @@ public class ScannerBuilder {
     filters.addFilter(new ColumnTrackingNextLargestTimestampFilter(ts, tracker));
 
     // filter out kvs based on deletes
-    filters.addFilter(new ApplyAndFilterDeletesFilter(getAllFamilies(indexedColumns)));
+    ApplyAndFilterDeletesFilter deleteFilter = new ApplyAndFilterDeletesFilter(getAllFamilies(indexedColumns));
+    filters.addFilter(deleteFilter);
 
     // combine the family filters and the rest of the filters as a
-    return getFilteredScanner(filters, returnNullIfRowNotFound);
+    return getFilteredScanner(filters, returnNullIfRowNotFound, deleteFilter.getDeleteTracker());
   }
 
   /**
@@ -108,14 +110,18 @@ public class ScannerBuilder {
     return families;
   }
 
-  private Scanner getFilteredScanner(Filter filters, boolean returnNullIfRowNotFound) {
+  public static interface CoveredDeleteScanner extends Scanner {
+      public DeleteTracker getDeleteTracker();
+  }
+  
+  private CoveredDeleteScanner getFilteredScanner(Filter filters, boolean returnNullIfRowNotFound, final DeleteTracker deleteTracker) {
     // create a scanner and wrap it as an iterator, meaning you can only go forward
     final FilteredKeyValueScanner kvScanner = new FilteredKeyValueScanner(filters, memstore);
     // seek the scanner to initialize it
     KeyValue start = KeyValueUtil.createFirstOnRow(update.getRow());
     try {
       if (!kvScanner.seek(start)) {
-        return returnNullIfRowNotFound ? null : new EmptyScanner();
+        return returnNullIfRowNotFound ? null : new EmptyScanner(deleteTracker);
       }
     } catch (IOException e) {
       // This should never happen - everything should explode if so.
@@ -124,7 +130,7 @@ public class ScannerBuilder {
     }
 
     // we have some info in the scanner, so wrap it in an iterator and return.
-    return new Scanner() {
+    return new CoveredDeleteScanner() {
 
       @Override
       public Cell next() {
@@ -161,6 +167,11 @@ public class ScannerBuilder {
       @Override
       public void close() throws IOException {
         kvScanner.close();
+      }
+
+      @Override
+      public DeleteTracker getDeleteTracker() {
+        return deleteTracker;
       }
     };
   }

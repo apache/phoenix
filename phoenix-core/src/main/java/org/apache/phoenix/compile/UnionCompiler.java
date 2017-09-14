@@ -58,7 +58,8 @@ public class UnionCompiler {
             for (QueryPlan plan : selectPlans) {
                 if (columnCount !=plan.getProjector().getColumnCount()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode
-                        .SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS).setMessage(".")
+                        .SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS).setMessage("1st query has " + columnCount + " columns whereas 2nd " +
+                            "query has " + plan.getProjector().getColumnCount())
                         .build().buildException();
                 }
                 ColumnProjector colproj = plan.getProjector().getColumnProjector(i);
@@ -101,7 +102,7 @@ public class UnionCompiler {
             null, null, projectedColumns, null, null, null, true, null, null, null, true,
             true, true, null, null, null, false, false, 0, 0L,
             SchemaUtil.isNamespaceMappingEnabled(PTableType.SUBQUERY,
-                statement.getConnection().getQueryServices().getProps()), null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER);
+                statement.getConnection().getQueryServices().getProps()), null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
         TableRef tableRef = new TableRef(null, tempTable, 0, false);
         return tableRef;
     }
@@ -116,7 +117,9 @@ public class UnionCompiler {
             targetTypes.get(i).setType(type);
         } else {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode
-                .SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS).setMessage(".")
+                .SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS).setMessage("Column # " + i + " is "
+                    + targetTypes.get(i).getType().getSqlTypeName() + " in 1st query where as it is "
+                    + type.getSqlTypeName() + " in 2nd query")
                 .build().buildException();
         }
         Integer len = expression.getMaxLength();

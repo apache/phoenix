@@ -498,7 +498,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (rhs instanceof LiteralExpression) {
             String pattern = (String)((LiteralExpression)rhs).getValue();
             if (pattern == null || pattern.length() == 0) {
-                return LiteralExpression.newConstant(null, rhs.getDeterminism());
+                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, rhs.getDeterminism());
             }
             // TODO: for pattern of '%' optimize to strlength(lhs) > 0
             // We can't use lhs IS NOT NULL b/c if lhs is NULL we need

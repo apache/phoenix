@@ -33,19 +33,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -61,52 +59,45 @@ import com.google.common.collect.Maps;
  */
 
 @RunWith(Parameterized.class)
-public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
+public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected static final String tenantId = getOrganizationId();
     protected static final String ATABLE_INDEX_NAME = "ATABLE_IDX";
     protected static final long BATCH_SIZE = 3;
     protected static final String[] INDEX_DDLS = new String[] {
             "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
             "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
-                    + "    B_STRING, " + "    A_DATE)",
+                    + "    B_STRING, " + "    A_DATE) %s",
             "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
             "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
             "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
-                    + "    A_DATE)",
+                    + "    A_DATE) %s",
             "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)", 
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
             "" };
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
-        doSetup(null);
-    }
-    
-    protected static void doSetup(Map<String,String> customProps) throws Exception {
-        Map<String,String> props = getDefaultProps();
-        if(customProps != null) {
-        	props.putAll(customProps);
-        }
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         // Make a small batch size to test multiple calls to reserve sequences
         props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
-    private static Map<Pair<String, String>, Pair<String, String>> namesByParams = Maps.newHashMapWithExpectedSize(10);
-    
-    protected long ts;
     protected Date date;
     private String indexDDL;
     private String tableDDLOptions;
     protected String tableName;
     protected String indexName;
     
-    public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded) {
+    private static final Logger logger = LoggerFactory.getLogger(BaseQueryIT.class);
+
+    public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded,
+            boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             optionBuilder.append("COLUMN_ENCODED_BYTES=0");
@@ -119,35 +110,33 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
                 optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             }
         }
+        if (keepDeletedCells) {
+            if (optionBuilder.length()>0)
+                optionBuilder.append(",");
+            optionBuilder.append("KEEP_DELETED_CELLS=true");
+        }
         this.tableDDLOptions = optionBuilder.toString();
         try {
-            this.ts = nextTimestamp();
-            Pair<String, String> runParam = new Pair<>(idxDdl, tableDDLOptions);
-            Pair<String, String> tableIndexNames = namesByParams.get(runParam);
-            if (tableIndexNames == null) {
-                this.tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
-                this.indexName = generateUniqueName();
-                namesByParams.put(runParam, new Pair<>(tableName, indexName));
-                if (idxDdl.length() > 0) {
-                    this.indexDDL = String.format(idxDdl, indexName, tableName);
-                    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-                    Connection conn = DriverManager.getConnection(getUrl(), props);
-                    conn.createStatement().execute(this.indexDDL);
-                }
-            } else {
-                this.tableName = tableIndexNames.getFirst();
-                this.indexName = tableIndexNames.getSecond();
-                initATableValues(this.tableName, tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
-            }
+            this.tableName =
+                    initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
+                        date = new Date(System.currentTimeMillis()), null, getUrl(), tableDDLOptions);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            logger.error("Exception when creating aTable ", e);
+            throw e;
         }
-    }
-    
-    @Before
-    public void init() throws Exception {
-        this.ts = nextTimestamp();
+        this.indexName = generateUniqueName();
+        if (idxDdl.length() > 0) {
+            this.indexDDL =
+                    String.format(idxDdl, indexName, tableName,
+                        keepDeletedCells ? "KEEP_DELETED_CELLS=true" : "KEEP_DELETED_CELLS=false");
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                conn.createStatement().execute(this.indexDDL);
+            } catch (Exception e) {
+                logger.error("Exception while creating index: " + indexDDL, e);
+                throw e;
+            }
+        }
     }
     
     @Parameters(name="indexDDL={0},mutable={1},columnEncoded={2}")

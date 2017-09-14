@@ -42,8 +42,7 @@ public class TenantCacheTest {
     public void testInvalidateClosesMemoryChunk() throws SQLException {
         int maxServerCacheTimeToLive = 10000;
         long maxBytes = 1000;
-        int maxWaitMs = 1000;
-        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes, maxWaitMs);
+        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes);
         TenantCacheImpl newTenantCache = new TenantCacheImpl(memoryManager, maxServerCacheTimeToLive);
         ImmutableBytesPtr cacheId = new ImmutableBytesPtr(Bytes.toBytes("a"));
         ImmutableBytesWritable cachePtr = new ImmutableBytesWritable(Bytes.toBytes("a"));
@@ -57,8 +56,7 @@ public class TenantCacheTest {
     public void testTimeoutClosesMemoryChunk() throws Exception {
         int maxServerCacheTimeToLive = 10;
         long maxBytes = 1000;
-        int maxWaitMs = 10;
-        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes, maxWaitMs);
+        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes);
         ManualTicker ticker = new ManualTicker();
         TenantCacheImpl cache = new TenantCacheImpl(memoryManager, maxServerCacheTimeToLive, ticker);
         ImmutableBytesPtr cacheId1 = new ImmutableBytesPtr(Bytes.toBytes("a"));

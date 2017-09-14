@@ -21,9 +21,6 @@ import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
-import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
-import static org.apache.phoenix.util.TestUtil.MDTEST_SCHEMA_NAME;
-import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -55,23 +52,19 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
 
-public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
+public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 
-    private String tableName; 
     @Test
     public void testSelect() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId));
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         // Table wildcard query
@@ -221,7 +214,8 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
         byte[] cfC = Bytes.toBytes(SchemaUtil.normalizeIdentifier("c"));
         byte[][] familyNames = new byte[][] { cfB, cfC };
-        byte[] htableName = SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME, MDTEST_NAME);
+        String table = generateUniqueName();
+        byte[] htableName = SchemaUtil.getTableNameAsBytes("", table);
         HBaseAdmin admin = pconn.getQueryServices().getAdmin();
 
         @SuppressWarnings("deprecation")
@@ -232,17 +226,14 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         }
         admin.createTable(descriptor);
 
-        long ts = nextTimestamp();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
 
-        String createStmt = "create view " + MDTEST_NAME + " (id integer not null primary key,"
+        String createStmt = "create view " + table + " (id integer not null primary key,"
                 + " b.col1 integer, c.col2 bigint, c.col3 varchar(20))";
         conn1.createStatement().execute(createStmt);
         conn1.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
         PhoenixConnection conn2 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         byte[] c1 = Bytes.toBytes("COL1");
         byte[] c2 = Bytes.toBytes("COL2");
@@ -251,26 +242,25 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         try {
             htable = conn2.getQueryServices().getTable(htableName);
             Put put = new Put(PInteger.INSTANCE.toBytes(1));
-            put.add(cfB, c1, ts + 6, PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(2));
+            put.add(cfB, c1, PInteger.INSTANCE.toBytes(1));
+            put.add(cfC, c2, PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
             put = new Put(PInteger.INSTANCE.toBytes(2));
-            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(10));
-            put.add(cfC, c3, ts + 6, PVarchar.INSTANCE.toBytes("abcd"));
+            put.add(cfC, c2, PLong.INSTANCE.toBytes(10));
+            put.add(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             put = new Put(PInteger.INSTANCE.toBytes(3));
-            put.add(cfB, c1, ts + 6, PInteger.INSTANCE.toBytes(3));
-            put.add(cfC, c2, ts + 6, PLong.INSTANCE.toBytes(10));
-            put.add(cfC, c3, ts + 6, PVarchar.INSTANCE.toBytes("abcd"));
+            put.add(cfB, c1, PInteger.INSTANCE.toBytes(3));
+            put.add(cfC, c2, PLong.INSTANCE.toBytes(10));
+            put.add(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             conn2.close();
 
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
             Connection conn7 = DriverManager.getConnection(getUrl(), props);
-            String select = "SELECT id, b.col1 FROM " + MDTEST_NAME + " WHERE c.col2=?";
+            String select = "SELECT id, b.col1 FROM " + table + " WHERE c.col2=?";
             PreparedStatement ps = conn7.prepareStatement(select);
             ps.setInt(1, 10);
             ResultSet rs = ps.executeQuery();
@@ -284,7 +274,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Select contains only CF wildcards
-            select = "SELECT b.* FROM " + MDTEST_NAME + " WHERE c.col2=?";
+            select = "SELECT b.* FROM " + table + " WHERE c.col2=?";
             ps = conn7.prepareStatement(select);
             ps.setInt(1, 10);
             rs = ps.executeQuery();
@@ -295,7 +285,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertEquals(3, rs.getInt(1));
             assertFalse(rs.next());
 
-            select = "SELECT b.* FROM " + MDTEST_NAME;
+            select = "SELECT b.* FROM " + table;
             ps = conn7.prepareStatement(select);
             rs = ps.executeQuery();
             assertTrue(rs.next());
@@ -315,17 +305,28 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
     }
 
     
-    private static void initMultiCFTable(long ts) throws Exception {
+    private static String initMultiCFTable() throws Exception {
         String url = getUrl();
-        ensureTableCreated(url, MULTI_CF_NAME, MULTI_CF_NAME, ts);
-
+        String tableName = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        String ddl = "create table " + tableName +
+                "   (id char(15) not null primary key,\n" +
+                "    a.unique_user_count integer,\n" +
+                "    b.unique_org_count integer,\n" +
+                "    c.db_cpu_utilization decimal(31,10),\n" +
+                "    d.transaction_count bigint,\n" +
+                "    e.cpu_utilization decimal(31,10),\n" +
+                "    f.response_time bigint,\n" +
+                "    g.response_time bigint)";
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            conn.createStatement().execute(ddl);
+        }
+        props = new Properties();
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "MULTI_CF(" +
+                    "upsert into " + tableName +
+                    "(" +
                     "    id, " +
                     "    a.unique_user_count, " +
                     "    b.unique_org_count, " +
@@ -343,6 +344,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             stmt.setBigDecimal(4, BigDecimal.valueOf(20.9));
             stmt.execute();
             conn.commit();
+            return tableName;
         } finally {
             conn.close();
         }
@@ -350,14 +352,12 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectWithConditionOnMultiCF() throws Exception {
-        long ts = nextTimestamp();
-        initMultiCFTable(ts);
+        String tableName = initMultiCFTable();
         
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "SELECT c.db_cpu_utilization FROM MULTI_CF WHERE a.unique_user_count = ? and b.unique_org_count = ?";
+            String query = "SELECT c.db_cpu_utilization FROM " + tableName + " WHERE a.unique_user_count = ? and b.unique_org_count = ?";
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setInt(1, 1);
             statement.setInt(2, 1);

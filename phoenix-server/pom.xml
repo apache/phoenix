@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.11.0-HBase-1.3-SNAPSHOT</version>
+    <version>4.12.0-HBase-1.3-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Server</name>
@@ -133,6 +133,7 @@
                   <include>it.unimi.dsi:fastutil</include>
                   <include>io.dropwizard.metrics:metrics-core</include>
                   <include>org.apache.thrift:libthrift</include>
+                  <include>com.clearspring.analytics:stream</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>

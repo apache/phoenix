@@ -21,6 +21,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.sql.Array;
+import java.sql.SQLException;
 import java.text.Format;
 import java.util.Random;
 
@@ -1100,9 +1102,12 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     }
 
     public String toStringLiteral(Object o, Format formatter) {
+        if (o == null) {
+            return String.valueOf(o);
+        }
         if (formatter != null) {
             return formatter.format(o);
-        } else if (null == o) { return String.valueOf(o); }
+        }
         return o.toString();
     }
 
@@ -1152,9 +1157,19 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         if (value == null) { return null; }
         for (PDataType type : PDataType.values()) {
             if (type.isArrayType()) {
-                PhoenixArray arr = (PhoenixArray)value;
-                if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
-                        && type.getJavaClass().isInstance(value)) { return type; }
+                if (value instanceof PhoenixArray) {
+                    PhoenixArray arr = (PhoenixArray)value;
+                    if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
+                            && type.getJavaClass().isInstance(value)) { return type; }
+                } else {
+                    Array arr = (Array) value;
+                    try {
+                        // Does the array's component type make sense for what we were told it is
+                        if (arr.getBaseType() == type.getSqlType() - PDataType.ARRAY_TYPE_BASE) {
+                            return type;
+                        }
+                    } catch (SQLException e) { /* Passthrough to fail */ }
+                }
             } else {
                 if (type.getJavaClass().isInstance(value)) { return type; }
             }

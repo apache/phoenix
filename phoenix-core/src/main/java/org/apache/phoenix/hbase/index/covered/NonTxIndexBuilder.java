@@ -12,24 +12,17 @@ package org.apache.phoenix.hbase.index.covered;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.BaseIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
@@ -39,7 +32,6 @@ import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
 
 import com.google.common.collect.Lists;
-import com.google.common.primitives.Longs;
 
 /**
  * Build covered indexes for phoenix updates.
@@ -94,76 +86,29 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      * @throws IOException
      */
     private void batchMutationAndAddUpdates(IndexUpdateManager manager, LocalTableState state, Mutation m, IndexMetaData indexMetaData) throws IOException {
-        // split the mutation into timestamp-based batches
-        Collection<Batch> batches = createTimestampBatchesFromMutation(m);
+        // The cells of a mutation are broken up into time stamp batches prior to this call (in Indexer).
+        long ts = m.getFamilyCellMap().values().iterator().next().iterator().next().getTimestamp();
+        Batch batch = new Batch(ts);
+        for (List<Cell> family : m.getFamilyCellMap().values()) {
+            List<KeyValue> kvs = KeyValueUtil.ensureKeyValues(family);
+            for (KeyValue kv : kvs) {
+                batch.add(kv);
+                if(ts != kv.getTimestamp()) {
+                    throw new IllegalStateException("Time stamps must match for all cells in a batch");
+                }
+            }
+        }
 
         // go through each batch of keyvalues and build separate index entries for each
         boolean cleanupCurrentState = !indexMetaData.isImmutableRows();
-        for (Batch batch : batches) {
-            /*
-             * We have to split the work between the cleanup and the update for each group because when we update the
-             * current state of the row for the current batch (appending the mutations for the current batch) the next
-             * group will see that as the current state, which will can cause the a delete and a put to be created for
-             * the next group.
-             */
-            if (addMutationsForBatch(manager, batch, state, cleanupCurrentState, indexMetaData)) {
-                cleanupCurrentState = false;
-            }
-        }
-    }
-
-    /**
-     * Batch all the {@link KeyValue}s in a {@link Mutation} by timestamp. Updates any {@link KeyValue} with a timestamp
-     * == {@link HConstants#LATEST_TIMESTAMP} to the timestamp at the time the method is called.
-     * 
-     * @param m
-     *            {@link Mutation} from which to extract the {@link KeyValue}s
-     * @return the mutation, broken into batches and sorted in ascending order (smallest first)
-     */
-    protected Collection<Batch> createTimestampBatchesFromMutation(Mutation m) {
-        Map<Long, Batch> batches = new HashMap<Long, Batch>();
-        for (List<Cell> family : m.getFamilyCellMap().values()) {
-            List<KeyValue> familyKVs = KeyValueUtil.ensureKeyValues(family);
-            createTimestampBatchesFromKeyValues(familyKVs, batches);
-        }
-        // sort the batches
-        List<Batch> sorted = new ArrayList<Batch>(batches.values());
-        Collections.sort(sorted, new Comparator<Batch>() {
-            @Override
-            public int compare(Batch o1, Batch o2) {
-                return Longs.compare(o1.getTimestamp(), o2.getTimestamp());
-            }
-        });
-        return sorted;
-    }
-
-    /**
-     * Batch all the {@link KeyValue}s in a collection of kvs by timestamp. Updates any {@link KeyValue} with a
-     * timestamp == {@link HConstants#LATEST_TIMESTAMP} to the timestamp at the time the method is called.
-     * 
-     * @param kvs
-     *            {@link KeyValue}s to break into batches
-     * @param batches
-     *            to update with the given kvs
-     */
-    protected void createTimestampBatchesFromKeyValues(Collection<KeyValue> kvs, Map<Long, Batch> batches) {
-        long now = EnvironmentEdgeManager.currentTime();
-        byte[] nowBytes = Bytes.toBytes(now);
-
-        // batch kvs by timestamp
-        for (KeyValue kv : kvs) {
-            long ts = kv.getTimestamp();
-            // override the timestamp to the current time, so the index and primary tables match
-            // all the keys with LATEST_TIMESTAMP will then be put into the same batch
-            if (kv.updateLatestStamp(nowBytes)) {
-                ts = now;
-            }
-            Batch batch = batches.get(ts);
-            if (batch == null) {
-                batch = new Batch(ts);
-                batches.put(ts, batch);
-            }
-            batch.add(kv);
+        /*
+         * We have to split the work between the cleanup and the update for each group because when we update the
+         * current state of the row for the current batch (appending the mutations for the current batch) the next
+         * group will see that as the current state, which will can cause the a delete and a put to be created for
+         * the next group.
+         */
+        if (addMutationsForBatch(manager, batch, state, cleanupCurrentState, indexMetaData)) {
+            cleanupCurrentState = false;
         }
     }
 
@@ -221,35 +166,40 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
 
         // A.2 do a single pass first for the updates to the current state
         state.applyPendingUpdates();
-        long minTs = addUpdateForGivenTimestamp(batchTs, state, updateMap, indexMetaData);
-        // if all the updates are the latest thing in the index, we are done - don't go and fix history
-        if (ColumnTracker.isNewestTime(minTs)) { return false; }
-
-        // A.3 otherwise, we need to roll up through the current state and get the 'correct' view of the
-        // index. after this, we have the correct view of the index, from the batch up to the index
-        while (!ColumnTracker.isNewestTime(minTs)) {
-            minTs = addUpdateForGivenTimestamp(minTs, state, updateMap, indexMetaData);
-        }
-
-        // B. only cleanup the current state if we need to - its a huge waste of effort otherwise.
-        if (requireCurrentStateCleanup) {
-            // roll back the pending update. This is needed so we can remove all the 'old' index entries.
-            // We don't need to do the puts here, but just the deletes at the given timestamps since we
-            // just want to completely hide the incorrect entries.
-            state.rollback(batch.getKvs());
-            // setup state
-            state.setPendingUpdates(batch.getKvs());
-
-            // cleanup the pending batch. If anything in the correct history is covered by Deletes used to
-            // 'fix' history (same row key and ts), we just drop the delete (we don't want to drop both
-            // because the update may have a different set of columns or value based on the update).
-            cleanupIndexStateFromBatchOnward(updateMap, batchTs, state, indexMetaData);
-
-            // have to roll the state forward again, so the current state is correct
-            state.applyPendingUpdates();
-            return true;
-        }
+        addUpdateForGivenTimestamp(batchTs, state, updateMap, indexMetaData);
+        // FIXME: PHOENIX-4057 do not attempt to issue index updates
+        // for out-of-order mutations since it corrupts the index.
         return false;
+        
+//        long minTs = addUpdateForGivenTimestamp(batchTs, state, updateMap, indexMetaData);
+//        // if all the updates are the latest thing in the index, we are done - don't go and fix history
+//        if (ColumnTracker.isNewestTime(minTs)) { return false; }
+//
+//        // A.3 otherwise, we need to roll up through the current state and get the 'correct' view of the
+//        // index. after this, we have the correct view of the index, from the batch up to the index
+//        while (!ColumnTracker.isNewestTime(minTs)) {
+//            minTs = addUpdateForGivenTimestamp(minTs, state, updateMap, indexMetaData);
+//        }
+//
+//        // B. only cleanup the current state if we need to - its a huge waste of effort otherwise.
+//        if (requireCurrentStateCleanup) {
+//            // roll back the pending update. This is needed so we can remove all the 'old' index entries.
+//            // We don't need to do the puts here, but just the deletes at the given timestamps since we
+//            // just want to completely hide the incorrect entries.
+//            state.rollback(batch.getKvs());
+//            // setup state
+//            state.setPendingUpdates(batch.getKvs());
+//
+//            // cleanup the pending batch. If anything in the correct history is covered by Deletes used to
+//            // 'fix' history (same row key and ts), we just drop the delete (we don't want to drop both
+//            // because the update may have a different set of columns or value based on the update).
+//            cleanupIndexStateFromBatchOnward(updateMap, batchTs, state, indexMetaData);
+//
+//            // have to roll the state forward again, so the current state is correct
+//            state.applyPendingUpdates();
+//            return true;
+//        }
+//        return false;
     }
 
     private long addUpdateForGivenTimestamp(long ts, LocalTableState state, IndexUpdateManager updateMap, IndexMetaData indexMetaData)
@@ -308,6 +258,13 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
             if (trackerTs < minTs) {
                 minTs = tracker.getTS();
             }
+            
+            // FIXME: PHOENIX-4057 do not attempt to issue index updates
+            // for out-of-order mutations since it corrupts the index.
+            if (tracker.hasNewerTimestamps()) {
+                continue;
+            }
+            
             // track index hints for the next round. Hint if we need an update for that column for the
             // next timestamp. These columns clearly won't need to update as we go through time as they
             // already match the most recent possible thing.
@@ -383,12 +340,22 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      */
     protected void addDeleteUpdatesToMap(IndexUpdateManager updateMap, LocalTableState state, long ts, IndexMetaData indexMetaData)
             throws IOException {
+        if (indexMetaData.isImmutableRows()) {
+            return;
+        }
         Iterable<IndexUpdate> cleanup = codec.getIndexDeletes(state, indexMetaData);
         if (cleanup != null) {
             for (IndexUpdate d : cleanup) {
                 if (!d.isValid()) {
                     continue;
                 }
+                // FIXME: PHOENIX-4057 do not attempt to issue index updates
+                // for out-of-order mutations since it corrupts the index.
+                final ColumnTracker tracker = d.getIndexedColumns();
+                if (tracker.hasNewerTimestamps()) {
+                    continue;
+                }
+                
                 // override the timestamps in the delete to match the current batch.
                 Delete remove = (Delete)d.getUpdate();
                 remove.setTimestamp(ts);

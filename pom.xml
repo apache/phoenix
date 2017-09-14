@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.11.0-HBase-1.3-SNAPSHOT</version>
+  <version>4.12.0-HBase-1.3-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -36,6 +36,7 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-load-balancer</module>
   </modules>
 
   <repositories>
@@ -98,13 +99,13 @@
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <avatica.version>1.9.0</avatica.version>
+    <avatica.version>1.10.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
-    <tephra.version>0.11.0-incubating</tephra.version>
+    <tephra.version>0.13.0-incubating</tephra.version>
     <spark.version>2.0.2</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
-
+    <stream.version>2.9.5</stream.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
@@ -112,8 +113,8 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.19.1</maven-failsafe-plugin.version>
+    <maven-surefire-plugin.version>2.20</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.20</maven-failsafe-plugin.version>
 
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
@@ -127,6 +128,8 @@
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+   <curator.version>2.12.0</curator.version>
+
   </properties>
 
   <build>
@@ -245,12 +248,6 @@
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -280,12 +277,6 @@
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -304,12 +295,6 @@
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
                 <shutdown>kill</shutdown>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -346,12 +331,6 @@
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
                  <shutdown>kill</shutdown>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
@@ -570,6 +549,11 @@
         <artifactId>phoenix-queryserver-client</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-load-balancer</artifactId>
+        <version>${project.version}</version>
+      </dependency>
 
       <!-- HBase dependencies -->
       <dependency>
@@ -664,7 +648,6 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-hadoop2-compat</artifactId>
         <version>${hbase.version}</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -812,7 +795,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-1.1</artifactId>
+        <artifactId>tephra-hbase-compat-1.3</artifactId>
         <version>${tephra.version}</version>
       </dependency>
 
@@ -952,6 +935,21 @@
         <groupId>joda-time</groupId>
         <artifactId>joda-time</artifactId>
         <version>${jodatime.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-test</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-client</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.clearspring.analytics</groupId>
+        <artifactId>stream</artifactId>
+        <version>${stream.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

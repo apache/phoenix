@@ -33,6 +33,9 @@ import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
@@ -43,9 +46,6 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.FunctionParseNode.Argument;
-import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 
 import com.google.common.collect.Lists;
 
@@ -125,6 +125,9 @@ public class RoundDecimalExpression extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression childExpr = children.get(0);
         if(childExpr.evaluate(tuple, ptr)) {
+            if (ptr.getLength()==0) {
+                return true;
+            }
             BigDecimal value = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childExpr.getDataType(), childExpr.getSortOrder());
             BigDecimal scaledValue = value.setScale(scale, getRoundingMode());
             ptr.set(PDecimal.INSTANCE.toBytes(scaledValue));

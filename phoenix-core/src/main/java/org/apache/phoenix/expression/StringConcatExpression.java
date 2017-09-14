@@ -86,6 +86,9 @@ public class StringConcatExpression extends BaseCompoundExpression {
                 // have enough information yet.
                 return false;
             }
+            if (ptr.getLength() == 0) {
+                continue;
+            }
             PDataType childType = children.get(i).getDataType();
             SortOrder sortOrder = children.get(i).getSortOrder();
             // We could potentially not invert the bytes, but we might as well since we're allocating

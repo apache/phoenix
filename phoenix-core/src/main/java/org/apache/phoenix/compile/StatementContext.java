@@ -252,7 +252,7 @@ public class StatementContext {
     }
 
     public long getCurrentTime() throws SQLException {
-        long ts = this.getCurrentTable().getTimeStamp();
+        long ts = this.getCurrentTable().getCurrentTime();
         // if the table is transactional then it is only resolved once per query, so we can't use the table timestamp
         if (this.getCurrentTable().getTable().getType() != PTableType.PROJECTED && !this
                 .getCurrentTable().getTable().isTransactional() && ts != QueryConstants
@@ -279,7 +279,7 @@ public class StatementContext {
         return sequences;
     }
 
-    public void addWhereCoditionColumn(byte[] cf, byte[] q) {
+    public void addWhereConditionColumn(byte[] cf, byte[] q) {
         whereConditionColumns.add(new Pair<byte[], byte[]>(cf, q));
     }
 

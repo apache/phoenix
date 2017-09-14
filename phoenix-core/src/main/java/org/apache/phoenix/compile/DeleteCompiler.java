@@ -17,6 +17,7 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.execute.MutationState.RowTimestampColInfo.NULL_ROWTIMESTAMP_INFO;
+import static org.apache.phoenix.util.NumberUtil.add;
 
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
@@ -61,6 +62,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -114,6 +116,7 @@ public class DeleteCompiler {
         final boolean isAutoCommit = connection.getAutoCommit();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         Map<ImmutableBytesPtr,RowMutationState> mutations = Maps.newHashMapWithExpectedSize(batchSize);
         List<Map<ImmutableBytesPtr,RowMutationState>> indexMutations = null;
@@ -172,10 +175,10 @@ public class DeleteCompiler {
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
-                    MutationState state = new MutationState(targetTableRef, mutations, 0, maxSize, connection);
+                    MutationState state = new MutationState(targetTableRef, mutations, 0, maxSize, maxSizeBytes, connection);
                     connection.getMutationState().join(state);
                     for (int i = 0; i < indexTableRefs.size(); i++) {
-                        MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, connection);
+                        MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                         connection.getMutationState().join(indexState);
                     }
                     connection.getMutationState().send();
@@ -188,10 +191,10 @@ public class DeleteCompiler {
 
             // If auto commit is true, this last batch will be committed upon return
             int nCommittedRows = isAutoCommit ? (rowCount / batchSize * batchSize) : 0;
-            MutationState state = new MutationState(targetTableRef, mutations, nCommittedRows, maxSize, connection);
+            MutationState state = new MutationState(targetTableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
             for (int i = 0; i < indexTableRefs.size(); i++) {
                 // To prevent the counting of these index rows, we have a negative for remainingRows.
-                MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, connection);
+                MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                 state.join(indexState);
             }
             return state;
@@ -301,6 +304,24 @@ public class DeleteCompiler {
 		public Operation getOperation() {
 			return operation;
 		}
+
+        @Override
+        public Long getEstimatedRowsToScan() throws SQLException {
+            Long estRows = null;
+            for (MutationPlan plan : plans) {
+                estRows = add(estRows, plan.getEstimatedRowsToScan());
+            }
+            return estRows;
+        }
+
+        @Override
+        public Long getEstimatedBytesToScan() throws SQLException {
+            Long estBytes = null;
+            for (MutationPlan plan : plans) {
+                estBytes = add(estBytes, plan.getEstimatedBytesToScan());
+            }
+            return estBytes;
+        }
     }
     
     private static boolean hasNonPKIndexedColumns(Collection<PTable> immutableIndexes) {
@@ -375,7 +396,7 @@ public class DeleteCompiler {
                 select = StatementNormalizer.normalize(select, resolverToBe);
                 SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolverToBe, connection);
                 if (transformedSelect != select) {
-                    resolverToBe = FromCompiler.getResolverForQuery(transformedSelect, connection);
+                    resolverToBe = FromCompiler.getResolverForQuery(transformedSelect, connection, false, delete.getTable().getName());
                     select = StatementNormalizer.normalize(transformedSelect, resolverToBe);
                 }
                 parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection);
@@ -476,6 +497,7 @@ public class DeleteCompiler {
             }
             
             final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+            final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
      
             final StatementContext context = plan.getContext();
             // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
@@ -502,7 +524,7 @@ public class DeleteCompiler {
                         while (iterator.hasNext()) {
                             mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                         }
-                        return new MutationState(tableRef, mutation, 0, maxSize, connection);
+                        return new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
                     }
     
                     @Override
@@ -530,14 +552,20 @@ public class DeleteCompiler {
             		public Operation getOperation() {
             			return operation;
             		}
+
+                    @Override
+                    public Long getEstimatedRowsToScan() throws SQLException {
+                        return 0l;
+                    }
+
+                    @Override
+                    public Long getEstimatedBytesToScan() throws SQLException {
+                        return 0l;
+                    }
                 });
             } else if (runOnServer) {
                 // TODO: better abstraction
                 Scan scan = context.getScan();
-                // Propagate IGNORE_NEWER_MUTATIONS when replaying mutations since there will be
-                // future dated data row mutations that will get in the way of generating the
-                // correct index rows on replay.
-                scan.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
                 scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
     
                 // Build an ungrouped aggregate query: select COUNT(*) from <table> where <where>
@@ -597,7 +625,7 @@ public class DeleteCompiler {
                             try {
                                 Tuple row = iterator.next();
                                 final long mutationCount = (Long)projector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
-                                return new MutationState(maxSize, connection) {
+                                return new MutationState(maxSize, maxSizeBytes, connection) {
                                     @Override
                                     public long getUpdateCount() {
                                         return mutationCount;
@@ -620,6 +648,16 @@ public class DeleteCompiler {
                         planSteps.add("DELETE ROWS");
                         planSteps.addAll(queryPlanSteps);
                         return new ExplainPlan(planSteps);
+                    }
+
+                    @Override
+                    public Long getEstimatedRowsToScan() throws SQLException {
+                        return aggPlan.getEstimatedRowsToScan();
+                    }
+
+                    @Override
+                    public Long getEstimatedBytesToScan() throws SQLException {
+                        return aggPlan.getEstimatedBytesToScan();
                     }
                 });
             } else {
@@ -676,7 +714,7 @@ public class DeleteCompiler {
                                 }
                                 // Return total number of rows that have been delete. In the case of auto commit being off
                                 // the mutations will all be in the mutation state of the current connection.
-                                MutationState state = new MutationState(maxSize, connection, totalRowCount);
+                                MutationState state = new MutationState(maxSize, maxSizeBytes, connection, totalRowCount);
 
                                 // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
                                 state.setReadMetricQueue(plan.getContext().getReadMetricsQueue());
@@ -697,6 +735,16 @@ public class DeleteCompiler {
                         planSteps.add("DELETE ROWS");
                         planSteps.addAll(queryPlanSteps);
                         return new ExplainPlan(planSteps);
+                    }
+
+                    @Override
+                    public Long getEstimatedRowsToScan() throws SQLException {
+                        return plan.getEstimatedRowsToScan();
+                    }
+
+                    @Override
+                    public Long getEstimatedBytesToScan() throws SQLException {
+                        return plan.getEstimatedBytesToScan();
                     }
                 });
             }

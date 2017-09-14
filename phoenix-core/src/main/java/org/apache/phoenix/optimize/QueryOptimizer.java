@@ -221,7 +221,7 @@ public class QueryOptimizer {
         schemaName = schemaName.length() == 0 ? null :  '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';
-        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName));
+        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName),select.getTableSamplingRate());
         SelectStatement indexSelect = FACTORY.select(select, table);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
         // We will or will not do tuple projection according to the data plan.
@@ -249,7 +249,9 @@ public class QueryOptimizer {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
                     } else if (index.getIndexType() == IndexType.GLOBAL) {
-                        throw new ColumnNotFoundException("*");
+                        String schemaNameStr = index.getSchemaName()==null?null:index.getSchemaName().getString();
+                        String tableNameStr = index.getTableName()==null?null:index.getTableName().getString();
+                        throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
                     }
                 }
             } catch (ColumnNotFoundException e) {

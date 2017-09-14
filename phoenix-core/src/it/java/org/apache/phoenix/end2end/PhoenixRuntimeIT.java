@@ -147,5 +147,4 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         HTableInterface htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
     }
-    
 }

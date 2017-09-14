@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.util.ColumnInfo;
 
 import com.google.common.base.Preconditions;
@@ -40,6 +41,8 @@ public class PhoenixIndexDBWritable  implements DBWritable {
     private List<Object> values;
     
     private int columnCount = -1;
+
+    private long rowTs = -1;
     
     @Override
     public void write(PreparedStatement statement) throws SQLException {
@@ -63,7 +66,9 @@ public class PhoenixIndexDBWritable  implements DBWritable {
         if(columnCount == -1) {
             this.columnCount = resultSet.getMetaData().getColumnCount();
         }
-  
+        if (columnCount > 0) {
+            this.rowTs = resultSet.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp();
+        }
         values = Lists.newArrayListWithCapacity(columnCount);
         for(int i = 0 ; i < columnCount ; i++) {
             Object value = resultSet.getObject(i + 1);
@@ -86,6 +91,10 @@ public class PhoenixIndexDBWritable  implements DBWritable {
 
     public void setValues(List<Object> values) {
         this.values = values;
+    }
+
+    public long getRowTs() {
+        return rowTs;
     }
 
 }

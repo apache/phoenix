@@ -1918,4 +1918,35 @@ public class PDataTypeTest {
         assertTrue(Bytes.compareTo(expectedLowerRange, range.getLowerRange()) == 0);
         assertTrue(Bytes.compareTo(upperRange, range.getUpperRange()) == 0);
     }
+    
+    @Test
+    public void testCompareToNull() {
+        for (PDataType type1 : PDataType.values()) {
+            Object value1 = type1.getSampleValue();
+            for (PDataType type2 : PDataType.values()) {
+                Object value2 = null;
+                if (type1.isComparableTo(type2)) {
+                    assertTrue(type1.compareTo(value1, value2, type2) > 0);
+                }
+            }
+        }
+        for (PDataType type1 : PDataType.values()) {
+            Object value1 = null;
+            for (PDataType type2 : PDataType.values()) {
+                Object value2 = type2.getSampleValue();
+                if (type1.isComparableTo(type2)) {
+                    assertTrue(type1.compareTo(value1, value2, type2) < 0);
+                }
+            }
+        }
+        for (PDataType type1 : PDataType.values()) {
+            Object value1 = null;
+            for (PDataType type2 : PDataType.values()) {
+                Object value2 = null;
+                if (type1.isComparableTo(type2)) {
+                    assertTrue(type1.compareTo(value1, value2, type2) == 0);
+                }
+            }
+        }
+    }
 }

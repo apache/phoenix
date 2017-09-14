@@ -93,8 +93,6 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
         }
         if (!arrayExpr.evaluate(tuple, ptr)) {
             return false;
-        } else if (ptr.getLength() == 0) {
-            return true;
         }
         int arrayLength = PArrayDataType.getArrayLength(ptr, baseDataType, arrayExpr.getMaxLength());
 

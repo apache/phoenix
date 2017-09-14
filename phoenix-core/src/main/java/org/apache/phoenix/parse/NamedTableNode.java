@@ -34,7 +34,7 @@ import com.google.common.collect.ImmutableList;
 public class NamedTableNode extends ConcreteTableNode {
 
     private final List<ColumnDef> dynColumns;
-
+    
     public static NamedTableNode create (String alias, TableName name, List<ColumnDef> dynColumns) {
         return new NamedTableNode(alias, name, dynColumns);
     }
@@ -47,13 +47,23 @@ public class NamedTableNode extends ConcreteTableNode {
         return new NamedTableNode(null, TableName.create(schemaName, tableName), Collections.<ColumnDef>emptyList());
     }
     
+    @Deprecated
     NamedTableNode(String alias, TableName name) {
-        super(alias, name);
+        this(alias, name, ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE);
+    }
+    
+    @Deprecated
+    NamedTableNode(String alias, TableName name, List<ColumnDef> dynColumns) {
+    	this(alias,name,dynColumns,ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE);
+    }
+    
+    NamedTableNode(String alias, TableName name, Double tableSamplingRate) {
+    	super(alias, name, tableSamplingRate);
         dynColumns = Collections.<ColumnDef> emptyList();
     }
-
-    NamedTableNode(String alias, TableName name, List<ColumnDef> dynColumns) {
-        super(alias, name);
+    
+    NamedTableNode(String alias, TableName name, List<ColumnDef> dynColumns, Double tableSamplingRate) {
+        super(alias, name, tableSamplingRate);
         if (dynColumns != null) {
             this.dynColumns = ImmutableList.copyOf(dynColumns);
         } else {
@@ -83,6 +93,7 @@ public class NamedTableNode extends ConcreteTableNode {
             buf.append(')');
         }
         if (this.getAlias() != null) buf.append(" " + this.getAlias());
+        if (this.getTableSamplingRate() != null) buf.append(" TABLESAMPLE " + this.getTableSamplingRate());
         buf.append(' ');
     }
 

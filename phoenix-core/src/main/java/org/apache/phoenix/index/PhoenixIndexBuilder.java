@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -223,11 +224,12 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                     Collections.sort(flattenedCells,KeyValue.COMPARATOR);
                 }
                 PRow row = table.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
+                int adjust = table.getBucketNum() == null ? 1 : 2;
                 for (int i = 0; i < expressions.size(); i++) {
                     Expression expression = expressions.get(i);
                     ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
                     expression.evaluate(tuple, ptr);
-                    PColumn column = table.getColumns().get(i + 1);
+                    PColumn column = table.getColumns().get(i + adjust);
                     Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
                     // We are guaranteed that the two column will have the
                     // same type.
@@ -354,7 +356,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                 int repeating1 = oldInput.readShort();
                 if (Bytes.compareTo(
                     oldOnDupKeyBytes, ON_DUP_KEY_HEADER_BYTE_SIZE, oldOnDupKeyBytes.length - ON_DUP_KEY_HEADER_BYTE_SIZE, 
-                    newOnDupKeyBytes, Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN, oldOnDupKeyBytes.length - ON_DUP_KEY_HEADER_BYTE_SIZE) == 0) {
+                    newOnDupKeyBytes, Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN, newOnDupKeyBytes.length - ON_DUP_KEY_HEADER_BYTE_SIZE) == 0) {
                 // If both old and new ON DUPLICATE KEY UPDATE clauses match,
                 // reduce the size of data we're sending over the wire.
                 // TODO: optimization size of RPC more.
@@ -380,5 +382,10 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
 
     public static boolean isDupKeyIgnore(byte[] onDupKeyBytes) {
         return onDupKeyBytes != null && Bytes.compareTo(ON_DUP_KEY_IGNORE_BYTES, onDupKeyBytes) == 0;
+    }
+
+    @Override
+    public ReplayWrite getReplayWrite(Mutation m) {
+        return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
 }

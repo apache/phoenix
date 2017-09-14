@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -66,8 +67,10 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -85,12 +88,15 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.tephra.util.TxUtils;
+import org.apache.phoenix.transaction.TransactionFactory;
 
+import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Maps.EntryTransformer;
 
 /**
  *
@@ -184,6 +190,20 @@ public class PhoenixRuntime {
      * Use this connection property to explicitly enable or disable request level metric collection.
      */
     public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+
+    /**
+     * Use this column name on the row returned by explain plan result set to get estimate of number
+     * of bytes read.
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS;
+
+    /**
+     * Use this column name on the row returned by explain plan result set to get estimate of number
+     * of rows read.
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_ROWS_COLUMN_ALIAS;
 
     /**
      * All Phoenix specific connection properties
@@ -1295,13 +1315,31 @@ public class PhoenixRuntime {
         return GlobalClientMetrics.isMetricsEnabled();
     }
     
+    private static Map<String, Long> createMetricMap(Map<MetricType, Long> metricInfoMap) {
+    	Map<String, Long> metricMap = Maps.newHashMapWithExpectedSize(metricInfoMap.size());
+    	for (Entry<MetricType, Long> entry : metricInfoMap.entrySet()) {
+    		metricMap.put(entry.getKey().shortName(), entry.getValue());
+    	}
+    	return metricMap;
+	}
+    
+	private static Map<String, Map<String, Long>> transformMetrics(Map<String, Map<MetricType, Long>> metricMap) {
+		Function<Map<MetricType, Long>, Map<String, Long>> func = new Function<Map<MetricType, Long>, Map<String, Long>>() {
+			@Override
+			public Map<String, Long> apply(Map<MetricType, Long> map) {
+				return createMetricMap(map);
+			}
+		};
+		return Maps.transformValues(metricMap, func);
+	}
+    
     /**
      * Method to expose the metrics associated with performing reads using the passed result set. A typical pattern is:
      * 
      * <pre>
      * {@code
-     * Map<String, Map<String, Long>> overAllQueryMetrics = null;
-     * Map<String, Map<String, Long>> requestReadMetrics = null;
+     * Map<String, Map<MetricType, Long>> overAllQueryMetrics = null;
+     * Map<String, Map<MetricType, Long>> requestReadMetrics = null;
      * try (ResultSet rs = stmt.executeQuery()) {
      *    while(rs.next()) {
      *      .....
@@ -1317,9 +1355,15 @@ public class PhoenixRuntime {
      * @return a map of (table name) -> (map of (metric name) -> (metric value))
      * @throws SQLException
      */
-    public static Map<String, Map<String, Long>> getRequestReadMetrics(ResultSet rs) throws SQLException {
+    public static Map<String, Map<MetricType, Long>> getRequestReadMetricInfo(ResultSet rs) throws SQLException {
         PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
         return resultSet.getReadMetrics();
+    }
+    
+    @Deprecated 
+    // use getRequestReadMetricInfo
+    public static Map<String, Map<String, Long>> getRequestReadMetrics(ResultSet rs) throws SQLException {
+        return transformMetrics(getRequestReadMetricInfo(rs));
     }
 
     /**
@@ -1328,8 +1372,8 @@ public class PhoenixRuntime {
      * 
      * <pre>
      * {@code
-     * Map<String, Map<String, Long>> overAllQueryMetrics = null;
-     * Map<String, Map<String, Long>> requestReadMetrics = null;
+     * Map<String, Map<MetricType, Long>> overAllQueryMetrics = null;
+     * Map<String, Map<MetricType, Long>> requestReadMetrics = null;
      * try (ResultSet rs = stmt.executeQuery()) {
      *    while(rs.next()) {
      *      .....
@@ -1345,9 +1389,15 @@ public class PhoenixRuntime {
      * @return a map of metric name -> metric value
      * @throws SQLException
      */
-    public static Map<String, Long> getOverAllReadRequestMetrics(ResultSet rs) throws SQLException {
+    public static Map<MetricType, Long> getOverAllReadRequestMetricInfo(ResultSet rs) throws SQLException {
         PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
         return resultSet.getOverAllRequestReadMetrics();
+    }
+    
+    @Deprecated
+    // use getOverAllReadRequestMetricInfo
+    public static Map<String, Long> getOverAllReadRequestMetrics(ResultSet rs) throws SQLException {
+        return createMetricMap(getOverAllReadRequestMetricInfo(rs));
     }
 
     /**
@@ -1357,8 +1407,8 @@ public class PhoenixRuntime {
      * 
      * <pre>
      * {@code
-     * Map<String, Map<String, Long>> mutationWriteMetrics = null;
-     * Map<String, Map<String, Long>> mutationReadMetrics = null;
+     * Map<String, Map<MetricType, Long>> mutationWriteMetrics = null;
+     * Map<String, Map<MetricType, Long>> mutationReadMetrics = null;
      * try (Connection conn = DriverManager.getConnection(url)) {
      *    conn.createStatement.executeUpdate(dml1);
      *    ....
@@ -1378,9 +1428,15 @@ public class PhoenixRuntime {
      * @return a map of (table name) -> (map of (metric name) -> (metric value))
      * @throws SQLException
      */
-    public static Map<String, Map<String, Long>> getWriteMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+    public static Map<String, Map<MetricType, Long>> getWriteMetricInfoForMutationsSinceLastReset(Connection conn) throws SQLException {
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         return pConn.getMutationMetrics();
+    }
+    
+    @Deprecated
+    // use getWriteMetricInfoForMutationsSinceLastReset
+    public static Map<String, Map<String, Long>> getWriteMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+        return transformMetrics(getWriteMetricInfoForMutationsSinceLastReset(conn));
     }
 
     /**
@@ -1390,8 +1446,8 @@ public class PhoenixRuntime {
      * 
      * <pre>
      * {@code
-     * Map<String, Map<String, Long>> mutationWriteMetrics = null;
-     * Map<String, Map<String, Long>> mutationReadMetrics = null;
+     * Map<String, Map<MetricType, Long>> mutationWriteMetrics = null;
+     * Map<String, Map<MetricType, Long>> mutationReadMetrics = null;
      * try (Connection conn = DriverManager.getConnection(url)) {
      *    conn.createStatement.executeUpdate(dml1);
      *    ....
@@ -1410,9 +1466,15 @@ public class PhoenixRuntime {
      * @return  a map of (table name) -> (map of (metric name) -> (metric value))
      * @throws SQLException
      */
-    public static Map<String, Map<String, Long>> getReadMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+    public static Map<String, Map<MetricType, Long>> getReadMetricInfoForMutationsSinceLastReset(Connection conn) throws SQLException {
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         return pConn.getReadMetrics();
+    }
+    
+    @Deprecated
+    // use getReadMetricInfoForMutationsSinceLastReset 
+    public static Map<String, Map<String, Long>> getReadMetricsForMutationsSinceLastReset(Connection conn) throws SQLException {
+        return transformMetrics(getReadMetricInfoForMutationsSinceLastReset(conn));
     }
 
     /**
@@ -1447,7 +1509,7 @@ public class PhoenixRuntime {
      * @return wall clock time in milliseconds (i.e. Epoch time) of a given Cell time stamp.
      */
     public static long getWallClockTimeFromCellTimeStamp(long tsOfCell) {
-        return TxUtils.isPreExistingVersion(tsOfCell) ? tsOfCell : TransactionUtil.convertToMilliseconds(tsOfCell);
+        return TransactionFactory.getTransactionFactory().getTransactionContext().isPreExistingVersion(tsOfCell) ? tsOfCell : TransactionUtil.convertToMilliseconds(tsOfCell);
     }
 
     public static long getCurrentScn(ReadOnlyProps props) {

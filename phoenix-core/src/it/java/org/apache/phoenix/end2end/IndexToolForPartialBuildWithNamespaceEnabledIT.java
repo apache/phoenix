@@ -24,6 +24,8 @@ import java.util.Map;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
@@ -31,11 +33,12 @@ import com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexToolForPartialBuildWithNamespaceEnabled}
  */
+@RunWith(Parameterized.class)
 public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolForPartialBuildIT {
     
-    
-    public IndexToolForPartialBuildWithNamespaceEnabledIT(boolean localIndex, boolean isNamespaceEnabled) {
-        super(localIndex);
+
+    public IndexToolForPartialBuildWithNamespaceEnabledIT(boolean isNamespaceEnabled) {
+        super();
         this.isNamespaceEnabled=isNamespaceEnabled;
     }
     
@@ -49,10 +52,10 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
-    @Parameters(name="localIndex = {0} , isNamespaceEnabled = {1}")
+    @Parameters(name="isNamespaceEnabled = {0}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, true},{ true, false }
+                 { true },{ false }
            });
     }
     

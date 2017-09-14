@@ -140,7 +140,7 @@ public class PostDDLCompiler {
             @Override
             public MutationState execute() throws SQLException {
                 if (tableRefs.isEmpty()) {
-                    return new MutationState(0, connection);
+                    return new MutationState(0, 1000, connection);
                 }
                 boolean wasAutoCommit = connection.getAutoCommit();
                 try {
@@ -319,7 +319,7 @@ public class PostDDLCompiler {
                         
                     }
                     final long count = totalMutationCount;
-                    return new MutationState(1, connection) {
+                    return new MutationState(1, 1000, connection) {
                         @Override
                         public long getUpdateCount() {
                             return count;

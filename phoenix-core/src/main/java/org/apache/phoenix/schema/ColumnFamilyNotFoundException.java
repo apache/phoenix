@@ -32,9 +32,9 @@ public class ColumnFamilyNotFoundException extends MetaDataEntityNotFoundExcepti
     private static SQLExceptionCode code = SQLExceptionCode.COLUMN_FAMILY_NOT_FOUND;
     private final String familyName;
 
-    public ColumnFamilyNotFoundException(String familyName) {
+    public ColumnFamilyNotFoundException(String schemaName, String tableName, String familyName) {
         super(new SQLExceptionInfo.Builder(code).setFamilyName(familyName).build().toString(),
-                code.getSQLState(), code.getErrorCode(), null);
+                code.getSQLState(), code.getErrorCode(), schemaName, tableName,null);
         this.familyName = familyName;
     }
 

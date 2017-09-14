@@ -48,7 +48,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
@@ -65,6 +64,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
@@ -115,10 +115,9 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.tephra.TxConstants;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
 import com.google.common.collect.Lists;
-import com.google.protobuf.ServiceException;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
@@ -289,7 +288,7 @@ public class IndexUtil {
                     regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
                 }
                 Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
-                delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY));
+                delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY));
                 indexMutations.add(delete);
             }
             return indexMutations;
@@ -323,7 +322,7 @@ public class IndexUtil {
                     	}
         
                         @Override
-                        public ImmutableBytesWritable getLatestValue(ColumnReference ref) {
+                        public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
                             // Always return null for our empty key value, as this will cause the index
                             // maintainer to always treat this Put as a new row.
                             if (isEmptyKeyValue(table, ref)) {
@@ -518,7 +517,7 @@ public class IndexUtil {
         return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), buf.toString());
     }
     
-    public static void wrapResultUsingOffset(final ObserverContext<RegionCoprocessorEnvironment> c,
+    public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
             List<Cell> result, final int offset, ColumnReference[] dataColumns,
             TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
             byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
@@ -543,11 +542,11 @@ public class IndexUtil {
                 joinResult = dataRegion.get(get);
             } else {
                 TableName dataTable =
-                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(c.getEnvironment()
-                                .getRegion().getTableDesc().getNameAsString()));
+                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
+                            environment.getRegion().getTableDesc().getNameAsString()));
                 HTableInterface table = null;
                 try {
-                    table = c.getEnvironment().getTable(dataTable);
+                    table = environment.getTable(dataTable);
                     joinResult = table.get(get);
                 } finally {
                     if (table != null) table.close();
@@ -726,10 +725,15 @@ public class IndexUtil {
             mutations.toArray(new Mutation[mutations.size()]),
             HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
-
-    public static MetaDataMutationResult setIndexDisableTimeStamp(String indexTableName, long minTimeStamp,
-            HTableInterface metaTable, PIndexState newState) throws ServiceException, Throwable {
+    
+    public static MetaDataMutationResult updateIndexState(String indexTableName, long minTimeStamp,
+            HTableInterface metaTable, PIndexState newState) throws Throwable {
         byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
+        return updateIndexState(indexTableKey, minTimeStamp, metaTable, newState);
+    }
+    
+    public static MetaDataMutationResult updateIndexState(byte[] indexTableKey, long minTimeStamp,
+            HTableInterface metaTable, PIndexState newState) throws Throwable {
         // Mimic the Put that gets generated by the client on an update of the index state
         Put put = new Put(indexTableKey);
         put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
@@ -800,6 +804,38 @@ public class IndexUtil {
     
     public static boolean isLocalIndexFamily(String family) {
         return family.indexOf(LOCAL_INDEX_COLUMN_FAMILY_PREFIX) != -1;
+    }
+
+    public static void updateIndexState(PhoenixConnection conn, String indexTableName,
+    		PIndexState newState, Long indexDisableTimestamp) throws SQLException {
+    	byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
+    	String schemaName = SchemaUtil.getSchemaNameFromFullName(indexTableName);
+    	String indexName = SchemaUtil.getTableNameFromFullName(indexTableName);
+    	// Mimic the Put that gets generated by the client on an update of the
+    	// index state
+    	Put put = new Put(indexTableKey);
+    	put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
+    			newState.getSerializedBytes());
+        if (indexDisableTimestamp != null) {
+            put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
+                PLong.INSTANCE.toBytes(indexDisableTimestamp));
+        }
+        if (newState == PIndexState.ACTIVE) {
+            put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP_BYTES, PLong.INSTANCE.toBytes(0));
+        }
+    	final List<Mutation> tableMetadata = Collections.<Mutation> singletonList(put);
+    	MetaDataMutationResult result = conn.getQueryServices().updateIndexState(tableMetadata, null);
+    	MutationCode code = result.getMutationCode();
+    	if (code == MutationCode.TABLE_NOT_FOUND) {
+    		throw new TableNotFoundException(schemaName, indexName);
+    	}
+    	if (code == MutationCode.UNALLOWED_TABLE_MUTATION) {
+    		throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION)
+    				.setMessage("indexState=" + newState).setSchemaName(schemaName)
+    				.setTableName(indexName).build().buildException();
+    	}
     }
     
 }

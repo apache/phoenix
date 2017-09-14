@@ -17,12 +17,24 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+
+import javax.annotation.concurrent.GuardedBy;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.client.CoprocessorHConnection;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.phoenix.hbase.index.table.CoprocessorHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
 public class IndexWriterUtils {
@@ -56,19 +68,84 @@ public class IndexWriterUtils {
   public static final String HTABLE_THREAD_KEY = "hbase.htable.threads.max";
    public static final String INDEX_WRITES_THREAD_MAX_PER_REGIONSERVER_KEY = "phoenix.index.writes.threads.max";
    public static final String HTABLE_KEEP_ALIVE_KEY = "hbase.htable.threads.keepalivetime";
-   
+
+   public static final String INDEX_WRITER_RPC_RETRIES_NUMBER = "phoenix.index.writes.rpc.retries.number";
+   /**
+    * Based on the logic in HBase's AsyncProcess, a default of 11 retries with a pause of 100ms
+    * approximates 48 sec total retry time (factoring in backoffs).  The total time should be less
+    * than HBase's rpc timeout (default of 60 sec) or else the client will retry before receiving
+    * the response
+    */
+   public static final int DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER = 11;
+   public static final String INDEX_WRITER_RPC_PAUSE = "phoenix.index.writes.rpc.pause";
+   public static final int DEFAULT_INDEX_WRITER_RPC_PAUSE = 100;
+
   private IndexWriterUtils() {
     // private ctor for utilites
   }
 
-  public static HTableFactory getDefaultDelegateHTableFactory(CoprocessorEnvironment env) {
-    // create a simple delegate factory, setup the way we need
-    Configuration conf = env.getConfiguration();
-    // set the number of threads allowed per table.
-    int htableThreads =
-        conf.getInt(IndexWriterUtils.INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY, IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
-    LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
-    IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
-    return new CoprocessorHTableFactory(env);
-  }
+    public static HTableFactory getDefaultDelegateHTableFactory(CoprocessorEnvironment env) {
+        // create a simple delegate factory, setup the way we need
+        Configuration conf = env.getConfiguration();
+        // set the number of threads allowed per table.
+        int htableThreads =
+                conf.getInt(IndexWriterUtils.INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY,
+                    IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
+        LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
+        IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
+        if (env instanceof RegionCoprocessorEnvironment) {
+            RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) env;
+            RegionServerServices services = e.getRegionServerServices();
+            if (services instanceof HRegionServer) {
+                return new CoprocessorHConnectionTableFactory(conf, (HRegionServer) services);
+            }
+        }
+        return new CoprocessorHTableFactory(env);
+    }
+
+    /**
+     * {@code HTableFactory} that creates HTables by using a {@link CoprocessorHConnection} This
+     * factory was added as a workaround to the bug reported in
+     * https://issues.apache.org/jira/browse/HBASE-18359
+     */
+    private static class CoprocessorHConnectionTableFactory implements HTableFactory {
+        @GuardedBy("CoprocessorHConnectionTableFactory.this")
+        private HConnection connection;
+        private final Configuration conf;
+        private final HRegionServer server;
+
+        CoprocessorHConnectionTableFactory(Configuration conf, HRegionServer server) {
+            this.conf = conf;
+            this.server = server;
+        }
+
+        private synchronized HConnection getConnection(Configuration conf) throws IOException {
+            if (connection == null || connection.isClosed()) {
+                connection = new CoprocessorHConnection(conf, server);
+            }
+            return connection;
+        }
+
+        @Override
+        public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
+            return getConnection(conf).getTable(tablename.copyBytesIfNecessary());
+        }
+
+        @Override
+        public synchronized void shutdown() {
+            try {
+                if (connection != null && !connection.isClosed()) {
+                    connection.close();
+                }
+            } catch (Throwable e) {
+                LOG.warn("Error while trying to close the HConnection used by CoprocessorHConnectionTableFactory", e);
+            }
+        }
+
+        @Override
+        public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool)
+                throws IOException {
+            return getConnection(conf).getTable(tablename.copyBytesIfNecessary(), pool);
+        }
+    }
 }

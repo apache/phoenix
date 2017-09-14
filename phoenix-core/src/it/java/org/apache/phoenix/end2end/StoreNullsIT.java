@@ -24,8 +24,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
@@ -34,6 +37,7 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -47,7 +51,9 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -172,7 +178,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             stmt.execute(String.format(ddlFormat, dataTableName));
             stmt.executeUpdate("UPSERT INTO " + dataTableName + " VALUES (1, 'v1')");
             Thread.sleep(10L);
-            long afterFirstInsert = System.currentTimeMillis();
+            long afterFirstInsert = EnvironmentEdgeManager.currentTimeMillis();
             Thread.sleep(10L);
             
             stmt.executeUpdate("UPSERT INTO " + dataTableName + " VALUES (1, null)");
@@ -200,6 +206,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             
             rs.close();
             historicalStmt.close();
+            conn.close();
             historicalConn.close();
         }
 
@@ -215,7 +222,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate("UPSERT INTO " + dataTableName + " VALUES (1, 'v1')");
     
             Thread.sleep(10L);
-            long afterFirstInsert = System.currentTimeMillis();
+            long afterFirstInsert = EnvironmentEdgeManager.currentTimeMillis();
             Thread.sleep(10L);
     
             stmt.executeUpdate("DELETE FROM " + dataTableName + " WHERE id = 1");
@@ -239,7 +246,70 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
             rs = historicalStmt.executeQuery("SELECT name FROM " + dataTableName + " WHERE id = 1");
             assertFalse(rs.next());
             rs.close();
+            conn.close();
+            historicalStmt.close();
+            historicalConn.close();
         }
+    }
+
+    
+    private static long getRowCount(Connection conn, String tableName) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + tableName);
+        assertTrue(rs.next());
+        return rs.getLong(1);
+    }
+
+    @Test
+    public void testSetIndexedColumnToNullTwiceWithStoreNulls() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);     
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, "
+                + "CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=" + storeNulls + (columnEncoded ? "" : ",COLUMN_ENCODED_BYTES=0"));
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
+        stmt.setTimestamp(1, new Timestamp(1000L));
+        stmt.executeUpdate();
+        conn.commit();
+        
+        Timestamp expectedTimestamp;
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+        expectedTimestamp = null;
+        stmt.setTimestamp(1, expectedTimestamp);
+        stmt.executeUpdate();
+        conn.commit();
+        
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
+        expectedTimestamp = null;
+        stmt.setTimestamp(1, expectedTimestamp);
+        stmt.executeUpdate();
+        conn.commit();
+
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName)));
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName)));
+
+        long count1 = getRowCount(conn, tableName);
+        long count2 = getRowCount(conn, indexName);
+        assertEquals("Table should have 1 row", 1, count1);
+        assertEquals("Index should have 1 row", 1, count2);
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ ts,v FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(expectedTimestamp, rs.getTimestamp(1));
+        assertEquals(null, rs.getString(2));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT \"0:TS\", \"0:V\" FROM " + indexName);
+        assertTrue(rs.next());
+        assertEquals(expectedTimestamp, rs.getTimestamp(1));
+        assertEquals(null, rs.getString(2));
+        assertFalse(rs.next());
+        conn.close();
     }
 
 }
