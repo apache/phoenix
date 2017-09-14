@@ -248,7 +248,7 @@ public class MutableQueryIT extends BaseQueryIT {
             "VALUES (?, ?, ?)";
         
         // Override value that was set at creation time
-        String url = getUrl();// + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
@@ -272,7 +272,7 @@ public class MutableQueryIT extends BaseQueryIT {
         
         // Delete row at timestamp 3. This should not be seen by the query executing
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
-        Connection futureConn = DriverManager.getConnection(getUrl());// + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3), props);
+        Connection futureConn = DriverManager.getConnection(getUrl());
         stmt = futureConn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW6);

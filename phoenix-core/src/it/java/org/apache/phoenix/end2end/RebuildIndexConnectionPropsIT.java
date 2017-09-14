@@ -90,8 +90,6 @@ public class RebuildIndexConnectionPropsIT extends BaseUniqueNamesOwnClusterIT {
                 Configuration rebuildQueryServicesConfig =
                         rebuildIndexConnection.getQueryServices().getConfiguration();
                 // assert that the properties are part of the query services config
-                assertEquals(Long.toString(Long.MAX_VALUE),
-                    rebuildQueryServicesConfig.get(PhoenixRuntime.CURRENT_SCN_ATTRIB));
                 assertEquals(
                     Long.toString(QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT),
                     rebuildQueryServicesConfig.get(QueryServices.THREAD_TIMEOUT_MS_ATTRIB));

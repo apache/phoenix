@@ -42,7 +42,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -70,7 +69,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
-        helpTestUpdateCache(fullTableName, null, new int[] {1, 1});
+        helpTestUpdateCache(fullTableName, new int[] {1, 1});
     }
     
     @Test
@@ -79,14 +78,14 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA);
-        helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
+        helpTestUpdateCache(fullTableName, new int[] {1, 3});
     }
 	
     @Test
     public void testUpdateCacheForNonTxnSystemTable() throws Exception {
         String fullTableName = "\""+ QueryConstants.SYSTEM_SCHEMA_NAME + "\""+ QueryConstants.NAME_SEPARATOR + generateUniqueName();
         setupSystemTable(fullTableName);
-        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0});
     }
     
     @Test
@@ -99,7 +98,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
             "alter table " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=NEVER");
         }
-        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0});
     }
     
     @Test
@@ -109,7 +108,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=always");
         }
-        helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
+        helpTestUpdateCache(fullTableName, new int[] {1, 3});
     }
     
     @Test
@@ -119,9 +118,9 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=" + 10000);
         }
-        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0});
         Thread.sleep(10000);
-        helpTestUpdateCache(fullTableName, null, new int[] {1, 0});
+        helpTestUpdateCache(fullTableName, new int[] {1, 0});
     }
     
     @Test
@@ -131,14 +130,14 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=never");
         }
-        helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0});
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=ALWAYS");
         }
-        helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
+        helpTestUpdateCache(fullTableName, new int[] {1, 3});
     }
     
-	public static void helpTestUpdateCache(String fullTableName, Long scn, int[] expectedRPCs) throws Exception {
+	private static void helpTestUpdateCache(String fullTableName, int[] expectedRPCs) throws Exception {
 	    String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
 	    String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
 		String selectSql = "SELECT * FROM "+fullTableName;
@@ -146,9 +145,6 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
 		ConnectionQueryServices connectionQueryServices = Mockito.spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
 		Properties props = new Properties();
 		props.putAll(PhoenixEmbeddedDriver.DEFFAULT_PROPS.asMap());
-		if (scn!=null) {
-            props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn+10));
-        }
 		Connection conn = connectionQueryServices.connect(getUrl(), props);
 		try {
 			conn.setAutoCommit(false);
@@ -167,12 +163,6 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
             reset(connectionQueryServices);
             
-            if (scn!=null) {
-                // advance scn so that we can see the data we just upserted
-                props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn+20));
-                conn = connectionQueryServices.connect(getUrl(), props);
-            }
-			
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
 			TestUtil.validateRowKeyColumns(rs, 1);
 			TestUtil.validateRowKeyColumns(rs, 2);

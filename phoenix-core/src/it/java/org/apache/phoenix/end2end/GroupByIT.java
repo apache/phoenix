@@ -58,32 +58,6 @@ public class GroupByIT extends BaseQueryIT {
     }
     
     @Test
-    public void testNoWhereScan() throws Exception {
-        String query = "SELECT y_integer FROM " + tableName;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        //props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            for (int i =0; i < 8; i++) {
-                assertTrue (rs.next());
-                assertEquals(0, rs.getInt(1));
-                assertTrue(rs.wasNull());
-            }
-            assertTrue (rs.next());
-            assertEquals(300, rs.getInt(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
- // FIXME: this is flapping with an phoenix.memory.InsufficientMemoryException
-    // in the GroupedAggregateRegionObserver. We can work around it by increasing
-    // the amount of available memory in QueryServicesTestImpl, but we shouldn't
-    // have to. I think something may no be being closed to reclaim the memory.
-    @Test
     public void testGroupedAggregation() throws Exception {
         // Tests that you don't get an ambiguous column exception when using the same alias as the column name
         String query = "SELECT a_string as a_string, count(1), 'foo' FROM " + tableName + " WHERE organization_id=? GROUP BY a_string";

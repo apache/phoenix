@@ -84,6 +84,27 @@ public class ScanQueryIT extends BaseQueryIT {
     }
     
     @Test
+    public void testNoWhereScan() throws Exception {
+        String query = "SELECT y_integer FROM " + tableName;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            for (int i =0; i < 8; i++) {
+                assertTrue (rs.next());
+                assertEquals(0, rs.getInt(1));
+                assertTrue(rs.wasNull());
+            }
+            assertTrue (rs.next());
+            assertEquals(300, rs.getInt(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
     public void testScanByByteValue() throws Exception {
         String query = "SELECT a_string, b_string, a_byte FROM " + tableName + " WHERE ?=organization_id and 1=a_byte";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
