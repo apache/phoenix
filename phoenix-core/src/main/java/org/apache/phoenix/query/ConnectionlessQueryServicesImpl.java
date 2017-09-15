@@ -135,7 +135,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
-        TransactionFactory.getTransactionFactory().getTransactionContext().setInMemoryTransactionClient(config);
         this.guidePostsCache = new GuidePostsCache(this, config);
     }
 
