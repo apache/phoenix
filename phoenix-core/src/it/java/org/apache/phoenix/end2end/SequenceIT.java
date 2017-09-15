@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
@@ -44,29 +45,39 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
-public class SequenceIT extends BaseClientManagedTimeIT {
-    private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM \"SYSTEM\".\"SEQUENCE\"";
-    private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s FROM \"SYSTEM\".\"SEQUENCE\"";
+public class SequenceIT extends ParallelStatsDisabledIT {
+    private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s";
     private static final long BATCH_SIZE = 3;
    
     private Connection conn;
     
+    private static String generateNameWithSchema() {
+    	return SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+    }
+    
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
-        Map<String,String> props = getDefaultProps();
-        // Must update config before starting server
+        Map<String, String> props = Maps.newHashMap();
         props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    @Before
+    public void init() throws Exception {
+    	createConnection();
     }
     
     @After
@@ -79,20 +90,21 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
 	@Test
 	public void testSystemTable() throws Exception {		
-		nextConnection();
+		conn.createStatement().execute("CREATE SEQUENCE " + generateNameWithSchema());
 		String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\"";
 		ResultSet rs = conn.prepareStatement(query).executeQuery();
-		assertFalse(rs.next());
+		assertTrue(rs.next());
 	}
 
 	@Test
 	public void testDuplicateSequences() throws Exception {
-        nextConnection();
-		conn.createStatement().execute("CREATE SEQUENCE alpha.beta START WITH 2 INCREMENT BY 4\n");
+        String sequenceName = generateNameWithSchema();
+        
+        
+		conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
 
 		try {
-	        nextConnection();
-			conn.createStatement().execute("CREATE SEQUENCE alpha.beta START WITH 2 INCREMENT BY 4\n");
+			conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
 			Assert.fail("Duplicate sequences");
 		} catch (SequenceAlreadyExistsException e){
 
@@ -101,8 +113,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
 	@Test
 	public void testSequenceNotFound() throws Exception {
-        nextConnection();
-		String query = "SELECT NEXT value FOR qwert.asdf FROM \"SYSTEM\".\"SEQUENCE\"";
+        String sequenceName = generateNameWithSchema();
+		
+        
+		String query = "SELECT NEXT value FOR " + sequenceName ;
 		try {
 			conn.prepareStatement(query).executeQuery();
 			fail("Sequence not found");
@@ -115,30 +129,28 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     public void testCreateSequenceWhenNamespaceEnabled() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
-        String sequenceSchemaName = "ALPHA";
-        String sequenceName = sequenceSchemaName + ".M_OMEGA";
+        Connection nsConn = DriverManager.getConnection(getUrl(), props);
 
-        nextConnection(props);
+        String sequenceName = generateNameWithSchema();
+        String sequenceSchemaName = getSchemaName(sequenceName);
+
         try {
-            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        	nsConn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
             fail();
         } catch (SchemaNotFoundException e) {
             // expected
         }
 
-        conn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
-        nextConnection(props);
-        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        nsConn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
+        nsConn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
         sequenceSchemaName = "TEST_SEQ_SCHEMA";
         sequenceName = "M_SEQ";
-        conn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
-        nextConnection(props);
-        conn.createStatement().execute("USE " + sequenceSchemaName);
-        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
-        nextConnection(props);
+        nsConn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
+        nsConn.createStatement().execute("USE " + sequenceSchemaName);
+        nsConn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
         String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='"
                 + sequenceName + "'";
-        ResultSet rs = conn.prepareStatement(query).executeQuery();
+        ResultSet rs = nsConn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(sequenceSchemaName, rs.getString("sequence_schema"));
         assertEquals(sequenceName, rs.getString("sequence_name"));
@@ -146,7 +158,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4, rs.getInt("increment_by"));
         assertFalse(rs.next());
         try {
-            conn.createStatement().execute(
+        	nsConn.createStatement().execute(
                     "CREATE SEQUENCE " + sequenceSchemaName + "." + sequenceName + " START WITH 2 INCREMENT BY 4");
             fail();
         } catch (SequenceAlreadyExistsException e) {
@@ -156,14 +168,16 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 	
 	@Test
     public void testCreateSequence() throws Exception { 
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.omega START WITH 2 INCREMENT BY 4");
-        nextConnection();
-        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='OMEGA'";
+        String sequenceName = generateNameWithSchema();
+        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
+        String schemaName = getSchemaName(sequenceName);
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
-        assertEquals("ALPHA", rs.getString("sequence_schema"));
-        assertEquals("OMEGA", rs.getString("sequence_name"));
+        assertEquals(schemaName, rs.getString("sequence_schema"));
+        assertEquals(sequenceNameWithoutSchema, rs.getString("sequence_name"));
         assertEquals(2, rs.getInt("current_value"));
         assertEquals(4, rs.getInt("increment_by"));
         assertFalse(rs.next());
@@ -171,12 +185,13 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCurrentValueFor() throws Exception {
+        String sequenceName = generateNameWithSchema();
         ResultSet rs;
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE used.nowhere START WITH 2 INCREMENT BY 4");
-        nextConnection();
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        
         try {
-            rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR used.nowhere FROM \"SYSTEM\".\"SEQUENCE\"");
+            rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR " + sequenceName );
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -184,36 +199,37 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             assertTrue(e.getNextException()==null);
         }
         
-        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR used.nowhere FROM \"SYSTEM\".\"SEQUENCE\"");
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + sequenceName );
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR used.nowhere FROM \"SYSTEM\".\"SEQUENCE\"");
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR " + sequenceName );
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
 	}
 
     @Test
-    public void testDropSequence() throws Exception { 
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.omega START WITH 2 INCREMENT BY 4");
-        nextConnection();
-        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='OMEGA'";
+    public void testDropSequence() throws Exception {
+        String sequenceName = generateNameWithSchema();
+        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
+        String schemaName = getSchemaName(sequenceName);
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='"+ sequenceNameWithoutSchema +"'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
-        assertEquals("ALPHA", rs.getString("sequence_schema"));
-        assertEquals("OMEGA", rs.getString("sequence_name"));
+        assertEquals(schemaName, rs.getString("sequence_schema"));
+        assertEquals(sequenceNameWithoutSchema, rs.getString("sequence_name"));
         assertEquals(2, rs.getInt("current_value"));
         assertEquals(4, rs.getInt("increment_by"));
         assertFalse(rs.next());
 
-        conn.createStatement().execute("DROP SEQUENCE alpha.omega");
-        nextConnection();
-        query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='OMEGA'";
+        conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
+        query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'";
         rs = conn.prepareStatement(query).executeQuery();
         assertFalse(rs.next());
 
         try {
-            conn.createStatement().execute("DROP SEQUENCE alpha.omega");
+            conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
             fail();
         } catch (SequenceNotFoundException ignore) {
         }
@@ -221,23 +237,22 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
 	@Test
 	public void testSelectNextValueFor() throws Exception {
-        nextConnection();
-		conn.createStatement().execute("CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3, 5, 7);
+        String sequenceName = generateNameWithSchema();
+		conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");
+        assertSequenceValuesForSingleRow(sequenceName, 3, 5, 7);
 	}
 
 	@Test
 	public void testInsertNextValueFor() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.tau START WITH 2 INCREMENT BY 1");
-		conn.createStatement().execute("CREATE TABLE test.sequence_number ( id INTEGER NOT NULL PRIMARY KEY)");
-        nextConnection();
-		conn.createStatement().execute("UPSERT INTO test.sequence_number (id) VALUES (NEXT VALUE FOR alpha.tau)");
-        conn.createStatement().execute("UPSERT INTO test.sequence_number (id) VALUES (NEXT VALUE FOR alpha.tau)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 1");
+		conn.createStatement().execute("CREATE TABLE " + tableName + " ( id INTEGER NOT NULL PRIMARY KEY)");
+		conn.createStatement().execute("UPSERT INTO " + tableName + " (id) VALUES (NEXT VALUE FOR " + sequenceName + ")");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (id) VALUES (NEXT VALUE FOR " + sequenceName  + ")");
 		conn.commit();
-        nextConnection();
-		String query = "SELECT id FROM test.sequence_number";		
+		String query = "SELECT id FROM " + tableName;		
 		ResultSet rs = conn.prepareStatement(query).executeQuery();
 		assertTrue(rs.next());
 		assertEquals(2, rs.getInt(1));
@@ -247,15 +262,18 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceCreation() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
+        String schemaName = getSchemaName(sequenceName);
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE alpha.gamma START WITH 2 INCREMENT BY 3 MINVALUE 0 MAXVALUE 10 CYCLE CACHE 5");
-        nextConnection();
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 3 MINVALUE 0 MAXVALUE 10 CYCLE CACHE 5");
+        
         ResultSet rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM \"SYSTEM\".\"SEQUENCE\"");
+                            "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA='" + schemaName + "' AND SEQUENCE_NAME='" + sequenceNameWithoutSchema + "'");
         assertTrue(rs.next());
         assertEquals(2, rs.getLong("start_with"));
         assertEquals(2, rs.getInt("current_value"));
@@ -264,21 +282,22 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(0, rs.getLong("min_value"));
         assertEquals(10, rs.getLong("max_value"));
         assertEquals(true, rs.getBoolean("cycle_flag"));
-        assertEquals("ALPHA", rs.getString("sequence_schema"));
-        assertEquals("GAMMA", rs.getString("sequence_name"));
+        assertEquals(schemaName, rs.getString("sequence_schema"));
+        assertEquals(sequenceNameWithoutSchema, rs.getString("sequence_name"));
         assertFalse(rs.next());
         rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT NEXT VALUE FOR alpha.gamma, CURRENT VALUE FOR alpha.gamma FROM \"SYSTEM\".\"SEQUENCE\"");
+                            "SELECT NEXT VALUE FOR " + sequenceName + ", CURRENT VALUE FOR " + sequenceName );
         assertTrue(rs.next());
         assertEquals(2, rs.getLong(1));
         assertEquals(2, rs.getLong(2));
+        
         assertFalse(rs.next());
         rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT CURRENT VALUE FOR alpha.gamma, NEXT VALUE FOR alpha.gamma FROM \"SYSTEM\".\"SEQUENCE\"");
+                            "SELECT CURRENT VALUE FOR " + sequenceName + ", NEXT VALUE FOR " + sequenceName );
         assertTrue(rs.next());
         assertEquals(5, rs.getLong(1));
         assertEquals(5, rs.getLong(2));
@@ -287,10 +306,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSameMultipleSequenceValues() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 4 INCREMENT BY 7");
-        nextConnection();
-        String query = "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.zeta FROM \"SYSTEM\".\"SEQUENCE\"";
+        String sequenceName = generateNameWithSchema();
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7");
+        String query = "SELECT NEXT VALUE FOR " + sequenceName + ", NEXT VALUE FOR " + sequenceName ;
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -301,11 +320,13 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultipleSequenceValues() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 4 INCREMENT BY 7");
-        conn.createStatement().execute("CREATE SEQUENCE alpha.kappa START WITH 9 INCREMENT BY 2");
-        nextConnection();
-        String query = "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM \"SYSTEM\".\"SEQUENCE\"";
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();
+    	
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7");
+        conn.createStatement().execute("CREATE SEQUENCE " + alternateSequenceName + " START WITH 9 INCREMENT BY 2");
+        
+        String query = "SELECT NEXT VALUE FOR " + sequenceName + ", NEXT VALUE FOR " + alternateSequenceName + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " LIMIT 2";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -314,10 +335,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4+7, rs.getInt(1));
         assertEquals(9+2, rs.getInt(2));
         assertFalse(rs.next());
-        conn.close();
+
         // Test that sequences don't have gaps (if no other client request the same sequence before we close it)
-        nextConnection();
-        rs = conn.prepareStatement(query).executeQuery();
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        rs = conn2.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4+7*2, rs.getInt(1));
         assertEquals(9+2*2, rs.getInt(2));
@@ -325,19 +346,23 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4+7*3, rs.getInt(1));
         assertEquals(9+2*3, rs.getInt(2));
         assertFalse(rs.next());
-        conn.close();
+        conn2.close();
     }
     
     @Test
     public void testMultipleSequencesNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
+        String schemaName = getSchemaName(sequenceName);
+        String alternateSequenceName = sequenceName + "_ALT";
+        String alternatesequenceNameWithoutSchema = getNameWithoutSchema(alternateSequenceName);
+
         conn.createStatement().execute(
-            "CREATE SEQUENCE alpha.zeta START WITH 4 INCREMENT BY 7 MAXVALUE 24");
+            "CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7 MAXVALUE 24");
         conn.createStatement().execute(
-            "CREATE SEQUENCE alpha.kappa START WITH 9 INCREMENT BY -2 MINVALUE 5");
-        nextConnection();
+            "CREATE SEQUENCE " + alternateSequenceName + " START WITH 9 INCREMENT BY -2 MINVALUE 5");
         String query =
-                "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM \"SYSTEM\".\"SEQUENCE\"";
+                "SELECT NEXT VALUE FOR " + sequenceName + ", NEXT VALUE FOR " + alternateSequenceName + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " LIMIT 2";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -346,9 +371,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4 + 7, rs.getInt(1));
         assertEquals(9 - 2, rs.getInt(2));
         assertFalse(rs.next());
-        conn.close();
-        
-        nextConnection();
+               
         rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4 + 7 * 2, rs.getInt(1));
@@ -358,10 +381,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             fail();
         } catch (SQLException e) {
             SQLException sqlEx1 =
-                    SequenceUtil.getException("ALPHA", "ZETA",
+                    SequenceUtil.getException(schemaName, sequenceNameWithoutSchema,
                         SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE);
             SQLException sqlEx2 =
-                    SequenceUtil.getException("ALPHA", "KAPPA",
+                    SequenceUtil.getException(schemaName, alternatesequenceNameWithoutSchema,
                         SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE);
             verifyExceptions(e, Lists.newArrayList(sqlEx1.getMessage(), sqlEx2.getMessage()));
         }
@@ -370,14 +393,16 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testMultipleSequencesCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();
+    	
         conn.createStatement().execute(
-            "CREATE SEQUENCE alpha.zeta START WITH 4 INCREMENT BY 7 MINVALUE 4 MAXVALUE 19 CYCLE");
+            "CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7 MINVALUE 4 MAXVALUE 19 CYCLE");
         conn.createStatement().execute(
-            "CREATE SEQUENCE alpha.kappa START WITH 9 INCREMENT BY -2 MINVALUE 5 MAXVALUE 9 CYCLE");
-        nextConnection();
+            "CREATE SEQUENCE " + alternateSequenceName + " START WITH 9 INCREMENT BY -2 MINVALUE 5 MAXVALUE 9 CYCLE");
+        
         String query =
-                "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM \"SYSTEM\".\"SEQUENCE\"";
+                "SELECT NEXT VALUE FOR " + sequenceName + ", NEXT VALUE FOR " + alternateSequenceName  + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " LIMIT 2";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -386,9 +411,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(4 + 7, rs.getInt(1));
         assertEquals(9 - 2, rs.getInt(2));
         assertFalse(rs.next());
-        conn.close();
         
-        nextConnection();
         rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4 + 7 * 2, rs.getInt(1));
@@ -396,31 +419,33 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         assertEquals(9, rs.getInt(2));
-        conn.close();
     }
     
 	@Test
 	public void testCompilerOptimization() throws Exception {
-		nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE seq.perf START WITH 3 INCREMENT BY 2");        
-		conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
-        nextConnection();
-        conn.createStatement().execute("CREATE INDEX idx ON t(v1) INCLUDE (v2)");
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
+		
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");        
+		conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
+        
+        conn.createStatement().execute("CREATE INDEX " + generateUniqueName() + " ON " + tableName + "(v1) INCLUDE (v2)");
+        
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        stmt.optimizeQuery("SELECT k, NEXT VALUE FOR seq.perf FROM t WHERE v1 = 'bar'");
+        stmt.optimizeQuery("SELECT k, NEXT VALUE FOR " + sequenceName + " FROM " + tableName + " WHERE v1 = 'bar'");
 	}
 	
 	@Test
 	public void testSelectRowAndSequence() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.epsilon START WITH 1 INCREMENT BY 4");
-		conn.createStatement().execute("CREATE TABLE test.foo ( id INTEGER NOT NULL PRIMARY KEY)");
-        nextConnection();
-		conn.createStatement().execute("UPSERT INTO test.foo (id) VALUES (NEXT VALUE FOR alpha.epsilon)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 4");
+		conn.createStatement().execute("CREATE TABLE " + tableName + " ( id INTEGER NOT NULL PRIMARY KEY)");
+        
+		conn.createStatement().execute("UPSERT INTO " + tableName + " (id) VALUES (NEXT VALUE FOR " + sequenceName + ")");
 		conn.commit();
-        nextConnection();
-		String query = "SELECT NEXT VALUE FOR alpha.epsilon, id FROM test.foo";
+        
+		String query = "SELECT NEXT VALUE FOR " + sequenceName + ", id FROM " + tableName;
 		ResultSet rs = conn.prepareStatement(query).executeQuery();
 		assertTrue(rs.next());
 		assertEquals(5, rs.getInt(1));
@@ -430,18 +455,19 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectNextValueForOverMultipleBatches() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
+
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
         
-        nextConnection();
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ")");
         for (int i = 0; i < BATCH_SIZE  * 2 + 1; i++) {
             stmt.execute();
         }
         conn.commit();
-        nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*),max(k) FROM foo");
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*),max(k) FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(BATCH_SIZE * 2 + 1, rs.getInt(1));
         assertEquals(BATCH_SIZE * 2 + 1, rs.getInt(2));
@@ -449,13 +475,15 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectNextValueForGroupBy() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
-        conn.createStatement().execute("CREATE TABLE bar (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
+        String SECOND_tableName = generateNameWithSchema();
+    	
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("CREATE TABLE "+ SECOND_tableName + " (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
         
-        nextConnection();
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar, ?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ", ?)");
         stmt.setString(1, "a");
         stmt.execute();
         stmt.setString(1, "a");
@@ -468,8 +496,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.commit();
         
-        nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k from foo");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k from " + tableName );
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertTrue(rs.next());
@@ -482,11 +509,11 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(5, rs.getInt(1));
         assertFalse(rs.next());
 
-        nextConnection();
+        
         conn.setAutoCommit(true);;
-        conn.createStatement().execute("UPSERT INTO bar SELECT NEXT VALUE FOR foo.bar,v FROM foo GROUP BY v");
-        nextConnection();
-        rs = conn.createStatement().executeQuery("SELECT * from bar");
+        conn.createStatement().execute("UPSERT INTO " + SECOND_tableName + " SELECT NEXT VALUE FOR " + sequenceName + ",v FROM " + tableName + " GROUP BY v");
+        
+        rs = conn.createStatement().executeQuery("SELECT * from " + SECOND_tableName);
         assertTrue(rs.next());
         assertEquals(6, rs.getInt(1));
         assertEquals("a", rs.getString(2));
@@ -501,23 +528,21 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectNextValueForMultipleConn() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
 
-        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
+
         Connection conn1 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        
-        PreparedStatement stmt1 = conn1.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        PreparedStatement stmt1 = conn1.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ")");
         for (int i = 0; i < BATCH_SIZE+ 1; i++) {
             stmt1.execute();
         }
         conn1.commit();
         
-        nextConnection();
-        Connection conn2 = conn;
-        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ")");
         stmt2.execute();
         stmt1.close(); // Should still continue with next value, even on separate connection
         for (int i = 0; i < BATCH_SIZE; i++) {
@@ -525,11 +550,9 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         }
         conn2.commit();
         conn2.close();
-        conn1.close();
         
-        nextConnection();
         // No gaps exist even when sequences were generated from different connections
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM foo");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
         for (int i = 0; i < (BATCH_SIZE+ 1)*2; i++) {
             assertTrue(rs.next());
             assertEquals(i+1, rs.getInt(1));
@@ -539,35 +562,27 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectNextValueForMultipleConnWithStmtClose() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
         
-        nextConnection();
-        Connection conn1 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        
-        PreparedStatement stmt1 = conn1.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
+        PreparedStatement stmt1 = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
         for (int i = 0; i < BATCH_SIZE+ 1; i++) {
             stmt1.execute();
         }
-        conn1.commit();
+        conn.commit();
         stmt1.close();
         
-        nextConnection();
-        Connection conn2 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        
-        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
         for (int i = 0; i < BATCH_SIZE + 1; i++) {
             stmt2.execute();
         }
         conn2.commit();
         conn2.close();
-        conn1.close();
         
-        nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM foo");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
         for (int i = 0; i < 2*(BATCH_SIZE + 1); i++) {
             assertTrue(rs.next());
             assertEquals(i+1, rs.getInt(1));
@@ -577,34 +592,27 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectNextValueForMultipleConnWithConnClose() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
         
-        nextConnection();
-        Connection conn1 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        
-        PreparedStatement stmt1 = conn1.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
+
+        PreparedStatement stmt1 = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
         for (int i = 0; i < BATCH_SIZE+ 1; i++) {
             stmt1.execute();
         }
-        conn1.commit();
-        conn1.close(); 
-       
-        nextConnection();
-        Connection conn2 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        
-        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)");
+        conn.commit();
+
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));;
+        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
         for (int i = 0; i < BATCH_SIZE + 1; i++) {
             stmt2.execute();
         }
         conn2.commit();
         conn2.close();
         
-        nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM foo");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
         for (int i = 0; i < 2*(BATCH_SIZE + 1); i++) {
             assertTrue(rs.next());
             assertEquals(i+1, rs.getInt(1));
@@ -623,36 +631,31 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     }
     
     private void testDropCachedSeq(boolean detectDeleteSeqInEval) throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        conn.createStatement().execute("CREATE SEQUENCE bar.bas START WITH 101");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
         
-        nextConnection();
-        Connection conn1 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE SEQUENCE " + alternateSequenceName + " START WITH 101");
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
         
-        String stmtStr1a = "UPSERT INTO foo VALUES(NEXT VALUE FOR foo.bar)";
-        PreparedStatement stmt1a = conn1.prepareStatement(stmtStr1a);
+        String stmtStr1a = "UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )";
+        PreparedStatement stmt1a = conn.prepareStatement(stmtStr1a);
         stmt1a.execute();
         stmt1a.execute();
-        String stmtStr1b = "UPSERT INTO foo VALUES(NEXT VALUE FOR bar.bas)";
-        PreparedStatement stmt1b = conn1.prepareStatement(stmtStr1b);
+        String stmtStr1b = "UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR "+ alternateSequenceName +")";
+        PreparedStatement stmt1b = conn.prepareStatement(stmtStr1b);
         stmt1b.execute();
         stmt1b.execute();
         stmt1b.execute();
-        conn1.commit();
+        conn.commit();
         
-        nextConnection();
-        Connection conn2 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        
-        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO foo VALUES(NEXT VALUE FOR bar.bas)");
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));;
+        PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + alternateSequenceName + ")");
         stmt2.execute();
         conn2.commit();
         
-        nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM foo");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName + "");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertTrue(rs.next());
@@ -667,14 +670,12 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(104, rs.getInt(1));
         assertFalse(rs.next());
         
-        nextConnection();
-        conn.createStatement().execute("DROP SEQUENCE bar.bas");
-
-        nextConnection();
+        conn.createStatement().execute("DROP SEQUENCE " + alternateSequenceName);
+        
         stmt1a = conn.prepareStatement(stmtStr1a);
         stmt1a.execute();
         if (!detectDeleteSeqInEval) {
-            stmt1a.execute(); // Will allocate new batch for foo.bar and get error for bar.bas, but ignore it
+            stmt1a.execute(); // Will allocate new batch for " + sequenceName + " and get error for bar.bas, but ignore it
         }
         
         stmt1b = conn.prepareStatement(stmtStr1b);
@@ -683,35 +684,33 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             fail();
         } catch (SequenceNotFoundException e) {
         }
-        conn1.close();
         conn2.close();
     }
 
     @Test
     public void testExplainPlanValidatesSequences() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE bar");
-        conn.createStatement().execute("CREATE TABLE foo (k BIGINT NOT NULL PRIMARY KEY)");
+        String sequenceName = generateNameWithSchema();
+        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
+        String tableName = generateNameWithSchema();
         
-        nextConnection();
-        Connection conn2 = conn;
-        conn = null; // So that call to nextConnection doesn't close it
-        ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR bar FROM foo");
-        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER FOO\n" + 
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
+        
+        Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR " + sequenceName + " FROM " + tableName);
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ tableName +"\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
         		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
         
-        nextConnection();
-        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='BAR'");
+        
+        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'");
         assertTrue(rs.next());
-        assertEquals("BAR", rs.getString(1));
+        assertEquals(sequenceNameWithoutSchema, rs.getString(1));
         assertEquals(1, rs.getInt(2));
-        conn.close();
         conn2.close();
 
-        nextConnection();
         try {
-            conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR zzz FROM foo");
+            conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR zzz FROM " + tableName);
             fail();
         } catch (SequenceNotFoundException e) {
             // expected
@@ -721,83 +720,78 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testSelectNextValueAsInput() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 2");
-        nextConnection();
-        String query = "SELECT LPAD(ENCODE(NEXT VALUE FOR foo.bar,'base62'),5,'0') FROM \"SYSTEM\".\"SEQUENCE\"";
+    	
+        String sequenceName = generateSequenceName();
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");
+        String query = "SELECT LPAD(ENCODE(NEXT VALUE FOR  " + sequenceName + " ,'base62'),5,'0') FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals("00003", rs.getString(1));
     }
     
+    private String generateSequenceName() {
+    	return generateUniqueName();
+    }
+    
     @Test
     public void testSelectNextValueInArithmetic() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 2");
-        nextConnection();
-        String query = "SELECT NEXT VALUE FOR foo.bar+1 FROM SYSTEM.\"SEQUENCE\"";
+        String sequenceName = generateNameWithSchema();
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");
+        
+        String query = "SELECT NEXT VALUE FOR  " + sequenceName + " +1";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
     }
 
-    private void nextConnection(Properties props) throws Exception {
-        if (conn != null) conn.close();
-        long ts = nextTimestamp();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+    private void createConnection() throws Exception {
+    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
-    }
-
-    // if nextConnection() is not used to get to get a connection, make sure you call .close() so that connections are
-    // not leaked
-    private void nextConnection() throws Exception {
-        nextConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
     
     @Test
     public void testSequenceDefault() throws Exception {
-        nextConnection();    
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        nextConnection();
-        assertSequenceValuesForSingleRow(1, 2, 3);
-        conn.createStatement().execute("DROP SEQUENCE foo.bar");
+        String sequenceName = generateNameWithSchema();
+            
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT BY -1");
-        nextConnection();
-        assertSequenceValuesForSingleRow(1, 0, -1);
-        conn.createStatement().execute("DROP SEQUENCE foo.bar");
+        assertSequenceValuesForSingleRow(sequenceName, 1, 2, 3);
+        conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar MINVALUE 10");
-        nextConnection();
-        assertSequenceValuesForSingleRow(10, 11, 12);
-        conn.createStatement().execute("DROP SEQUENCE foo.bar");
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1");
         
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT BY -1 MINVALUE 10 ");
-        nextConnection();
-        assertSequenceValuesForSingleRow(Long.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE - 2);
-        conn.createStatement().execute("DROP SEQUENCE foo.bar");
-
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar MAXVALUE 0");
-        nextConnection();
-        assertSequenceValuesForSingleRow(Long.MIN_VALUE, Long.MIN_VALUE + 1, Long.MIN_VALUE + 2);
-        conn.createStatement().execute("DROP SEQUENCE foo.bar");
+        assertSequenceValuesForSingleRow(sequenceName, 1, 0, -1);
+        conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT BY -1 MAXVALUE 0");
-        nextConnection();
-        assertSequenceValuesForSingleRow(0, -1, -2);
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MINVALUE 10");
+        
+        assertSequenceValuesForSingleRow(sequenceName, 10, 11, 12);
+        conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1 MINVALUE 10 ");
+        
+        assertSequenceValuesForSingleRow(sequenceName, Long.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE - 2);
+        conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MAXVALUE 0");
+        
+        assertSequenceValuesForSingleRow(sequenceName, Long.MIN_VALUE, Long.MIN_VALUE + 1, Long.MIN_VALUE + 2);
+        conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1 MAXVALUE 0");
+        
+        assertSequenceValuesForSingleRow(sequenceName, 0, -1, -2);
     }
 
     @Test
     public void testSequenceValidateStartValue() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();
+        
         try {
             conn.createStatement().execute(
-                "CREATE SEQUENCE foo.bar1 START WITH 1 INCREMENT BY 1 MINVALUE 2 MAXVALUE 3");
+                "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 1 MINVALUE 2 MAXVALUE 3");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE.getErrorCode(),
@@ -807,7 +801,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
         try {
             conn.createStatement().execute(
-                "CREATE SEQUENCE foo.bar2 START WITH 4 INCREMENT BY 1 MINVALUE 2 MAXVALUE 3");
+                "CREATE SEQUENCE " + alternateSequenceName + " START WITH 4 INCREMENT BY 1 MINVALUE 2 MAXVALUE 3");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE.getErrorCode(),
@@ -818,9 +812,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceValidateMinValue() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         try {
-            conn.createStatement().execute("CREATE SEQUENCE foo.bar MINVALUE abc");
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MINVALUE abc");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.MINVALUE_MUST_BE_CONSTANT.getErrorCode(),
@@ -831,9 +826,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceValidateMaxValue() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         try {
-            conn.createStatement().execute("CREATE SEQUENCE foo.bar MAXVALUE null");
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MAXVALUE null");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.MAXVALUE_MUST_BE_CONSTANT.getErrorCode(),
@@ -844,9 +840,11 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceValidateMinValueLessThanOrEqualToMaxValue() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+    	
+        
         try {
-            conn.createStatement().execute("CREATE SEQUENCE foo.bar MINVALUE 2 MAXVALUE 1");
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MINVALUE 2 MAXVALUE 1");
             fail();
         } catch (SQLException e) {
             assertEquals(
@@ -858,9 +856,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceValidateIncrementConstant() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         try {
-            conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT null");
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT null");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT.getErrorCode(),
@@ -871,9 +870,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceValidateIncrementNotEqualToZero() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         try {
-            conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT 0");
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT 0");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.INCREMENT_BY_MUST_NOT_BE_ZERO.getErrorCode(),
@@ -884,34 +884,38 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testSequenceStartWithMinMaxSameValueIncreasingCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 1 MINVALUE 3 MAXVALUE 3 CYCLE CACHE 1");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3, 3, 3);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 1 MINVALUE 3 MAXVALUE 3 CYCLE CACHE 1");
+        
+        assertSequenceValuesForSingleRow(sequenceName, 3, 3, 3);
     }
     
     @Test
     public void testSequenceStartWithMinMaxSameValueDecreasingCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY -1 MINVALUE 3 MAXVALUE 3 CYCLE CACHE 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3, 3, 3);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY -1 MINVALUE 3 MAXVALUE 3 CYCLE CACHE 2");
+        
+        assertSequenceValuesForSingleRow(sequenceName, 3, 3, 3);
     }
     
     @Test
     public void testSequenceStartWithMinMaxSameValueIncreasingNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+    	
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 1 MINVALUE 3 MAXVALUE 3 CACHE 1");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 1 MINVALUE 3 MAXVALUE 3 CACHE 1");
+        
+        assertSequenceValuesForSingleRow(sequenceName, 3);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -923,14 +927,15 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testSequenceStartWithMinMaxSameValueDecreasingNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY -1 MINVALUE 3 MAXVALUE 3 CACHE 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY -1 MINVALUE 3 MAXVALUE 3 CACHE 2");
+        
+        assertSequenceValuesForSingleRow(sequenceName, 3);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -942,34 +947,35 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceIncreasingCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(2, 5, 8, 1, 4, 7, 10, 1, 4);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
+        assertSequenceValuesForSingleRow(sequenceName, 2, 5, 8, 1, 4, 7, 10, 1, 4);
     }
 
     @Test
     public void testSequenceDecreasingCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY -2 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3, 1, 10, 8, 6, 4, 2, 10, 8);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY -2 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
+        assertSequenceValuesForSingleRow(sequenceName, 3, 1, 10, 8, 6, 4, 2, 10, 8);
     }
 
     @Test
     public void testSequenceIncreasingNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+    	
+        
         // client throws exception
         conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar START WITH 2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 10 CACHE 100");
-        nextConnection();
-        assertSequenceValuesForSingleRow(2, 5, 8);
+            "CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 3 MINVALUE 1 MAXVALUE 10 CACHE 100");
+        assertSequenceValuesForSingleRow(sequenceName, 2, 5, 8);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -981,14 +987,14 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceIncreasingUsingMaxValueNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // server throws exception
         conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar START WITH 8 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CACHE 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(8, 10);
+            "CREATE SEQUENCE " + sequenceName + " START WITH 8 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CACHE 2");
+        assertSequenceValuesForSingleRow(sequenceName, 8, 10);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -1000,15 +1006,15 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceDecreasingNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // client will throw exception
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 4 INCREMENT BY -2 MINVALUE 1 MAXVALUE 10 CACHE 100");
-        nextConnection();
-        assertSequenceValuesForSingleRow(4, 2);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY -2 MINVALUE 1 MAXVALUE 10 CACHE 100");
+        assertSequenceValuesForSingleRow(sequenceName, 4, 2);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -1020,14 +1026,14 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceDecreasingUsingMinValueNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // server will throw exception
         conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY -2 MINVALUE 1 MAXVALUE 10 CACHE 2");
-        nextConnection();
-        assertSequenceValuesForSingleRow(3, 1);
+            "CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY -2 MINVALUE 1 MAXVALUE 10 CACHE 2");
+        assertSequenceValuesForSingleRow(sequenceName, 3, 1);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -1039,14 +1045,15 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceIncreasingOverflowNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // start with Long.MAX_VALUE
         conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar START WITH 9223372036854775807 INCREMENT BY 1 CACHE 10");
-        nextConnection();
-        assertSequenceValuesForSingleRow(Long.MAX_VALUE);
+            "CREATE SEQUENCE " + sequenceName + " START WITH 9223372036854775807 INCREMENT BY 1 CACHE 10");
+        
+        assertSequenceValuesForSingleRow(sequenceName, Long.MAX_VALUE);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -1058,26 +1065,26 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceIncreasingOverflowCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // start with Long.MAX_VALUE
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 9223372036854775807 INCREMENT BY 9223372036854775807 CYCLE CACHE 10");
-        nextConnection();
-        assertSequenceValuesForSingleRow(Long.MAX_VALUE, Long.MIN_VALUE, -1, Long.MAX_VALUE - 1,
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 9223372036854775807 INCREMENT BY 9223372036854775807 CYCLE CACHE 10");
+        assertSequenceValuesForSingleRow(sequenceName, Long.MAX_VALUE, Long.MIN_VALUE, -1, Long.MAX_VALUE - 1,
             Long.MIN_VALUE, -1);
     }
 
     @Test
     public void testSequenceDecreasingOverflowNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // start with Long.MIN_VALUE + 1
         conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar START WITH -9223372036854775807 INCREMENT BY -1 CACHE 10");
-        nextConnection();
-        assertSequenceValuesForSingleRow(Long.MIN_VALUE + 1, Long.MIN_VALUE);
+            "CREATE SEQUENCE " + sequenceName + " START WITH -9223372036854775807 INCREMENT BY -1 CACHE 10");
+        assertSequenceValuesForSingleRow(sequenceName, Long.MIN_VALUE + 1, Long.MIN_VALUE);
         try {
-            ResultSet rs = conn.createStatement().executeQuery(NEXT_VAL_SQL);
+            ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -1089,31 +1096,34 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSequenceDecreasingOverflowCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        
         // start with Long.MIN_VALUE + 1
         conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH -9223372036854775807 INCREMENT BY -9223372036854775807 CYCLE CACHE 10");
-        nextConnection();
-        assertSequenceValuesForSingleRow(Long.MIN_VALUE + 1, Long.MAX_VALUE, 0, Long.MIN_VALUE + 1,
+                    "CREATE SEQUENCE " + sequenceName + " START WITH -9223372036854775807 INCREMENT BY -9223372036854775807 CYCLE CACHE 10");
+        assertSequenceValuesForSingleRow(sequenceName, Long.MIN_VALUE + 1, Long.MAX_VALUE, 0, Long.MIN_VALUE + 1,
             Long.MAX_VALUE, 0);
     }
 
     @Test
     public void testMultipleSequenceValuesNoCycle() throws Exception {
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();
+        
         conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar START WITH 1 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CACHE 2");
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar2");
-        nextConnection();
-        assertSequenceValuesMultipleSeq(1, 3);
-        assertSequenceValuesMultipleSeq(5, 7);
+            "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CACHE 2");
+        conn.createStatement().execute("CREATE SEQUENCE " + alternateSequenceName);
+        assertSequenceValuesMultipleSeq(sequenceName, 1, 3);
+        assertSequenceValuesMultipleSeq(sequenceName, 5, 7);
 
-        ResultSet rs = conn.prepareStatement(NEXT_VAL_SQL).executeQuery();
+        PreparedStatement stmt = conn.prepareStatement(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
+        ResultSet rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals(9, rs.getInt(1));
+        assertFalse(rs.next());
         try {
-            assertTrue(rs.next());
+            stmt.executeQuery().next();
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
@@ -1122,8 +1132,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         }
 
         try {
-            rs = conn.prepareStatement(NEXT_VAL_SQL).executeQuery();
-            rs.next();
+            stmt.executeQuery().next();
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
@@ -1134,53 +1143,53 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultipleSequenceValuesCycle() throws Exception {
-        nextConnection();
-        conn.createStatement()
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();        
+                conn.createStatement()
                 .execute(
-                    "CREATE SEQUENCE foo.bar START WITH 1 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar2");
-        nextConnection();
-        assertSequenceValuesMultipleSeq(1, 3);
-        assertSequenceValuesMultipleSeq(5, 7);
-        assertSequenceValuesMultipleSeq(9, 1);
-        assertSequenceValuesMultipleSeq(3, 5);
-        assertSequenceValuesMultipleSeq(7, 9);
-        assertSequenceValuesMultipleSeq(1, 3);
-        assertSequenceValuesMultipleSeq(5, 7);
+                    "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
+        conn.createStatement().execute("CREATE SEQUENCE " + alternateSequenceName);
+        assertSequenceValuesMultipleSeq(sequenceName, 1, 3);
+        assertSequenceValuesMultipleSeq(sequenceName, 5, 7);
+        assertSequenceValuesMultipleSeq(sequenceName, 9, 1);
+        assertSequenceValuesMultipleSeq(sequenceName, 3, 5);
+        assertSequenceValuesMultipleSeq(sequenceName, 7, 9);
+        assertSequenceValuesMultipleSeq(sequenceName, 1, 3);
+        assertSequenceValuesMultipleSeq(sequenceName, 5, 7);
     }
 
     @Test
     public void testUpsertSelectGroupByWithSequence() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE foo.bar");
-        nextConnection();
+        String sequenceName = generateNameWithSchema();
+        String tableName = generateNameWithSchema();
+        String SECOND_tableName = generateNameWithSchema();
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
 
         conn.createStatement()
                 .execute(
-                    "CREATE TABLE EVENTS (event_id BIGINT NOT NULL PRIMARY KEY, user_id char(15), val BIGINT )");
+                    "CREATE TABLE " + tableName +  "(event_id BIGINT NOT NULL PRIMARY KEY, user_id char(15), val BIGINT )");
         conn.createStatement()
                 .execute(
-                    "CREATE TABLE METRICS (metric_id char(15) NOT NULL PRIMARY KEY, agg_id char(15), metric_val INTEGER )");
+                    "CREATE TABLE " + SECOND_tableName + " (metric_id char(15) NOT NULL PRIMARY KEY, agg_id char(15), metric_val INTEGER )");
 
-        nextConnection();
+        
         // 2 rows for user1, 3 rows for user2 and 1 row for user3
-        insertEvent(1, "user1", 1);
-        insertEvent(2, "user2", 1);
-        insertEvent(3, "user1", 1);
-        insertEvent(4, "user2", 1);
-        insertEvent(5, "user2", 1);
-        insertEvent(6, "user3", 1);
+        insertEvent(tableName, 1, "user1", 1);
+        insertEvent(tableName, 2, "user2", 1);
+        insertEvent(tableName, 3, "user1", 1);
+        insertEvent(tableName, 4, "user2", 1);
+        insertEvent(tableName, 5, "user2", 1);
+        insertEvent(tableName, 6, "user3", 1);
         conn.commit();
-        nextConnection();
 
         conn.createStatement()
                 .execute(
-                    "UPSERT INTO METRICS SELECT 'METRIC_'||(LPAD(ENCODE(NEXT VALUE FOR foo.bar,'base62'),5,'0')), user_id, sum(val) FROM events GROUP BY user_id ORDER BY user_id");
+                    "UPSERT INTO " + SECOND_tableName + " SELECT 'METRIC_'||(LPAD(ENCODE(NEXT VALUE FOR " + sequenceName + ",'base62'),5,'0')), user_id, sum(val) FROM " + tableName + " GROUP BY user_id ORDER BY user_id");
         conn.commit();
-        nextConnection();
 
         PreparedStatement stmt =
-                conn.prepareStatement("SELECT metric_id, agg_id, metric_val FROM METRICS");
+                conn.prepareStatement("SELECT metric_id, agg_id, metric_val FROM " + SECOND_tableName);
         ResultSet rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals("METRIC_00001", rs.getString("metric_id"));
@@ -1205,21 +1214,19 @@ public class SequenceIT extends BaseClientManagedTimeIT {
      * value was being unset from true to false.
      */
     public void testNextValuesForSequenceClosingConnections() throws Exception {
-
+        String sequenceName = generateNameWithSchema();
         // Create Sequence
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE seqtest.closeconn START WITH 4990 MINVALUE 4990 MAXVALUE 5000 CACHE 10");
-        nextConnection();
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4990 MINVALUE 4990 MAXVALUE 5000 CACHE 10");
         
         // Call NEXT VALUE FOR 1 time more than available values in the Sequence. We expected the final time
         // to throw an error as we will have reached the max value
         try {
             long val = 0L;
             for (int i = 0; i <= 11; i++) {
-                ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, "seqtest.closeconn"));
+                ResultSet rs = conn.createStatement().executeQuery(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
                 rs.next();
                 val = rs.getLong(1);
-                nextConnection();
+                
             }
             fail("Expect to fail as we have arrived at the max sequence value " + val);
         } catch (SQLException e) {
@@ -1229,8 +1236,8 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         }
     }
 
-    private void insertEvent(long id, String userId, long val) throws SQLException {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO events VALUES(?,?,?)");
+    private void insertEvent(String tableName, long id, String userId, long val) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
         stmt.setLong(1, id);
         stmt.setString(2, userId);
         stmt.setLong(3, val);
@@ -1241,9 +1248,9 @@ public class SequenceIT extends BaseClientManagedTimeIT {
      * Helper to verify the sequence values returned in multiple ResultSets each containing one row
      * @param seqVals expected sequence values (one per ResultSet)
      */
-    private void assertSequenceValuesForSingleRow(long... seqVals)
+    private void assertSequenceValuesForSingleRow(String sequenceName, long... seqVals)
             throws SQLException {
-        PreparedStatement stmt = conn.prepareStatement(NEXT_VAL_SQL);
+        PreparedStatement stmt = conn.prepareStatement(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
         for (long seqVal : seqVals) {
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -1258,15 +1265,14 @@ public class SequenceIT extends BaseClientManagedTimeIT {
      * Helper to verify the sequence values returned in a single ResultSet containing multiple row
      * @param seqVals expected sequence values (from one ResultSet)
      */
-    private void assertSequenceValuesMultipleSeq(long... seqVals) throws SQLException {
-        PreparedStatement stmt = conn.prepareStatement(NEXT_VAL_SQL);
-        ResultSet rs = stmt.executeQuery();
+    private void assertSequenceValuesMultipleSeq(String sequenceName, long... seqVals) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement(String.format(SELECT_NEXT_VALUE_SQL, sequenceName));
         for (long seqVal : seqVals) {
+            ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             assertEquals(seqVal, rs.getLong(1));
+            assertFalse(rs.next());
         }
-        assertFalse(rs.next());
-        rs.close();
         stmt.close();
     }
 
@@ -1287,23 +1293,25 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testValidateBeforeReserve() throws Exception {
-        nextConnection();
-        conn.createStatement().execute(
-                "CREATE TABLE foo (k VARCHAR PRIMARY KEY, l BIGINT)");
-        conn.createStatement().execute(
-            "CREATE SEQUENCE foo.bar");
         
-        nextConnection();
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR foo.bar FROM foo");
+        String tableName = generateNameWithSchema();
+        String seqName = generateNameWithSchema();
+        
+        conn.createStatement().execute(
+                "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY, l BIGINT)");
+        conn.createStatement().execute(
+            "CREATE SEQUENCE " + seqName);
+        
+        
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR " + seqName + " FROM " + tableName);
         assertTrue(rs.next());
         conn.createStatement().execute(
-                "UPSERT INTO foo VALUES ('a', NEXT VALUE FOR foo.bar)");
+                "UPSERT INTO " + tableName + " VALUES ('a', NEXT VALUE FOR " + seqName + ")");
         conn.createStatement().execute(
-                "UPSERT INTO foo VALUES ('b', NEXT VALUE FOR foo.bar)");
+                "UPSERT INTO " + tableName + " VALUES ('b', NEXT VALUE FOR " + seqName + ")");
         conn.commit();
         
-        nextConnection();
-        rs = conn.createStatement().executeQuery("SELECT * FROM foo");
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals(1,rs.getLong(2));
@@ -1312,8 +1320,8 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertEquals(2,rs.getLong(2));
         assertFalse(rs.next());
         
-        nextConnection();
-        PreparedStatement stmt = conn.prepareStatement("SELECT NEXT VALUE FOR foo.bar FROM foo");
+        
+        PreparedStatement stmt = conn.prepareStatement("SELECT NEXT VALUE FOR " + seqName + " FROM " + tableName);
         ParameterMetaData md = stmt.getParameterMetaData();
         assertEquals(0,md.getParameterCount());
         rs = stmt.executeQuery();
@@ -1326,26 +1334,31 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testNoFromClause() throws Exception {
+        String sequenceName = generateNameWithSchema();
+        String alternateSequenceName = generateNameWithSchema();
+    	
         ResultSet rs;
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE myseq START WITH 1 INCREMENT BY 1");
-        conn.createStatement().execute("CREATE SEQUENCE anotherseq START WITH 2 INCREMENT BY 3");
-        nextConnection();
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR myseq");
+        
+        String seqName = sequenceName;
+        String secondSeqName = alternateSequenceName;
+        conn.createStatement().execute("CREATE SEQUENCE " + seqName + " START WITH 1 INCREMENT BY 1");
+        conn.createStatement().execute("CREATE SEQUENCE " + secondSeqName + " START WITH 2 INCREMENT BY 3");
+        
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR " + seqName);
         assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
-        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR myseq");
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + seqName);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT CURRENT VALUE FOR myseq");
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT CURRENT VALUE FOR " + seqName);
         assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
-        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR myseq");
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR " + seqName);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR myseq, NEXT VALUE FOR anotherseq");
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + seqName + ", NEXT VALUE FOR " + secondSeqName);
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals(2, rs.getInt(2));
-        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR myseq, NEXT VALUE FOR anotherseq");
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR " + seqName + ", NEXT VALUE FOR " + secondSeqName);
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals(5, rs.getInt(2));        
@@ -1353,10 +1366,13 @@ public class SequenceIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testReturnAllSequencesNotCalledForNoOpenConnections() throws Exception {
-        nextConnection();
-        conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 3 INCREMENT BY 2 CACHE 5");
-        nextConnection();
-        String query = "SELECT NEXT VALUE FOR alpha.zeta FROM \"SYSTEM\".\"SEQUENCE\"";
+        String sequenceName = generateNameWithSchema();
+        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
+        String schemaName = getSchemaName(sequenceName);
+        
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2 CACHE 5");
+        
+        String query = "SELECT NEXT VALUE FOR " + sequenceName ;
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
@@ -1365,23 +1381,33 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(5, rs.getInt(1));
         assertFalse(rs.next());
-        conn.close();
         
-        nextConnection();
         // verify that calling close() does not return sequence values back to the server
-        query = "SELECT CURRENT_VALUE FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA='ALPHA' AND SEQUENCE_NAME='ZETA'";
-        rs = conn.prepareStatement(query).executeQuery();
+        query = "SELECT CURRENT_VALUE FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA=? AND SEQUENCE_NAME=?";
+        PreparedStatement preparedStatement = conn.prepareStatement(query);
+        preparedStatement.setString(1, schemaName);
+        preparedStatement.setString(2, sequenceNameWithoutSchema);
+        rs = preparedStatement.executeQuery();
         assertTrue(rs.next());
         assertEquals(13, rs.getInt(1));
         assertFalse(rs.next());
     }
+    
+    private static String getSchemaName(String tableName) {
+    	return tableName.substring(0, tableName.indexOf("."));
+    }
+     
+    private static String getNameWithoutSchema(String tableName) {
+    	return tableName.substring(tableName.indexOf(".") + 1, tableName.length());
+    }    
 
     @Test
     public void testPointInTimeSequence() throws Exception {
+        String sequenceName = generateNameWithSchema();    	
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn;
         ResultSet rs;
-        String seqName = generateUniqueName();
+        String seqName = sequenceName;
         long ts = nextTimestamp();
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         conn = DriverManager.getConnection(getUrl(), props);
