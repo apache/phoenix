@@ -21,7 +21,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.net.InetAddress;
@@ -51,6 +50,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.DNS;
+import org.apache.phoenix.hive.PrimaryKeyData;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -256,16 +256,13 @@ public class PhoenixStorageHandlerUtil {
     }
 
     public static Map<?, ?> toMap(byte[] serialized) {
-        Map<?, ?> resultMap = null;
         ByteArrayInputStream bais = new ByteArrayInputStream(serialized);
 
-        try (ObjectInputStream ois = new ObjectInputStream(bais)) {
-            resultMap = (Map<?, ?>) ois.readObject();
+        try {
+            return PrimaryKeyData.deserialize(bais).getData();
         } catch (ClassNotFoundException | IOException e) {
             throw new RuntimeException(e);
         }
-
-        return resultMap;
     }
 
     public static String getOptionsValue(Options options) {
