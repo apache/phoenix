@@ -31,24 +31,22 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class FunkyNamesIT extends BaseClientManagedTimeIT {
+public class FunkyNamesIT extends ParallelStatsDisabledIT {
 
-    protected static void initTableValues(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(), FUNKY_NAME, FUNKY_NAME,splits, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+    protected static String initTableValues(byte[][] splits) throws Exception {
+    	String tableName = generateUniqueName();
+        ensureTableCreated(getUrl(), tableName, FUNKY_NAME,splits, null, null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
                 "upsert into " +
-                "FUNKY_NAMES(" +
+                tableName +
+                "(" +
                 "    \"foo!\", " +
                 "    \"#@$\", " +
                 "    \"foo.bar-bas\", " +
@@ -66,18 +64,17 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
         stmt.setInt(7, 3);
         stmt.executeUpdate();
         conn.close();
+        return tableName;
     }
 
     @Test
     public void testUnaliasedFunkyNames() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT \"foo!\",\"#@$\",\"foo.bar-bas\",\"_blah^\" FROM FUNKY_NAMES";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT \"foo!\",\"#@$\",\"foo.bar-bas\",\"_blah^\" FROM %s";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
-            PreparedStatement statement = conn.prepareStatement(query);
+            String tableName = initTableValues(null);
+            PreparedStatement statement = conn.prepareStatement(String.format(query, tableName));
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
@@ -97,14 +94,12 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCaseSensitive() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT \"Value\",\"VALUE\",\"value\" FROM FUNKY_NAMES";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT \"Value\",\"VALUE\",\"value\" FROM %s";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
-            PreparedStatement statement = conn.prepareStatement(query);
+            String tableName = initTableValues(null);
+            PreparedStatement statement = conn.prepareStatement(String.format(query, tableName));
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
@@ -127,14 +122,12 @@ public class FunkyNamesIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testAliasedFunkyNames() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT \"1-3.4$\".\"foo!\" as \"1-2\",\"#@$\" as \"[3]\",\"foo.bar-bas\" as \"$$$\",\"_blah^\" \"0\" FROM FUNKY_NAMES \"1-3.4$\"";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT \"1-3.4$\".\"foo!\" as \"1-2\",\"#@$\" as \"[3]\",\"foo.bar-bas\" as \"$$$\",\"_blah^\" \"0\" FROM %s \"1-3.4$\"";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues(null, ts);
-            PreparedStatement statement = conn.prepareStatement(query);
+            String tableName = initTableValues(null);
+            PreparedStatement statement = conn.prepareStatement(String.format(query, tableName));
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
             assertEquals("a", rs.getString("1-2"));
