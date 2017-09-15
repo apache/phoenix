@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -32,11 +31,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-
-
 
 /**
  * 
@@ -44,21 +40,19 @@ import org.junit.Test;
  * 
  */
 
-public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
+public class ExtendedQueryExecIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testToDateFunctionBind() throws Exception {
-        long ts = nextTimestamp();
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),date, ts, getUrl(), null);
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId),date, null, getUrl(), null);
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "SELECT a_date FROM atable WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
+            String query = "SELECT a_date FROM " + tableName + " WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, "1970-1-1 12:00:00");
             ResultSet rs = statement.executeQuery();
@@ -73,14 +67,13 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
             justification="Test code.")
     @Test
     public void testTypeMismatchToDateFunctionBind() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),null, ts, getUrl(), null);
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId),null, null, getUrl(), null);
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "SELECT a_date FROM atable WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
+            String query = "SELECT a_date FROM " + tableName + " WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setDate(1, new Date(2));
             statement.executeQuery();
@@ -99,17 +92,15 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
      */
     @Test
     public void testDateFunctions() throws Exception {
-        long ts = nextTimestamp();
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),date, ts, getUrl(), null);
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId),date, null, getUrl(), null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs;
-            String queryPrefix = "SELECT a_date FROM atable WHERE organization_id='" + tenantId + "' and ";
+            String queryPrefix = "SELECT a_date FROM " + tableName + "  WHERE organization_id='" + tenantId + "' and ";
 
             String queryDateArg = "a_date < TO_DATE('1970-1-1 12:00:00')";
             rs = getResultSet(conn, queryPrefix + queryDateArg);
@@ -144,17 +135,16 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
      */
     @Test
     public void testDateGroupBy() throws Exception {
-        long ts = nextTimestamp();
+
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),date, ts, getUrl(), null);
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId),date, null, getUrl(), null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             ResultSet rs;
-            String query = "SELECT a_date, count(1) FROM atable WHERE organization_id='" + tenantId + "' group by a_date";
+            String query = "SELECT a_date, count(1) FROM " + tableName + "  WHERE organization_id='" + tenantId + "' group by a_date";
             rs = getResultSet(conn, query);
             
             /* 3 rows in expected result:
