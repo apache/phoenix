@@ -48,7 +48,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 public class DerivedTableIT extends ParallelStatsDisabledIT {
-    public String[] initTableWithIndex(String tableName) throws Exception {
+    private static String[] initTableWithIndex(String tableName) throws Exception {
         String tenantId = getOrganizationId();
         initATableValues(tableName, tenantId, getDefaultSplits(tenantId), null, null, getUrl(), null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -73,7 +73,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
         return plans;
     }
 
-    public String[] initTableWithoutIndex(String tableName) throws Exception {
+    private static String[] initTableWithoutIndex(String tableName) throws Exception {
         String tenantId = getOrganizationId();
         initATableValues(tableName, tenantId, getDefaultSplits(tenantId), null, null, getUrl(), null);
         String[] plans= {"CLIENT PARALLEL 4-WAY FULL SCAN OVER "+tableName+"\n" +
