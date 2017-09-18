@@ -45,7 +45,6 @@ import java.sql.ResultSet;
 import java.sql.Types;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -247,7 +246,7 @@ public class DistinctCountIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testDistinctCountONEWithEmptyResult() throws Exception {
+    public void testDistinctCountOneWithEmptyResult() throws Exception {
         String tenantId = getOrganizationId();
         String tableName = generateUniqueName();
         initATableValues(null, null, getDefaultSplits(tenantId), null, tableName);
@@ -437,23 +436,15 @@ public class DistinctCountIT extends ParallelStatsDisabledIT {
     public void testDistinctCountOnIndexTab() throws Exception {
         String tableName=generateUniqueName();
         String indexName=generateUniqueName();
-        long ts = nextTimestamp();
         String ddl = "create table "+tableName+" (id integer not null, first_name char(15),\n"
                 + "    last_name char(15), CONSTRAINT pk PRIMARY KEY (id))";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute(ddl);
-        conn.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE INDEX "+indexName+" ON "+tableName+"(first_name)");
-        conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(getUrl(), props);
         stmt = conn.prepareStatement("upsert into "+tableName+" (id, first_name, "
                 + "last_name) VALUES (?, ?, ?)");
         stmt.setInt(1, 1);
@@ -469,10 +460,7 @@ public class DistinctCountIT extends ParallelStatsDisabledIT {
         stmt.setString(3, "LN3");
         stmt.execute();
         conn.commit();
-        conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-        conn = DriverManager.getConnection(getUrl(), props);
         String query = "SELECT COUNT (DISTINCT first_name) FROM "+tableName;
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
