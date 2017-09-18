@@ -41,6 +41,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -1403,47 +1404,39 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPointInTimeSequence() throws Exception {
-        String sequenceName = generateNameWithSchema();    	
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn;
+        String seqName = generateNameWithSchema();    	
+        Properties scnProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
+        Connection beforeSeqConn = DriverManager.getConnection(getUrl(), scnProps);
+
         ResultSet rs;
-        String seqName = sequenceName;
-        long ts = nextTimestamp();
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        conn = DriverManager.getConnection(getUrl(), props);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE SEQUENCE " + seqName + "");
 
         try {
-            conn.createStatement().executeQuery("SELECT next value for " + seqName);
+            beforeSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
             fail();
         } catch (SequenceNotFoundException e) {
-            conn.close();
+            beforeSeqConn.close();
         }
 
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(getUrl(), props);
+        scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
+        Connection afterSeqConn = DriverManager.getConnection(getUrl(), scnProps);
+
         rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        conn.close();
-
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 7));
-        conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
-        conn.close();
 
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
-        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("DROP SEQUENCE " + seqName + "");
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
+        
+        rs = afterSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
-        conn.close();
 
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(getUrl(), props);
         try {
             rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
             fail();
@@ -1451,20 +1444,14 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         }
 
         conn.createStatement().execute("CREATE SEQUENCE " + seqName);
-        conn.close();
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
-        conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        conn.close();
 
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 6));
-        conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
+        rs = afterSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
-        conn.close();
+        afterSeqConn.close();
     }
 
 }
