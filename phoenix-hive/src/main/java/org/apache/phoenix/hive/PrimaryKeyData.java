@@ -77,7 +77,7 @@ public class PrimaryKeyData implements Serializable{
     }
 
     public static PrimaryKeyData deserialize(InputStream input) throws IOException, ClassNotFoundException {
-        try (LookAheadObjectInputStream ois = new LookAheadObjectInputStream((InputStream) input)) {
+        try (LookAheadObjectInputStream ois = new LookAheadObjectInputStream(input)) {
             Object obj = ois.readObject();
             if (obj instanceof PrimaryKeyData) {
                 return (PrimaryKeyData) obj;
