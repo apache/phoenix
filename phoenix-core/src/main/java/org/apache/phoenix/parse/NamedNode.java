@@ -20,8 +20,6 @@ package org.apache.phoenix.parse;
 
 import org.apache.phoenix.util.SchemaUtil;
 
-import java.util.Objects;
-
 public class NamedNode {
     private final String name;
     private final boolean isCaseSensitive;
@@ -59,7 +57,7 @@ public class NamedNode {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         NamedNode other = (NamedNode)obj;
-        return Objects.equals(name, other.name);
+        return name.equals(other.name);
     }
     
     @Override
