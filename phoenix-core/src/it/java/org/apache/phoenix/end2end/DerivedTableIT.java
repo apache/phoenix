@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.collections.map.HashedMap;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.After;
@@ -66,13 +65,11 @@ import com.google.common.collect.Lists;
 public class DerivedTableIT extends ParallelStatsDisabledIT {
     private static final String tenantId = getOrganizationId();
     private static final String dynamicTableName = "_TABLENAME_REPLACEABLE_";
-    private static final Map<String,String> tableNames=new HashedMap();
     @Rule public TestName name = new TestName();
 
     private String[] indexDDL;
     private String[] plans;
     private String tableName;
-    private Statement statement;
 
 
     public DerivedTableIT(String[] indexDDL, String[] plans) {
