@@ -425,19 +425,17 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 								continue;
 							}
 							long scanBeginTime = Math.max(0, earliestDisableTimestamp - backwardOverlapDurationMs);
+                            long scanEndTime = Math.min(latestUpperBoundTimestamp,
+                                    getTimestampForBatch(scanBeginTime,batchExecutedPerTableMap.get(dataPTable.getName())));
 							LOG.info("Starting to build " + dataPTable + " indexes " + indexesToPartiallyRebuild
-									+ " from timestamp=" + scanBeginTime + " until " + latestUpperBoundTimestamp);
+									+ " from timestamp=" + scanBeginTime + " until " + scanEndTime);
 							
 							TableRef tableRef = new TableRef(null, dataPTable, HConstants.LATEST_TIMESTAMP, false);
 							// TODO Need to set high timeout
 							PostDDLCompiler compiler = new PostDDLCompiler(conn);
-							MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null,
-									HConstants.LATEST_TIMESTAMP);
-							Scan dataTableScan = IndexManagementUtil.newLocalStateScan(plan.getContext().getScan(),
-									maintainers);
+							MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, scanEndTime);
+							Scan dataTableScan = IndexManagementUtil.newLocalStateScan(plan.getContext().getScan(), maintainers);
 
-							long scanEndTime = Math.min(latestUpperBoundTimestamp,
-							        getTimestampForBatch(scanBeginTime,batchExecutedPerTableMap.get(dataPTable.getName())));
 							// We can't allow partial results
 							dataTableScan.setTimeRange(scanBeginTime, scanEndTime);
 							dataTableScan.setCacheBlocks(false);
