@@ -473,10 +473,10 @@ public class MutationState implements SQLCloseable {
             final long timestamp, boolean includeAllIndexes, final boolean sendAll) { 
         final PTable table = tableRef.getTable();
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
-                 includeAllIndexes || table.isWALDisabled() ? // TODO: remove check for isWALDisabled once PHOENIX-3137 is fixed.
-                     IndexMaintainer.nonDisabledIndexIterator(table.getIndexes().iterator()) :
+                 includeAllIndexes ?
+                     IndexMaintainer.maintainedIndexes(table.getIndexes().iterator()) :
                          table.isImmutableRows() ?
-                            IndexMaintainer.enabledGlobalIndexIterator(table.getIndexes().iterator()) :
+                            IndexMaintainer.maintainedGlobalIndexes(table.getIndexes().iterator()) :
                                 Iterators.<PTable>emptyIterator();
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
@@ -707,7 +707,7 @@ public class MutationState implements SQLCloseable {
         for (PTable idxTtable : indexes) {
             // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
             // our failure mode is block writes on index failure.
-            if (idxTtable.getIndexState() == PIndexState.ACTIVE && idxTtable.getIndexDisableTimestamp() > 0) {
+            if ((idxTtable.getIndexState() == PIndexState.ACTIVE || idxTtable.getIndexState() == PIndexState.PENDING_ACTIVE) && idxTtable.getIndexDisableTimestamp() > 0) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE)
                 .setSchemaName(table.getSchemaName().getString())
                 .setTableName(table.getTableName().getString()).build().buildException();
@@ -795,7 +795,7 @@ public class MutationState implements SQLCloseable {
             try {
                 PTable table = tableRef.getTable();
                 List<PTable> indexes = table.getIndexes();
-                Iterator<PTable> enabledIndexes = IndexMaintainer.nonDisabledIndexIterator(indexes.iterator());
+                Iterator<PTable> enabledIndexes = IndexMaintainer.maintainedIndexes(indexes.iterator());
                 if (enabledIndexes.hasNext()) {
                     List<PTable> keyValueIndexes = Collections.emptyList();
                     ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();

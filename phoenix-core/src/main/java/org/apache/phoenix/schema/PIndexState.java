@@ -26,7 +26,8 @@ public enum PIndexState {
     ACTIVE("a"),
     INACTIVE("i"),
     DISABLE("x"),
-    REBUILD("r");
+    REBUILD("r"),
+    PENDING_ACTIVE("p");
 
     private final String serializedValue;
     private final byte[] serializedBytes;

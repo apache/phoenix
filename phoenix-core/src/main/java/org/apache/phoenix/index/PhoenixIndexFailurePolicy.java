@@ -51,7 +51,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -201,7 +200,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             return timestamp;
         }
 
-        PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.ACTIVE;
+        PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.PENDING_ACTIVE;
         // for all the index tables that we've found, try to disable them and if that fails, try to
         for (Map.Entry<String, Long> tableTimeElement :indexTableNames.entrySet()){
             String indexTableName = tableTimeElement.getKey();
@@ -266,12 +265,9 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             Map<ImmutableBytesWritable, String> localIndexNames =
                     new HashMap<ImmutableBytesWritable, String>();
             for (PTable index : indexes) {
-                if (index.getIndexType() == IndexType.LOCAL
-                        && index.getIndexState() == PIndexState.ACTIVE) {
-                    if (localIndex == null) localIndex = index;
-                    localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
-                            index.getViewIndexId())), index.getName().getString());
-                }
+                if (localIndex == null) localIndex = index;
+                localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
+                        index.getViewIndexId())), index.getName().getString());
             }
             if (localIndex == null) {
                 return Collections.emptySet();
