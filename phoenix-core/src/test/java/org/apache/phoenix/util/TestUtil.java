@@ -75,7 +75,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
-import org.apache.phoenix.end2end.index.PartialIndexRebuilderIT.WriteFailingRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
@@ -888,10 +887,10 @@ public class TestUtil {
     public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState indexState) throws InterruptedException, SQLException {
         waitForIndexState(conn, fullIndexName, indexState, 0L);
     }
-    
+
     private enum IndexStateCheck {SUCCESS, FAIL, KEEP_TRYING};
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
-        int maxTries = 300, nTries = 0;
+        int maxTries = 60, nTries = 0;
         do {
             Thread.sleep(1000); // sleep 1 sec
             IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
@@ -918,12 +917,9 @@ public class TestUtil {
         ResultSet rs = conn.createStatement().executeQuery(query);
         if (rs.next()) {
             Long actualIndexDisableTimestamp = rs.getLong(1);
-            if (rs.wasNull()) {
-                actualIndexDisableTimestamp = null;
-            }
             PIndexState actualIndexState = PIndexState.fromSerializedValue(rs.getString(2));
-            boolean matchesExpected = Objects.equal(actualIndexDisableTimestamp, expectedIndexDisableTimestamp) &&
-                    actualIndexState == expectedIndexState;
+            boolean matchesExpected = (expectedIndexDisableTimestamp == null || Objects.equal(actualIndexDisableTimestamp, expectedIndexDisableTimestamp)) 
+                    && actualIndexState == expectedIndexState;
             if (matchesExpected) {
                 return IndexStateCheck.SUCCESS;
             }
@@ -949,6 +945,7 @@ public class TestUtil {
 		}else{
 			return;
 		}
+        final int retries = 10;
         int numTries = 10;
         try (HBaseAdmin admin = services.getAdmin()) {
             admin.modifyTable(Bytes.toBytes(tableName), descriptor);
@@ -957,13 +954,38 @@ public class TestUtil {
                 numTries--;
                 if (numTries == 0) {
                     throw new Exception(
-                            "Check to detect if delaying co-processor was added failed after "
-                                    + numTries + " retries.");
+                            "Failed to add " + coprocessorClass.getName() + " after "
+                                    + retries + " retries.");
                 }
                 Thread.sleep(1000);
             }
         }
     }
 
+    public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        if (descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
+            descriptor.removeCoprocessor(coprocessorClass.getName());
+        }else{
+            return;
+        }
+        final int retries = 10;
+        int numTries = retries;
+        try (HBaseAdmin admin = services.getAdmin()) {
+            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
+            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+                    && numTries > 0) {
+                numTries--;
+                if (numTries == 0) {
+                    throw new Exception(
+                            "Failed to remove " + coprocessorClass.getName() + " after "
+                                    + retries + " retries.");
+                }
+                Thread.sleep(1000);
+            }
+        }
+    }
+    
 
 }

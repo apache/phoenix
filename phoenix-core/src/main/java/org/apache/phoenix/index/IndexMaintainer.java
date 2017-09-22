@@ -143,29 +143,34 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return maintainer;
     }
     
-    public static Iterator<PTable> nonDisabledIndexIterator(Iterator<PTable> indexes) {
+    private static boolean sendIndexMaintainer(PTable index) {
+        PIndexState indexState = index.getIndexState();
+        return ! ( PIndexState.DISABLE == indexState || PIndexState.PENDING_ACTIVE == indexState );
+    }
+
+    public static Iterator<PTable> maintainedIndexes(Iterator<PTable> indexes) {
         return Iterators.filter(indexes, new Predicate<PTable>() {
             @Override
             public boolean apply(PTable index) {
-                return !PIndexState.DISABLE.equals(index.getIndexState());
+                return sendIndexMaintainer(index);
             }
         });
     }
     
-    public static Iterator<PTable> enabledGlobalIndexIterator(Iterator<PTable> indexes) {
+    public static Iterator<PTable> maintainedGlobalIndexes(Iterator<PTable> indexes) {
         return Iterators.filter(indexes, new Predicate<PTable>() {
             @Override
             public boolean apply(PTable index) {
-                return !PIndexState.DISABLE.equals(index.getIndexState()) && !index.getIndexType().equals(IndexType.LOCAL);
+                return sendIndexMaintainer(index) && index.getIndexType() == IndexType.GLOBAL;
             }
         });
     }
     
-    public static Iterator<PTable> enabledLocalIndexIterator(Iterator<PTable> indexes) {
+    public static Iterator<PTable> maintainedLocalIndexes(Iterator<PTable> indexes) {
         return Iterators.filter(indexes, new Predicate<PTable>() {
             @Override
             public boolean apply(PTable index) {
-                return !PIndexState.DISABLE.equals(index.getIndexState()) && index.getIndexType().equals(IndexType.LOCAL);
+                return sendIndexMaintainer(index) && index.getIndexType() == IndexType.LOCAL;
             }
         });
     }
@@ -188,9 +193,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        Iterator<PTable> indexesItr = nonDisabledIndexIterator(indexes.iterator());
+        Iterator<PTable> indexesItr = maintainedIndexes(indexes.iterator());
         if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
-            indexesItr = enabledLocalIndexIterator(indexesItr);
+            indexesItr = maintainedLocalIndexes(indexesItr);
             if (!indexesItr.hasNext()) {
                 ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
                 return;
@@ -209,8 +214,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
             indexesItr =
-                    dataTable.isImmutableRows() ? enabledLocalIndexIterator(indexes.iterator())
-                            : nonDisabledIndexIterator(indexes.iterator());
+                    dataTable.isImmutableRows() ? maintainedLocalIndexes(indexes.iterator())
+                            : maintainedIndexes(indexes.iterator());
             while (indexesItr.hasNext()) {
                     org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(indexesItr.next().getIndexMaintainer(dataTable, connection));
                     byte[] protoBytes = proto.toByteArray();
