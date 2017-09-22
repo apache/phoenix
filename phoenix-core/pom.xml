@@ -249,7 +249,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-1.1</artifactId>
+      <artifactId>tephra-hbase-compat-1.3</artifactId>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->
