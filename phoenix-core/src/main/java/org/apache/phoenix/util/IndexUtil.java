@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
@@ -81,6 +84,7 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -741,6 +745,7 @@ public class IndexUtil {
                             MutationProto mp = ProtobufUtil.toProto(m);
                             builder.addTableMetadataMutations(mp.toByteString());
                         }
+                        builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
                         instance.updateIndexState(controller, builder.build(), rpcCallback);
                         if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                         return rpcCallback.get();
@@ -793,7 +798,12 @@ public class IndexUtil {
     }
 
     public static void updateIndexState(PhoenixConnection conn, String indexTableName,
-    		PIndexState newState, Long indexDisableTimestamp) throws SQLException {
+            PIndexState newState, Long indexDisableTimestamp) throws SQLException {
+        updateIndexState(conn, indexTableName, newState, indexDisableTimestamp, HConstants.LATEST_TIMESTAMP);
+    }
+    
+    public static void updateIndexState(PhoenixConnection conn, String indexTableName,
+    		PIndexState newState, Long indexDisableTimestamp, Long expectedMaxTimestamp) throws SQLException {
     	byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
     	String schemaName = SchemaUtil.getSchemaNameFromFullName(indexTableName);
     	String indexName = SchemaUtil.getTableNameFromFullName(indexTableName);
@@ -801,10 +811,12 @@ public class IndexUtil {
     	// index state
     	Put put = new Put(indexTableKey);
     	put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
+                expectedMaxTimestamp,
     			newState.getSerializedBytes());
         if (indexDisableTimestamp != null) {
             put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                 PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
+                expectedMaxTimestamp,
                 PLong.INSTANCE.toBytes(indexDisableTimestamp));
         }
         if (newState == PIndexState.ACTIVE) {

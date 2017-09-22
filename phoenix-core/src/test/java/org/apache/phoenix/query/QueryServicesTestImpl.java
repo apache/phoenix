@@ -38,7 +38,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     private static final int DEFAULT_MAX_MEMORY_PERC = 30; // 30% of heap
     private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000*5; //5min
     private static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024; // 1m
-    private static final int DEFAULT_MAX_MEMORY_WAIT_MS = 0;
     private static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
     private static final int DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS = 60000 * 60; // 1HR (to prevent age-out of hash cache during debugging)
     private static final long DEFAULT_MAX_HASH_CACHE_SIZE = 1024*1024*10;  // 10 Mb
@@ -64,6 +63,12 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
     public static final long DEFAULT_INDEX_POPULATION_WAIT_TIME = 0;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = true;
+    /*
+     * Effectively disable running the index rebuild task by having an infinite delay
+     * because we want to control it's execution ourselves
+     */
+    public static final long DEFAULT_INDEX_REBUILD_TASK_INITIAL_DELAY = Long.MAX_VALUE;
+
     
     /**
      * Set number of salt buckets lower for sequence table during testing, as a high
@@ -109,7 +114,8 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setHConnectionPoolCoreSize(DEFAULT_HCONNECTION_POOL_CORE_SIZE)
                 .setHConnectionPoolMaxSize(DEFAULT_HCONNECTION_POOL_MAX_SIZE)
                 .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS)
-                .setDefaultIndexPopulationWaitTime(DEFAULT_INDEX_POPULATION_WAIT_TIME);
+                .setDefaultIndexPopulationWaitTime(DEFAULT_INDEX_POPULATION_WAIT_TIME)
+                .setIndexRebuildTaskInitialDelay(DEFAULT_INDEX_REBUILD_TASK_INITIAL_DELAY);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {
