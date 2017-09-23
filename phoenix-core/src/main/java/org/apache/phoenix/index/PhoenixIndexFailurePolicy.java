@@ -51,6 +51,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -265,9 +266,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             Map<ImmutableBytesWritable, String> localIndexNames =
                     new HashMap<ImmutableBytesWritable, String>();
             for (PTable index : indexes) {
-                if (localIndex == null) localIndex = index;
-                localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
-                        index.getViewIndexId())), index.getName().getString());
+                if (index.getIndexType() == IndexType.LOCAL) {
+                    localIndex = index;
+                    localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
+                            index.getViewIndexId())), index.getName().getString());
+                }
             }
             if (localIndex == null) {
                 return Collections.emptySet();
