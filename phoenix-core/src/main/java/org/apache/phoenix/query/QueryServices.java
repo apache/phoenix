@@ -262,7 +262,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String UPLOAD_BINARY_DATA_TYPE_ENCODING = "phoenix.upload.binaryDataType.encoding";
 
     public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
-    
+
+    public static final String MAX_INDEXES_PER_TABLE = "phoenix.index.maxIndexesPerTable";
+
     public static final String CLIENT_CACHE_ENCODING = "phoenix.table.client.cache.encoding";
     public static final String AUTO_UPGRADE_ENABLED = "phoenix.autoupgrade.enabled";
 
