@@ -19,9 +19,13 @@ package org.apache.phoenix.end2end;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -31,9 +35,12 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
+import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -42,6 +49,9 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class HashJoinCacheIT extends HashJoinIT {
@@ -426,7 +436,27 @@ public class HashJoinCacheIT extends HashJoinIT {
 	public void testUpsertWithJoin() throws Exception {
 		// TODO: We will enable this test once PHOENIX-3163
 	}
-    
+
+    @Test
+    public void testExpiredCache() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, "1");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " +
+                tableName1 + " supp RIGHT JOIN " + tableName2 +
+                " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            rs.next();
+            fail("HashJoinCacheNotFoundException was not thrown or incorrectly handled");
+        } catch (HashJoinCacheNotFoundException e) {
+            //Expected exception
+        }
+    }
+
     public static class InvalidateHashCache extends SimpleRegionObserver {
         public static Random rand= new Random();
         public static List<ImmutableBytesPtr> lastRemovedJoinIds=new ArrayList<ImmutableBytesPtr>();
