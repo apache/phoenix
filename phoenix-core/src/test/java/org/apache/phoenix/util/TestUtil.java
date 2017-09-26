@@ -888,14 +888,25 @@ public class TestUtil {
         waitForIndexState(conn, fullIndexName, indexState, 0L);
     }
 
-    private enum IndexStateCheck {SUCCESS, FAIL, KEEP_TRYING};
+    private static class IndexStateCheck {
+    	public final PIndexState indexState;
+    	public final Long indexDisableTimestamp;
+    	public final Boolean success;
+    	
+    	public IndexStateCheck(PIndexState indexState, Long indexDisableTimestamp, Boolean success) {
+    		this.indexState = indexState;
+    		this.indexDisableTimestamp = indexDisableTimestamp;
+    		this.success = success;
+    	}
+    }
+    
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
         int maxTries = 60, nTries = 0;
         do {
             Thread.sleep(1000); // sleep 1 sec
             IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
-            if (state != IndexStateCheck.KEEP_TRYING) {
-                if (state == IndexStateCheck.SUCCESS) {
+            if (state.success != null) {
+                if (Boolean.TRUE.equals(state.success)) {
                     return;
                 }
                 fail("Index state will not become " + expectedIndexState);
@@ -905,8 +916,26 @@ public class TestUtil {
     }
 
     public static boolean checkIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
-        return checkIndexStateInternal(conn,fullIndexName, expectedIndexState, expectedIndexDisableTimestamp) == IndexStateCheck.SUCCESS;
+        return Boolean.TRUE.equals(checkIndexStateInternal(conn,fullIndexName, expectedIndexState, expectedIndexDisableTimestamp).success);
     }
+    
+    public static void assertIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
+    	IndexStateCheck state = checkIndexStateInternal(conn,fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
+        if (!Boolean.TRUE.equals(state.success)) {
+        	if (expectedIndexState != null) {
+        		assertEquals(expectedIndexState, state.indexState);
+        	}
+        	if (expectedIndexDisableTimestamp != null) {
+        		assertEquals(expectedIndexDisableTimestamp, state.indexDisableTimestamp);
+        	}
+        }
+    }
+    
+    public static PIndexState getIndexState(Connection conn, String fullIndexName) throws SQLException {
+    	IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, null, null);
+    	return state.indexState;
+    }
+    
     private static IndexStateCheck checkIndexStateInternal(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
         String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
         String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
@@ -915,19 +944,21 @@ public class TestUtil {
                 + ") = (" + "'" + schema + "','" + index + "') "
                 + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
         ResultSet rs = conn.createStatement().executeQuery(query);
+        Long actualIndexDisableTimestamp = null;
+        PIndexState actualIndexState = null;
         if (rs.next()) {
-            Long actualIndexDisableTimestamp = rs.getLong(1);
-            PIndexState actualIndexState = PIndexState.fromSerializedValue(rs.getString(2));
+            actualIndexDisableTimestamp = rs.getLong(1);
+            actualIndexState = PIndexState.fromSerializedValue(rs.getString(2));
             boolean matchesExpected = (expectedIndexDisableTimestamp == null || Objects.equal(actualIndexDisableTimestamp, expectedIndexDisableTimestamp)) 
-                    && actualIndexState == expectedIndexState;
+                    && (expectedIndexState == null || actualIndexState == expectedIndexState);
             if (matchesExpected) {
-                return IndexStateCheck.SUCCESS;
+                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, Boolean.TRUE);
             }
             if (ZERO.equals(actualIndexDisableTimestamp)) {
-                return IndexStateCheck.FAIL;
+                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, Boolean.FALSE);
             }
         }
-        return IndexStateCheck.KEEP_TRYING;
+        return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, null);
     }
 
     public static long getRowCount(Connection conn, String tableName) throws SQLException {
