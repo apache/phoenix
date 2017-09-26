@@ -88,7 +88,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB, Boolean.TRUE.toString());
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, Long.toString(REBUILD_INTERVAL));
-        serverProps.put(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD, "300000"); // give up rebuilding after 5 minutes
+        serverProps.put(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD, "50000000");
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, Long.toString(REBUILD_PERIOD)); // batch at 50 seconds
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(WAIT_AFTER_DISABLED));
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
@@ -897,7 +897,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
             
             runIndexRebuilder();
-            assertTrue(TestUtil.checkIndexState(conn, fullIndexName, indexStateOnFailure == PIndexState.DISABLE ? PIndexState.INACTIVE : PIndexState.ACTIVE, null));
+            assertEquals(indexStateOnFailure == PIndexState.DISABLE ? PIndexState.INACTIVE : PIndexState.ACTIVE, TestUtil.getIndexState(conn, fullIndexName));
             clock.time += WAIT_AFTER_DISABLED;
             
             // First batch should have been processed again because we started over
@@ -907,7 +907,9 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             clock.time += 2 * REBUILD_PERIOD;
             // Second batch should have been processed now
             runIndexRebuilder();
-            assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.ACTIVE, 0L));
+            clock.time += 2 * REBUILD_PERIOD;
+            runIndexRebuilder();
+            TestUtil.assertIndexState(conn, fullIndexName, PIndexState.ACTIVE, 0L);
             
             // Verify that other batches were processed
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
