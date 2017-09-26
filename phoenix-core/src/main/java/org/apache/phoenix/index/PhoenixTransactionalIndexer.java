@@ -76,6 +76,7 @@ import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
+import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
@@ -142,8 +143,10 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
         // setup the actual index writer
         // For transactional tables, we keep the index active upon a write failure
-        // since we have the all versus none behavior for transactions.
-        this.writer = new IndexWriter(new LeaveIndexActiveFailurePolicy(), indexWriterEnv, serverName + "-tx-index-writer");
+        // since we have the all versus none behavior for transactions. Also, we
+        // fail on any write exception since this will end up failing the transaction.
+        this.writer = new IndexWriter(IndexWriter.getCommitter(indexWriterEnv, ParallelWriterIndexCommitter.class),
+                new LeaveIndexActiveFailurePolicy(), indexWriterEnv, serverName + "-tx-index-writer");
     }
 
     @Override
