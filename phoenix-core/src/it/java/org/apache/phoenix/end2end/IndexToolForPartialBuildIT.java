@@ -117,7 +117,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
                 conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
             }
             stmt.execute(
-                    String.format("CREATE TABLE %s (ID BIGINT NOT NULL, NAME VARCHAR, ZIP INTEGER CONSTRAINT PK PRIMARY KEY(ID ROW_TIMESTAMP)) %s",
+                    String.format("CREATE IMMUTABLE TABLE %s (ID BIGINT NOT NULL, NAME VARCHAR, ZIP INTEGER CONSTRAINT PK PRIMARY KEY(ID ROW_TIMESTAMP)) %s",
                             fullTableName, tableDDLOptions));
             String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", fullTableName);
             PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
@@ -162,8 +162,8 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             PTable pindexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, indxTable));
             assertEquals(PIndexState.BUILDING, pindexTable.getIndexState());
             assertEquals(rs.getLong(1), pindexTable.getTimeStamp());
-            //assert disabled timestamp
-            assertEquals(rs.getLong(2), 3000);
+            //assert disabled timestamp is set correctly when index mutations are processed on the server
+            assertEquals(0, rs.getLong(2));
 
             String selectSql = String.format("SELECT LPAD(UPPER(NAME),11,'x')||'_xyz',ID FROM %s", fullTableName);
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
@@ -195,7 +195,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceEnabled));
             indexingTool.setConf(conf);
 
-            final String[] cmdArgs = getArgValues(schemaName, dataTableName);
+            final String[] cmdArgs = getArgValues(schemaName, dataTableName, indxTable);
             int status = indexingTool.run(cmdArgs);
             assertEquals(0, status);
 
@@ -237,7 +237,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
 		assertTrue(actualExplainPlan.contains(expectedExplainPlan));
 	}
 
-    public String[] getArgValues(String schemaName, String dataTable) {
+    public String[] getArgValues(String schemaName, String dataTable, String indexName) {
         final List<String> args = Lists.newArrayList();
         if (schemaName!=null) {
             args.add("-s");
@@ -245,7 +245,9 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         }
         args.add("-dt");
         args.add(dataTable);
-        args.add("-pr");
+        // complete index rebuild
+        args.add("-it");
+        args.add(indexName);
         args.add("-op");
         args.add("/tmp/output/partialTable_");
         return args.toArray(new String[0]);

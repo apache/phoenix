@@ -470,7 +470,7 @@ public class MutationState implements SQLCloseable {
     }
     
     private Iterator<Pair<PName,List<Mutation>>> addRowMutations(final TableRef tableRef, final Map<ImmutableBytesPtr, RowMutationState> values,
-            final long timestamp, boolean includeAllIndexes, final boolean sendAll) { 
+            final long mutationTimestamp, final long serverTimestamp, boolean includeAllIndexes, final boolean sendAll) { 
         final PTable table = tableRef.getTable();
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
                  includeAllIndexes ?
@@ -480,7 +480,7 @@ public class MutationState implements SQLCloseable {
                                 Iterators.<PTable>emptyIterator();
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
-        generateMutations(tableRef, timestamp, values, mutationList, mutationsPertainingToIndex);
+        generateMutations(tableRef, mutationTimestamp, serverTimestamp, values, mutationList, mutationsPertainingToIndex);
         return new Iterator<Pair<PName,List<Mutation>>>() {
             boolean isFirst = true;
 
@@ -507,7 +507,7 @@ public class MutationState implements SQLCloseable {
                         Map<ImmutableBytesPtr, RowMutationState> rowToColumnMap = mutations.remove(key);
                         if (rowToColumnMap!=null) {
                             final List<Mutation> deleteMutations = Lists.newArrayList();
-                            generateMutations(tableRef, timestamp, rowToColumnMap, deleteMutations, null);
+                            generateMutations(tableRef, mutationTimestamp, serverTimestamp, rowToColumnMap, deleteMutations, null);
                             indexMutations.addAll(deleteMutations);
                         }
                     }
@@ -525,14 +525,14 @@ public class MutationState implements SQLCloseable {
         };
     }
 
-    private void generateMutations(final TableRef tableRef, long timestamp,
-            final Map<ImmutableBytesPtr, RowMutationState> values,
+    private void generateMutations(final TableRef tableRef, final long mutationTimestamp,
+            final long serverTimestamp, final Map<ImmutableBytesPtr, RowMutationState> values,
             final List<Mutation> mutationList, final List<Mutation> mutationsPertainingToIndex) {
         final PTable table = tableRef.getTable();
         boolean tableWithRowTimestampCol = table.getRowTimestampColPos() != -1;
         Iterator<Map.Entry<ImmutableBytesPtr, RowMutationState>> iterator =
                 values.entrySet().iterator();
-        long timestampToUse = timestamp;
+        long timestampToUse = mutationTimestamp;
         Map<ImmutableBytesPtr, RowMutationState> modifiedValues = Maps.newHashMap();
         while (iterator.hasNext()) {
             Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry = iterator.next();
@@ -543,12 +543,13 @@ public class MutationState implements SQLCloseable {
             if (tableWithRowTimestampCol) {
                 RowTimestampColInfo rowTsColInfo = state.getRowTimestampColInfo();
                 if (rowTsColInfo.useServerTimestamp()) {
+                    // regenerate the key with this timestamp.
+                    key = getNewRowKeyWithRowTimestamp(key, serverTimestamp, table);
                 	// since we are about to modify the byte[] stored in key (which changes its hashcode)
                 	// we need to remove the entry from the values map and add a new entry with the modified byte[]
                 	modifiedValues.put(key, state);
                 	iterator.remove();
-                    // regenerate the key with this timestamp.
-                    key = getNewRowKeyWithRowTimestamp(key, timestampToUse, table);
+                	timestampToUse = serverTimestamp;
                 } else {
                     if (rowTsColInfo.getTimestamp() != null) {
                         timestampToUse = rowTsColInfo.getTimestamp();
@@ -620,13 +621,14 @@ public class MutationState implements SQLCloseable {
             return Iterators.emptyIterator();
         }
         Long scn = connection.getSCN();
-        final long timestamp = getMutationTimestamp(tableTimestamp, scn);
+        final long serverTimestamp = getTableTimestamp(tableTimestamp, scn);
+        final long mutationTimestamp = getMutationTimestamp(scn);
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             private Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> current = iterator.next();
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
                     
             private Iterator<Pair<byte[],List<Mutation>>> init() {
-                final Iterator<Pair<PName, List<Mutation>>> mutationIterator = addRowMutations(current.getKey(), current.getValue(), timestamp, includeMutableIndexes, true);
+                final Iterator<Pair<PName, List<Mutation>>> mutationIterator = addRowMutations(current.getKey(), current.getValue(), mutationTimestamp, serverTimestamp, includeMutableIndexes, true);
                 return new Iterator<Pair<byte[],List<Mutation>>>() {
                     @Override
                     public boolean hasNext() {
@@ -668,8 +670,12 @@ public class MutationState implements SQLCloseable {
         };
     }
 
-    public static long getMutationTimestamp(final Long tableTimestamp, Long scn) {
+    public static long getTableTimestamp(final Long tableTimestamp, Long scn) {
         return (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
+    }
+    
+    public static long getMutationTimestamp(final Long scn) {
+        return scn == null ? HConstants.LATEST_TIMESTAMP : scn;
     }
 
     /**
@@ -684,14 +690,15 @@ public class MutationState implements SQLCloseable {
         long[] timeStamps = new long[this.mutations.size()];
         for (Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> entry : mutations.entrySet()) {
             TableRef tableRef = entry.getKey();
-            timeStamps[i++] = validate(tableRef, entry.getValue());
+            timeStamps[i++] = validateAndGetServerTimestamp(tableRef, entry.getValue());
         }
         return timeStamps;
     }
     
-    private long validate(TableRef tableRef, Map<ImmutableBytesPtr, RowMutationState> rowKeyToColumnMap) throws SQLException {
+    private long validateAndGetServerTimestamp(TableRef tableRef, Map<ImmutableBytesPtr, RowMutationState> rowKeyToColumnMap) throws SQLException {
         Long scn = connection.getSCN();
         MetaDataClient client = new MetaDataClient(connection);
+        long serverTimeStamp = tableRef.getTimeStamp();
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
         PTable table = tableRef.getTable();
@@ -715,6 +722,7 @@ public class MutationState implements SQLCloseable {
         } 
         long timestamp = result.getMutationTime();
         if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
+            serverTimeStamp = timestamp;
             if (result.wasUpdated()) {
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
                 for (Map.Entry<ImmutableBytesPtr,RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
@@ -736,7 +744,7 @@ public class MutationState implements SQLCloseable {
                 }
             }
         }
-        return scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+        return serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp;
     }
     
     private static long calculateMutationSize(List<Mutation> mutations) {
@@ -913,9 +921,11 @@ public class MutationState implements SQLCloseable {
                     continue;
                 }
                 // Validate as we go if transactional since we can undo if a problem occurs (which is unlikely)
-                long serverTimestamp = serverTimeStamps == null ? validate(tableRef, valuesMap) : serverTimeStamps[i++];
+                long serverTimestamp = serverTimeStamps == null ? validateAndGetServerTimestamp(tableRef, valuesMap) : serverTimeStamps[i++];
+                Long scn = connection.getSCN();
+                long mutationTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
                 final PTable table = tableRef.getTable();
-                Iterator<Pair<PName,List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, serverTimestamp, false, sendAll);
+                Iterator<Pair<PName,List<Mutation>>> mutationsIterator = addRowMutations(tableRef, valuesMap, mutationTimestamp, serverTimestamp, false, sendAll);
                 // build map from physical table to mutation list
                 boolean isDataTable = true;
                 while (mutationsIterator.hasNext()) {
