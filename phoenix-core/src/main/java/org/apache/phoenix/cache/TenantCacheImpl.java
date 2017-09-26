@@ -100,11 +100,13 @@ public class TenantCacheImpl implements TenantCache {
     
     @Override
     public Closeable getServerCache(ImmutableBytesPtr cacheId) {
+        getServerCaches().cleanUp();
         return getServerCaches().getIfPresent(cacheId);
     }
     
     @Override
     public Closeable addServerCache(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, byte[] txState, ServerCacheFactory cacheFactory, boolean useProtoForIndexMaintainer) throws SQLException {
+        getServerCaches().cleanUp();
         MemoryChunk chunk = this.getMemoryManager().allocate(cachePtr.getLength() + txState.length);
         boolean success = false;
         try {
