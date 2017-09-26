@@ -581,8 +581,10 @@ public class MetaDataClient {
         // Do not make rpc to getTable if
         // 1. table is a system table
         // 2. table was already resolved as of that timestamp
+        // 3. table does not have a ROW_TIMESTAMP column and age is less then UPDATE_CACHE_FREQUENCY
         if (table != null && !alwaysHitServer
-                && (systemTable || resolvedTimestamp == tableResolvedTimestamp || connection.getMetaDataCache().getAge(tableRef) < table.getUpdateCacheFrequency())) {
+                && (systemTable || resolvedTimestamp == tableResolvedTimestamp || 
+                (table.getRowTimestampColPos() == -1 && connection.getMetaDataCache().getAge(tableRef) < table.getUpdateCacheFrequency() ))) {
             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, QueryConstants.UNSET_TIMESTAMP, table);
         }
 
@@ -1424,6 +1426,10 @@ public class MetaDataClient {
                     }
                     if (!connection.getQueryServices().hasIndexWALCodec() && !dataTable.isTransactional()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_MUTABLE_INDEX_CONFIG).setTableName(indexTableName.getTableName()).build().buildException();
+                    }
+                    boolean tableWithRowTimestampCol = dataTable.getRowTimestampColPos() != -1;
+                    if (tableWithRowTimestampCol) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_INDEX_ON_MUTABLE_TABLE_WITH_ROWTIMESTAMP).setTableName(indexTableName.getTableName()).build().buildException();
                     }
                 }
                 int posOffset = 0;
@@ -3746,7 +3752,7 @@ public class MetaDataClient {
                     if(!indexColumnsToDrop.isEmpty()) {
                         long indexTableSeqNum = incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null, null);
                         dropColumnMutations(index, indexColumnsToDrop);
-                        long clientTimestamp = MutationState.getMutationTimestamp(timeStamp, connection.getSCN());
+                        long clientTimestamp = MutationState.getTableTimestamp(timeStamp, connection.getSCN());
                         connection.removeColumn(tenantId, index.getName().getString(),
                                 indexColumnsToDrop, clientTimestamp, indexTableSeqNum,
                                 TransactionUtil.getResolvedTimestamp(connection, index.isTransactional(), clientTimestamp));
