@@ -7,7 +7,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-package org.apache.phoenix.hbase.index.write.recovery;
+package org.apache.phoenix.hbase.index.write;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,10 +39,7 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
-import org.apache.phoenix.hbase.index.write.IndexCommitter;
-import org.apache.phoenix.hbase.index.write.IndexWriter;
-import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
-import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -71,15 +68,24 @@ import com.google.common.collect.Multimap;
 public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private static final Log LOG = LogFactory.getLog(TrackingParallelWriterIndexCommitter.class);
 
-    public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.trackingwriter.threads.max";
+    public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
-    private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.trackingwriter.threads.keepalivetime";
+    private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
 
     private TaskRunner pool;
     private HTableFactory factory;
     private CapturingAbortable abortable;
     private Stoppable stopped;
     private RegionCoprocessorEnvironment env;
+    private KeyValueBuilder kvBuilder;
+
+    // for testing
+    public TrackingParallelWriterIndexCommitter(String hbaseVersion) {
+        kvBuilder = KeyValueBuilder.get(hbaseVersion);
+    }
+
+    public TrackingParallelWriterIndexCommitter() {
+    }
 
     @Override
     public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name) {
@@ -90,6 +96,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
                                 INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent, env);
+        this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
     /**
@@ -113,7 +120,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
             // get the mutations for each table. We leak the implementation here a little bit to save
             // doing a complete copy over of all the index update for each table.
-            final List<Mutation> mutations = (List<Mutation>)entry.getValue();
+            final List<Mutation> mutations = kvBuilder.cloneIfNecessary((List<Mutation>)entry.getValue());
             // track each reference so we can get at it easily later, when determing failures
             final HTableInterfaceReference tableReference = entry.getKey();
             final RegionCoprocessorEnvironment env = this.env;
