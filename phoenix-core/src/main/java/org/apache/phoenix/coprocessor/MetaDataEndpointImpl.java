@@ -235,6 +235,7 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -1413,6 +1414,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             done.run(builder.build());
                             return;
                         }
+                        // make sure we haven't gone over our threshold for indexes on this table.
+                        if (execeededIndexQuota(tableType, parentTable, env.getConfiguration())) {
+                            builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
                         long parentTableSeqNumber;
                         if (tableType == PTableType.VIEW && viewPhysicalTableRow != null && request.hasClientVersion()) {
                             // Starting 4.5, the client passes the sequence number of the physical table in the table metadata.
@@ -1612,6 +1620,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
+    }
+
+    @VisibleForTesting
+    static boolean execeededIndexQuota(PTableType tableType, PTable parentTable, Configuration configuration) {
+        return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= configuration
+            .getInt(QueryServices.MAX_INDEXES_PER_TABLE,
+                QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
     }
 
     private static RowLock acquireLock(HRegion region, byte[] key, List<RowLock> locks)

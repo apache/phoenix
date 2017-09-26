@@ -42,6 +42,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -187,6 +188,36 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
+    }
+
+    @Test
+    public void testCreatingTooManyIndexesIsNotAllowed() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (\n"
+            + "ID VARCHAR(15) PRIMARY KEY,\n"
+            + "COL1 BIGINT,"
+            + "COL2 BIGINT,"
+            + "COL3 BIGINT,"
+            + "COL4 BIGINT) ";
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        
+        int maxIndexes = conn.unwrap(PhoenixConnection.class).getQueryServices().getProps().getInt(
+        		QueryServices.MAX_INDEXES_PER_TABLE, QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
+
+        // Use local indexes since there's only one physical table for all of them.
+        for (int i = 0; i < maxIndexes; i++) {
+            conn.createStatement().execute("CREATE LOCAL INDEX I_" + i + tableName + " ON " + tableName + "(COL1) INCLUDE (COL2,COL3,COL4)");
+        }
+        
+        // here we ensure we get a too many indexes error
+        try {
+            conn.createStatement().execute("CREATE LOCAL INDEX I_" + maxIndexes + tableName + " ON " + tableName + "(COL1) INCLUDE (COL2,COL3,COL4)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TOO_MANY_INDEXES.getErrorCode(), e.getErrorCode());
+        }
     }
 
     /**
