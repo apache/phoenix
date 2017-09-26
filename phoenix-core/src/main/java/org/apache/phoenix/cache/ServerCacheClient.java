@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -121,16 +122,24 @@ public class ServerCacheClient {
     public class ServerCache implements SQLCloseable {
         private final int size;
         private final byte[] id;
-        private final Set<HRegionLocation> servers;
+        private final Map<HRegionLocation, Long> servers;
         private ImmutableBytesWritable cachePtr;
         private MemoryChunk chunk;
         private File outputFile;
+        private long maxServerCacheTTL;
         
         
         public ServerCache(byte[] id, Set<HRegionLocation> servers, ImmutableBytesWritable cachePtr,
                 ConnectionQueryServices services, boolean storeCacheOnClient) throws IOException {
+            maxServerCacheTTL = services.getProps().getInt(
+                    QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB,
+                    QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
             this.id = id;
-            this.servers = new HashSet<HRegionLocation>(servers);
+            this.servers = new HashMap();
+            long currentTime = System.currentTimeMillis();
+            for(HRegionLocation loc : servers) {
+                this.servers.put(loc, currentTime);
+            }
             this.size =  cachePtr.getLength();
             if (storeCacheOnClient) {
                 try {
@@ -171,10 +180,28 @@ public class ServerCacheClient {
         public byte[] getId() {
             return id;
         }
-        
-		public boolean addServer(HRegionLocation loc) {
-			return this.servers.add(loc);
-		}
+
+        public boolean addServer(HRegionLocation loc) {
+            if(this.servers.containsKey(loc)) {
+                return false;
+            } else {
+                this.servers.put(loc, System.currentTimeMillis());
+                return true;
+            }
+        }
+
+        public boolean isExpired(HRegionLocation loc) {
+            if(this.servers.containsKey(loc)) {
+                Long time = this.servers.get(loc);
+                if(System.currentTimeMillis() - time > maxServerCacheTTL)
+                    return true; // cache was send more than maxTTL ms ago, expecting that it's expired
+            } else {
+                return false; // should be on server yet.
+            }
+            return false; // Unknown region location. Need to send the cache.
+        }
+
+
         
         /**
          * Call to free up cache on region servers when no longer needed
@@ -182,7 +209,7 @@ public class ServerCacheClient {
         @Override
         public void close() throws SQLException {
             try{
-                removeServerCache(this, servers);
+                removeServerCache(this, servers.keySet());
             }finally{
                 cachePtr = null;
                 if (chunk != null) {
@@ -305,8 +332,6 @@ public class ServerCacheClient {
     
     /**
      * Remove the cached table from all region servers
-     * @param cacheId unique identifier for the hash join (returned from {@link #addHashCache(HTable, Scan, Set)})
-     * @param servers list of servers upon which table was cached (filled in by {@link #addHashCache(HTable, Scan, Set)})
      * @throws SQLException
      * @throws IllegalStateException if hashed table cannot be removed on any region server on which it was added
      */
@@ -421,6 +446,9 @@ public class ServerCacheClient {
             byte[] tableName = pTable.getPhysicalName().getBytes();
             table = services.getTable(tableName);
             HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, startkeyOfRegion);
+            if(cache.isExpired(tableRegionLocation)) {
+                return false;
+            }
 			if (cache.addServer(tableRegionLocation) || services.getProps().getBoolean(HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER,false)) {
 				success = addServerCache(table, startkeyOfRegion, pTable, cacheId, cache.getCachePtr(), cacheFactory,
 						txState);
