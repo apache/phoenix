@@ -131,7 +131,7 @@ public class TestIndexWriter {
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // setup the writer and failure policy
-    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
+    TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, e);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
@@ -145,6 +145,7 @@ public class TestIndexWriter {
   }
 
   /**
+<<<<<<< HEAD
    * Index updates can potentially be queued up if there aren't enough writer threads. If a running
    * index write fails, then we should early exit the pending indexupdate, when it comes up (if the
    * pool isn't already shutdown).
@@ -230,6 +231,8 @@ public class TestIndexWriter {
   }
 
   /**
+=======
+>>>>>>> 3687939... PHOENIX-3815 Only disable indexes on which write failures occurred (Vincent Poon)
    * Test that if we get an interruption to to the thread while doing a batch (e.g. via shutdown),
    * that we correctly end the task
    * @throws Exception on failure
@@ -279,7 +282,7 @@ public class TestIndexWriter {
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 
     // setup the writer
-    ParallelWriterIndexCommitter committer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
+    TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     committer.setup(factory, exec, abort, stop, e );
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);

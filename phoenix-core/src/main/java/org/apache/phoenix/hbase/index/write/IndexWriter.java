@@ -47,7 +47,7 @@ import com.google.common.collect.Multimap;
 public class IndexWriter implements Stoppable {
 
   private static final Log LOG = LogFactory.getLog(IndexWriter.class);
-  private static final String INDEX_COMMITTER_CONF_KEY = "index.writer.commiter.class";
+  public static final String INDEX_COMMITTER_CONF_KEY = "index.writer.commiter.class";
   public static final String INDEX_FAILURE_POLICY_CONF_KEY = "index.writer.failurepolicy.class";
   private AtomicBoolean stopped = new AtomicBoolean(false);
   private IndexCommitter writer;
@@ -66,10 +66,14 @@ public class IndexWriter implements Stoppable {
     }
 
   public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env) throws IOException {
+      return getCommitter(env,TrackingParallelWriterIndexCommitter.class);
+  }
+  
+  public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env, Class<? extends IndexCommitter> defaultClass) throws IOException {
     Configuration conf = env.getConfiguration();
     try {
       IndexCommitter committer =
-          conf.getClass(INDEX_COMMITTER_CONF_KEY, ParallelWriterIndexCommitter.class,
+          conf.getClass(INDEX_COMMITTER_CONF_KEY, defaultClass,
             IndexCommitter.class).newInstance();
       return committer;
     } catch (InstantiationException e) {
