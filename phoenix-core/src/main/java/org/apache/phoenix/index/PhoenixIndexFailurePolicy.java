@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.write.DelegateIndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
@@ -165,7 +166,15 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         // start by looking at all the tables to which we attempted to write
         long timestamp = 0;
         boolean leaveIndexActive = blockDataTableWritesOnFailure || !disableIndexOnFailure;
+        // if using TrackingParallelWriter, we know which indexes failed and only disable those
+        Set<HTableInterfaceReference> failedTables = cause instanceof MultiIndexWriteFailureException 
+                ? new HashSet<HTableInterfaceReference>(((MultiIndexWriteFailureException)cause).getFailedTables())
+                : Collections.<HTableInterfaceReference>emptySet();
+        
         for (HTableInterfaceReference ref : refs) {
+            if (failedTables.size() > 0 && !failedTables.contains(ref)) {
+                continue; // leave index active if its writes succeeded
+            }
             long minTimeStamp = 0;
 
             // get the minimum timestamp across all the mutations we attempted on that table

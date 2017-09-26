@@ -60,6 +60,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -226,8 +227,8 @@ public class MutableIndexFailureIT extends BaseTest {
     @Test
     public void testIndexWriteFailure() throws Exception {
         String secondIndexName = "B_" + FailingRegionObserver.FAIL_INDEX_NAME;
-//        String thirdIndexName = "C_" + INDEX_NAME;
-//        String thirdFullIndexName = SchemaUtil.getTableName(schema, thirdIndexName);
+        String thirdIndexName = "C_IDX";
+        String thirdFullIndexName = SchemaUtil.getTableName(schema, thirdIndexName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, String.valueOf(isNamespaceMapped));
         try (Connection conn = driver.connect(url, props)) {
@@ -250,8 +251,8 @@ public class MutableIndexFailureIT extends BaseTest {
             // check the drop index.
             conn.createStatement().execute(
                     "CREATE "  + (!localIndex ? "LOCAL " : "") + " INDEX " + secondIndexName + " ON " + fullTableName + " (v2) INCLUDE (v1)");
-//            conn.createStatement().execute(
-//                    "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + thirdIndexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+            conn.createStatement().execute(
+                    "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + thirdIndexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
 
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
@@ -266,9 +267,9 @@ public class MutableIndexFailureIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(secondIndexName, rs.getString(3));
             assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
-//            assertTrue(rs.next());
-//            assertEquals(thirdIndexName, rs.getString(3));
-//            assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
+            assertTrue(rs.next());
+            assertEquals(thirdIndexName, rs.getString(3));
+            assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
             initializeTable(conn, fullTableName);
             
             query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
@@ -301,6 +302,10 @@ public class MutableIndexFailureIT extends BaseTest {
                 assertTrue(PIndexState.ACTIVE.toString().equalsIgnoreCase(indexState) || PIndexState.PENDING_ACTIVE.toString().equalsIgnoreCase(indexState));
             } else {
                 assertTrue(PIndexState.DISABLE.toString().equals(indexState) || PIndexState.INACTIVE.toString().equals(indexState));
+                // non-failing index should remain active
+                ResultSet thirdRs = conn.createStatement().executeQuery(getSysCatQuery(thirdIndexName));
+                assertTrue(thirdRs.next());
+                assertEquals(PIndexState.ACTIVE.getSerializedValue(), thirdRs.getString(1));
             }
             assertFalse(rs.next());
 
@@ -330,8 +335,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 assertEquals("d", rs.getString(2));
                 assertFalse(rs.next());
             }
-            // Comment back in when PHOENIX-3815 is fixed
-//            validateDataWithIndex(conn, fullTableName, thirdFullIndexName, false);
+            IndexScrutiny.scrutinizeIndex(conn, fullTableName, thirdFullIndexName);
 
             if (!failRebuildTask) {
                 // re-enable index table
@@ -357,10 +361,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 checkStateAfterRebuild(conn, fullIndexName, PIndexState.DISABLE);
                 // verify that the index was marked as disabled and the index disable
                 // timestamp set to 0
-                String q =
-                        "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
-                                + schema + "' AND TABLE_NAME = '" + indexName + "'"
-                                + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
+                String q = getSysCatQuery(indexName);
                 try (ResultSet r = conn.createStatement().executeQuery(q)) {
                     assertTrue(r.next());
                     assertEquals(PIndexState.DISABLE.getSerializedValue(), r.getString(1));
@@ -373,6 +374,15 @@ public class MutableIndexFailureIT extends BaseTest {
             FAIL_WRITE = false;
         }
     }
+
+    private String getSysCatQuery(String iName) {
+        String q =
+                "SELECT INDEX_STATE, INDEX_DISABLE_TIMESTAMP FROM SYSTEM.CATALOG WHERE TABLE_SCHEM = '"
+                        + schema + "' AND TABLE_NAME = '" + iName + "'"
+                        + " AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL";
+        return q;
+    }
+
 
     private void checkStateAfterRebuild(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
         if (!transactional) {
