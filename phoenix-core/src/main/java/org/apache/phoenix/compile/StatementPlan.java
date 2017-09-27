@@ -48,4 +48,10 @@ public interface StatementPlan {
      *         Returns null if the estimate cannot be provided.
      */
     public Long getEstimatedBytesToScan() throws SQLException;
+
+    /**
+     * @return timestamp at which the estimate information (estimated bytes and estimated rows) was
+     *         computed. executed. Returns null if the information cannot be provided.
+     */
+    public Long getEstimateInfoTimestamp() throws SQLException;
 }

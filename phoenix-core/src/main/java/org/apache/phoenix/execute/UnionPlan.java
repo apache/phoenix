@@ -18,6 +18,7 @@
 package org.apache.phoenix.execute;
 
 import static org.apache.phoenix.util.NumberUtil.add;
+import static org.apache.phoenix.util.NumberUtil.getMin;
 
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
@@ -66,6 +67,7 @@ public class UnionPlan implements QueryPlan {
     private UnionResultIterators iterators;
     private Long estimatedRows;
     private Long estimatedBytes;
+    private Long estimateInfoTs;
     private boolean explainPlanCalled;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
@@ -182,8 +184,21 @@ public class UnionPlan implements QueryPlan {
             steps.set(i, "    " + steps.get(i));
         }
         for (QueryPlan plan : plans) {
-            estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
-            estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
+            if (plan.getEstimatedBytesToScan() == null || plan.getEstimatedRowsToScan() == null
+                    || plan.getEstimateInfoTimestamp() == null) {
+                /*
+                 * If any of the sub plans doesn't have the estimate info available, then we don't
+                 * provide estimate for the overall plan
+                 */
+                estimatedBytes = null;
+                estimatedRows = null;
+                estimateInfoTs = null;
+                break;
+            } else {
+                estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
+                estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
+                estimateInfoTs = getMin(estimateInfoTs, plan.getEstimateInfoTimestamp());
+            }
         }
         return new ExplainPlan(steps);
     }
@@ -252,5 +267,13 @@ public class UnionPlan implements QueryPlan {
             getExplainPlan();
         }
         return estimatedBytes;
+    }
+
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        if (!explainPlanCalled) {
+            getExplainPlan();
+        }
+        return estimateInfoTs;
     }
 }

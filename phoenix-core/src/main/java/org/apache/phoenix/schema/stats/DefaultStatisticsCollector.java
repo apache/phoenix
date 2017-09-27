@@ -48,9 +48,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,18 +62,19 @@ import com.google.common.collect.Maps;
 class DefaultStatisticsCollector implements StatisticsCollector {
     private static final Logger logger = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     private final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
-    private final StatisticsWriter statsWriter;
+    private StatisticsWriter statsWriter;
     private final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
     private final byte[] guidePostWidthBytes;
     private final byte[] guidePostPerRegionBytes;
     // Where to look for GUIDE_POSTS_WIDTH in SYSTEM.CATALOG
     private final byte[] ptableKey;
     private final RegionCoprocessorEnvironment env;
-
     private long guidePostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
     private ImmutableBytesWritable currentRow;
+    private final long clientTimeStamp;
+    private final String tableName;
 
     DefaultStatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
@@ -96,9 +97,8 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             pName = MetaDataUtil.getViewIndexUserTableName(tableName);
         }
         ptableKey = SchemaUtil.getTableKeyFromFullName(pName);
-        // Get the stats table associated with the current table on which the CP is
-        // triggered
-        this.statsWriter = StatisticsWriter.newWriter(env, tableName, clientTimeStamp);
+        this.clientTimeStamp = clientTimeStamp;
+        this.tableName = tableName;
         // in a compaction we know the one family ahead of time
         if (family != null) {
             ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
@@ -121,14 +121,14 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 guidepostWidth = PLong.INSTANCE.getCodec().decodeInt(guidePostWidthBytes, 0, SortOrder.getDefault());
             }
             this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
-                    env.getRegion().getTableDesc());
+                env.getRegion().getTableDesc());
         } else {
             long guidepostWidth = -1;
             HTableInterface htable = null;
             try {
                 // Next check for GUIDE_POST_WIDTH on table
                 htable = env.getTable(
-                        SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
+                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
                 Get get = new Get(ptableKey);
                 get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
                 Result result = htable.get(get);
@@ -151,13 +151,13 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 // Last use global config value
                 Configuration config = env.getConfiguration();
                 this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
-                        config.getInt(
-                            QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION),
-                        config.getLong(
-                            QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
-                        env.getRegion().getTableDesc());
+                    config.getInt(
+                        QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                        QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION),
+                    config.getLong(
+                        QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
+                    env.getRegion().getTableDesc());
             }
         }
     }
@@ -176,7 +176,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     public void updateStatistic(Region region, Scan scan) {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            writeStatistics(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime(), scan);
+            writeStatistics(region, true, mutations, EnvironmentEdgeManager.currentTimeMillis(), scan);
             if (logger.isDebugEnabled()) {
                 logger.debug("Committing new stats for the region " + region.getRegionInfo());
             }
@@ -217,7 +217,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     if (logger.isDebugEnabled()) {
                         logger.debug("Deleting the stats for the region " + region.getRegionInfo());
                     }
-                    statsWriter.deleteStats(region, this, fam, mutations);
+                    statsWriter.deleteStatsForRegion(region, this, fam, mutations);
                 }
                 if (logger.isDebugEnabled()) {
                     logger.debug("Adding new stats for the region " + region.getRegionInfo());
@@ -291,7 +291,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             long byteCount = gps.getFirst() + kvLength;
             gps.setFirst(byteCount);
             if (byteCount >= guidePostDepth) {
-                if (gps.getSecond().addGuidePosts(row, byteCount, gps.getSecond().getRowCount())) {
+                if (gps.getSecond().addGuidePostOnCollection(row, byteCount, gps.getSecond().getRowCount())) {
                     gps.setFirst(0l);
                     gps.getSecond().resetRowCount();
                 }
@@ -307,21 +307,17 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             logger.debug("Compaction scanner created for stats");
         }
         ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
-        return getInternalScanner(env, s, cfKey);
-    }
-
-    private InternalScanner getInternalScanner(RegionCoprocessorEnvironment env, InternalScanner internalScan,
-            ImmutableBytesPtr family) throws IOException {
-        StatisticsScanner scanner = new StatisticsScanner(this, statsWriter, env, internalScan, family);
-        // We need to initialize the scanner synchronously and potentially perform a cross region Get
-        // in order to use the correct guide posts width for the table being compacted.
+        // Potentially perform a cross region server get in order to use the correct guide posts
+        // width for the table being compacted.
         init();
+        StatisticsScanner scanner = new StatisticsScanner(this, statsWriter, env, s, cfKey);
         return scanner;
     }
 
     @Override
     public void init() throws IOException {
         initGuidepostDepth();
+        this.statsWriter = StatisticsWriter.newWriter(env, tableName, clientTimeStamp, guidePostDepth);
     }
 
     @Override

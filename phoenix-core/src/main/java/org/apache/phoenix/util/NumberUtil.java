@@ -67,4 +67,22 @@ public class NumberUtil {
             return num1 + num2;
         }
     }
+
+    /**
+     * @return If both are null, then return null. If one is null, return the other. Else, return
+     *         minimum of the two.
+     */
+    public static Long getMin(Long num1, Long num2) {
+        if (num1 == null) {
+            if (num2 == null) {
+                return null;
+            }
+            return num2;
+        } else {
+            if (num2 == null) {
+                return num1;
+            }
+            return Math.min(num1, num2);
+        }
+    }
 }

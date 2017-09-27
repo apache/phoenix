@@ -125,4 +125,9 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 	public Long getEstimatedBytesToScan() {
 		return 0l;
 	}
+
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        return 0l;
+    }
 }

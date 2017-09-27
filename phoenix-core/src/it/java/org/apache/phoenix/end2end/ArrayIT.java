@@ -131,8 +131,7 @@ public class ArrayIT extends ParallelStatsDisabledIT {
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM " + tableName + " WHERE ?=organization_id and ?=a_float";
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		Connection conn = DriverManager.getConnection(getUrl(), props);
-        //TODO: samarth do we need this
-		analyzeTable(conn, tableName);
+        analyzeTable(conn, tableName);
 		try {
 		    PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);

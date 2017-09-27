@@ -25,6 +25,7 @@ import java.sql.PreparedStatement;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.Shadower;
@@ -648,7 +649,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
         final PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
         GuidePostsInfoBuilder gpWriter = new GuidePostsInfoBuilder();
         for (byte[] gp : guidePosts) {
-            gpWriter.addGuidePosts(gp, 1000);
+            gpWriter.trackGuidePost(new ImmutableBytesWritable(gp), 1000, 0, 0);
         }
         GuidePostsInfo info = gpWriter.build();
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);

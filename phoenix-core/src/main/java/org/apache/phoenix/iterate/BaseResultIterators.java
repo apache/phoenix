@@ -66,7 +66,6 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -149,6 +148,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final List<List<List<Pair<Scan,Future<PeekingResultIterator>>>>> allFutures;
     private Long estimatedRows;
     private Long estimatedSize;
+    private Long estimateInfoTimestamp;
     private boolean hasGuidePosts;
     private Scan scan;
     private boolean useStatsForParallelization;
@@ -679,7 +679,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         boolean isSalted = table.getBucketNum() != null;
         boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
         GuidePostsInfo gps = getGuidePosts();
+        // case when stats wasn't collected
         hasGuidePosts = gps != GuidePostsInfo.NO_GUIDEPOST;
+        // Case when stats collection did run but there possibly wasn't enough data. In such a
+        // case we generate an empty guide post with the byte estimate being set as guide post
+        // width. 
+        boolean emptyGuidePost = gps.isEmptyGuidePost();
         boolean traverseAllRegions = isSalted || isLocalIndex;
         if (!traverseAllRegions) {
             byte[] scanStartRow = scan.getStartRow();
@@ -720,6 +725,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         int guideIndex = 0;
         long estimatedRows = 0;
         long estimatedSize = 0;
+        long estimateTs = Long.MAX_VALUE;
+        long minGuidePostTimestamp = Long.MAX_VALUE;
         try {
             if (gpsSize > 0) {
                 stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
@@ -728,11 +735,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 try {
                     while (currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input)) >= 0
                             && currentKey.getLength() != 0) {
+                        minGuidePostTimestamp = Math.min(estimateTs,
+                            gps.getGuidePostTimestamps()[guideIndex]);
                         guideIndex++;
                     }
-                } catch (EOFException e) {}
+                } catch (EOFException e) {
+                    // expected. Thrown when we have decoded all guide posts.
+                }
             }
             byte[] currentKeyBytes = currentKey.copyBytes();
+            boolean intersectWithGuidePosts = guideIndex < gpsSize;
+            if (!intersectWithGuidePosts) {
+                // If there are no guide posts within the query range, we use the estimateInfoTimestamp
+                // as the minimum time across all guideposts
+                estimateTs = minGuidePostTimestamp;
+            }
             // Merge bisect with guideposts for all but the last region
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
@@ -748,25 +765,37 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     endRegionKey = regionInfo.getEndKey();
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
                 }
-                try {
-                    while (guideIndex < gpsSize && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
-                        Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
-                                false);
-                        if (newScan != null) {
-                            ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
-                                regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
-                            estimatedRows += gps.getRowCounts()[guideIndex];
-                            estimatedSize += gps.getByteCounts()[guideIndex];
-                        }
-                        if (useStatsForParallelization) {
-                            scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
-                        }
-                        currentKeyBytes = currentGuidePostBytes;
+                while (intersectWithGuidePosts && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
+                    Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
+                        false);
+                    if (newScan != null) {
+                        ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
+                            regionInfo.getStartKey(), regionInfo.getEndKey(),
+                            newScan.getStartRow(), newScan.getStopRow());
+                        estimatedRows += gps.getRowCounts()[guideIndex];
+                        estimatedSize += gps.getByteCounts()[guideIndex];
+                    }
+                    if (useStatsForParallelization) {
+                        scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                    }
+                    currentKeyBytes = currentGuidePostBytes;
+                    try {
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();
+                        /*
+                         * It is possible that the timestamp of guideposts could be different.
+                         * So we report the time at which stats information was collected as the
+                         * minimum of timestamp of the guideposts that we will be going over.
+                         */
+                        estimateTs =
+                                Math.min(estimateTs,
+                                    gps.getGuidePostTimestamps()[guideIndex]);
                         guideIndex++;
+                    } catch (EOFException e) {
+                        // We have read all guide posts
+                        intersectWithGuidePosts = false;
                     }
-                } catch (EOFException e) {}
+                }
                 Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
                 if(newScan != null) {
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
@@ -779,12 +808,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (scanRanges.isPointLookup()) {
                 this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
                 this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
+                this.estimateInfoTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            } else if (emptyGuidePost) {
+                // In case of an empty guide post, we estimate the number of rows scanned by
+                // using the estimated row size
+                this.estimatedRows = (gps.getByteCounts()[0] / SchemaUtil.estimateRowSize(table));
+                this.estimatedSize = gps.getByteCounts()[0];
+                this.estimateInfoTimestamp = gps.getGuidePostTimestamps()[0];
             } else if (hasGuidePosts) {
                 this.estimatedRows = estimatedRows;
                 this.estimatedSize = estimatedSize;
+                this.estimateInfoTimestamp = estimateTs;
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
+                this.estimateInfoTimestamp = null;
             }
             if (!scans.isEmpty()) { // Add any remaining scans
                 parallelScans.add(scans);
@@ -1171,4 +1209,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return "ResultIterators [name=" + getName() + ",id=" + scanId + ",scans=" + scans + "]";
     }
 
+    public Long getEstimateInfoTimestamp() {
+        return this.estimateInfoTimestamp;
+    }
 }

@@ -481,6 +481,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public Long getEstimatedBytesToScan() {
                 return null;
             }
+
+            @Override
+            public Long getEstimateInfoTimestamp() throws SQLException {
+                return null;
+            }
             
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()), context.getScan(), false, null);
         List<KeyRange> keyRanges = parallelIterators.getSplits();
