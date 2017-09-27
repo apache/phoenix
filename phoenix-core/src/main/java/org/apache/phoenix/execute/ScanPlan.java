@@ -64,6 +64,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -88,6 +89,7 @@ public class ScanPlan extends BaseQueryPlan {
     private boolean isDataToScanWithinThreshold;
     private Long serialRowsEstimate;
     private Long serialBytesEstimate;
+    private Long serialEstimateInfoTs;
 
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
         this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
@@ -114,6 +116,7 @@ public class ScanPlan extends BaseQueryPlan {
         if (isSerial) {
             serialBytesEstimate = estimate.getFirst();
             serialRowsEstimate = estimate.getSecond();
+            serialEstimateInfoTs = EnvironmentEdgeManager.currentTimeMillis();
         }
     }
 
@@ -240,6 +243,7 @@ public class ScanPlan extends BaseQueryPlan {
         }
         estimatedRows = iterators.getEstimatedRowCount();
         estimatedSize = iterators.getEstimatedByteCount();
+        estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();
         splits = iterators.getSplits();
         scans = iterators.getScans();
         if (isOffsetOnServer) {
@@ -302,5 +306,11 @@ public class ScanPlan extends BaseQueryPlan {
         return super.getEstimatedBytesToScan();
     }
 
-
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        if (isSerial) {
+            return serialEstimateInfoTs;
+        }
+        return super.getEstimateInfoTimestamp();
+    }
 }

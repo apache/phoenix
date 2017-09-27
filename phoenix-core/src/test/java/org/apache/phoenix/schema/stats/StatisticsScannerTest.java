@@ -115,8 +115,8 @@ public class StatisticsScannerTest {
     @Test
     public void testCheckRegionServerStoppingOnException() throws Exception {
         StatisticsScannerCallable realCallable = mockScanner.new StatisticsScannerCallable();
-        doThrow(new IOException()).when(statsWriter).deleteStats(any(HRegion.class), any(StatisticsCollector.class),
-                any(ImmutableBytesPtr.class), any(List.class));
+        doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(HRegion.class),
+            any(StatisticsCollector.class), any(ImmutableBytesPtr.class), any(List.class));
         when(rsServices.isStopping()).thenReturn(true);
         when(rsServices.isStopped()).thenReturn(false);
 
@@ -130,8 +130,8 @@ public class StatisticsScannerTest {
     @Test
     public void testCheckRegionServerStoppedOnException() throws Exception {
         StatisticsScannerCallable realCallable = mockScanner.new StatisticsScannerCallable();
-        doThrow(new IOException()).when(statsWriter).deleteStats(any(HRegion.class), any(StatisticsCollector.class),
-                any(ImmutableBytesPtr.class), any(List.class));
+        doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(HRegion.class),
+            any(StatisticsCollector.class), any(ImmutableBytesPtr.class), any(List.class));
         when(rsServices.isStopping()).thenReturn(false);
         when(rsServices.isStopped()).thenReturn(true);
 

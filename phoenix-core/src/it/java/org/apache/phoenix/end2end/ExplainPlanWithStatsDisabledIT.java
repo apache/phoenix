@@ -20,12 +20,13 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
 
-import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -54,7 +55,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
     private static void initData(String tableName) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + tableName
-                    + " ( k INTEGER, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k))");
+                    + " ( k INTEGER, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) GUIDE_POSTS_WIDTH = 0");
             conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
             conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
             conn.createStatement().execute("upsert into " + tableName + " values (102,2,4)");
@@ -66,6 +67,9 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("upsert into " + tableName + " values (108,2,4)");
             conn.createStatement().execute("upsert into " + tableName + " values (109,2,4)");
             conn.commit();
+            // Because the guide post width is set to 0, no guide post will be collected
+            // effectively disabling stats collection.
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         }
     }
 
@@ -167,9 +171,10 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         binds.add(99);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
-            Pair<Long, Long> info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200l, info.getSecond());
-            assertEquals((Long) 2l, info.getFirst());
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 200l, info.estimatedBytes);
+            assertEquals((Long) 2l, info.estimatedRows);
+            assertTrue(info.estimatedRows > 0);
         }
     }
 
@@ -183,30 +188,57 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             assertEstimatesAreZero(sql, binds, conn);
         }
     }
-    
+
     @Test
     public void testBytesRowsForSelectExecutedSerially() throws Exception {
         String sql = "SELECT * FROM " + tableA + " LIMIT 2";
         List<Object> binds = Lists.newArrayList();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
-            Pair<Long, Long> info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200l, info.getSecond());
-            assertEquals((Long) 2l, info.getFirst());
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 200l, info.estimatedBytes);
+            assertEquals((Long) 2l, info.estimatedRows);
+            assertTrue(info.estimatedRows > 0);
         }
     }
 
-    private void assertEstimatesAreNull(String sql, List<Object> binds, Connection conn)
+    @Test
+    public void testEstimatesForUnionWithTablesWithNullAndLargeGpWidth() throws Exception {
+        String tableWithLargeGPWidth = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // create a table with 1 MB guidepost width
+            long guidePostWidth = 1000000;
+            conn.createStatement()
+                    .execute("CREATE TABLE " + tableWithLargeGPWidth
+                            + " ( k INTEGER, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) GUIDE_POSTS_WIDTH="
+                            + guidePostWidth);
+            conn.createStatement()
+                    .execute("upsert into " + tableWithLargeGPWidth + " values (100,1,3)");
+            conn.createStatement()
+                    .execute("upsert into " + tableWithLargeGPWidth + " values (101,2,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableWithLargeGPWidth);
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql =
+                    "SELECT * FROM " + tableA + " UNION ALL SELECT * FROM " + tableWithLargeGPWidth;
+            assertEstimatesAreNull(sql, Lists.newArrayList(), conn);
+        }
+    }
+
+    public static void assertEstimatesAreNull(String sql, List<Object> binds, Connection conn)
             throws Exception {
-        Pair<Long, Long> info = getByteRowEstimates(conn, sql, binds);
-        assertNull(info.getSecond());
-        assertNull(info.getFirst());
+        Estimate info = getByteRowEstimates(conn, sql, binds);
+        assertNull(info.estimatedBytes);
+        assertNull(info.estimatedRows);
+        assertNull(info.estimateInfoTs);
     }
 
     private void assertEstimatesAreZero(String sql, List<Object> binds, Connection conn)
             throws Exception {
-        Pair<Long, Long> info = getByteRowEstimates(conn, sql, binds);
-        assertEquals((Long) 0l, info.getSecond());
-        assertEquals((Long) 0l, info.getFirst());
+        Estimate info = getByteRowEstimates(conn, sql, binds);
+        assertEquals((Long) 0l, info.estimatedBytes);
+        assertEquals((Long) 0l, info.estimatedRows);
+        assertEquals((Long) 0l, info.estimateInfoTs);
     }
 }

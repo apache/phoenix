@@ -43,7 +43,6 @@ import java.util.Random;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -58,8 +57,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -177,7 +177,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 1-CHUNK 0 ROWS 0 BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n" + 
+                "CLIENT 1-CHUNK 0 ROWS 20 BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY",
                 explainPlan);
         conn.close();
@@ -197,7 +197,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + fullTableName + " WHERE v2='foo'");
         explainPlan = QueryUtil.getExplainPlan(rs);
         // if we are using the ONE_CELL_PER_COLUMN_FAMILY storage scheme, we will have the single kv even though there are no values for col family v2 
-        String stats = columnEncoded && !mutable  ? "4-CHUNK 1 ROWS 38 BYTES" : "3-CHUNK 0 ROWS 0 BYTES";
+        String stats = columnEncoded && !mutable  ? "4-CHUNK 1 ROWS 38 BYTES" : "3-CHUNK 0 ROWS 20 BYTES";
         assertEquals(
                 "CLIENT " + stats + " PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
                 "    SERVER FILTER BY B.V2 = 'foo'\n" + 
@@ -705,6 +705,43 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             rs = conn.createStatement().executeQuery(q);
             rs.next();
             assertEquals("Number of expected rows in stats table after major compaction didn't match", numRows, rs.getInt(1));
+        }
+    }
+    
+    @Test
+    public void testEmptyGuidePostGeneratedWhenDataSizeLessThanGPWidth() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            long guidePostWidth = 20000000;
+            conn.createStatement()
+                    .execute("CREATE TABLE " + tableName
+                            + " ( k INTEGER, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) GUIDE_POSTS_WIDTH="
+                            + guidePostWidth + ", SALT_BUCKETS = 4");
+            conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+            ConnectionQueryServices queryServices =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (HTableInterface statsHTable =
+                    queryServices.getTable(
+                        SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
+                            queryServices.getProps()).getName())) {
+                GuidePostsInfo gps =
+                        StatisticsUtil.readStatistics(statsHTable,
+                            new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes("C1")),
+                            HConstants.LATEST_TIMESTAMP);
+                assertTrue(gps.isEmptyGuidePost());
+                assertEquals(guidePostWidth, gps.getByteCounts()[0]);
+                assertTrue(gps.getGuidePostTimestamps()[0] > 0);
+                gps =
+                        StatisticsUtil.readStatistics(statsHTable,
+                            new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes("C2")),
+                            HConstants.LATEST_TIMESTAMP);
+                assertTrue(gps.isEmptyGuidePost());
+                assertEquals(guidePostWidth, gps.getByteCounts()[0]);
+                assertTrue(gps.getGuidePostTimestamps()[0] > 0);
+            }
         }
     }
 
