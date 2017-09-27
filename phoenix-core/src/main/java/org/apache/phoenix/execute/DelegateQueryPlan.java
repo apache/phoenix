@@ -151,4 +151,9 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public Long getEstimatedBytesToScan() throws SQLException {
         return delegate.getEstimatedBytesToScan();
     }
+
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        return delegate.getEstimateInfoTimestamp();
+    }
 }

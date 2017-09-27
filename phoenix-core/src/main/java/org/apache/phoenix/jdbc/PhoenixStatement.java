@@ -44,6 +44,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -508,24 +509,32 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private static final String EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_NAME = "BytesEstimate";
     private static final byte[] EXPLAIN_PLAN_BYTES_ESTIMATE =
             PVarchar.INSTANCE.toBytes(EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_NAME);
-    private static final String EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME = "RowsEstimate";
-    private static final byte[] EXPLAIN_PLAN_ROWS_ESTIMATE =
-            PVarchar.INSTANCE.toBytes(EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME);
-
     public static final String EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS = "EST_BYTES_READ";
-    public static final String EXPLAIN_PLAN_ROWS_COLUMN_ALIAS = "EST_ROWS_READ";
-
     private static final PColumnImpl EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_BYTES_ESTIMATE),
                     PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 1,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
                     EXPLAIN_PLAN_BYTES_ESTIMATE);
 
+    private static final String EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME = "RowsEstimate";
+    private static final byte[] EXPLAIN_PLAN_ROWS_ESTIMATE =
+            PVarchar.INSTANCE.toBytes(EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME);
+    public static final String EXPLAIN_PLAN_ROWS_COLUMN_ALIAS = "EST_ROWS_READ";
     private static final PColumnImpl EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ROWS_ESTIMATE),
                     PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 2,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
                     EXPLAIN_PLAN_ROWS_ESTIMATE);
+
+    private static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_NAME = "EstimateInfoTS";
+    private static final byte[] EXPLAIN_PLAN_ESTIMATE_INFO_TS =
+            PVarchar.INSTANCE.toBytes(EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_NAME);
+    public static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS = "EST_INFO_TS";
+    private static final PColumnImpl EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN =
+            new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ESTIMATE_INFO_TS),
+                PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 3,
+                SortOrder.getDefault(), 0, null, false, null, false, false,
+                EXPLAIN_PLAN_ESTIMATE_INFO_TS);
 
     private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR_WITH_BYTE_ROW_ESTIMATES =
             new RowProjector(Arrays
@@ -535,12 +544,17 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                         new RowKeyValueAccessor(Collections
                                                 .<PDatum> singletonList(EXPLAIN_PLAN_DATUM), 0)),
                                 false),
-                        new ExpressionProjector(
-                                EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS, EXPLAIN_PLAN_TABLE_NAME,
-                                new KeyValueColumnExpression(EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN), false),
-                        new ExpressionProjector(EXPLAIN_PLAN_ROWS_COLUMN_ALIAS,
+                        new ExpressionProjector(EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS,
                                 EXPLAIN_PLAN_TABLE_NAME, new KeyValueColumnExpression(
-                                        EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN),
+                                        EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN),
+                                false),
+                        new ExpressionProjector(EXPLAIN_PLAN_ROWS_COLUMN_ALIAS,
+                                EXPLAIN_PLAN_TABLE_NAME,
+                                new KeyValueColumnExpression(EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN),
+                                false),
+                        new ExpressionProjector(EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS,
+                                EXPLAIN_PLAN_TABLE_NAME,
+                                new KeyValueColumnExpression(EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN),
                                 false)),
                     0, true);
 
@@ -569,6 +583,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
             Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
+            Long estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
             for (String planStep : planSteps) {
                 byte[] row = PVarchar.INSTANCE.toBytes(planStep);
                 List<Cell> cells = Lists.newArrayListWithCapacity(3);
@@ -584,11 +599,18 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimatedRowsToScan)));
                 }
+                if (estimateInfoTimestamp != null) {
+                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
+                }
+                Collections.sort(cells, KeyValue.COMPARATOR);
                 Tuple tuple = new MultiKeyValueTuple(cells);
                 tuples.add(tuple);
             }
             final Long estimatedBytes = estimatedBytesToScan;
             final Long estimatedRows = estimatedRowsToScan;
+            final Long estimateTs = estimateInfoTimestamp;
             final ResultIterator iterator = new MaterializedResultIterator(tuples);
             return new QueryPlan() {
 
@@ -706,6 +728,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     return estimatedBytes;
                 }
                 
+                @Override
+                public Long getEstimateInfoTimestamp() throws SQLException {
+                    return estimateTs;
+                }
             };
         }
     }
@@ -1313,6 +1339,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
                 @Override
                 public Long getEstimatedBytesToScan() throws SQLException {
+                    return 0l;
+                }
+
+                @Override
+                public Long getEstimateInfoTimestamp() throws SQLException {
                     return 0l;
                 }
             };

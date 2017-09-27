@@ -20,11 +20,16 @@ package org.apache.phoenix.schema.tuple;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.util.KeyValueUtil;
 
-
+/**
+ * Tuple that can be used to represent a list of cells. It is imperative that the list of cells
+ * passed in are sorted using the {@link KeyValue#COMPARATOR} otherwise doing binary search to find
+ * a particular cell will fail.
+ */
 public class MultiKeyValueTuple extends BaseTuple {
     private List<Cell> values;
     

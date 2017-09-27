@@ -17,10 +17,11 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -30,21 +31,18 @@ import com.google.common.primitives.Longs;
  *  guidePosts of different regions when the GuidePostsInfo is formed for a table.
  */
 public class GuidePostsInfo {
-    public final static GuidePostsInfo EMPTY_GUIDEPOST = new GuidePostsInfo(new ArrayList<Long>(),
-            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), new ArrayList<Long>(), 0, 0) {
-        @Override
-        public int getEstimatedSize() {
-            return 0;
-        }
-    };
-    public final static GuidePostsInfo NO_GUIDEPOST = new GuidePostsInfo(new ArrayList<Long>(),
-            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), new ArrayList<Long>(), 0, 0) {
-        @Override
-        public int getEstimatedSize() {
-            return 0;
-        }
-    };
-
+    public final static GuidePostsInfo NO_GUIDEPOST =
+            new GuidePostsInfo(Collections.<Long> emptyList(),
+                    new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY),
+                    Collections.<Long> emptyList(), 0, 0, Collections.<Long> emptyList()) {
+                @Override
+                public int getEstimatedSize() {
+                    return 0;
+                }
+            };
+    
+    public final static byte[] EMPTY_GUIDEPOST_KEY = ByteUtil.EMPTY_BYTE_ARRAY;
+    
     /**
      * the total number of guidePosts for the table combining all the guidePosts per region per cf.
      */
@@ -69,6 +67,10 @@ public class GuidePostsInfo {
      * Estimate of byte size of this instance
      */
     private final int estimatedSize;
+    /**
+     * The timestamps at which guideposts were created/updated
+     */
+    private final long[] gpTimestamps;
 
     /**
      * Constructor that creates GuidePostsInfo per region
@@ -83,9 +85,11 @@ public class GuidePostsInfo {
      *            Maximum length of a guidePost collected
      * @param guidePostsCount
      *            Number of guidePosts
+     * @param gpTimestamps
+     *            Times at which guidePosts were updated/created
      */
     public GuidePostsInfo(List<Long> byteCounts, ImmutableBytesWritable guidePosts, List<Long> rowCounts, int maxLength,
-            int guidePostsCount) {
+            int guidePostsCount, List<Long> updateTimes) {
         this.guidePosts = new ImmutableBytesWritable(guidePosts);
         this.maxLength = maxLength;
         this.guidePostsCount = guidePostsCount;
@@ -99,6 +103,7 @@ public class GuidePostsInfo {
                 + SizedUtil.ARRAY_SIZE + this.byteCounts.length * SizedUtil.LONG_SIZE // byteCounts
                 + SizedUtil.INT_SIZE; // estimatedSize
         this.estimatedSize = estimatedSize;
+        this.gpTimestamps = Longs.toArray(updateTimes);
     }
     
     public ImmutableBytesWritable getGuidePosts() {
@@ -121,7 +126,27 @@ public class GuidePostsInfo {
         return byteCounts;
     }
 
+    public long[] getGuidePostTimestamps() {
+        return gpTimestamps;
+    }
+
     public int getEstimatedSize() {
         return estimatedSize;
     }
+
+    public boolean isEmptyGuidePost() {
+        return guidePosts.equals(EMPTY_GUIDEPOST_KEY) && guidePostsCount == 0
+                && byteCounts.length == 1 && gpTimestamps.length == 1;
+    }
+
+    public static GuidePostsInfo createEmptyGuidePost(long byteCount, long guidePostUpdateTime) {
+        return new GuidePostsInfo(Collections.singletonList(byteCount),
+                new ImmutableBytesWritable(EMPTY_GUIDEPOST_KEY), Collections.<Long> emptyList(), 0,
+                0, Collections.<Long> singletonList(guidePostUpdateTime));
+    }
+    
+    public static boolean isEmptyGpsKey(byte[] key) {
+        return Bytes.equals(key, GuidePostsInfo.EMPTY_GUIDEPOST_KEY);
+    }
+
 }

@@ -34,7 +34,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
@@ -162,14 +166,14 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
         initTableValues(conn);
         updateStatistics(conn);
         ResultSet rs;
-        rs = conn.createStatement()
-                .executeQuery("SELECT t_id from " + tableName + " order by t_id offset " + offset + " row");
         int i = 0;
+        rs =
+                conn.createStatement().executeQuery(
+                    "SELECT t_id from " + tableName + " order by t_id offset " + offset + " row");
         while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
             assertEquals(STRINGS[offset + i - 1], rs.getString(1));
         }
-
         rs = conn.createStatement().executeQuery(
                 "SELECT k3, count(*) from " + tableName + " group by k3 order by k3 desc offset " + offset + " row");
 

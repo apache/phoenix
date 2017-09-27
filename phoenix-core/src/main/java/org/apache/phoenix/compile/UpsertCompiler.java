@@ -764,6 +764,11 @@ public class UpsertCompiler {
                         public Long getEstimatedBytesToScan() throws SQLException {
                             return aggPlan.getEstimatedBytesToScan();
                         }
+
+                        @Override
+                        public Long getEstimateInfoTimestamp() throws SQLException {
+                            return aggPlan.getEstimateInfoTimestamp();
+                        }
                     };
                 }
             }
@@ -846,7 +851,11 @@ public class UpsertCompiler {
                 public Long getEstimatedBytesToScan() throws SQLException {
                     return queryPlan.getEstimatedBytesToScan();
                 }
-                
+
+                @Override
+                public Long getEstimateInfoTimestamp() throws SQLException {
+                    return queryPlan.getEstimateInfoTimestamp();
+                }
             };
         }
 
@@ -1086,6 +1095,10 @@ public class UpsertCompiler {
                 return 0l;
             }
 
+            @Override
+            public Long getEstimateInfoTimestamp() throws SQLException {
+                return 0l;
+            }
         };
     }
     

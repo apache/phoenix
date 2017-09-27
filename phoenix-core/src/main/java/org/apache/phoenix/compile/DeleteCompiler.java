@@ -309,6 +309,13 @@ public class DeleteCompiler {
         public Long getEstimatedRowsToScan() throws SQLException {
             Long estRows = null;
             for (MutationPlan plan : plans) {
+                /*
+                 * If any of the plan doesn't have estimate information available, then we cannot
+                 * provide estimate for the overall plan.
+                 */
+                if (plan.getEstimatedRowsToScan() == null) {
+                    return null;
+                }
                 estRows = add(estRows, plan.getEstimatedRowsToScan());
             }
             return estRows;
@@ -318,12 +325,36 @@ public class DeleteCompiler {
         public Long getEstimatedBytesToScan() throws SQLException {
             Long estBytes = null;
             for (MutationPlan plan : plans) {
+                /*
+                 * If any of the plan doesn't have estimate information available, then we cannot
+                 * provide estimate for the overall plan.
+                 */
+                if (plan.getEstimatedBytesToScan() == null) {
+                    return null;
+                }
                 estBytes = add(estBytes, plan.getEstimatedBytesToScan());
             }
             return estBytes;
         }
+
+        @Override
+        public Long getEstimateInfoTimestamp() throws SQLException {
+            Long estInfoTimestamp = Long.MAX_VALUE;
+            for (MutationPlan plan : plans) {
+                Long timestamp = plan.getEstimateInfoTimestamp();
+                /*
+                 * If any of the plan doesn't have estimate information available, then we cannot
+                 * provide estimate for the overall plan.
+                 */
+                if (timestamp == null) {
+                    return timestamp;
+                }
+                estInfoTimestamp = Math.min(estInfoTimestamp, timestamp);
+            }
+            return estInfoTimestamp;
+        }
     }
-    
+
     private static boolean hasNonPKIndexedColumns(Collection<PTable> immutableIndexes) {
         for (PTable index : immutableIndexes) {
             for (PColumn column : index.getPKColumns()) {
@@ -562,6 +593,11 @@ public class DeleteCompiler {
                     public Long getEstimatedBytesToScan() throws SQLException {
                         return 0l;
                     }
+
+                    @Override
+                    public Long getEstimateInfoTimestamp() throws SQLException {
+                        return 0l;
+                    }
                 });
             } else if (runOnServer) {
                 // TODO: better abstraction
@@ -659,6 +695,11 @@ public class DeleteCompiler {
                     public Long getEstimatedBytesToScan() throws SQLException {
                         return aggPlan.getEstimatedBytesToScan();
                     }
+
+                    @Override
+                    public Long getEstimateInfoTimestamp() throws SQLException {
+                        return aggPlan.getEstimateInfoTimestamp();
+                    }
                 });
             } else {
                 List<TableRef> immutableIndexRefsToBe = Lists.newArrayListWithExpectedSize(dataPlan.getTableRef().getTable().getIndexes().size());
@@ -745,6 +786,11 @@ public class DeleteCompiler {
                     @Override
                     public Long getEstimatedBytesToScan() throws SQLException {
                         return plan.getEstimatedBytesToScan();
+                    }
+
+                    @Override
+                    public Long getEstimateInfoTimestamp() throws SQLException {
+                        return plan.getEstimateInfoTimestamp();
                     }
                 });
             }

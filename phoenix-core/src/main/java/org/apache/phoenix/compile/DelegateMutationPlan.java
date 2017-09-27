@@ -77,4 +77,9 @@ public class DelegateMutationPlan implements MutationPlan {
         return plan.getEstimatedBytesToScan();
     }
 
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        return plan.getEstimateInfoTimestamp();
+    }
+
 }
