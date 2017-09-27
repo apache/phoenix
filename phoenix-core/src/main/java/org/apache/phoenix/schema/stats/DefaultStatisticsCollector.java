@@ -169,7 +169,9 @@ class DefaultStatisticsCollector implements StatisticsCollector {
 
     @Override
     public void close() throws IOException {
-        this.statsWriter.close();
+        if (statsWriter != null) {
+            this.statsWriter.close();
+        }
     }
 
     @Override
