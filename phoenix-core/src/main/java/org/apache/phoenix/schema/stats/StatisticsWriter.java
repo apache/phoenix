@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import static org.apache.phoenix.schema.stats.StatisticsUtil.getAdjustedKey;
+
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.DataInput;
@@ -24,6 +26,7 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.sql.Date;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -33,6 +36,8 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
@@ -42,12 +47,15 @@ import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRo
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -68,16 +76,16 @@ public class StatisticsWriter implements Closeable {
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
      */
-    public static StatisticsWriter newWriter(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp)
+    public static StatisticsWriter newWriter(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, long guidePostDepth)
             throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
-            clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+            clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
         }
         HTableInterface statsWriterTable = env.getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
         HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
-                clientTimeStamp);
+                clientTimeStamp, guidePostDepth);
         return statsTable;
     }
 
@@ -88,14 +96,15 @@ public class StatisticsWriter implements Closeable {
     private final HTableInterface statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
-    private final ImmutableBytesWritable minKeyPtr = new ImmutableBytesWritable();
-
+    private final long guidePostDepth;
+    
     private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName,
-            long clientTimeStamp) {
+            long clientTimeStamp, long guidePostDepth) {
         this.statsReaderTable = statsReaderTable;
         this.statsWriterTable = statsWriterTable;
         this.tableName = Bytes.toBytes(tableName);
         this.clientTimeStamp = clientTimeStamp;
+        this.guidePostDepth = guidePostDepth;
     }
 
     /**
@@ -159,7 +168,17 @@ public class StatisticsWriter implements Closeable {
                 Delete delete = new Delete(rowKey, timeStamp);
                 mutations.add(delete);
             } else {
-                addGuidepost(cfKey, mutations, ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY, 0, 0, timeStamp);
+                /*
+                 * When there is not enough data in the region, we create a guide post with empty
+                 * key with the estimated amount of data in it as the guide post width. We can't
+                 * determine the expected number of rows here since we don't have the PTable and the
+                 * associated schema available to make the row size estimate. We instead will
+                 * compute it on the client side when reading out guideposts from the SYSTEM.STATS
+                 * table in StatisticsUtil#readStatistics(HTableInterface statsHTable,
+                 * GuidePostsKey key, long clientTimeStamp).
+                 */
+                addGuidepost(cfKey, mutations, ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY, guidePostDepth,
+                    0, timeStamp);
             }
         }
     }
@@ -209,7 +228,7 @@ public class StatisticsWriter implements Closeable {
     }
 
     private Put getLastStatsUpdatedTimePut(long timeStamp) {
-        long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         byte[] prefix = tableName;
         Put put = new Put(prefix);
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
@@ -223,12 +242,25 @@ public class StatisticsWriter implements Closeable {
         statsWriterTable.put(put);
     }
 
-    public void deleteStats(Region region, StatisticsCollector tracker, ImmutableBytesPtr fam, List<Mutation> mutations)
-            throws IOException {
-        long timeStamp = clientTimeStamp == DefaultStatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp()
-                : clientTimeStamp;
-        List<Result> statsForRegion = StatisticsUtil.readStatistics(statsWriterTable, tableName, fam,
-                region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey(), timeStamp);
+    public void deleteStatsForRegion(Region region, StatisticsCollector tracker, ImmutableBytesPtr fam,
+            List<Mutation> mutations) throws IOException {
+        long timeStamp =
+                clientTimeStamp == DefaultStatisticsCollector.NO_TIMESTAMP
+                        ? tracker.getMaxTimeStamp() : clientTimeStamp;
+        byte[] startKey = region.getRegionInfo().getStartKey();
+        byte[] stopKey = region.getRegionInfo().getEndKey();
+        List<Result> statsForRegion = new ArrayList<Result>();
+        Scan s =
+                MetaDataUtil.newTableRowsScan(getAdjustedKey(startKey, tableName, fam, false),
+                    getAdjustedKey(stopKey, tableName, fam, true),
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
+        try (ResultScanner scanner = statsWriterTable.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                statsForRegion.add(result);
+            }
+        }
         for (Result result : statsForRegion) {
             mutations.add(new Delete(result.getRow(), timeStamp - 1));
         }

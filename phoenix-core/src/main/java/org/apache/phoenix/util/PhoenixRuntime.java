@@ -206,6 +206,13 @@ public class PhoenixRuntime {
             PhoenixStatement.EXPLAIN_PLAN_ROWS_COLUMN_ALIAS;
 
     /**
+     * Use this column name on the row returned by explain plan result set to get timestamp at which
+     * the estimate of number or bytes/rows was collected
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS;
+
+    /**
      * All Phoenix specific connection properties
      * TODO: use enum instead
      */

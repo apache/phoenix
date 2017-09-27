@@ -902,7 +902,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 InternalScanner internalScanner = scanner;
                 if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
                     try {
-                        long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                        long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
                         StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
                             c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
                             store.getFamily().getName());
@@ -1160,7 +1160,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      * Package private for tests.
      */
     static class StatsCollectionCallable implements Callable<Long> {
-        private final StatisticsCollector stats;
+        private final StatisticsCollector statsCollector;
         private final Region region;
         private final RegionScanner innerScanner;
         private final Configuration config;
@@ -1168,7 +1168,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
         StatsCollectionCallable(StatisticsCollector s, Region r, RegionScanner rs,
                 Configuration config, Scan scan) {
-            this.stats = s;
+            this.statsCollector = s;
             this.region = r;
             this.innerScanner = rs;
             this.config = config;
@@ -1194,12 +1194,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             long rowCount = 0;
             try {
                 if (!compactionRunning) {
-                    stats.init();
+                    statsCollector.init();
                     synchronized (innerScanner) {
                         do {
                             List<Cell> results = new ArrayList<Cell>();
                             hasMore = innerScanner.nextRaw(results);
-                            stats.collectStatistics(results);
+                            statsCollector.collectStatistics(results);
                             rowCount++;
                             compactionRunning = areStatsBeingCollectedViaCompaction();
                         } while (hasMore && !compactionRunning);
@@ -1213,7 +1213,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
-                        stats.updateStatistic(region, scan);
+                        statsCollector.updateStatistic(region, scan);
                         logger.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
                                 + ". Time: " + (System.currentTimeMillis() - startTime));
@@ -1225,7 +1225,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 } finally {
                     try {
                         StatisticsCollectionRunTracker.getInstance(config).removeUpdateStatsCommandRegion(region.getRegionInfo());
-                        stats.close();
+                        statsCollector.close();
                     } finally {
                         try {
                             innerScanner.close();

@@ -19,11 +19,7 @@ package org.apache.phoenix.schema.stats;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
@@ -37,7 +33,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
@@ -122,7 +117,7 @@ public class StatisticsUtil {
         return rowKey;
     }
 
-    private static byte[] getAdjustedKey(byte[] key, byte[] tableNameBytes, ImmutableBytesWritable cf, boolean nextKey) {
+    public static byte[] getAdjustedKey(byte[] key, byte[] tableNameBytes, ImmutableBytesWritable cf, boolean nextKey) {
         if (Bytes.compareTo(key, ByteUtil.EMPTY_BYTE_ARRAY) != 0) {
             return getRowKey(tableNameBytes, cf, key); 
         }
@@ -131,30 +126,6 @@ public class StatisticsUtil {
             ByteUtil.nextKey(key, key.length);
         }
         return key;
-    }
-
-    public static List<Result> readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, ImmutableBytesPtr cf,
-            byte[] startKey, byte[] stopKey, long clientTimeStamp) throws IOException {
-        List<Result> statsForRegion = new ArrayList<Result>();
-        Scan s = MetaDataUtil.newTableRowsScan(
-                getAdjustedKey(startKey, tableNameBytes, cf, false),
-                getAdjustedKey(stopKey, tableNameBytes, cf, true), 
-                MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                clientTimeStamp);
-        s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
-        ResultScanner scanner = null;
-        try {
-            scanner = statsHTable.getScanner(s);
-            Result result = null;
-            while ((result = scanner.next()) != null) {
-                statsForRegion.add(result);
-            }
-        } finally {
-            if (scanner != null) {
-                scanner.close();
-            }
-        }
-        return statsForRegion;
     }
 
     public static GuidePostsInfo readStatistics(HTableInterface statsHTable, GuidePostsKey key, long clientTimeStamp)
@@ -168,8 +139,9 @@ public class StatisticsUtil {
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
-        GuidePostsInfoBuilder guidePostsInfoWriter = new GuidePostsInfoBuilder();
+        GuidePostsInfoBuilder guidePostsInfoBuilder = new GuidePostsInfoBuilder();
         Cell current = null;
+        GuidePostsInfo emptyGuidePost = null;
         try (ResultScanner scanner = statsHTable.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {
@@ -198,22 +170,24 @@ public class StatisticsUtil {
                     ptr.set(current.getRowArray(), cfOffset, cfLength);
                     byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     byte[] newGPStartKey = getGuidePostsInfoFromRowKey(tableNameBytes, cfName, result.getRow());
-                    guidePostsInfoWriter.addGuidePosts(newGPStartKey, byteCount, rowCount);
+                    boolean isEmptyGuidePost = GuidePostsInfo.isEmptyGpsKey(newGPStartKey);
+                    // Use the timestamp of the cell as the time at which guidepost was
+                    // created/updated
+                    long guidePostUpdateTime = current.getTimestamp();
+                    if (isEmptyGuidePost) {
+                        emptyGuidePost =
+                                GuidePostsInfo.createEmptyGuidePost(byteCount, guidePostUpdateTime);
+                    } else {
+                        guidePostsInfoBuilder.trackGuidePost(
+                            new ImmutableBytesWritable(newGPStartKey), byteCount, rowCount,
+                            guidePostUpdateTime);
+                    }
                 }
             }
         }
         // We write a row with an empty KeyValue in the case that stats were generated but without enough data
         // for any guideposts. If we have no rows, it means stats were never generated.
-        return current == null ? GuidePostsInfo.NO_GUIDEPOST : guidePostsInfoWriter.isEmpty() ? GuidePostsInfo.EMPTY_GUIDEPOST : guidePostsInfoWriter.build();
-    }
-
-    private static SortedMap<byte[], GuidePostsInfo> getGuidePostsPerCf(
-            TreeMap<byte[], GuidePostsInfoBuilder> guidePostsWriterPerCf) {
-        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
-        for (byte[] key : guidePostsWriterPerCf.keySet()) {
-            guidePostsPerCf.put(key, guidePostsWriterPerCf.get(key).build());
-        }
-        return guidePostsPerCf;
+        return current == null ? GuidePostsInfo.NO_GUIDEPOST : guidePostsInfoBuilder.isEmpty() ? emptyGuidePost : guidePostsInfoBuilder.build();
     }
 
     public static long getGuidePostDepth(int guidepostPerRegion, long guidepostWidth, HTableDescriptor tableDesc) {
@@ -230,8 +204,8 @@ public class StatisticsUtil {
             return guidepostWidth;
         }
     }
-
-	public static byte[] getGuidePostsInfoFromRowKey(byte[] tableNameBytes, byte[] fam, byte[] row) {
+    
+    public static byte[] getGuidePostsInfoFromRowKey(byte[] tableNameBytes, byte[] fam, byte[] row) {
 	    if (row.length > tableNameBytes.length + 1 + fam.length) {
     		ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     		int gpOffset = tableNameBytes.length + 1 + fam.length + 1;

@@ -20,6 +20,7 @@ package org.apache.phoenix.execute;
 import static org.apache.phoenix.monitoring.TaskExecutionMetricsHolder.NO_OP_INSTANCE;
 import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 import static org.apache.phoenix.util.NumberUtil.add;
+import static org.apache.phoenix.util.NumberUtil.getMin;
 
 import java.sql.SQLException;
 import java.util.Collections;
@@ -96,6 +97,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private List<Expression> keyRangeExpressions;
     private Long estimatedRows;
     private Long estimatedBytes;
+    private Long estimateInfoTs;
     private boolean explainPlanCalled;
     
     public static HashJoinPlan create(SelectStatement statement, 
@@ -261,8 +263,24 @@ public class HashJoinPlan extends DelegateQueryPlan {
             planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
         }
         for (SubPlan subPlan : subPlans) {
-            estimatedBytes = add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
-            estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
+            if (subPlan.getInnerPlan().getEstimatedBytesToScan() == null
+                    || subPlan.getInnerPlan().getEstimatedRowsToScan() == null
+                    || subPlan.getInnerPlan().getEstimateInfoTimestamp() == null) {
+                /*
+                 * If any of the sub plans doesn't have the estimate info available, then we don't
+                 * provide estimate for the overall plan
+                 */
+                estimatedBytes = null;
+                estimatedRows = null;
+                estimateInfoTs = null;
+                break;
+            } else {
+                estimatedBytes =
+                        add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
+                estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
+                estimateInfoTs =
+                        getMin(estimateInfoTs, subPlan.getInnerPlan().getEstimateInfoTimestamp());
+            }
         }
         return new ExplainPlan(planSteps);
     }
@@ -485,6 +503,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
             getExplainPlan();
         }
         return estimatedBytes;
+    }
+
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        if (!explainPlanCalled) {
+            getExplainPlan();
+        }
+        return estimateInfoTs;
     }
 }
 

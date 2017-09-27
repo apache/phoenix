@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.query.BaseTest;
-import org.junit.AfterClass;
 import org.junit.experimental.categories.Category;
 
 /**
