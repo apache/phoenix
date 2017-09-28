@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.end2end.join;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -32,14 +32,12 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -112,6 +110,11 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
         this.plans = plans;
     }
     
+    public BaseJoinIT() {
+        this.indexDDL = new String[0];
+        this.plans = new String[0];
+    }
+
     protected String getTableName(Connection conn, String virtualName) throws Exception {
         String realName = virtualNameToRealNameMap.get(virtualName);
         if (realName == null) {
