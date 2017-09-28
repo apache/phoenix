@@ -105,7 +105,6 @@ import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -1210,7 +1209,7 @@ public class MetaDataClient {
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         Properties props = new Properties(connection.getClientInfo());
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(connection.getSCN()+1));
+        props.setProperty(PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, Long.toString(connection.getSCN()+1));
         PhoenixConnection conn = new PhoenixConnection(connection, connection.getQueryServices(), props);
         MetaDataClient newClientAtNextTimeStamp = new MetaDataClient(conn);
 
@@ -2894,13 +2893,9 @@ public class MetaDataClient {
     }
 
     private void deleteFromStatsTable(List<TableRef> tableRefs, long ts) throws SQLException {
-        Properties props = new Properties(connection.getClientInfo());
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = new PhoenixConnection(connection.getQueryServices(), connection, ts);
-        conn.setAutoCommit(true);
-        boolean success = false;
-        SQLException sqlException = null;
-        try {
+    	boolean isAutoCommit = connection.getAutoCommit();
+    	try {
+	        connection.setAutoCommit(true);
             StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
             for (TableRef ref : tableRefs) {
                 buf.append("'" + ref.getTable().getPhysicalName().getString() + "',");
@@ -2917,25 +2912,9 @@ public class MetaDataClient {
                 }
                 buf.setCharAt(buf.length() - 1, ')');
             }
-            conn.createStatement().execute(buf.toString());
-            success = true;
-        } catch (SQLException e) {
-            sqlException = e;
+            connection.createStatement().execute(buf.toString());
         } finally {
-            try {
-                conn.close();
-            } catch (SQLException e) {
-                if (sqlException == null) {
-                    // If we're not in the middle of throwing another exception
-                    // then throw the exception we got on close.
-                    if (success) {
-                        sqlException = e;
-                    }
-                } else {
-                    sqlException.setNextException(e);
-                }
-            }
-            if (sqlException != null) { throw sqlException; }
+        	connection.setAutoCommit(isAutoCommit);
         }
     }
 
