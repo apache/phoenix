@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX;
-import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX_LOCKED;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX_UNLOCKED;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
@@ -64,10 +63,16 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -490,7 +495,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             }
             
             // run upgrade
-            UpgradeUtil.upgradeTo4_5_0(conn.unwrap(PhoenixConnection.class));
+            upgradeTo4_5_0(conn);
             
             // Verify base column counts for tenant specific views
             for (int i = 0; i < 2 ; i++) {
@@ -507,6 +512,12 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         }
         
         
+    }
+
+    private static void upgradeTo4_5_0(Connection conn) throws SQLException {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        pconn.setRunningUpgrade(true);
+        UpgradeUtil.upgradeTo4_5_0(pconn);
     }
     
     private enum ColumnDiff {
@@ -570,7 +581,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             checkBaseColumnCount(null, baseTableSchema, baseTableName, 0);
             
             // run upgrade
-            UpgradeUtil.upgradeTo4_5_0(conn.unwrap(PhoenixConnection.class));
+            upgradeTo4_5_0(conn);
 
             checkBaseColumnCount(tenantId, viewSchema, viewName, expectedBaseColumnCount);
             checkBaseColumnCount(null, baseTableSchema, baseTableName, BASE_TABLE_BASE_COLUMN_COUNT);
@@ -639,8 +650,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     return true;
                 }
             };
-            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade,
-                    conn.unwrap(PhoenixConnection.class), HConstants.LATEST_TIMESTAMP)) {
+            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade, getUrl(), PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES), 
+                    conn.unwrap(PhoenixConnection.class).getMetaDataCache())) {
                 try {
                     phxConn.createStatement().execute(
                             "CREATE TABLE " + generateUniqueName()

@@ -96,7 +96,6 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Maps.EntryTransformer;
 
 /**
  *
@@ -123,26 +122,18 @@ public class PhoenixRuntime {
 
     /**
      * Use this connection property to control HBase timestamps
-     * by specifying your own long timestamp value at connection time. All
-     * queries will use this as the upper bound of the time range for scans
-     * and DDL, and DML will use this as t he timestamp for key values.
+     * by specifying your own long timestamp value at connection time.
+     * Specifying this property will force the connection to be read
+     * only - no DML or DDL will be allowed.
      */
     public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
 
     /**
-     * Use this connection property to set the long time stamp value at
-     * which to replay DML statements after a write failure. The time
-     * stamp value must match the value returned by 
-     * {@link org.apache.phoenix.execute.CommitException#getServerTimestamp()}
-     * when the exception occurred. Used in conjunction with the 
-     * {@link org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy}
-     * index write failure policy to provide a means of the client replaying
-     * updates to ensure that secondary indexes are correctly caught up
-     * with any data updates when a write failure occurs. The updates
-     * should be replayed in ascending time stamp order.
+     * Internal connection property to force an index to be built at a
+     * given time stamp.
      */
-    public static final String REPLAY_AT_ATTRIB = "ReplayAt";
-
+    public static final String BUILD_INDEX_AT_ATTRIB = "BuildIndexAt";
+    
     /**
      * Use this connection property to help with fairness of resource allocation
      * for the client and server. The value of the attribute determines the

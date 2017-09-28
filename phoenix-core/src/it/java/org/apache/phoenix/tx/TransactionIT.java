@@ -44,12 +44,35 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class TransactionIT  extends ParallelStatsDisabledIT {
+
+    @Test
+    public void testQueryWithSCN() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
+        }
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            try {
+            	conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+                fail();
+            } catch (SQLException e) {
+                assertEquals("Unexpected Exception",
+                        SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET
+                                .getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
 
     @Test
     public void testReCreateTxnTableAfterDroppingExistingNonTxnTable() throws SQLException {

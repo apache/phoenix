@@ -585,14 +585,6 @@ public class MutationState implements SQLCloseable {
                 rowMutationsPertainingToIndex = rowMutations;
             }
             mutationList.addAll(rowMutations);
-            if (connection.isReplayMutations()) {
-                // Propagate IGNORE_NEWER_MUTATIONS when replaying mutations since there will be
-                // future dated data row mutations that will get in the way of generating the
-                // correct index rows on replay.
-                for (Mutation mutation : rowMutations) {
-                    mutation.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES, BaseScannerRegionObserver.REPLAY_TABLE_AND_INDEX_WRITES);
-                }
-            }
             if (mutationsPertainingToIndex != null) mutationsPertainingToIndex
                     .addAll(rowMutationsPertainingToIndex);
         }

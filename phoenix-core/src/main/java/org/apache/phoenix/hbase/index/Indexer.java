@@ -99,7 +99,6 @@ import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -395,14 +394,6 @@ public class Indexer extends BaseRegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  // Assume time stamp of mutation a client defined time stamp if it's not within
-  // a factor of ten of the current time.
-  // TODO: get rid of this and have client pass LATEST_TIMESTAMP unless an SCN is set
-  private static boolean isProbablyClientControlledTimeStamp(Mutation m) {
-      double ratio = EnvironmentEdgeManager.currentTimeMillis() / MetaDataUtil.getClientTimeStamp(m);
-      return ratio > 10 || ratio < 0.10;
-  }
-   
   private static void setTimeStamp(KeyValue kv, byte[] tsBytes) {
       int tsOffset = kv.getTimestampOffset();
       System.arraycopy(tsBytes, 0, kv.getBuffer(), tsOffset, Bytes.SIZEOF_LONG);
@@ -470,7 +461,7 @@ public class Indexer extends BaseRegionObserver {
       
       Mutation firstMutation = miniBatchOp.getOperation(0);
       ReplayWrite replayWrite = this.builder.getReplayWrite(firstMutation);
-      boolean resetTimeStamp = replayWrite == null && !isProbablyClientControlledTimeStamp(firstMutation);
+      boolean resetTimeStamp = replayWrite == null;
       long now = EnvironmentEdgeManager.currentTimeMillis();
       byte[] byteNow = Bytes.toBytes(now);
       for (int i = 0; i < miniBatchOp.size(); i++) {

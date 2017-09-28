@@ -162,7 +162,8 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             PTable pindexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, indxTable));
             assertEquals(PIndexState.BUILDING, pindexTable.getIndexState());
             assertEquals(rs.getLong(1), pindexTable.getTimeStamp());
-            //assert disabled timestamp is set correctly when index mutations are processed on the server
+
+            //assert disabled timestamp
             assertEquals(0, rs.getLong(2));
 
             String selectSql = String.format("SELECT LPAD(UPPER(NAME),11,'x')||'_xyz',ID FROM %s", fullTableName);
@@ -216,8 +217,6 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
                 assertEquals("xxUNAME" + i*1000 + "_xyz", rs.getString(1));
             }
             assertFalse(rs.next());
-
-           // conn.createStatement().execute(String.format("DROP INDEX  %s ON %s", indxTable, fullTableName));
         } finally {
             conn.close();
         }
