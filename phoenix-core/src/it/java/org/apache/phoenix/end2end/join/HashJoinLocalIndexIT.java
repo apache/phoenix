@@ -46,7 +46,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
         super(indexDDL, plans);
     }
     
-    @Parameters
+    @Parameters(name="HashJoinLocalIndexIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
