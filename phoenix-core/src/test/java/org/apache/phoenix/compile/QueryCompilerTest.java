@@ -82,6 +82,7 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -2257,18 +2258,20 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testQueryWithSCN() throws Exception {
+    public void testDMLOfNonIndexWithBuildIndexAt() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(1000));
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute(
+                    "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR)");
+        }
+        props.put(PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()+1));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             try {
-                conn.createStatement().execute(
-                                "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
+            	conn.createStatement().execute("UPSERT INTO T (k,v1) SELECT k,v1 FROM T");
                 fail();
             } catch (SQLException e) {
                 assertEquals("Unexpected Exception",
-                        SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET
+                        SQLExceptionCode.ONLY_INDEX_UPDATABLE_AT_SCN
                                 .getErrorCode(), e.getErrorCode());
             }
         }
@@ -2777,21 +2780,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
     
-    @Test
-    public void testSCNInOnDupKey() throws Exception {
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=100";
-        Connection conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("CREATE TABLE t1 (k1 integer not null, k2 integer not null, v bigint, constraint pk primary key (k1,k2))");
-        try {
-            conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_SET_SCN_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
-        } finally {
-            conn.close();
-        }
-    }
-
     @Test
     public void testOrderPreservingGroupBy() throws Exception {
         try (Connection conn= DriverManager.getConnection(getUrl())) {

@@ -17,11 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
-import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
@@ -145,7 +143,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
         conn.commit();
 
         String btableName = generateUniqueName();
-        ensureTableCreated(getUrl(),btableName, BTABLE_NAME, nextTimestamp()-2);
+        ensureTableCreated(getUrl(),btableName, BTABLE_NAME);
         statement = conn.prepareStatement(
                 "upsert into " + btableName + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
         statement.setString(1, "abc");

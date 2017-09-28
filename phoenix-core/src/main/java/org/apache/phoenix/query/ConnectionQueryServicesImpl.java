@@ -2412,6 +2412,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             try (PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
                                     scnProps, newEmptyMetaData())) {
                                 try {
+                                	metaConnection.setRunningUpgrade(true);
                                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                                 } catch (NewerTableAlreadyExistsException ignore) {
                                     // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed

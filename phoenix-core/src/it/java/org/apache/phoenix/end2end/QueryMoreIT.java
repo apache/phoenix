@@ -336,7 +336,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     @Test // see - https://issues.apache.org/jira/browse/PHOENIX-1696
     public void testSelectColumnMoreThanOnce() throws Exception {
         Date date = new Date(System.currentTimeMillis());
-        initEntityHistoryTableValues("abcd", getDefaultSplits("abcd"), date, 100l);
+        initEntityHistoryTableValues("abcd", getDefaultSplits("abcd"), date, null);
         String query = "SELECT NEW_VALUE, NEW_VALUE FROM " + TestUtil.ENTITY_HISTORY_TABLE_NAME + " LIMIT 1";
         ResultSet rs = DriverManager.getConnection(getUrl()).createStatement().executeQuery(query);
         assertTrue(rs.next());

@@ -133,8 +133,8 @@ public class JDBCUtil {
         return (scnStr == null ? null : Long.parseLong(scnStr));
     }
 
-    public static Long getReplayAt(String url, Properties info) throws SQLException {
-        String scnStr = findProperty(url, info, PhoenixRuntime.REPLAY_AT_ATTRIB);
+    public static Long getBuildIndexSCN(String url, Properties info) throws SQLException {
+        String scnStr = findProperty(url, info, PhoenixRuntime.BUILD_INDEX_AT_ATTRIB);
         return (scnStr == null ? null : Long.parseLong(scnStr));
     }
 
