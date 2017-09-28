@@ -61,6 +61,22 @@ public class ConnectionUtil {
     }
 
     /**
+     * Retrieve the configured input Connection for the target cluster.
+     *
+     * @param conf configuration containing connection information
+     * @param props custom connection properties
+     * @return the configured input connection
+     */
+    public static Connection getTargetInputConnection(final Configuration conf,
+            final Properties props) throws SQLException {
+        Preconditions.checkNotNull(conf);
+        return getConnection(PhoenixConfigurationUtil.getInputTargetCluster(conf),
+                PhoenixConfigurationUtil.getClientPort(conf),
+                PhoenixConfigurationUtil.getZNodeParent(conf),
+                PropertiesUtil.extractProperties(props, conf));
+    }
+
+    /**
      * Create the configured output Connection.
      *
      * @param conf configuration containing the connection information
