@@ -37,8 +37,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Properties;
 import java.util.Random;
 
@@ -79,10 +77,9 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class IndexIT extends ParallelStatsDisabledIT {
+public abstract class IndexIT extends ParallelStatsDisabledIT {
     private static final Random RAND = new Random();
 
     private final boolean localIndex;
@@ -90,7 +87,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
     private final boolean mutable;
     private final String tableDDLOptions;
 
-    public IndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
+    protected IndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
         this.localIndex = localIndex;
         this.transactional = transactional;
         this.mutable = mutable;
@@ -114,16 +111,6 @@ public class IndexIT extends ParallelStatsDisabledIT {
             optionBuilder.append(" TRANSACTIONAL=true ");
         }
         this.tableDDLOptions = optionBuilder.toString();
-    }
-
-    @Parameters(name="IndexIT_localIndex={0},mutable={1},transactional={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
-                { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
-                { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
-                { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
-           });
     }
 
     @Test
