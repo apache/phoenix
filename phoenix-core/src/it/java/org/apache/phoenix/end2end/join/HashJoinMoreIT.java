@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.end2end.join;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -30,6 +30,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
