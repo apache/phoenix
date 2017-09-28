@@ -294,6 +294,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                 String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                 metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
+                metaConnection.setRunningUpgrade(true);
                 try {
                     metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                 } catch (TableAlreadyExistsException ignore) {

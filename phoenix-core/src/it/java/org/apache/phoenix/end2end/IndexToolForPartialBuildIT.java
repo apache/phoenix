@@ -233,8 +233,6 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
                 assertEquals("xxUNAME" + i*1000 + "_xyz", rs.getString(1));
             }
             assertFalse(rs.next());
-
-           // conn.createStatement().execute(String.format("DROP INDEX  %s ON %s", indxTable, fullTableName));
         } finally {
             conn.close();
         }

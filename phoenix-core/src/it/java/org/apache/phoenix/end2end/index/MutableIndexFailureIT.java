@@ -25,7 +25,6 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -451,24 +450,6 @@ public class MutableIndexFailureIT extends BaseTest {
             assertEquals("c", rs.getString(1));
             assertEquals("z", rs.getString(2));
             assertFalse(rs.next());
-        }
-    }
-    
-    private void replayMutations() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        for (int i = 0; i < exceptions.size(); i++) {
-            CommitException e = exceptions.get(i);
-            long ts = e.getServerTimestamp();
-            props.setProperty(PhoenixRuntime.REPLAY_AT_ATTRIB, Long.toString(ts));
-            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-                if (i == 0) {
-                    updateTable(conn, false);
-                } else if (i == 1) {
-                    updateTableAgain(conn, false);
-                } else {
-                    fail();
-                }
-            }
         }
     }
     

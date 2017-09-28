@@ -895,7 +895,8 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("0", rs.getString(1));
             assertEquals(indexStateOnFailure == PIndexState.DISABLE ? fullTableName : fullIndexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
             TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
-            
+
+            clock.time += 1000;
             runIndexRebuilder();
             assertEquals(indexStateOnFailure == PIndexState.DISABLE ? PIndexState.INACTIVE : PIndexState.ACTIVE, TestUtil.getIndexState(conn, fullIndexName));
             clock.time += WAIT_AFTER_DISABLED;

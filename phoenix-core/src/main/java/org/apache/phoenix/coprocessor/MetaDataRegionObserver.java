@@ -530,9 +530,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             int indexRebuildRpcRetriesCounter =
                     config.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
-            // Set SCN so that we don't ping server and have the upper bound set back to
-            // the timestamp when the failure occurred.
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
             // Set various phoenix and hbase level timeouts and rpc retries
             props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
                 Long.toString(indexRebuildQueryTimeoutMs));

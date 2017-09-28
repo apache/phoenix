@@ -35,9 +35,8 @@ import org.junit.Test;
 public class QueryExecWithoutSCNIT extends ParallelStatsDisabledIT {
     @Test
     public void testScanNoSCN() throws Exception {
-        long ts = System.currentTimeMillis();
         String tenantId = getOrganizationId();
-        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), null, null, getUrl());
         String query = "SELECT a_string, b_string FROM " + tableName + " WHERE organization_id=? and a_integer = 5";
         Properties props = new Properties(); // Test with no CurrentSCN property set
         Connection conn = DriverManager.getConnection(getUrl(), props);
