@@ -30,7 +30,7 @@ public class HashJoinNoIndexIT extends HashJoinIT {
         super(indexDDL, plans);
     }
 
-    @Parameters
+    @Parameters(name="HashJoinNoIndexIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
