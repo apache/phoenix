@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.A_VALUE;
+import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -39,6 +41,9 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
+
+import com.google.common.primitives.Doubles;
+import com.google.common.primitives.Floats;
 
 public class NumericArithmeticIT extends ParallelStatsDisabledIT {
     private String tableName;
@@ -278,4 +283,144 @@ public class NumericArithmeticIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
+    @Test
+    public void testScanByByteValue() throws Exception {
+        String query = "SELECT a_string, b_string, a_byte FROM " + tableName + " WHERE ?=organization_id and 1=a_byte";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, getOrganizationId());
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertEquals(rs.getString("B_string"), B_VALUE);
+            assertEquals(rs.getByte(3), 1);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testScanByShortValue() throws Exception {
+        String query = "SELECT a_string, b_string, a_short FROM " + tableName + " WHERE ?=organization_id and 128=a_short";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, getOrganizationId());
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertEquals(rs.getString("B_string"), B_VALUE);
+            assertEquals(rs.getShort("a_short"), 128);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testScanByFloatValue() throws Exception {
+        String query = "SELECT a_string, b_string, a_float FROM " + tableName + " WHERE ?=organization_id and ?=a_float";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, getOrganizationId());
+            statement.setFloat(2, 0.01f);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertEquals(rs.getString("B_string"), B_VALUE);
+            assertTrue(Floats.compare(rs.getFloat(3), 0.01f) == 0);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testScanByUnsignedFloatValue() throws Exception {
+        String query = "SELECT a_string, b_string, a_unsigned_float FROM " + tableName + " WHERE ?=organization_id and ?=a_unsigned_float";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, getOrganizationId());
+            statement.setFloat(2, 0.01f);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertEquals(rs.getString("B_string"), B_VALUE);
+            assertTrue(Floats.compare(rs.getFloat(3), 0.01f) == 0);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testScanByDoubleValue() throws Exception {
+        String query = "SELECT a_string, b_string, a_double FROM " + tableName + " WHERE ?=organization_id and ?=a_double";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, getOrganizationId());
+            statement.setDouble(2, 0.0001);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertEquals(rs.getString("B_string"), B_VALUE);
+            assertTrue(Doubles.compare(rs.getDouble(3), 0.0001) == 0);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testScanByUnsignedDoubleValue() throws Exception {
+        String query = "SELECT a_string, b_string, a_unsigned_double FROM " + tableName + " WHERE ?=organization_id and ?=a_unsigned_double";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, getOrganizationId());
+            statement.setDouble(2, 0.0001);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), A_VALUE);
+            assertEquals(rs.getString("B_string"), B_VALUE);
+            assertTrue(Doubles.compare(rs.getDouble(3), 0.0001) == 0);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testScanWithNoWhereClause() throws Exception {
+        String query = "SELECT y_integer FROM " + tableName;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            for (int i =0; i < 8; i++) {
+                assertTrue (rs.next());
+                assertEquals(0, rs.getInt(1));
+                assertTrue(rs.wasNull());
+            }
+            assertTrue (rs.next());
+            assertEquals(300, rs.getInt(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+   
 }
