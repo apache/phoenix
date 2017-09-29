@@ -55,12 +55,16 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -1812,4 +1816,68 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         }
     }
 
+
+    @Test
+    public void testTimestamp() throws Exception {
+        String updateStmt = 
+            "upsert into " + tableName +
+            " (" +
+            "    ORGANIZATION_ID, " +
+            "    ENTITY_ID, " +
+            "    A_TIMESTAMP) " +
+            "VALUES (?, ?, ?)";
+        // Override value that was set at creation time
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection upsertConn = DriverManager.getConnection(url, props);
+        upsertConn.setAutoCommit(true); // Test auto commit
+        PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
+        stmt.setString(1, tenantId);
+        stmt.setString(2, ROW4);
+        Timestamp tsValue1 = new Timestamp(5000);
+        byte[] ts1 = PTimestamp.INSTANCE.toBytes(tsValue1);
+        stmt.setTimestamp(3, tsValue1);
+        stmt.execute();
+        
+        Connection conn1 = DriverManager.getConnection(url, props);
+        TestUtil.analyzeTable(conn1, tableName);
+        conn1.close();
+        
+        updateStmt = 
+            "upsert into " + tableName +
+            " (" +
+            "    ORGANIZATION_ID, " +
+            "    ENTITY_ID, " +
+            "    A_TIMESTAMP," +
+            "    A_TIME) " +
+            "VALUES (?, ?, ?, ?)";
+        stmt = upsertConn.prepareStatement(updateStmt);
+        stmt.setString(1, tenantId);
+        stmt.setString(2, ROW5);
+        Timestamp tsValue2 = new Timestamp(5000);
+        tsValue2.setNanos(200);
+        byte[] ts2 = PTimestamp.INSTANCE.toBytes(tsValue2);
+        stmt.setTimestamp(3, tsValue2);
+        stmt.setTime(4, new Time(tsValue2.getTime()));
+        stmt.execute();
+        upsertConn.close();
+        
+        assertTrue(TestUtil.compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
+        assertFalse(TestUtil.compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
+
+        String query = "SELECT entity_id, a_timestamp, a_time FROM " + tableName + " WHERE organization_id=? and a_timestamp > ?";
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setTimestamp(2, new Timestamp(5000));
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), ROW5);
+            assertEquals(rs.getTimestamp("A_TIMESTAMP"), tsValue2);
+            assertEquals(rs.getTime("A_TIME"), new Time(tsValue2.getTime()));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }

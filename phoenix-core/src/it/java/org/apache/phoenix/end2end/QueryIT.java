@@ -41,15 +41,10 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -168,70 +163,6 @@ public class QueryIT extends BaseQueryIT {
     }
     
     @Test
-    public void testTimestamp() throws Exception {
-        String updateStmt = 
-            "upsert into " + tableName +
-            " (" +
-            "    ORGANIZATION_ID, " +
-            "    ENTITY_ID, " +
-            "    A_TIMESTAMP) " +
-            "VALUES (?, ?, ?)";
-        // Override value that was set at creation time
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW4);
-        Timestamp tsValue1 = new Timestamp(5000);
-        byte[] ts1 = PTimestamp.INSTANCE.toBytes(tsValue1);
-        stmt.setTimestamp(3, tsValue1);
-        stmt.execute();
-        
-        Connection conn1 = DriverManager.getConnection(url, props);
-        analyzeTable(conn1, tableName);
-        conn1.close();
-        
-        updateStmt = 
-            "upsert into " + tableName +
-            " (" +
-            "    ORGANIZATION_ID, " +
-            "    ENTITY_ID, " +
-            "    A_TIMESTAMP," +
-            "    A_TIME) " +
-            "VALUES (?, ?, ?, ?)";
-        stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW5);
-        Timestamp tsValue2 = new Timestamp(5000);
-        tsValue2.setNanos(200);
-        byte[] ts2 = PTimestamp.INSTANCE.toBytes(tsValue2);
-        stmt.setTimestamp(3, tsValue2);
-        stmt.setTime(4, new Time(tsValue2.getTime()));
-        stmt.execute();
-        upsertConn.close();
-        
-        assertTrue(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
-        assertFalse(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
-
-        String query = "SELECT entity_id, a_timestamp, a_time FROM " + tableName + " WHERE organization_id=? and a_timestamp > ?";
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setTimestamp(2, new Timestamp(5000));
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW5);
-            assertEquals(rs.getTimestamp("A_TIMESTAMP"), tsValue2);
-            assertEquals(rs.getTime("A_TIME"), new Time(tsValue2.getTime()));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
-    @Test
     public void testSimpleInListStatement() throws Exception {
         String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_integer IN (2,4)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -315,52 +246,6 @@ public class QueryIT extends BaseQueryIT {
             assertEquals(ROW7, rs.getString(1));
             assertTrue(rs.next());
             assertEquals(ROW9, rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
-    @Test
-    public void testIsNull() throws Exception {
-        String query = "SELECT entity_id FROM " + tableName + " WHERE X_DECIMAL is null";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW1);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW2);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW3);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW4);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW5);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW6);
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testIsNotNull() throws Exception {
-        String query = "SELECT entity_id FROM " + tableName + " WHERE X_DECIMAL is not null";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW7);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW8);
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), ROW9);
             assertFalse(rs.next());
         } finally {
             conn.close();
