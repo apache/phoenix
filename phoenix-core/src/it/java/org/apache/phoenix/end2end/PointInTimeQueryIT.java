@@ -50,7 +50,6 @@ import com.google.common.collect.Lists;
 public class PointInTimeQueryIT extends BaseQueryIT {
 
     @Parameters(name="PointInTimeQueryIT_{index},mutable={1},columnEncoded={2}")
-    @Shadower(classBeingShadowed = BaseQueryIT.class)
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {

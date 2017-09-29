@@ -32,6 +32,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -41,9 +42,15 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.runners.Parameterized.Parameters;
 
 public class AggregateQueryIT extends BaseQueryIT {
 
+    @Parameters(name="AggregateQueryIT_{index}") // name is used by failsafe as file name in reports
+    public static Collection<Object> data() {
+        return BaseQueryIT.allIndexes();
+    }
+    
     public AggregateQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
     }
