@@ -51,27 +51,41 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected static final String tenantId = getOrganizationId();
     protected static final String ATABLE_INDEX_NAME = "ATABLE_IDX";
     protected static final long BATCH_SIZE = 3;
-    protected static final String[] INDEX_DDLS = new String[] {
-            "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
-            "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
-                    + "    B_STRING, " + "    A_DATE) %s",
-            "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
-            "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
-            "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
-                    + "    A_DATE) %s",
-            "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE) %s",
-            "" };
-
+    protected static final String NO_INDEX = "";
+    protected static final String[] GLOBAL_INDEX_DDLS =
+            new String[] {
+                    "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE (" + "    A_STRING, "
+                            + "    B_STRING, " + "    A_DATE) %s",
+                    "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
+                            + "    A_DATE) %s",
+                    "CREATE INDEX %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
+                            + "    B_STRING, " + "    A_DATE) %s",
+                    NO_INDEX };
+    protected static final String[] LOCAL_INDEX_DDLS =
+            new String[] {
+                    "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE (" + "    A_STRING, "
+                            + "    B_STRING, " + "    A_DATE) %s",
+                    "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
+                            + "    A_DATE) %s",
+                    "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
+                            + "    B_STRING, " + "    A_DATE) %s" };
+    protected static String[] INDEX_DDLS;
+    static {
+        INDEX_DDLS = new String[GLOBAL_INDEX_DDLS.length + LOCAL_INDEX_DDLS.length];
+        int i = 0;
+        for (String s : GLOBAL_INDEX_DDLS) {
+            INDEX_DDLS[i++] = s;
+        }
+        for (String s : LOCAL_INDEX_DDLS) {
+            INDEX_DDLS[i++] = s;
+        }
+    }
     protected Date date;
     private String indexDDL;
     private String tableDDLOptions;
     protected String tableName;
     protected String indexName;
-    
+
     private static final Logger logger = LoggerFactory.getLogger(BaseQueryIT.class);
 
     public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded,
@@ -81,23 +95,23 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             optionBuilder.append("COLUMN_ENCODED_BYTES=0");
         }
         if (!mutable) {
-            if (optionBuilder.length()>0)
-                optionBuilder.append(",");
+            if (optionBuilder.length() > 0) optionBuilder.append(",");
             optionBuilder.append("IMMUTABLE_ROWS=true");
             if (!columnEncoded) {
-                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="
+                        + PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             }
         }
         if (keepDeletedCells) {
-            if (optionBuilder.length()>0)
-                optionBuilder.append(",");
+            if (optionBuilder.length() > 0) optionBuilder.append(",");
             optionBuilder.append("KEEP_DELETED_CELLS=true");
         }
         this.tableDDLOptions = optionBuilder.toString();
         try {
             this.tableName =
                     initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
-                        date = new Date(System.currentTimeMillis()), null, getUrl(), tableDDLOptions);
+                        date = new Date(System.currentTimeMillis()), null, getUrl(),
+                        tableDDLOptions);
         } catch (Exception e) {
             logger.error("Exception when creating aTable ", e);
             throw e;
@@ -116,13 +130,26 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             }
         }
     }
-    
-    @Parameters(name="indexDDL={0},mutable={1},columnEncoded={2}")
-    public static Collection<Object> data() {
+
+    @Parameters(name = "indexDDL={0},mutable={1},columnEncoded={2}")
+    public static Collection<Object> allIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
-            for (boolean mutable : new boolean[]{false}) {
-                for (boolean columnEncoded : new boolean[]{false}) {
+            for (boolean mutable : new boolean[] { false }) {
+                for (boolean columnEncoded : new boolean[] { false }) {
+                    testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
+                }
+            }
+        }
+        return testCases;
+    }
+
+    @Parameters(name = "localIndexDDL={0}")
+    public static Collection<Object> localIndexes() {
+        List<Object> testCases = Lists.newArrayList();
+        for (String indexDDL : LOCAL_INDEX_DDLS) {
+            for (boolean mutable : new boolean[] { false }) {
+                for (boolean columnEncoded : new boolean[] { false }) {
                     testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
                 }
             }
