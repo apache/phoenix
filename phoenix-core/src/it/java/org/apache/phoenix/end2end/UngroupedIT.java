@@ -46,7 +46,7 @@ public class UngroupedIT extends BaseQueryIT {
 
     public UngroupedIT(String idxDdl, boolean mutable, boolean columnEncoded)
             throws Exception {
-        super(idxDdl, mutable, columnEncoded, false);
+        super(idxDdl, columnEncoded, false);
     }
 
     @Parameters(name="UngroupedIT_{index}") // name is used by failsafe as file name in reports
