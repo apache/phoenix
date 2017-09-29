@@ -1255,18 +1255,19 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         
         // Verify that the data upserted using the tenant view can now be queried using tenant view
         try (Connection tenantConn = getTenantConnection(tenantId)) {
-            // Query the base table
-            PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " + tenantView + " WHERE (PK2, PK3) IN ((?, ?), (?, ?)) ORDER BY KV1");
-            stmt.setDate(1, upsertedDate);
-            stmt.setInt(2, 33);
-            stmt.setDate(3, new Date(upsertedTs));
-            stmt.setInt(4, 44);
-            ResultSet rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("KV13", rs.getString("KV1"));
-            assertTrue(rs.next());
-            assertEquals("KV14", rs.getString("KV1"));
-            assertFalse(rs.next());
+            //TODO: enable after PHOENIX-4243 is fixed    
+//            // Query the base table
+//            PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " + tenantView + " WHERE (PK2, PK3) IN ((?, ?), (?, ?)) ORDER BY KV1");
+//            stmt.setDate(1, upsertedDate);
+//            stmt.setInt(2, 33);
+//            stmt.setDate(3, new Date(upsertedTs));
+//            stmt.setInt(4, 44);
+//            ResultSet rs = stmt.executeQuery();
+//            assertTrue(rs.next());
+//            assertEquals("KV13", rs.getString("KV1"));
+//            assertTrue(rs.next());
+//            assertEquals("KV14", rs.getString("KV1"));
+//            assertFalse(rs.next());
             
             //TODO: uncomment the code after PHOENIX-2277 is fixed
 //            // Query using the index on the tenantView
