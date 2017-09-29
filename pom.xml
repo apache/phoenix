@@ -284,24 +284,6 @@
               </goals>
             </execution>
             <execution>
-              <id>ClientManagedTimeTests</id>
-                <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
-                <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2500m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
-                <shutdown>kill</shutdown>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-            <execution>
               <id>HBaseManagedTimeTests</id>
               <configuration>
                 <encoding>UTF-8</encoding>
