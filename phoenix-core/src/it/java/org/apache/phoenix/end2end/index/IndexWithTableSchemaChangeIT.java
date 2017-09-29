@@ -424,10 +424,9 @@ public class IndexWithTableSchemaChangeIT extends ParallelStatsDisabledIT {
 
         // make sure that the tables are empty, but reachable
         conn.createStatement().execute(
-          "CREATE TABLE " + dataTableFullName
+          "CREATE " + (immutable ? "IMMUTABLE" : "") + " TABLE " + dataTableFullName
               + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
-              + (immutable ? "IMMUTABLE_ROWS = true" : "")
-              + (!columnEncoded ? ",IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : ""));
+              + (!columnEncoded ? "IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : ""));
         query = "SELECT * FROM " + dataTableFullName;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
