@@ -24,7 +24,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -34,22 +33,17 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 /**
  * Suite of integration tests that validate that Bulk Allocation of Sequence values
@@ -62,7 +56,6 @@ import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
-    private static final long BATCH_SIZE = 3;
     private static final String SELECT_NEXT_VALUE_SQL =
             "SELECT NEXT VALUE FOR %s";
     private static final String SELECT_CURRENT_VALUE_SQL =
@@ -73,7 +66,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
             "CREATE SEQUENCE %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s";
     private static final String CREATE_SEQUENCE_WITH_MIN_MAX_AND_CYCLE_TEMPLATE =
             "CREATE SEQUENCE %s START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CYCLE CACHE %s";
-
+    private static final String SCHEMA_NAME = "S";
     
     private Connection conn;
     private String tenantId;
@@ -87,16 +80,12 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
         return new Object[] {null, "tenant1"};
     }
 
-    private static String generateNameWithSchema() {
-    	return SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+    private static String generateTableNameWithSchema() {
+        return SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueName());
     }
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMap();
-        props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    
+    private static String generateSequenceNameWithSchema() {
+        return SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueSequenceName());
     }
 
     @Before
@@ -114,7 +103,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceParseNextValuesWithNull() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         try {
             conn.createStatement().executeQuery(
                 "SELECT NEXT NULL VALUES FOR  " + sequenceName);
@@ -128,7 +117,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceParseNextValuesWithNonNumber() throws Exception {
-    	String sequenceName = generateNameWithSchema();    
+    	String sequenceName = generateSequenceNameWithSchema();    
         try {
             conn.createStatement().executeQuery(
                 "SELECT NEXT '89b' VALUES FOR  " + sequenceName);
@@ -143,7 +132,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceParseNextValuesWithNegativeNumber() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         try {
             conn.createStatement().executeQuery(
                 "SELECT NEXT '-1' VALUES FOR  " + sequenceName);
@@ -157,7 +146,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testParseNextValuesSequenceWithZeroAllocated() throws Exception {
-    	String sequenceName = generateNameWithSchema();    
+    	String sequenceName = generateSequenceNameWithSchema();    
         try {
             conn.createStatement().executeQuery(
                 "SELECT NEXT 0 VALUES FOR  " + sequenceName);
@@ -172,7 +161,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNextValuesForSequenceWithNoAllocatedValues() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(1)
                         .numAllocated(100).build();
@@ -196,7 +185,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      */
     public void testNextValuesForSequenceUsingBinds() throws Exception {
         // Create Sequence
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(1)
                         .numAllocated(100).build();
@@ -217,7 +206,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNextValuesForSequenceWithPreviouslyAllocatedValues() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -247,7 +236,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * the latest batch.
      */
     public void testConnectionCloseReturnsSequenceValuesCorrectly() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(2).startsWith(1).cacheSize(100)
                         .numAllocated(100).build();
@@ -279,8 +268,8 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * Validates that calling NEXT <n> VALUES FOR <seq> works correctly with UPSERT.
      */
     public void testNextValuesForSequenceWithUpsert() throws Exception {
-    	String sequenceName = generateNameWithSchema();
-    	String tableName = generateUniqueName();
+    	String sequenceName = generateSequenceNameWithSchema();
+    	String tableName = generateTableNameWithSchema();
     	
         // Create Sequence
         final SequenceProperties props =
@@ -318,7 +307,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNextValuesForSequenceWithIncrementBy() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(3).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -341,7 +330,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNextValuesForSequenceWithNegativeIncrementBy() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(-1).startsWith(2000).cacheSize(100)
                         .numAllocated(1000).build();
@@ -365,7 +354,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNextValuesForSequenceWithNegativeIncrementByGreaterThanOne() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(-5).startsWith(2000).cacheSize(100)
                         .numAllocated(100).build();
@@ -397,7 +386,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * have access to all slots requested.
      */
     public void testNextValuesForSequenceExceedsMaxValue() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties sequenceProps =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(100).cacheSize(100)
                         .numAllocated(1000).minValue(100).maxValue(900).build();
@@ -434,7 +423,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * have access to all slots requested.
      */
     public void testNextValuesForSequenceExceedsMinValue() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties sequenceProps =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(-5).startsWith(900).cacheSize(100)
                         .numAllocated(160).minValue(100).maxValue(900).build();
@@ -470,7 +459,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * min and max defined.
      */
     public void testNextValuesForSequenceWithMinMaxDefined() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(5).startsWith(100).cacheSize(100)
                         .numAllocated(1000).minValue(100).maxValue(6000).build();
@@ -493,7 +482,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNextValuesForSequenceWithDefaultMax() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(100).cacheSize(100)
                         .numAllocated(Long.MAX_VALUE - 100).build();
@@ -524,7 +513,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * the expression is evaluated.
      */
     public void testNextValuesForSequenceOverflowAllocation() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(100).cacheSize(100)
                         .numAllocated(Long.MAX_VALUE).build();
@@ -551,7 +540,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * as expected.
      */
     public void testNextValuesForSequenceAllocationLessThanCacheSize() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(5).startsWith(100).cacheSize(100)
                         .numAllocated(50).minValue(100).maxValue(6000).build();
@@ -583,7 +572,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * as expected if we don't have enough values in the cache to support the allocation.
      */
     public void testNextValuesForInsufficentCacheValuesAllocationLessThanCacheSize() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(5).startsWith(100).cacheSize(100)
                         .numAllocated(50).minValue(100).maxValue(6000).build();
@@ -618,7 +607,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * CYCLE flag set to true.
      */
     public void testNextValuesForSequenceWithCycles() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties sequenceProps =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(5).startsWith(100).cacheSize(100)
                         .numAllocated(1000).minValue(100).maxValue(900).build();
@@ -654,7 +643,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * CURRENT VALUE FOR expression work correctly when used in the same statement.
      */
     public void testCurrentValueForAndNextValuesForExpressionsForSameSequence() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -691,7 +680,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * value for that for all expressions.
      */
     public void testMultipleNextValuesForExpressionsForSameSequence() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -728,7 +717,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * NEXT VALUE FOR <seq> is assumed to be 1.
      */
     public void testMultipleDifferentExpressionsForSameSequence() throws Exception {
-    	String sequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -779,8 +768,8 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * sync during the sequence management process.
      */
     public void testMultipleNextValuesForExpressionsForDifferentSequences() throws Exception {
-    	String sequenceName = generateNameWithSchema();
-    	String secondSequenceName = generateNameWithSchema();
+    	String sequenceName = generateSequenceNameWithSchema();
+    	String secondSequenceName = generateSequenceNameWithSchema();
 
         conn.createStatement().execute("CREATE SEQUENCE  " + sequenceName + "  START WITH 30 INCREMENT BY 3 CACHE 100");
         conn.createStatement().execute("CREATE SEQUENCE " + secondSequenceName + " START WITH 100 INCREMENT BY 5 CACHE 50");
@@ -811,8 +800,8 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * allocate any slots. 
      */
     public void testExplainPlanValidatesSequences() throws Exception {
-    	String sequenceName = generateNameWithSchema();
-    	String tableName = generateUniqueName();
+    	String sequenceName = generateSequenceNameWithSchema();
+    	String tableName = generateTableNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(3).startsWith(30).cacheSize(100)
                         .numAllocated(1000).build();
@@ -844,8 +833,8 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testExplainPlanForNextValuesFor() throws Exception {
-    	String sequenceName = generateNameWithSchema();
-    	String tableName = generateUniqueName();
+    	String sequenceName = generateSequenceNameWithSchema();
+    	String tableName = generateTableNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(3).startsWith(30).cacheSize(100)
                         .numAllocated(1000).build();
@@ -876,7 +865,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
      * 4) Read back value from expression NEXT <n> VALUES FOR <seq> via rs.next()
      */
     public void testNextValuesForMixedWithNextValueForMultiThreaded() throws Exception {
-    	final String sequenceName = generateNameWithSchema();
+    	final String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -939,7 +928,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultipleNextValuesWithDiffAllocsForMultiThreaded() throws Exception {
-    	final String sequenceName = generateNameWithSchema();
+    	final String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();
@@ -1010,7 +999,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultipleNextValuesWithSameAllocsForMultiThreaded() throws Exception {
-    	final String sequenceName = generateNameWithSchema();
+    	final String sequenceName = generateSequenceNameWithSchema();
         final SequenceProperties props =
                 new SequenceProperties.Builder().name(sequenceName).incrementBy(1).startsWith(1).cacheSize(100)
                         .numAllocated(1000).build();

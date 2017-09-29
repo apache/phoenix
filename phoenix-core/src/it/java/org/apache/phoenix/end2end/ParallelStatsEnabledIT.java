@@ -38,7 +38,7 @@ import com.google.common.collect.Maps;
 public abstract class ParallelStatsEnabledIT extends BaseTest {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static final void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));

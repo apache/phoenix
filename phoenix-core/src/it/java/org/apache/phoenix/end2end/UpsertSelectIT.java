@@ -42,8 +42,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.QueryPlan;
@@ -56,24 +54,11 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class UpsertSelectIT extends ParallelStatsDisabledIT {
 	
-  @BeforeClass
-  @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-  public static void doSetup() throws Exception {
-      Map<String,String> props = new HashMap<>();
-      props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(500));
-      props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
-
-      // Must update config before starting server
-      setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-  }
-    
     @Test
     public void testUpsertSelectWithNoIndex() throws Exception {
         testUpsertSelect(false, false);
