@@ -47,15 +47,17 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
-public class DateArithmeticIT extends BaseQueryIT {
-
-    public DateArithmeticIT(String idxDdl, boolean mutable, boolean columnEncoded, boolean keepDeletedCells)
-            throws Exception {
-        super(idxDdl, mutable, columnEncoded, keepDeletedCells);
-    }
-
+public class DateArithmeticIT extends ParallelStatsDisabledIT {
+    
     @Test
     public void testValidArithmetic() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Date date = new Date(System.currentTimeMillis());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName =
+                initATableValues(generateUniqueName(), getOrganizationId(), getDefaultSplits(getOrganizationId()),
+                    date, null, getUrl(), "COLUMN_ENCODED_BYTES=0");
+
         String[] queries = new String[] { 
                 "SELECT entity_id,organization_id FROM " + tableName + " where (A_DATE - A_DATE) * 5 < 0",
                 "SELECT entity_id,organization_id FROM " + tableName + " where 1 + A_DATE  < A_DATE",
@@ -63,24 +65,21 @@ public class DateArithmeticIT extends BaseQueryIT {
                 };
 
         for (String query : queries) {
-            Properties props = new Properties();
-            Connection conn = DriverManager.getConnection(getUrl(), props);
-            try {
                 PreparedStatement statement = conn.prepareStatement(query);
                 statement.executeQuery();
-            }
-            finally {
-                conn.close();
-            }
         }
+        conn.close();
     }
     
     @Test
     public void testDateAdd() throws Exception {
-        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE a_date + CAST(0.5 AS DOUBLE) < ?";
-        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Date date = new Date(System.currentTimeMillis());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName =
+                initATableValues(generateUniqueName(), getOrganizationId(), getDefaultSplits(getOrganizationId()),
+                    date, null, getUrl(), "COLUMN_ENCODED_BYTES=0");
+        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE a_date + CAST(0.5 AS DOUBLE) < ?";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setDate(1, new Date(System.currentTimeMillis() + MILLIS_IN_DAY));
@@ -98,10 +97,13 @@ public class DateArithmeticIT extends BaseQueryIT {
     
     @Test
     public void testDateSubtract() throws Exception {
-        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE a_date - CAST(0.5 AS DOUBLE) > ?";
-        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        Date date = new Date(System.currentTimeMillis());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName =
+                initATableValues(generateUniqueName(), getOrganizationId(), getDefaultSplits(getOrganizationId()),
+                    date, null, getUrl(), "COLUMN_ENCODED_BYTES=0");
+        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE a_date - CAST(0.5 AS DOUBLE) > ?";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setDate(1, new Date(System.currentTimeMillis() + MILLIS_IN_DAY));
@@ -119,11 +121,12 @@ public class DateArithmeticIT extends BaseQueryIT {
 
     @Test
     public void testDateDateSubtract() throws Exception {
-        String url;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        
-        url = getUrl();
-        Connection conn = DriverManager.getConnection(url, props);
+        Date date = new Date(System.currentTimeMillis());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName =
+                initATableValues(generateUniqueName(), getOrganizationId(), getDefaultSplits(getOrganizationId()),
+                    date, null, getUrl(), "COLUMN_ENCODED_BYTES=0");
         PreparedStatement statement = conn.prepareStatement("UPSERT INTO  " + tableName + " (organization_id,entity_id,a_time) VALUES(?,?,?)");
         statement.setString(1, getOrganizationId());
         statement.setString(2, ROW2);
@@ -303,5 +306,4 @@ public class DateArithmeticIT extends BaseQueryIT {
       assertTrue(rs.next());
       assertEquals("1995-05-01",rs.getDate(1).toString());
     }
-
 }

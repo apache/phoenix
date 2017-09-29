@@ -22,7 +22,6 @@ import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
-import static org.apache.phoenix.util.TestUtil.ROW3;
 import static org.apache.phoenix.util.TestUtil.ROW4;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.ROW6;
@@ -48,9 +47,9 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 
-public class MutableQueryIT extends BaseQueryIT {
-    
-    @Parameters(name="indexDDL={0},mutable={1},columnEncoded={2}")
+public class PointInTimeQueryIT extends BaseQueryIT {
+
+    @Parameters(name="PointInTimeQueryIT_{index},mutable={1},columnEncoded={2}")
     @Shadower(classBeingShadowed = BaseQueryIT.class)
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
@@ -62,181 +61,12 @@ public class MutableQueryIT extends BaseQueryIT {
         return testCases;
     }
     
-    public MutableQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, true);
-    }
-    
-    @Test
-    public void testSumOverNullIntegerColumn() throws Exception {
-        String query = "SELECT sum(a_integer) FROM " + tableName + " a";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) VALUES('" + getOrganizationId() + "','" + ROW3 + "',NULL)");
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn1, tableName);
-        conn1.close();
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(42, rs.getInt(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) SELECT organization_id, entity_id, CAST(null AS integer) FROM " + tableName);
-
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(0, rs.getInt(1));
-            assertTrue(rs.wasNull());
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
-    private void testNoStringValue(String value) throws Exception {
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(
-                "upsert into " + tableName + " VALUES (?, ?, ?)"); // without specifying columns
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW5);
-        stmt.setString(3, value);
-        stmt.execute(); // should commit too
-        upsertConn.close();
-        
-        Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn1, tableName);
-        conn1.close();
-        
-        String query = "SELECT a_string, b_string FROM " + tableName + " WHERE organization_id=? and a_integer = 5";
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(null, rs.getString(1));
-            assertTrue(rs.wasNull());
-            assertEquals(C_VALUE, rs.getString("B_string"));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
+    public PointInTimeQueryIT(String idxDdl, boolean mutable, boolean columnEncoded, boolean keepDeletedCells)
+            throws Exception {
+        // These queries fail without KEEP_DELETED_CELLS=true
+        super(idxDdl, mutable, columnEncoded, true);
     }
 
-    @Test
-    public void testNullStringValue() throws Exception {
-        testNoStringValue(null);
-    }
-    
-    @Test
-    public void testEmptyStringValue() throws Exception {
-        testNoStringValue("");
-    }
-    
-    @Test
-    public void testUnfoundSingleColumnCaseStatement() throws Exception {
-        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE organization_id=? and CASE WHEN a_integer = 0 or a_integer != 0 THEN 1 ELSE 0 END = 0";
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        // Set ROW5.A_INTEGER to null so that we have one row
-        // where the else clause of the CASE statement will
-        // fire.
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        String upsertStmt =
-            "upsert into " + tableName +
-            " (" +
-            "    ENTITY_ID, " +
-            "    ORGANIZATION_ID, " +
-            "    A_INTEGER) " +
-            "VALUES ('" + ROW5 + "','" + tenantId + "', null)";
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.execute(); // should commit too
-        upsertConn.close();
-        
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(ROW5, rs.getString(1));
-        assertFalse(rs.next());
-        conn.close();
-    }
-    
-    @SuppressWarnings("unchecked")
-    @Test
-    public void testGroupByCondition() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
-        statement.setString(1, tenantId);
-        ResultSet rs = statement.executeQuery();
-        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,8L));
-        try {
-            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
-            statement.setString(1, tenantId);
-            rs = statement.executeQuery();
-            List<List<Object>> expectedResults = Lists.newArrayList(
-                    Arrays.<Object>asList(1L,false),
-                    Arrays.<Object>asList(1L,true));
-            assertValuesEqualsResultSet(rs, expectedResults);
-        } finally {
-            conn.close();
-        }
-
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            statement = conn.prepareStatement("UPSERT into " + tableName + " (organization_id,entity_id,a_integer) values(?,?,null)");
-            statement.setString(1, tenantId);
-            statement.setString(2, ROW3);
-            statement.executeUpdate();
-            conn.commit();
-        } finally {
-            conn.close();
-        }
-        conn = DriverManager.getConnection(getUrl(), props);
-        statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
-        statement.setString(1, tenantId);
-        rs = statement.executeQuery();
-        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,1L,7L));
-        statement = conn.prepareStatement("SELECT a_integer, entity_id FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null)");
-        statement.setString(1, tenantId);
-        rs = statement.executeQuery();
-        List<List<Object>> expectedResults = Lists.newArrayList(
-                Arrays.<Object>asList(null,ROW3),
-                Arrays.<Object>asList(5,ROW5),
-                Arrays.<Object>asList(6,ROW6));
-        assertValuesEqualsResultSet(rs, expectedResults);
-        try {
-            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
-            statement.setString(1, tenantId);
-            rs = statement.executeQuery();
-            expectedResults = Lists.newArrayList(
-                    Arrays.<Object>asList(1L,null),
-                    Arrays.<Object>asList(1L,false),
-                    Arrays.<Object>asList(1L,true));
-            assertValuesEqualsResultSet(rs, expectedResults);
-        } finally {
-            conn.close();
-        }
-    }
-    
     @Test
     public void testPointInTimeDeleteUngroupedAggregation() throws Exception {
         String updateStmt = 
@@ -402,4 +232,5 @@ public class MutableQueryIT extends BaseQueryIT {
         assertOneOfValuesEqualsResultSet(rs, expectedResultsA,expectedResultsB);
        conn.close();
     }
+    
 }
