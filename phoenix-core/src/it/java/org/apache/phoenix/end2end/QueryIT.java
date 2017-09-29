@@ -32,11 +32,13 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.runners.Parameterized.Parameters;
 
 
 /**
@@ -45,6 +47,11 @@ import org.junit.Test;
  *
  */
 public class QueryIT extends BaseQueryIT {
+    
+    @Parameters(name="QueryIT_{index}") // name is used by failsafe as file name in reports
+    public static Collection<Object> data() {
+        return BaseQueryIT.allIndexes();
+    }    
     
     public QueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
