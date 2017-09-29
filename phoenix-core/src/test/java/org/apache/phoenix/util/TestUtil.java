@@ -1013,6 +1013,10 @@ public class TestUtil {
             }
         }
     }
-    
+     
+    public static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
+        int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
+        return ByteUtil.compare(op, compareResult);
+    }
 
 }

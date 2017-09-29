@@ -19,21 +19,14 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -136,20 +129,4 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
         }
         return testCases;
     }
-    
-    protected static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
-        int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
-        return ByteUtil.compare(op, compareResult);
-    }
-
-    protected static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
-        String query = "UPDATE STATISTICS " + tableName;
-        conn.createStatement().execute(query);
-    }
-    
-    private static AtomicInteger runCount = new AtomicInteger(0);
-    protected static int nextRunCount() {
-        return runCount.getAndAdd(1);
-    }
-
 }

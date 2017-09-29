@@ -42,7 +42,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -248,4 +247,36 @@ public class CaseStatementIT extends BaseQueryIT {
         }
     }
 
+    @Test
+    public void testUnfoundSingleColumnCaseStatement() throws Exception {
+        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE organization_id=? and CASE WHEN a_integer = 0 or a_integer != 0 THEN 1 ELSE 0 END = 0";
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        // Set ROW5.A_INTEGER to null so that we have one row
+        // where the else clause of the CASE statement will
+        // fire.
+        Connection upsertConn = DriverManager.getConnection(url, props);
+        String upsertStmt =
+            "upsert into " + tableName +
+            " (" +
+            "    ENTITY_ID, " +
+            "    ORGANIZATION_ID, " +
+            "    A_INTEGER) " +
+            "VALUES ('" + ROW5 + "','" + tenantId + "', null)";
+        upsertConn.setAutoCommit(true); // Test auto commit
+        // Insert all rows at ts
+        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
+        stmt.execute(); // should commit too
+        upsertConn.close();
+        
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.setString(1, tenantId);
+        ResultSet rs = statement.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(ROW5, rs.getString(1));
+        assertFalse(rs.next());
+        conn.close();
+    }
+   
 }
