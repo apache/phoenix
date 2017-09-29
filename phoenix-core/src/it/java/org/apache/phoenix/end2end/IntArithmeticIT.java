@@ -51,7 +51,7 @@ public class IntArithmeticIT extends BaseQueryIT {
         super(indexDDL, mutable, columnEncoded, false);
     }
     
-    @Parameters(name="ClientTimeArithmeticQueryIT_{index}") // name is used by failsafe as file name in reports
+    @Parameters(name="IntArithmeticIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
         return QueryIT.data();
     }
@@ -158,22 +158,6 @@ public class IntArithmeticIT extends BaseQueryIT {
             assertTrue (rs.next());
             assertEquals(ROW9, rs.getString(1));
             assertEquals(3, rs.getInt(2));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-    
-    @Test
-    public void testNegateExpression() throws Exception {
-        String query = "SELECT entity_id FROM " + tableName + " where A_INTEGER - 4 = -1";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(ROW3, rs.getString(1));
             assertFalse(rs.next());
         } finally {
             conn.close();
