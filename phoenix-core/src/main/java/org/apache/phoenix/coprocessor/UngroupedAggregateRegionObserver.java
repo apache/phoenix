@@ -164,7 +164,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     /**
      * This lock used for synchronizing the state of
      * {@link UngroupedAggregateRegionObserver#scansReferenceCount},
-     * {@link UngroupedAggregateRegionObserver#isRegionClosingOrSplitting} variables used to avoid possible
+     * {@link UngroupedAggregateRegionObserver#isRegionClosing} variables used to avoid possible
      * dead lock situation in case below steps: 
      * 1. We get read lock when we start writing local indexes, deletes etc.. 
      * 2. when memstore reach threshold, flushes happen. Since they use read (shared) lock they 
@@ -191,7 +191,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @GuardedBy("lock")
     private int scansReferenceCount = 0;
     @GuardedBy("lock")
-    private boolean isRegionClosingOrSplitting = false;
+    private boolean isRegionClosing = false;
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
     private Configuration upsertSelectConfig;
@@ -285,7 +285,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      */
     private void checkForRegionClosing() throws IOException {
         synchronized (lock) {
-            if(isRegionClosingOrSplitting) {
+            if(isRegionClosing) {
                 lock.notifyAll();
                 throw new IOException("Region is getting closed. Not allowing to write to avoid possible deadlock.");
             }
@@ -499,16 +499,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             useIndexProto = false;
         }
         boolean acquiredLock = false;
-        if(needToWrite) {
-            synchronized (lock) {
-                if (isRegionClosingOrSplitting) {
-                    throw new IOException("Temporarily unable to write from scan because region is closing or splitting");
-                }
-                scansReferenceCount++;
-                lock.notifyAll();
-            }
-        }
         try {
+            if(needToWrite) {
+                synchronized (lock) {
+                    scansReferenceCount++;
+                    lock.notifyAll();
+                }
+            }
             region.startRegionOperation();
             acquiredLock = true;
             synchronized (innerScanner) {
@@ -1298,7 +1295,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Don't allow splitting if operations need read and write to same region are going on in the
         // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
         synchronized (lock) {
-            isRegionClosingOrSplitting = true;
             if (scansReferenceCount > 0) {
                 throw new IOException("Operations like local index building/delete/upsert select"
                         + " might be going on so not allowing to split.");
@@ -1323,13 +1319,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
             throws IOException {
         synchronized (lock) {
-            isRegionClosingOrSplitting = true;
+            isRegionClosing = true;
             while (scansReferenceCount > 0) {
                 try {
                     lock.wait(1000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new IOException("Interrupted while waiting for completion of operations like local index building/delete/upsert select");
                 }
             }
         }
