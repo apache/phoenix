@@ -789,4 +789,9 @@ public class QueryServicesOptions {
         return this;
     }
 
+
+    public QueryServicesOptions setSequenceCacheSize(long sequenceCacheSize) {
+        config.setLong(SEQUENCE_CACHE_SIZE_ATTRIB, sequenceCacheSize);
+        return this;
+    }
 }
