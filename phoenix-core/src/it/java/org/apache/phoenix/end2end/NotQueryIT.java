@@ -35,30 +35,22 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
 
 @RunWith(Parameterized.class)
-public class NotQueryIT extends BaseQueryIT {
+public abstract class NotQueryIT extends BaseQueryIT {
 
-    public NotQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
+    protected NotQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
         super(indexDDL, mutable, columnEncoded, false);
-    }
-    
-    @Parameters(name="NotQueryIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
-        return QueryIT.data();
     }
     
     @Test

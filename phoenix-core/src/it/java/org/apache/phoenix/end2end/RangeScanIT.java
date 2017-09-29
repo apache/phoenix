@@ -53,7 +53,7 @@ public class RangeScanIT extends BaseQueryIT {
     
     @Parameters(name="RangeScanIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
-        return QueryIT.data();
+        return QueryIT.allIndexes();
     }
 
     public RangeScanIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
