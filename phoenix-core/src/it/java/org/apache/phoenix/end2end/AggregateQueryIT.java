@@ -52,7 +52,7 @@ public class AggregateQueryIT extends BaseQueryIT {
     }
     
     public AggregateQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, columnEncoded, false);
     }
 
     @Test

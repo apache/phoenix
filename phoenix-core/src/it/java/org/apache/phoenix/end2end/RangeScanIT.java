@@ -57,7 +57,7 @@ public class RangeScanIT extends BaseQueryIT {
     }
 
     public RangeScanIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, columnEncoded, false);
     }
     
     @Test
