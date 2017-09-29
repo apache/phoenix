@@ -52,7 +52,19 @@ public class IndexColumnNames {
         this.pdataTable = pdataTable;
         this.pindexTable = pindexTable;
         List<PColumn> pindexCols = pindexTable.getColumns();
+        List<PColumn> pkColumns = pindexTable.getPKColumns();
         Set<String> indexColsAdded = new HashSet<String>();
+        int offset = 0;
+        if (pindexTable.getBucketNum() != null) {
+            offset++;
+        }
+        if (pindexTable.getViewIndexId() != null) {
+            offset++;
+        }
+        if (offset > 0) {
+            pindexCols = pindexCols.subList(offset, pindexCols.size());
+            pkColumns = pkColumns.subList(offset, pkColumns.size());
+        }
 
         // first add the data pk columns
         for (PColumn indexCol : pindexCols) {
@@ -68,7 +80,7 @@ public class IndexColumnNames {
         }
 
         // then the rest of the index pk columns
-        for (PColumn indexPkCol : pindexTable.getPKColumns()) {
+        for (PColumn indexPkCol : pkColumns) {
             String indexColName = indexPkCol.getName().getString();
             if (!indexColsAdded.contains(indexColName)) {
                 indexPkColNames.add(indexColName);
@@ -81,7 +93,7 @@ public class IndexColumnNames {
         }
 
         // then the covered columns (rest of the columns)
-        for (PColumn indexCol : pindexTable.getColumns()) {
+        for (PColumn indexCol : pindexCols) {
             String indexColName = indexCol.getName().getString();
             if (!indexColsAdded.contains(indexColName)) {
                 indexNonPkColNames.add(indexColName);
