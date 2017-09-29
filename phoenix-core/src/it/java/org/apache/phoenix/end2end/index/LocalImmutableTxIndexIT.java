@@ -22,7 +22,7 @@ import java.util.Collection;
 
 import org.junit.runners.Parameterized.Parameters;
 
-public class LocalImmutableTxIndexIT extends IndexIT {
+public class LocalImmutableTxIndexIT extends BaseIndexIT {
 
     public LocalImmutableTxIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
         super(localIndex, mutable, transactional, columnEncoded);
