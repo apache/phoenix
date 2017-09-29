@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.ROW1;
+import static org.apache.phoenix.util.TestUtil.ROW2;
+import static org.apache.phoenix.util.TestUtil.ROW3;
+import static org.apache.phoenix.util.TestUtil.ROW4;
+import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -25,7 +30,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -338,4 +345,46 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
 
+    @Test
+    public void testCoalesceFunction() throws Exception {
+        String tenantId = getOrganizationId();
+       String tableName =
+                initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
+                    new Date(System.currentTimeMillis()), null, getUrl(), null);
+       String query = "SELECT entity_id FROM " + tableName + " WHERE coalesce(X_DECIMAL,0.0) = 0.0";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (organization_id,entity_id,x_decimal) values(?,?,?)");
+        stmt.setString(1, getOrganizationId());
+        stmt.setString(2, ROW1);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(1.0));
+        stmt.execute();
+        stmt.setString(2, ROW3);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(2.0));
+        stmt.execute();
+        stmt.setString(2, ROW4);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(3.0));
+        stmt.execute();
+        stmt.setString(2, ROW5);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(0.0));
+        stmt.execute();
+        stmt.setString(2, ROW6);
+        stmt.setBigDecimal(3, BigDecimal.valueOf(4.0));
+        stmt.execute();
+        conn.commit();
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), ROW2);
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), ROW5);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
 }
