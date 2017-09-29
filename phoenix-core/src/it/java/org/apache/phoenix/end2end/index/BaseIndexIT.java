@@ -79,7 +79,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public abstract class IndexIT extends ParallelStatsDisabledIT {
+public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     private static final Random RAND = new Random();
 
     private final boolean localIndex;
@@ -87,7 +87,7 @@ public abstract class IndexIT extends ParallelStatsDisabledIT {
     private final boolean mutable;
     private final String tableDDLOptions;
 
-    protected IndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
+    protected BaseIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
         this.localIndex = localIndex;
         this.transactional = transactional;
         this.mutable = mutable;
