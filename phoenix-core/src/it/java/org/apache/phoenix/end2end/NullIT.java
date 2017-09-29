@@ -49,8 +49,7 @@ import com.google.common.collect.Lists;
 
 public class NullIT extends BaseQueryIT {
     
-    @Parameters(name="indexDDL={0},mutable={1},columnEncoded={2}")
-    @Shadower(classBeingShadowed = BaseQueryIT.class)
+    @Parameters(name="indexDDL={index},mutable={1},columnEncoded={2}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
@@ -62,7 +61,7 @@ public class NullIT extends BaseQueryIT {
     }
     
     public NullIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, true);
+        super(indexDDL, mutable, columnEncoded, false);
     }
     
     private void testNoStringValue(String value) throws Exception {

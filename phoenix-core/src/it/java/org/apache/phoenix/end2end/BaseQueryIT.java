@@ -30,7 +30,6 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,25 +130,11 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Parameters(name = "indexDDL={0},mutable={1},columnEncoded={2}")
     public static Collection<Object> allIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
-            for (boolean mutable : new boolean[] { false }) {
-                for (boolean columnEncoded : new boolean[] { false }) {
-                    testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
-                }
-            }
-        }
-        return testCases;
-    }
-
-    @Parameters(name = "localIndexDDL={0}")
-    public static Collection<Object> localIndexes() {
-        List<Object> testCases = Lists.newArrayList();
-        for (String indexDDL : LOCAL_INDEX_DDLS) {
-            for (boolean mutable : new boolean[] { false }) {
-                for (boolean columnEncoded : new boolean[] { false }) {
+            for (boolean mutable : new boolean[]{true}) {
+                for (boolean columnEncoded : new boolean[]{false}) {
                     testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
                 }
             }

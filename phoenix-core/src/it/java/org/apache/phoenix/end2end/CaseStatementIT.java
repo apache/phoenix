@@ -59,7 +59,7 @@ public class CaseStatementIT extends BaseQueryIT {
     
     @Parameters(name="CaseStatementIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
-        return QueryIT.allIndexes();
+        return BaseQueryIT.allIndexes();
     }    
     
     @Test
