@@ -61,11 +61,16 @@ import com.google.common.collect.Maps;
 public class SequenceIT extends ParallelStatsDisabledIT {
     private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s";
     private static final long BATCH_SIZE = 3;
+    private static final String SCHEMA_NAME = "S";
    
     private Connection conn;
     
-    private static String generateNameWithSchema() {
-    	return SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+    private static String generateTableNameWithSchema() {
+    	return SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueName());
+    }
+    
+    private static String generateSequenceNameWithSchema() {
+        return SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueSequenceName());
     }
     
     @BeforeClass
@@ -91,7 +96,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testSystemTable() throws Exception {		
-		conn.createStatement().execute("CREATE SEQUENCE " + generateNameWithSchema());
+		conn.createStatement().execute("CREATE SEQUENCE " + generateSequenceNameWithSchema());
 		String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\"";
 		ResultSet rs = conn.prepareStatement(query).executeQuery();
 		assertTrue(rs.next());
@@ -99,7 +104,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testDuplicateSequences() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         
 		conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
@@ -114,7 +119,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testSequenceNotFound() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
 		
         
 		String query = "SELECT NEXT value FOR " + sequenceName ;
@@ -132,7 +137,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection nsConn = DriverManager.getConnection(getUrl(), props);
 
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceSchemaName = getSchemaName(sequenceName);
 
         try {
@@ -169,7 +174,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 	
 	@Test
     public void testCreateSequence() throws Exception { 
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
         String schemaName = getSchemaName(sequenceName);
         
@@ -186,7 +191,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCurrentValueFor() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         ResultSet rs;
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
@@ -210,7 +215,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDropSequence() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
         String schemaName = getSchemaName(sequenceName);
         
@@ -238,15 +243,15 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testSelectNextValueFor() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
 		conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");
         assertSequenceValuesForSingleRow(sequenceName, 3, 5, 7);
 	}
 
 	@Test
 	public void testInsertNextValueFor() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 1");
 		conn.createStatement().execute("CREATE TABLE " + tableName + " ( id INTEGER NOT NULL PRIMARY KEY)");
@@ -263,7 +268,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceCreation() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
         String schemaName = getSchemaName(sequenceName);
         
@@ -307,7 +312,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSameMultipleSequenceValues() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7");
         String query = "SELECT NEXT VALUE FOR " + sequenceName + ", NEXT VALUE FOR " + sequenceName ;
@@ -321,8 +326,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultipleSequenceValues() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();
     	
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7");
         conn.createStatement().execute("CREATE SEQUENCE " + alternateSequenceName + " START WITH 9 INCREMENT BY 2");
@@ -352,7 +357,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultipleSequencesNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
         String schemaName = getSchemaName(sequenceName);
         String alternateSequenceName = sequenceName + "_ALT";
@@ -394,8 +399,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultipleSequencesCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();
     	
         conn.createStatement().execute(
             "CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7 MINVALUE 4 MAXVALUE 19 CYCLE");
@@ -424,8 +429,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCompilerOptimization() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
 		
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");        
 		conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
@@ -438,8 +443,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 	
 	@Test
 	public void testSelectRowAndSequence() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 4");
 		conn.createStatement().execute("CREATE TABLE " + tableName + " ( id INTEGER NOT NULL PRIMARY KEY)");
         
@@ -456,8 +461,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectNextValueForOverMultipleBatches() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
 
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
@@ -476,15 +481,15 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectNextValueForGroupBy() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
-        String SECOND_tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName1 = generateTableNameWithSchema();
+        String tableName2 = generateTableNameWithSchema();
     	
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
-        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
-        conn.createStatement().execute("CREATE TABLE "+ SECOND_tableName + " (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("CREATE TABLE " + tableName1 + " (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("CREATE TABLE "+ tableName2 + " (k BIGINT NOT NULL PRIMARY KEY, v VARCHAR)");
         
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ", ?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName1 + " VALUES(NEXT VALUE FOR " + sequenceName + ", ?)");
         stmt.setString(1, "a");
         stmt.execute();
         stmt.setString(1, "a");
@@ -497,7 +502,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         stmt.execute();
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k from " + tableName );
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k from " + tableName1 );
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertTrue(rs.next());
@@ -512,9 +517,9 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
         
         conn.setAutoCommit(true);;
-        conn.createStatement().execute("UPSERT INTO " + SECOND_tableName + " SELECT NEXT VALUE FOR " + sequenceName + ",v FROM " + tableName + " GROUP BY v");
+        conn.createStatement().execute("UPSERT INTO " + tableName2 + " SELECT NEXT VALUE FOR " + sequenceName + ",v FROM " + tableName1 + " GROUP BY v");
         
-        rs = conn.createStatement().executeQuery("SELECT * from " + SECOND_tableName);
+        rs = conn.createStatement().executeQuery("SELECT * from " + tableName2);
         assertTrue(rs.next());
         assertEquals(6, rs.getInt(1));
         assertEquals("a", rs.getString(2));
@@ -529,8 +534,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectNextValueForMultipleConn() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
 
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
@@ -563,8 +568,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectNextValueForMultipleConnWithStmtClose() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
@@ -593,8 +598,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectNextValueForMultipleConnWithConnClose() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
@@ -632,9 +637,9 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     }
     
     private void testDropCachedSeq(boolean detectDeleteSeqInEval) throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE SEQUENCE " + alternateSequenceName + " START WITH 101");
@@ -690,9 +695,9 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testExplainPlanValidatesSequences() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
-        String tableName = generateNameWithSchema();
+        String tableName = generateTableNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
@@ -731,12 +736,12 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     }
     
     private String generateSequenceName() {
-    	return generateUniqueName();
+    	return generateUniqueSequenceName();
     }
     
     @Test
     public void testSelectNextValueInArithmetic() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2");
         
@@ -753,7 +758,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceDefault() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
             
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         
@@ -787,8 +792,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceValidateStartValue() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();
         
         try {
             conn.createStatement().execute(
@@ -813,7 +818,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceValidateMinValue() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         try {
             conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MINVALUE abc");
@@ -827,7 +832,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceValidateMaxValue() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         try {
             conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MAXVALUE null");
@@ -841,7 +846,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceValidateMinValueLessThanOrEqualToMaxValue() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
     	
         
         try {
@@ -857,7 +862,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceValidateIncrementConstant() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         try {
             conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT null");
@@ -871,7 +876,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceValidateIncrementNotEqualToZero() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         try {
             conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT 0");
@@ -885,7 +890,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceStartWithMinMaxSameValueIncreasingCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement()
                 .execute(
@@ -896,7 +901,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceStartWithMinMaxSameValueDecreasingCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement()
                 .execute(
@@ -907,7 +912,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceStartWithMinMaxSameValueIncreasingNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
     	
         
         conn.createStatement()
@@ -928,7 +933,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSequenceStartWithMinMaxSameValueDecreasingNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement()
                 .execute(
@@ -948,7 +953,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceIncreasingCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement()
                 .execute(
@@ -958,7 +963,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceDecreasingCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement()
                 .execute(
@@ -968,7 +973,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceIncreasingNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
     	
         
         // client throws exception
@@ -988,7 +993,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceIncreasingUsingMaxValueNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // server throws exception
         conn.createStatement().execute(
@@ -1007,7 +1012,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceDecreasingNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // client will throw exception
         conn.createStatement()
@@ -1027,7 +1032,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceDecreasingUsingMinValueNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // server will throw exception
         conn.createStatement().execute(
@@ -1046,7 +1051,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceIncreasingOverflowNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // start with Long.MAX_VALUE
         conn.createStatement().execute(
@@ -1066,7 +1071,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceIncreasingOverflowCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // start with Long.MAX_VALUE
         conn.createStatement()
@@ -1078,7 +1083,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceDecreasingOverflowNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // start with Long.MIN_VALUE + 1
         conn.createStatement().execute(
@@ -1097,7 +1102,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSequenceDecreasingOverflowCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         
         // start with Long.MIN_VALUE + 1
         conn.createStatement()
@@ -1109,8 +1114,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultipleSequenceValuesNoCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();
         
         conn.createStatement().execute(
             "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CACHE 2");
@@ -1144,8 +1149,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultipleSequenceValuesCycle() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();        
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();        
                 conn.createStatement()
                 .execute(
                     "CREATE SEQUENCE " + sequenceName + " START WITH 1 INCREMENT BY 2 MINVALUE 1 MAXVALUE 10 CYCLE CACHE 2");
@@ -1161,36 +1166,36 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertSelectGroupByWithSequence() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String tableName = generateNameWithSchema();
-        String SECOND_tableName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName1 = generateTableNameWithSchema();
+        String tableName2 = generateTableNameWithSchema();
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
 
         conn.createStatement()
                 .execute(
-                    "CREATE TABLE " + tableName +  "(event_id BIGINT NOT NULL PRIMARY KEY, user_id char(15), val BIGINT )");
+                    "CREATE TABLE " + tableName1 +  "(event_id BIGINT NOT NULL PRIMARY KEY, user_id char(15), val BIGINT )");
         conn.createStatement()
                 .execute(
-                    "CREATE TABLE " + SECOND_tableName + " (metric_id char(15) NOT NULL PRIMARY KEY, agg_id char(15), metric_val INTEGER )");
+                    "CREATE TABLE " + tableName2 + " (metric_id char(15) NOT NULL PRIMARY KEY, agg_id char(15), metric_val INTEGER )");
 
         
         // 2 rows for user1, 3 rows for user2 and 1 row for user3
-        insertEvent(tableName, 1, "user1", 1);
-        insertEvent(tableName, 2, "user2", 1);
-        insertEvent(tableName, 3, "user1", 1);
-        insertEvent(tableName, 4, "user2", 1);
-        insertEvent(tableName, 5, "user2", 1);
-        insertEvent(tableName, 6, "user3", 1);
+        insertEvent(tableName1, 1, "user1", 1);
+        insertEvent(tableName1, 2, "user2", 1);
+        insertEvent(tableName1, 3, "user1", 1);
+        insertEvent(tableName1, 4, "user2", 1);
+        insertEvent(tableName1, 5, "user2", 1);
+        insertEvent(tableName1, 6, "user3", 1);
         conn.commit();
 
         conn.createStatement()
                 .execute(
-                    "UPSERT INTO " + SECOND_tableName + " SELECT 'METRIC_'||(LPAD(ENCODE(NEXT VALUE FOR " + sequenceName + ",'base62'),5,'0')), user_id, sum(val) FROM " + tableName + " GROUP BY user_id ORDER BY user_id");
+                    "UPSERT INTO " + tableName2 + " SELECT 'METRIC_'||(LPAD(ENCODE(NEXT VALUE FOR " + sequenceName + ",'base62'),5,'0')), user_id, sum(val) FROM " + tableName1 + " GROUP BY user_id ORDER BY user_id");
         conn.commit();
 
         PreparedStatement stmt =
-                conn.prepareStatement("SELECT metric_id, agg_id, metric_val FROM " + SECOND_tableName);
+                conn.prepareStatement("SELECT metric_id, agg_id, metric_val FROM " + tableName2);
         ResultSet rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals("METRIC_00001", rs.getString("metric_id"));
@@ -1215,7 +1220,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
      * value was being unset from true to false.
      */
     public void testNextValuesForSequenceClosingConnections() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         // Create Sequence
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4990 MINVALUE 4990 MAXVALUE 5000 CACHE 10");
         
@@ -1295,8 +1300,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     @Test
     public void testValidateBeforeReserve() throws Exception {
         
-        String tableName = generateNameWithSchema();
-        String seqName = generateNameWithSchema();
+        String tableName = generateTableNameWithSchema();
+        String seqName = generateSequenceNameWithSchema();
         
         conn.createStatement().execute(
                 "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY, l BIGINT)");
@@ -1335,8 +1340,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNoFromClause() throws Exception {
-        String sequenceName = generateNameWithSchema();
-        String alternateSequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
+        String alternateSequenceName = generateSequenceNameWithSchema();
     	
         ResultSet rs;
         
@@ -1367,7 +1372,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testReturnAllSequencesNotCalledForNoOpenConnections() throws Exception {
-        String sequenceName = generateNameWithSchema();
+        String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
         String schemaName = getSchemaName(sequenceName);
         
@@ -1404,7 +1409,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPointInTimeSequence() throws Exception {
-        String seqName = generateNameWithSchema();    	
+        String seqName = generateSequenceNameWithSchema();    	
         Properties scnProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
         Connection beforeSeqConn = DriverManager.getConnection(getUrl(), scnProps);
