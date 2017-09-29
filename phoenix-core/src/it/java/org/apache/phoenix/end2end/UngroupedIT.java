@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
+import static org.apache.phoenix.util.TestUtil.ROW3;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
@@ -37,14 +38,15 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runners.Parameterized.Parameters;
 
 public class UngroupedIT extends BaseQueryIT {
 
-    public UngroupedIT(String idxDdl, boolean mutable, boolean columnEncoded, boolean keepDeletedCells)
+    public UngroupedIT(String idxDdl, boolean mutable, boolean columnEncoded)
             throws Exception {
-        super(idxDdl, mutable, columnEncoded, keepDeletedCells);
+        super(idxDdl, mutable, columnEncoded, false);
     }
 
     @Parameters(name="UngroupedIT_{index}") // name is used by failsafe as file name in reports
@@ -201,4 +203,42 @@ public class UngroupedIT extends BaseQueryIT {
         assertFalse(rs.next());
         conn.close();
     }
+    
+    @Test
+    public void testSumOverNullIntegerColumn() throws Exception {
+        String query = "SELECT sum(a_integer) FROM " + tableName + " a";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) VALUES('" + getOrganizationId() + "','" + ROW3 + "',NULL)");
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        TestUtil.analyzeTable(conn1, tableName);
+        conn1.close();
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(42, rs.getInt(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_integer) SELECT organization_id, entity_id, CAST(null AS integer) FROM " + tableName);
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(0, rs.getInt(1));
+            assertTrue(rs.wasNull());
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
 }

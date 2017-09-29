@@ -21,7 +21,9 @@ import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
+import static org.apache.phoenix.util.TestUtil.ROW3;
 import static org.apache.phoenix.util.TestUtil.ROW5;
+import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -32,7 +34,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -42,12 +46,14 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Lists;
+
 
 @RunWith(Parameterized.class)
 public class GroupByIT extends BaseQueryIT {
 
     public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, true);
+        super(indexDDL, mutable, columnEncoded, false);
     }
     
     @Parameters(name="GroupByIT_{index}") // name is used by failsafe as file name in reports
@@ -314,5 +320,64 @@ public class GroupByIT extends BaseQueryIT {
         assertFalse(rs.next());
         conn.close();
     }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void testGroupByCondition() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
+        statement.setString(1, tenantId);
+        ResultSet rs = statement.executeQuery();
+        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,8L));
+        try {
+            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            List<List<Object>> expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(1L,false),
+                    Arrays.<Object>asList(1L,true));
+            assertValuesEqualsResultSet(rs, expectedResults);
+        } finally {
+            conn.close();
+        }
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            statement = conn.prepareStatement("UPSERT into " + tableName + " (organization_id,entity_id,a_integer) values(?,?,null)");
+            statement.setString(1, tenantId);
+            statement.setString(2, ROW3);
+            statement.executeUpdate();
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+        conn = DriverManager.getConnection(getUrl(), props);
+        statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
+        statement.setString(1, tenantId);
+        rs = statement.executeQuery();
+        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,1L,7L));
+        statement = conn.prepareStatement("SELECT a_integer, entity_id FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null)");
+        statement.setString(1, tenantId);
+        rs = statement.executeQuery();
+        List<List<Object>> expectedResults = Lists.newArrayList(
+                Arrays.<Object>asList(null,ROW3),
+                Arrays.<Object>asList(5,ROW5),
+                Arrays.<Object>asList(6,ROW6));
+        assertValuesEqualsResultSet(rs, expectedResults);
+        try {
+            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(1L,null),
+                    Arrays.<Object>asList(1L,false),
+                    Arrays.<Object>asList(1L,true));
+            assertValuesEqualsResultSet(rs, expectedResults);
+        } finally {
+            conn.close();
+        }
+    }
+    
 
 }
