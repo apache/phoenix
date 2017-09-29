@@ -92,7 +92,6 @@
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
     <snappy.version>0.3</snappy.version>
-    <netty.version>4.0.23.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
@@ -892,11 +891,6 @@
         <groupId>org.apache.htrace</groupId>
         <artifactId>htrace-core</artifactId>
         <version>${htrace.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty-all</artifactId>
-        <version>${netty.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-codec</groupId>
