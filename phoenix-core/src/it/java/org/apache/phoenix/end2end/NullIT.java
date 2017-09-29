@@ -61,7 +61,7 @@ public class NullIT extends BaseQueryIT {
     }
     
     public NullIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, columnEncoded, false);
     }
     
     private void testNoStringValue(String value) throws Exception {

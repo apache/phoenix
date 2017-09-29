@@ -63,7 +63,7 @@ public class PointInTimeQueryIT extends BaseQueryIT {
     public PointInTimeQueryIT(String idxDdl, boolean mutable, boolean columnEncoded)
             throws Exception {
         // These queries fail without KEEP_DELETED_CELLS=true
-        super(idxDdl, mutable, columnEncoded, true);
+        super(idxDdl, columnEncoded, true);
     }
 
     @Test

@@ -26,7 +26,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -87,19 +86,10 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
 
     private static final Logger logger = LoggerFactory.getLogger(BaseQueryIT.class);
 
-    public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded,
-            boolean keepDeletedCells) throws Exception {
+    public BaseQueryIT(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             optionBuilder.append("COLUMN_ENCODED_BYTES=0");
-        }
-        if (!mutable) {
-            if (optionBuilder.length() > 0) optionBuilder.append(",");
-            optionBuilder.append("IMMUTABLE_ROWS=true");
-            if (!columnEncoded) {
-                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="
-                        + PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
-            }
         }
         if (keepDeletedCells) {
             if (optionBuilder.length() > 0) optionBuilder.append(",");
@@ -133,10 +123,8 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     public static Collection<Object> allIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
-            for (boolean mutable : new boolean[]{true}) {
-                for (boolean columnEncoded : new boolean[]{false}) {
-                    testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
-                }
+            for (boolean columnEncoded : new boolean[]{false}) {
+                testCases.add(new Object[] { indexDDL, columnEncoded });
             }
         }
         return testCases;
