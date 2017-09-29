@@ -62,6 +62,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final int DEFAULT_HCONNECTION_POOL_MAX_SIZE = 10;
     public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
     public static final long DEFAULT_INDEX_POPULATION_WAIT_TIME = 0;
+    public static final long DEFAULT_SEQUENCE_CACHE_SIZE = 3;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = true;
     /*
      * Effectively disable running the index rebuild task by having an infinite delay
@@ -84,6 +85,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     
     private static QueryServicesOptions getDefaultServicesOptions() {
     	return withDefaults()
+    	        .setSequenceCacheSize(DEFAULT_SEQUENCE_CACHE_SIZE)
     	        .setTransactionsEnabled(DEFAULT_TRANSACTIONS_ENABLED)
     	        .setExplainChunkCount(DEFAULT_EXPLAIN_CHUNK_COUNT)
                 .setExplainRowCount(DEFAULT_EXPLAIN_ROW_COUNT)

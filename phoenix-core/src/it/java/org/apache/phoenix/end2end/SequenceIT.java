@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryServicesTestImpl.DEFAULT_SEQUENCE_CACHE_SIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -31,7 +32,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -45,22 +45,18 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 
 public class SequenceIT extends ParallelStatsDisabledIT {
     private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s";
-    private static final long BATCH_SIZE = 3;
     private static final String SCHEMA_NAME = "S";
    
     private Connection conn;
@@ -71,14 +67,6 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     
     private static String generateSequenceNameWithSchema() {
         return SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueSequenceName());
-    }
-    
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMap();
-        props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Before
@@ -468,15 +456,15 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
         
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ")");
-        for (int i = 0; i < BATCH_SIZE  * 2 + 1; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE  * 2 + 1; i++) {
             stmt.execute();
         }
         conn.commit();
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT count(*),max(k) FROM " + tableName);
         assertTrue(rs.next());
-        assertEquals(BATCH_SIZE * 2 + 1, rs.getInt(1));
-        assertEquals(BATCH_SIZE * 2 + 1, rs.getInt(2));
+        assertEquals(DEFAULT_SEQUENCE_CACHE_SIZE * 2 + 1, rs.getInt(1));
+        assertEquals(DEFAULT_SEQUENCE_CACHE_SIZE * 2 + 1, rs.getInt(2));
     }
 
     @Test
@@ -542,7 +530,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 
         Connection conn1 = conn;
         PreparedStatement stmt1 = conn1.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ")");
-        for (int i = 0; i < BATCH_SIZE+ 1; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE+ 1; i++) {
             stmt1.execute();
         }
         conn1.commit();
@@ -551,7 +539,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR " + sequenceName + ")");
         stmt2.execute();
         stmt1.close(); // Should still continue with next value, even on separate connection
-        for (int i = 0; i < BATCH_SIZE; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE; i++) {
             stmt2.execute();
         }
         conn2.commit();
@@ -559,7 +547,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         
         // No gaps exist even when sequences were generated from different connections
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
-        for (int i = 0; i < (BATCH_SIZE+ 1)*2; i++) {
+        for (int i = 0; i < (DEFAULT_SEQUENCE_CACHE_SIZE+ 1)*2; i++) {
             assertTrue(rs.next());
             assertEquals(i+1, rs.getInt(1));
         }
@@ -574,7 +562,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
         PreparedStatement stmt1 = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
-        for (int i = 0; i < BATCH_SIZE+ 1; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE+ 1; i++) {
             stmt1.execute();
         }
         conn.commit();
@@ -582,14 +570,14 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         
         Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
-        for (int i = 0; i < BATCH_SIZE + 1; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE + 1; i++) {
             stmt2.execute();
         }
         conn2.commit();
         conn2.close();
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
-        for (int i = 0; i < 2*(BATCH_SIZE + 1); i++) {
+        for (int i = 0; i < 2*(DEFAULT_SEQUENCE_CACHE_SIZE + 1); i++) {
             assertTrue(rs.next());
             assertEquals(i+1, rs.getInt(1));
         }
@@ -605,21 +593,21 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
 
         PreparedStatement stmt1 = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
-        for (int i = 0; i < BATCH_SIZE+ 1; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE+ 1; i++) {
             stmt1.execute();
         }
         conn.commit();
 
         Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));;
         PreparedStatement stmt2 = conn2.prepareStatement("UPSERT INTO " + tableName + " VALUES(NEXT VALUE FOR  " + sequenceName + " )");
-        for (int i = 0; i < BATCH_SIZE + 1; i++) {
+        for (int i = 0; i < DEFAULT_SEQUENCE_CACHE_SIZE + 1; i++) {
             stmt2.execute();
         }
         conn2.commit();
         conn2.close();
         
         ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
-        for (int i = 0; i < 2*(BATCH_SIZE + 1); i++) {
+        for (int i = 0; i < 2*(DEFAULT_SEQUENCE_CACHE_SIZE + 1); i++) {
             assertTrue(rs.next());
             assertEquals(i+1, rs.getInt(1));
         }
