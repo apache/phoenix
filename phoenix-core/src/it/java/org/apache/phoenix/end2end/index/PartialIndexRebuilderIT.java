@@ -65,6 +65,7 @@ import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -822,11 +823,13 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Ignore("Until PHOENIX-4239 is fixed")
     @Test
     public void testIndexWriteFailureDisablingIndex() throws Throwable {
         testIndexWriteFailureDuringRebuild(PIndexState.DISABLE);
     }
     
+    @Ignore("Until PHOENIX-4239 is fixed")
     @Test
     public void testIndexWriteFailureLeavingIndexActive() throws Throwable {
         testIndexWriteFailureDuringRebuild(PIndexState.PENDING_ACTIVE);
