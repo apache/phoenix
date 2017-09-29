@@ -650,8 +650,8 @@ public class ScanRanges {
                     //ranges.set(rowTimestampColPos, sortedRange); //TODO: do I really need to do this?
                     Field f = schema.getField(rowTimestampColPos);
                     SortOrder order = f.getSortOrder();
-                    KeyRange lowestRange = rowTimestampColRange.get(0);
-                    KeyRange highestRange = rowTimestampColRange.get(rowTimestampColRange.size() - 1);
+                    KeyRange lowestRange = sortedRange.get(0);
+                    KeyRange highestRange = sortedRange.get(rowTimestampColRange.size() - 1);
                     if (order == SortOrder.DESC) {
                         return getDescTimeRange(lowestRange, highestRange, f);
                     }
