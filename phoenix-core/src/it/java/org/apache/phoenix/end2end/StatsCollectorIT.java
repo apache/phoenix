@@ -33,8 +33,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -71,12 +69,11 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
+public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private final String tableDDLOptions;
     private final boolean columnEncoded;
     private String tableName;
@@ -86,7 +83,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private final boolean userTableNamespaceMapped;
     private final boolean mutable;
     
-    public StatsCollectorIT(boolean mutable, boolean transactional, boolean userTableNamespaceMapped, boolean columnEncoded) {
+    protected StatsCollectorIT(boolean mutable, boolean transactional, boolean userTableNamespaceMapped, boolean columnEncoded) {
         StringBuilder sb = new StringBuilder();
         if (transactional) {
             sb.append("TRANSACTIONAL=true");
@@ -116,18 +113,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         this.columnEncoded = columnEncoded;
         this.mutable = mutable;
     }
-    
-    @Parameters(name="columnEncoded = {0}, mutable = {1}, transactional = {2}, isUserTableNamespaceMapped = {3}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true },
-                // no need to test non column encoded mutable case and this is the same as non column encoded immutable 
-                //{ false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
-                { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
-                { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
-          });
-    }
-    
+
     @BeforeClass
     public static void doSetup() throws Exception {
         // enable name space mapping at global level on both client and server side
