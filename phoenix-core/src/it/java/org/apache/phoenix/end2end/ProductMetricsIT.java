@@ -36,20 +36,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
-import org.junit.After;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -113,7 +108,7 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
         }
     }
 
-    protected static void initTableValues(String tablename, Connection conn, String tenantId) throws Exception {
+    private static void initTableValues(String tablename, Connection conn, String tenantId) throws Exception {
         PreparedStatement stmt = conn.prepareStatement(
                 "upsert into " + tablename +
                         " (" +
@@ -298,9 +293,7 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
         stmt.execute();
     }
 
-
-
-
+    
     @Test
     public void testDateRangeAggregation() throws Exception {
         String tablename=generateUniqueName();
@@ -1715,147 +1708,6 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testDateSubtractionCompareNumber() throws Exception {
-        String tablename=generateUniqueName();
-        String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and ? - \"DATE\" > 3";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            Date startDate = new Date(System.currentTimeMillis());
-            Date endDate = new Date(startDate.getTime() + 6 * QueryConstants.MILLIS_IN_DAY);
-            initDateTableValues(tablename, tenantId, getSplits(tenantId), startDate);
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setDate(2, endDate);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("A", rs.getString(1));
-            assertTrue(rs.next());
-            assertEquals("B", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testDateSubtractionLongToDecimalCompareNumber() throws Exception {
-        String tablename=generateUniqueName();
-        String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and ? - \"DATE\" - 1.5 > 3";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            Date startDate = new Date(System.currentTimeMillis());
-            Date endDate = new Date(startDate.getTime() + 9 * QueryConstants.MILLIS_IN_DAY);
-            initDateTableValues(tablename, tenantId, getSplits(tenantId), startDate);
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setDate(2, endDate);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("A", rs.getString(1));
-            assertTrue(rs.next());
-            assertEquals("B", rs.getString(1));
-            assertTrue(rs.next());
-            assertEquals("C", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testDateSubtractionCompareDate() throws Exception {
-        String tablename=generateUniqueName();
-        String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and date - 1 >= ?";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            Date startDate = new Date(System.currentTimeMillis());
-            Date endDate = new Date(startDate.getTime() + 9 * QueryConstants.MILLIS_IN_DAY);
-            initDateTableValues(tablename, tenantId, getSplits(tenantId), startDate);
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setDate(2, endDate);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("F", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testDateAddCompareDate() throws Exception {
-        String tablename=generateUniqueName();
-        String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and date + 1 >= ?";
-        Connection conn = DriverManager.getConnection(url);
-        try {
-            Date startDate = new Date(System.currentTimeMillis());
-            Date endDate = new Date(startDate.getTime() + 8 * QueryConstants.MILLIS_IN_DAY);
-            initDateTableValues(tablename, tenantId, getSplits(tenantId), startDate);
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setDate(2, endDate);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("E", rs.getString(1));
-            assertTrue(rs.next());
-            assertEquals("F", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testCurrentDate() throws Exception {
-        String tablename=generateUniqueName();
-        String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and \"DATE\" - current_date() > 8";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            Date startDate = new Date(System.currentTimeMillis());
-            initDateTableValues(tablename, tenantId, getSplits(tenantId), startDate);
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("F", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testCurrentTime() throws Exception {
-        String tablename=generateUniqueName();
-        String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM "+tablename+" WHERE organization_id = ? and \"DATE\" - current_time() > 8";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            Date startDate = new Date(System.currentTimeMillis());
-            initDateTableValues(tablename, tenantId, getSplits(tenantId), startDate);
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals("F", rs.getString(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
     public void testTruncateNotTraversableToFormScanKey() throws Exception {
         String tablename=generateUniqueName();
         String tenantId = getOrganizationId();
@@ -1879,27 +1731,9 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private static void destroyTable() throws Exception {
-        String tablename=generateUniqueName();
-        // Physically delete HBase table so that splits occur as expected for each test
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        ConnectionQueryServices services = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class).getQueryServices();
-        HBaseAdmin admin = services.getAdmin();
-        try {
-            try {
-                admin.disableTable(tablename);
-                admin.deleteTable(tablename);
-            } catch (TableNotFoundException e) {
-            }
-        } finally {
-            admin.close();
-        }
-    }
-
     @Test
     public void testSaltedOrderBy() throws Exception {
         String tablename=generateUniqueName();
-        destroyTable();
         String ddl = "create table " + tablename +
                 "   (organization_id char(15) not null," +
                 "    \"DATE\" date not null," +
