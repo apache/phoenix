@@ -54,7 +54,7 @@ public class QueryIT extends BaseQueryIT {
     }    
     
     public QueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, columnEncoded, false);
     }
     
     @Test

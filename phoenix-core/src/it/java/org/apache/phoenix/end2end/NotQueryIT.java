@@ -50,7 +50,7 @@ import com.google.common.primitives.Floats;
 public abstract class NotQueryIT extends BaseQueryIT {
 
     protected NotQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, columnEncoded, false);
     }
     
     @Test

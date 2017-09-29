@@ -53,7 +53,7 @@ import com.google.common.collect.Lists;
 public class GroupByIT extends BaseQueryIT {
 
     public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, columnEncoded, false);
     }
     
     @Parameters(name="GroupByIT_{index}") // name is used by failsafe as file name in reports
