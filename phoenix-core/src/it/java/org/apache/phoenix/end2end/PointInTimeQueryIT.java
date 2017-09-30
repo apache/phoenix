@@ -49,18 +49,18 @@ import com.google.common.collect.Lists;
 
 public class PointInTimeQueryIT extends BaseQueryIT {
 
-    @Parameters(name="PointInTimeQueryIT_{index},mutable={1},columnEncoded={2}")
+    @Parameters(name="PointInTimeQueryIT_{index},columnEncoded={1}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
             for (boolean columnEncoded : new boolean[]{false,true}) {
-                testCases.add(new Object[] { indexDDL, true, columnEncoded });
+                testCases.add(new Object[] { indexDDL, columnEncoded });
             }
         }
         return testCases;
     }
     
-    public PointInTimeQueryIT(String idxDdl, boolean mutable, boolean columnEncoded)
+    public PointInTimeQueryIT(String idxDdl, boolean columnEncoded)
             throws Exception {
         // These queries fail without KEEP_DELETED_CELLS=true
         super(idxDdl, columnEncoded, true);

@@ -49,18 +49,18 @@ import com.google.common.collect.Lists;
 
 public class NullIT extends BaseQueryIT {
     
-    @Parameters(name="indexDDL={index},mutable={1},columnEncoded={2}")
+    @Parameters(name="NullIT_{index},columnEncoded={1}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
             for (boolean columnEncoded : new boolean[]{false,true}) {
-                testCases.add(new Object[] { indexDDL, true, columnEncoded });
+                testCases.add(new Object[] { indexDDL, columnEncoded });
             }
         }
         return testCases;
     }
     
-    public NullIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
+    public NullIT(String indexDDL, boolean columnEncoded) throws Exception {
         super(indexDDL, columnEncoded, false);
     }
     
