@@ -51,7 +51,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 public class InQueryIT extends BaseQueryIT {
 
-    public InQueryIT(String idxDdl, boolean mutable, boolean columnEncoded, boolean keepDeletedCells) throws Exception {
+    public InQueryIT(String idxDdl, boolean columnEncoded) throws Exception {
         super(idxDdl, columnEncoded, false);
     }
 

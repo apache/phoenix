@@ -52,7 +52,7 @@ import com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class GroupByIT extends BaseQueryIT {
 
-    public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
+    public GroupByIT(String indexDDL, boolean columnEncoded) throws Exception {
         super(indexDDL, columnEncoded, false);
     }
     

@@ -51,7 +51,7 @@ public class AggregateQueryIT extends BaseQueryIT {
         return BaseQueryIT.allIndexes();
     }
     
-    public AggregateQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
+    public AggregateQueryIT(String indexDDL, boolean columnEncoded) throws Exception {
         super(indexDDL, columnEncoded, false);
     }
 
