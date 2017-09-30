@@ -26,16 +26,15 @@ import com.google.common.collect.Lists;
 
 public class NotQueryWithLocalImmutableIndexesIT extends NotQueryIT {
 
-    public NotQueryWithLocalImmutableIndexesIT(String indexDDL, boolean mutable,
-            boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded);
+    public NotQueryWithLocalImmutableIndexesIT(String indexDDL, boolean columnEncoded) throws Exception {
+        super(indexDDL, columnEncoded);
     }
 
     @Parameters(name = "localIndexDDL={0}")
     public static Collection<Object> localIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : LOCAL_INDEX_DDLS) {
-            testCases.add(new Object[] { indexDDL, true, false });
+            testCases.add(new Object[] { indexDDL, false });
         }
         return testCases;
     }

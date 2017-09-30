@@ -44,7 +44,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 public class UngroupedIT extends BaseQueryIT {
 
-    public UngroupedIT(String idxDdl, boolean mutable, boolean columnEncoded)
+    public UngroupedIT(String idxDdl, boolean columnEncoded)
             throws Exception {
         super(idxDdl, columnEncoded, false);
     }
