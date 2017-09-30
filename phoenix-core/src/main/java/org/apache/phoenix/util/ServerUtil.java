@@ -32,6 +32,8 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -225,4 +227,12 @@ public class ServerUtil {
                 || (maxBatchSizeBytes > 0 && mutationSize >= maxBatchSizeBytes);
     }
     
+    public static boolean isKeyInRegion(byte[] key, Region region) {
+        byte[] startKey = region.getRegionInfo().getStartKey();
+        byte[] endKey = region.getRegionInfo().getEndKey();
+        return (Bytes.compareTo(startKey, key) <= 0
+                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
+                    endKey) < 0));
+    }
+
 }
