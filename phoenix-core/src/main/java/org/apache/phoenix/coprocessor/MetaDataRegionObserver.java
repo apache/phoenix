@@ -30,7 +30,6 @@ import java.util.Properties;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -64,6 +63,7 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
@@ -81,9 +81,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -96,6 +98,10 @@ import com.google.common.collect.Maps;
 public class MetaDataRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
     public static final String REBUILD_INDEX_APPEND_TO_URL_STRING = "REBUILDINDEX";
+    private static final byte[] SYSTEM_CATALOG_KEY = SchemaUtil.getTableKey(
+            ByteUtil.EMPTY_BYTE_ARRAY,
+            QueryConstants.SYSTEM_SCHEMA_NAME_BYTES,
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
@@ -189,14 +195,17 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         if (deprecationLogger != null) {
             deprecationLogger.setLevel(Level.WARN);
         }
-        try {
-            Class.forName(PhoenixDriver.class.getName());
-            initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
-            // starts index rebuild schedule work
-            BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
-            executor.scheduleWithFixedDelay(task, initialRebuildTaskDelay, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
-        } catch (ClassNotFoundException ex) {
-            LOG.error("BuildIndexScheduleTask cannot start!", ex);
+        // Ensure we only run one of the index rebuilder tasks
+        if (ServerUtil.isKeyInRegion(SYSTEM_CATALOG_KEY, e.getEnvironment().getRegion())) {
+            try {
+                Class.forName(PhoenixDriver.class.getName());
+                initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
+                // starts index rebuild schedule work
+                BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
+                executor.scheduleWithFixedDelay(task, initialRebuildTaskDelay, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
+            } catch (ClassNotFoundException ex) {
+                LOG.error("BuildIndexScheduleTask cannot start!", ex);
+            }
         }
     }
 
@@ -205,16 +214,19 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
      *
      */
     public static class BuildIndexScheduleTask extends TimerTask {
-        // inProgress is to prevent timer from invoking a new task while previous one is still
-        // running
-        private final static AtomicInteger inProgress = new AtomicInteger(0);
         RegionCoprocessorEnvironment env;
         private final long rebuildIndexBatchSize;
         private final long configuredBatches;
         private final long indexDisableTimestampThreshold;
         private final ReadOnlyProps props;
+        private final List<String> onlyTheseTables;
 
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
+            this(env,null);
+        }
+
+        public BuildIndexScheduleTask(RegionCoprocessorEnvironment env, List<String> onlyTheseTables) {
+            this.onlyTheseTables = onlyTheseTables == null ? null : ImmutableList.copyOf(onlyTheseTables);
             this.env = env;
             Configuration configuration = env.getConfiguration();
             this.rebuildIndexBatchSize = configuration.getLong(
@@ -235,11 +247,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             // separately, all updating the same data.
             RegionScanner scanner = null;
             PhoenixConnection conn = null;
-            if (inProgress.getAndIncrement() > 0) {
-                inProgress.decrementAndGet();
-                LOG.debug("New ScheduledBuildIndexTask skipped as there is already one running");
-                return;
-            }
             try {
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -264,7 +271,10 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 do {
                     results.clear();
                     hasMore = scanner.next(results);
-                    if (results.isEmpty()) break;
+                    if (results.isEmpty()) {
+                        LOG.debug("Found no indexes with non zero INDEX_DISABLE_TIMESTAMP");
+                        break;
+                    }
 
                     Result r = Result.create(results);
                     byte[] disabledTimeStamp = r.getValue(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -272,6 +282,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     Cell indexStateCell = r.getColumnLatestCell(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES);
 
                     if (disabledTimeStamp == null || disabledTimeStamp.length == 0) {
+                        LOG.debug("Null or empty INDEX_DISABLE_TIMESTAMP");
                         continue;
                     }
 
@@ -282,6 +293,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
                     if ((dataTable == null || dataTable.length == 0) || indexStateCell == null) {
                         // data table name can't be empty
+                        LOG.debug("Null or data table name or index state");
                         continue;
                     }
 
@@ -297,22 +309,33 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                 + "so, Index rebuild has been skipped for row=" + r);
                         continue;
                     }
+                    
+                    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
+                    if (onlyTheseTables != null && !onlyTheseTables.contains(dataTableFullName)) {
+                        LOG.debug("Could not find " + dataTableFullName + " in " + onlyTheseTables);
+                        continue;
+                    }
 
                     if (conn == null) {
                         conn = getRebuildIndexConnection(env.getConfiguration());
                         dataTableToIndexesMap = Maps.newHashMap();
                     }
-                    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
                     PTable dataPTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
 
                     String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTable);
                     PTable indexPTable = PhoenixRuntime.getTableNoCache(conn, indexTableFullName);
                     // Sanity check in case index was removed from table
                     if (!dataPTable.getIndexes().contains(indexPTable)) {
+                        LOG.debug(dataTableFullName + " does not contain " + indexPTable.getName().getString());
                         continue;
                     }
                     
-                    if (!MetaDataUtil.tableRegionsOnline(this.env.getConfiguration(), indexPTable)) {
+                    PIndexState indexState = PIndexState.fromSerializedValue(indexStateBytes[0]);
+                    // Only perform relatively expensive check for all regions online when index
+                    // is disabled or pending active since that's the state it's placed into when
+                    // an index write fails.
+                    if ((indexState == PIndexState.DISABLE || indexState == PIndexState.PENDING_ACTIVE)
+                            && !MetaDataUtil.tableRegionsOnline(this.env.getConfiguration(), indexPTable)) {
                         LOG.debug("Index rebuild has been skipped because not all regions of index table="
                                 + indexPTable.getName() + " are online.");
                         continue;
@@ -337,7 +360,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         continue; // don't attempt another rebuild irrespective of whether
                                   // updateIndexState worked or not
                     }
-                    PIndexState indexState = PIndexState.fromSerializedValue(indexStateBytes[0]);
                     // Allow index to begin incremental maintenance as index is back online and we
                     // cannot transition directly from DISABLED -> ACTIVE
                     if (indexState == PIndexState.DISABLE) {
@@ -356,6 +378,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                     QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME);
                     // Wait until no failures have occurred in at least forwardOverlapDurationMs
                     if (indexStateCell.getTimestamp() + forwardOverlapDurationMs > currentTime) {
+                        LOG.debug("Still must wait " + (indexStateCell.getTimestamp() + forwardOverlapDurationMs - currentTime) + " before starting rebuild for " + indexTableFullName);
                         continue; // Haven't waited long enough yet
                     }
                     Long upperBoundOfRebuild = indexStateCell.getTimestamp() + forwardOverlapDurationMs;
@@ -419,6 +442,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 							}
 							// No indexes are disabled, so skip this table
 							if (earliestDisableTimestamp == Long.MAX_VALUE) {
+		                        LOG.debug("No indexes are disabled so continuing");
 								continue;
 							}
 							long scanBeginTime = Math.max(0, earliestDisableTimestamp - backwardOverlapDurationMs);
@@ -482,7 +506,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 			} catch (Throwable t) {
 				LOG.warn("ScheduledBuildIndexTask failed!", t);
 			} finally {
-				inProgress.decrementAndGet();
 				if (scanner != null) {
 					try {
 						scanner.close();
