@@ -3641,14 +3641,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private static MetaDataMutationResult checkKeyInRegion(byte[] key, HRegion region, MutationCode code) {
-        byte[] startKey = region.getStartKey();
-        byte[] endKey = region.getEndKey();
-        if (Bytes.compareTo(startKey, key) <= 0
-                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
-                    endKey) < 0)) {
-            return null; // normal case;
-        }
-        return new MetaDataMutationResult(code, EnvironmentEdgeManager.currentTimeMillis(), null);
+        return ServerUtil.isKeyInRegion(key, region) ? null : 
+            new MetaDataMutationResult(code, EnvironmentEdgeManager.currentTimeMillis(), null);
     }
 
     private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, HRegion region) {
