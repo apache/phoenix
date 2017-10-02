@@ -475,5 +475,15 @@
       <artifactId>stream</artifactId>
       <version>${stream.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+      <version>59.1</version>
+    </dependency>
+    <dependency>
+      <groupId>com.salesforce.grammaticus</groupId>
+      <artifactId>grammaticus</artifactId>
+      <version>1.0.0</version>
+    </dependency>
   </dependencies>
 </project>
