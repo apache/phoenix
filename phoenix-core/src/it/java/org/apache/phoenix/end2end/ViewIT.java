@@ -701,15 +701,15 @@ public class ViewIT extends BaseViewIT {
       Properties props = new Properties();
       Connection conn1 = DriverManager.getConnection(getUrl(), props);
       conn1.setAutoCommit(true);
-      String TABLE_NAME="UpdateCacheViewTest"+System.currentTimeMillis();
-      String VIEW_NAME="VIEW_"+System.currentTimeMillis();
+      String tableName=generateUniqueName();
+      String viewName=generateUniqueName();
       conn1.createStatement().execute(
-        "CREATE TABLE "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY=1000000");
-      conn1.createStatement().execute("upsert into "+TABLE_NAME+" values ('row1', 'value1', 'key1')");
+        "CREATE TABLE "+tableName+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY=1000000");
+      conn1.createStatement().execute("upsert into "+tableName+" values ('row1', 'value1', 'key1')");
       conn1.createStatement().execute(
-        "CREATE VIEW "+VIEW_NAME+" (v43 VARCHAR) AS SELECT * FROM "+TABLE_NAME+" WHERE v1 = 'value1'");
+        "CREATE VIEW "+viewName+" (v43 VARCHAR) AS SELECT * FROM "+tableName+" WHERE v1 = 'value1'");
       ResultSet rs = conn1.createStatement()
-          .executeQuery("SELECT * FROM "+TABLE_NAME+" WHERE v1 = 'value1'");
+          .executeQuery("SELECT * FROM "+tableName+" WHERE v1 = 'value1'");
       assertTrue(rs.next());
     }
 
