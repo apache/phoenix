@@ -44,7 +44,6 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -52,6 +51,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -413,4 +413,35 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testHintForIndexOnViewWithInclude() throws Exception {
+        testHintForIndexOnView(true);
+    }
+    
+    @Ignore("PHOENIX-4274 Hint query for index on view does not use include")
+    @Test
+    public void testHintForIndexOnViewWithoutInclude() throws Exception {
+        testHintForIndexOnView(false);        
+    }
+    
+    private void testHintForIndexOnView(boolean includeColumns) throws Exception {
+        Properties props = new Properties();
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.setAutoCommit(true);
+        String tableName=generateUniqueName();
+        String viewName=generateUniqueName();
+        String indexName=generateUniqueName();
+        conn1.createStatement().execute(
+          "CREATE TABLE "+tableName+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY=1000000");
+        conn1.createStatement().execute("upsert into "+tableName+" values ('row1', 'value1', 'key1')");
+        conn1.createStatement().execute(
+          "CREATE VIEW "+viewName+" (v3 VARCHAR, v4 VARCHAR) AS SELECT * FROM "+tableName+" WHERE v1 = 'value1'");
+        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + "(v3)" + (includeColumns ? " INCLUDE(v4)" : ""));
+        PhoenixStatement stmt = conn1.createStatement().unwrap(PhoenixStatement.class);
+        ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + viewName + " " + indexName + ") */ v1 FROM " + viewName + " WHERE v3 = 'foo' ORDER BY v4");
+        assertFalse(rs.next());
+        assertEquals(indexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+    }
+    
 }
