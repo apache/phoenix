@@ -302,10 +302,13 @@ public class MutableIndexFailureIT extends BaseTest {
                 assertTrue(PIndexState.ACTIVE.toString().equals(indexState) || PIndexState.PENDING_ACTIVE.toString().equals(indexState));
             } else {
                 assertTrue(PIndexState.DISABLE.toString().equals(indexState) || PIndexState.INACTIVE.toString().equals(indexState));
-                // non-failing index should remain active
-                ResultSet thirdRs = conn.createStatement().executeQuery(getSysCatQuery(thirdIndexName));
-                assertTrue(thirdRs.next());
-                assertEquals(PIndexState.ACTIVE.getSerializedValue(), thirdRs.getString(1));
+                // non-failing index should remain active unless the failure came from a local index
+                // in which case all local indexes are marked as disabled.
+                if (!localIndex) {
+                    ResultSet thirdRs = conn.createStatement().executeQuery(getSysCatQuery(thirdIndexName));
+                    assertTrue(thirdRs.next());
+                    assertEquals(PIndexState.ACTIVE.getSerializedValue(), thirdRs.getString(1));
+                }
             }
             assertFalse(rs.next());
 
@@ -335,7 +338,11 @@ public class MutableIndexFailureIT extends BaseTest {
                 assertEquals("d", rs.getString(2));
                 assertFalse(rs.next());
             }
-            IndexScrutiny.scrutinizeIndex(conn, fullTableName, thirdFullIndexName);
+            // See comment above. All local indexes are disabled when a write failure occurs
+            // to any of them.
+            if (!localIndex) {
+                IndexScrutiny.scrutinizeIndex(conn, fullTableName, thirdFullIndexName);
+            }
 
             if (!failRebuildTask) {
                 // re-enable index table
