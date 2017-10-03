@@ -230,7 +230,11 @@ public class PLong extends PWholeNumber<Long> {
 
     @Override
     public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-        return RANDOM.get().nextLong();
+        long val = RANDOM.get().nextLong();
+        if (val == Long.MIN_VALUE) {
+            return Long.MAX_VALUE;
+        }
+        return Math.abs(val);
     }
 
     static class LongCodec extends BaseCodec {
