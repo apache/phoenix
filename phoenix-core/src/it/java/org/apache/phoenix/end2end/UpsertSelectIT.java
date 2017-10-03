@@ -42,10 +42,12 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -1418,6 +1420,70 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         int upsertCount = conn.createStatement().executeUpdate("UPSERT INTO " + t2 + " SELECT pk, val FROM  " + t1);
         assertEquals(100,upsertCount);
         conn.close();
+    }
+
+    @Test // See https://issues.apache.org/jira/browse/PHOENIX-4265
+    public void testLongCodecUsedForRowTimestamp() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE IMMUTABLE TABLE " + tableName
+                    + " (k1 TIMESTAMP not null, k2 bigint not null, v bigint, constraint pk primary key (k1 row_timestamp, k2)) SALT_BUCKETS = 9");
+            conn.createStatement().execute(
+                "CREATE INDEX " + indexName + " ON " + tableName + " (v) INCLUDE (k2)");
+            PreparedStatement stmt =
+                    conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?) ");
+            stmt.setTimestamp(1, new Timestamp(1000));
+            stmt.setLong(2, 2000);
+            stmt.setLong(3, 1000);
+            stmt.executeUpdate();
+            stmt.setTimestamp(1, new Timestamp(2000));
+            stmt.setLong(2, 5000);
+            stmt.setLong(3, 5);
+            stmt.executeUpdate();
+            stmt.setTimestamp(1, new Timestamp(3000));
+            stmt.setLong(2, 5000);
+            stmt.setLong(3, 5);
+            stmt.executeUpdate();
+            stmt.setTimestamp(1, new Timestamp(4000));
+            stmt.setLong(2, 5000);
+            stmt.setLong(3, 5);
+            stmt.executeUpdate();
+            stmt.setTimestamp(1, new Timestamp(5000));
+            stmt.setLong(2, 2000);
+            stmt.setLong(3, 10);
+            stmt.executeUpdate();
+            stmt.setTimestamp(1, new Timestamp(6000));
+            stmt.setLong(2, 2000);
+            stmt.setLong(3, 20);
+            stmt.executeUpdate();
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT " +
+                    " K2 FROM " + tableName + " WHERE V = 5");
+            assertTrue("Index " + indexName + " should have been used",
+                rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getTableRef()
+                        .getTable().getName().getString().equals(indexName));
+            assertTrue(rs.next());
+            assertEquals(5000, rs.getLong("k2"));
+            assertTrue(rs.next());
+            assertEquals(5000, rs.getLong("k2"));
+            assertTrue(rs.next());
+            assertEquals(5000, rs.getLong("k2"));
+            assertFalse(rs.next());
+            rs =
+                    conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName + " "
+                            + indexName + ") */ " + " K2 FROM " + tableName + " WHERE V = 5");
+            assertTrue("Index " + indexName + " should have been used",
+                rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getTableRef()
+                        .getTable().getName().getString().equals(indexName));
+            assertTrue(rs.next());
+            assertEquals(5000, rs.getLong("k2"));
+            assertTrue(rs.next());
+            assertEquals(5000, rs.getLong("k2"));
+            assertTrue(rs.next());
+            assertEquals(5000, rs.getLong("k2"));
+            assertFalse(rs.next());
+        }
     }
 
     private static Connection getTenantConnection(String tenantId) throws Exception {
