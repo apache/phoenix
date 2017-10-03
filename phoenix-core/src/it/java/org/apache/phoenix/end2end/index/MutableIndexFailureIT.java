@@ -165,22 +165,20 @@ public class MutableIndexFailureIT extends BaseTest {
                 { false, false, true, true, false, null},
                 { false, false, true, true, false, true},
                 { false, false, false, true, false, null},
-                // FIXME: PHOENIX-4036 and PHOENIX-4037. Test cases with transactional or local
-                // indexes don't pass reliably.
-                //{ true, false, false, true, true, false, null},
-                //{ true, false, true, true, true, false, null},
-                //{ false, true, true, true, true, false, null},
-                //{ false, true, false, null, null, false, null},
-                //{ true, true, false, true, null, false, null},
-                //{ true, true, true, null, true, false, null},
+                { true, false, false, true, false, null},
+                { true, false, true, true, false, null},
+                { false, true, true, true, false, null},
+                { false, true, false, null, false, null},
+                { true, true, false, true, false, null},
+                { true, true, true, null, false, null},
 
                 { false, false, false, false, false, null},
-                //{ false, true, false, false, null, false, null},
+                { false, true, false, false, false, null},
                 { false, false, false, false, false, null},
                 { false, false, false, true, false, null},
                 { false, false, false, true, false, null},
-                //{ false, true, false, true, true, false, null},
-                //{ false, true, false, true, true, false, null},
+                { false, true, false, true, false, null},
+                { false, true, false, true, false, null},
                 { false, false, false, true, true, null},
                 { false, false, true, true, true, null},
                 { false, false, false, true, true, false},
@@ -304,10 +302,13 @@ public class MutableIndexFailureIT extends BaseTest {
                 assertTrue(PIndexState.ACTIVE.toString().equals(indexState) || PIndexState.PENDING_ACTIVE.toString().equals(indexState));
             } else {
                 assertTrue(PIndexState.DISABLE.toString().equals(indexState) || PIndexState.INACTIVE.toString().equals(indexState));
-                // non-failing index should remain active
-                ResultSet thirdRs = conn.createStatement().executeQuery(getSysCatQuery(thirdIndexName));
-                assertTrue(thirdRs.next());
-                assertEquals(PIndexState.ACTIVE.getSerializedValue(), thirdRs.getString(1));
+                // non-failing index should remain active unless the failure came from a local index
+                // in which case all local indexes are marked as disabled.
+                if (!localIndex) {
+                    ResultSet thirdRs = conn.createStatement().executeQuery(getSysCatQuery(thirdIndexName));
+                    assertTrue(thirdRs.next());
+                    assertEquals(PIndexState.ACTIVE.getSerializedValue(), thirdRs.getString(1));
+                }
             }
             assertFalse(rs.next());
 
@@ -337,7 +338,11 @@ public class MutableIndexFailureIT extends BaseTest {
                 assertEquals("d", rs.getString(2));
                 assertFalse(rs.next());
             }
-            IndexScrutiny.scrutinizeIndex(conn, fullTableName, thirdFullIndexName);
+            // See comment above. All local indexes are disabled when a write failure occurs
+            // to any of them.
+            if (!localIndex) {
+                IndexScrutiny.scrutinizeIndex(conn, fullTableName, thirdFullIndexName);
+            }
 
             if (!failRebuildTask) {
                 // re-enable index table
@@ -346,8 +351,7 @@ public class MutableIndexFailureIT extends BaseTest {
                 // wait for index to be rebuilt automatically
                 checkStateAfterRebuild(conn, fullIndexName, PIndexState.ACTIVE);
                 // Verify UPSERT on data table still works after index table is caught up
-                PreparedStatement stmt =
-                        conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
+                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
                 stmt.setString(1, "a3");
                 stmt.setString(2, "x4");
                 stmt.setString(3, "4");
@@ -452,7 +456,7 @@ public class MutableIndexFailureIT extends BaseTest {
             assertFalse(rs.next());
         }
     }
-    
+
     private void updateTable(Connection conn, boolean commitShouldFail) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
         // Insert new row
