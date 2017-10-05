@@ -330,7 +330,7 @@ public class MetaDataClient {
                     LINK_TYPE + 
                     ") VALUES (?, ?, ?, ?, ?, ?)";
     
-    private static final String CREATE_INDEX_PARENT_LINK = CREATE_CHILD_LINK;
+    private static final String CREATE_VIEW_INDEX_PARENT_LINK = CREATE_CHILD_LINK;
     
     private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
@@ -1854,13 +1854,13 @@ public class MetaDataClient {
                 
                 // Add row linking index table to parent table for indexes on views
                 if (parent.getType() == PTableType.VIEW) {
-	                linkStatement = connection.prepareStatement(CREATE_INDEX_PARENT_LINK);
+	                linkStatement = connection.prepareStatement(CREATE_VIEW_INDEX_PARENT_LINK);
 	                linkStatement.setString(1, tenantIdStr);
 	                linkStatement.setString(2, schemaName);
 	                linkStatement.setString(3, tableName);
 	                linkStatement.setString(4, parent.getTenantId()!=null ? parent.getTenantId().getString() : null);
 	                linkStatement.setString(5, parent.getName().getString());
-	                linkStatement.setByte(6, LinkType.INDEX_PARENT_TABLE.getSerializedValue());
+	                linkStatement.setByte(6, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
 	                linkStatement.execute();
                 }
             }

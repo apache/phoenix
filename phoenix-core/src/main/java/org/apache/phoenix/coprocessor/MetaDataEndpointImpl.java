@@ -273,7 +273,7 @@ import com.google.protobuf.Service;
  * @since 0.1
  */
 @SuppressWarnings("deprecation")
-public class MetaDataEndpointImpl extends MetaDataProtocol implements CoprocessorService, Coprocessor {
+public class all e extends MetaDataProtocol implements CoprocessorService, Coprocessor {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
     // Column to track tables that have been upgraded based on PHOENIX-2067
