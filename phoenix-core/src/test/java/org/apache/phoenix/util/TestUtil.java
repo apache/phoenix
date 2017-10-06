@@ -75,7 +75,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
-import org.apache.phoenix.end2end.index.PartialIndexRebuilderIT.WriteFailingRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
@@ -643,13 +642,7 @@ public class TestUtil {
         conn.createStatement().execute(query);
     }
     
-    public static void analyzeTable(String url, long ts, String tableName) throws IOException, SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        analyzeTable(url, props, tableName);
-    }
-
-    public static void analyzeTable(String url, Properties props, String tableName) throws IOException, SQLException {
+   public static void analyzeTable(String url, Properties props, String tableName) throws IOException, SQLException {
         Connection conn = DriverManager.getConnection(url, props);
         analyzeTable(conn, tableName);
         conn.close();
@@ -904,15 +897,26 @@ public class TestUtil {
     public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState indexState) throws InterruptedException, SQLException {
         waitForIndexState(conn, fullIndexName, indexState, 0L);
     }
+
+    private static class IndexStateCheck {
+    	public final PIndexState indexState;
+    	public final Long indexDisableTimestamp;
+    	public final Boolean success;
+    	
+    	public IndexStateCheck(PIndexState indexState, Long indexDisableTimestamp, Boolean success) {
+    		this.indexState = indexState;
+    		this.indexDisableTimestamp = indexDisableTimestamp;
+    		this.success = success;
+    	}
+    }
     
-    private enum IndexStateCheck {SUCCESS, FAIL, KEEP_TRYING};
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
-        int maxTries = 300, nTries = 0;
+        int maxTries = 60, nTries = 0;
         do {
             Thread.sleep(1000); // sleep 1 sec
             IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
-            if (state != IndexStateCheck.KEEP_TRYING) {
-                if (state == IndexStateCheck.SUCCESS) {
+            if (state.success != null) {
+                if (Boolean.TRUE.equals(state.success)) {
                     return;
                 }
                 fail("Index state will not become " + expectedIndexState);
@@ -922,8 +926,26 @@ public class TestUtil {
     }
 
     public static boolean checkIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
-        return checkIndexStateInternal(conn,fullIndexName, expectedIndexState, expectedIndexDisableTimestamp) == IndexStateCheck.SUCCESS;
+        return Boolean.TRUE.equals(checkIndexStateInternal(conn,fullIndexName, expectedIndexState, expectedIndexDisableTimestamp).success);
     }
+    
+    public static void assertIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
+    	IndexStateCheck state = checkIndexStateInternal(conn,fullIndexName, expectedIndexState, expectedIndexDisableTimestamp);
+        if (!Boolean.TRUE.equals(state.success)) {
+        	if (expectedIndexState != null) {
+        		assertEquals(expectedIndexState, state.indexState);
+        	}
+        	if (expectedIndexDisableTimestamp != null) {
+        		assertEquals(expectedIndexDisableTimestamp, state.indexDisableTimestamp);
+        	}
+        }
+    }
+    
+    public static PIndexState getIndexState(Connection conn, String fullIndexName) throws SQLException {
+    	IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, null, null);
+    	return state.indexState;
+    }
+    
     private static IndexStateCheck checkIndexStateInternal(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
         String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
         String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
@@ -932,22 +954,21 @@ public class TestUtil {
                 + ") = (" + "'" + schema + "','" + index + "') "
                 + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
         ResultSet rs = conn.createStatement().executeQuery(query);
+        Long actualIndexDisableTimestamp = null;
+        PIndexState actualIndexState = null;
         if (rs.next()) {
-            Long actualIndexDisableTimestamp = rs.getLong(1);
-            if (rs.wasNull()) {
-                actualIndexDisableTimestamp = null;
-            }
-            PIndexState actualIndexState = PIndexState.fromSerializedValue(rs.getString(2));
-            boolean matchesExpected = Objects.equal(actualIndexDisableTimestamp, expectedIndexDisableTimestamp) &&
-                    actualIndexState == expectedIndexState;
+            actualIndexDisableTimestamp = rs.getLong(1);
+            actualIndexState = PIndexState.fromSerializedValue(rs.getString(2));
+            boolean matchesExpected = (expectedIndexDisableTimestamp == null || Objects.equal(actualIndexDisableTimestamp, expectedIndexDisableTimestamp)) 
+                    && (expectedIndexState == null || actualIndexState == expectedIndexState);
             if (matchesExpected) {
-                return IndexStateCheck.SUCCESS;
+                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, Boolean.TRUE);
             }
             if (ZERO.equals(actualIndexDisableTimestamp)) {
-                return IndexStateCheck.FAIL;
+                return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, Boolean.FALSE);
             }
         }
-        return IndexStateCheck.KEEP_TRYING;
+        return new IndexStateCheck(actualIndexState, actualIndexDisableTimestamp, null);
     }
 
     public static long getRowCount(Connection conn, String tableName) throws SQLException {
@@ -965,6 +986,7 @@ public class TestUtil {
 		}else{
 			return;
 		}
+        final int retries = 10;
         int numTries = 10;
         try (HBaseAdmin admin = services.getAdmin()) {
             admin.modifyTable(Bytes.toBytes(tableName), descriptor);
@@ -973,13 +995,42 @@ public class TestUtil {
                 numTries--;
                 if (numTries == 0) {
                     throw new Exception(
-                            "Check to detect if delaying co-processor was added failed after "
-                                    + numTries + " retries.");
+                            "Failed to add " + coprocessorClass.getName() + " after "
+                                    + retries + " retries.");
                 }
                 Thread.sleep(1000);
             }
         }
     }
 
+    public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        if (descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
+            descriptor.removeCoprocessor(coprocessorClass.getName());
+        }else{
+            return;
+        }
+        final int retries = 10;
+        int numTries = retries;
+        try (HBaseAdmin admin = services.getAdmin()) {
+            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
+            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+                    && numTries > 0) {
+                numTries--;
+                if (numTries == 0) {
+                    throw new Exception(
+                            "Failed to remove " + coprocessorClass.getName() + " after "
+                                    + retries + " retries.");
+                }
+                Thread.sleep(1000);
+            }
+        }
+    }
+     
+    public static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
+        int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
+        return ByteUtil.compare(op, compareResult);
+    }
 
 }

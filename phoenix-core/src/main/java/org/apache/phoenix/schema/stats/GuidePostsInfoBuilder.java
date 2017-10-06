@@ -50,6 +50,7 @@ public class GuidePostsInfoBuilder {
     private TrustedByteArrayOutputStream stream;
     private List<Long> rowCounts = new ArrayList<Long>();
     private List<Long> byteCounts = new ArrayList<Long>();
+    private List<Long> guidePostsTimestamps = new ArrayList<Long>();
 
     public boolean isEmpty() {
         return rowCounts.size() == 0;
@@ -63,6 +64,10 @@ public class GuidePostsInfoBuilder {
         return byteCounts;
     }
 
+    public List<Long> getGuidePostsTimestamps() {
+        return guidePostsTimestamps;
+    }
+
     public int getMaxLength() {
         return maxLength;
     }
@@ -73,20 +78,31 @@ public class GuidePostsInfoBuilder {
         lastRow = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
+    public boolean addGuidePostOnCollection(ImmutableBytesWritable row, long byteCount,
+            long rowCount) {
+        /*
+         * When collecting guideposts, we don't care about the time at which guide post is being
+         * created/updated at. So passing it as 0 here. The update/create timestamp is important
+         * when we are reading guideposts out of the SYSTEM.STATS table.
+         */
+        return trackGuidePost(row, byteCount, rowCount, 0);
+    }
+
     /**
-     * The guide posts, rowCount and byteCount are accumulated every time a guidePosts depth is
-     * reached while collecting stats.
-     * @param row
-     * @param byteCount
-     * @return
-     * @throws IOException 
+     * Track a new guide post
+     * @param row number of rows in the guidepost
+     * @param byteCount number of bytes in the guidepost
+     * @param updateTimestamp time at which guidepost was created/updated.
+     * @throws IOException
      */
-    public boolean addGuidePosts(ImmutableBytesWritable row, long byteCount, long rowCount) {
+    public boolean trackGuidePost(ImmutableBytesWritable row, long byteCount, long rowCount,
+            long updateTimestamp) {
         if (row.getLength() != 0 && lastRow.compareTo(row) < 0) {
             try {
                 encoder.encode(output, row.get(), row.getOffset(), row.getLength());
                 rowCounts.add(rowCount);
                 byteCounts.add(byteCount);
+                guidePostsTimestamps.add(updateTimestamp);
                 this.guidePostsCount++;
                 this.maxLength = encoder.getMaxLength();
                 lastRow = row;
@@ -98,22 +114,10 @@ public class GuidePostsInfoBuilder {
         return false;
     }
 
-    public boolean addGuidePosts(byte[] row) {
-        return addGuidePosts(new ImmutableBytesWritable(row), 0, 0);
-    }
-
-    public boolean addGuidePosts(byte[] row, long byteCount) {
-        return addGuidePosts(new ImmutableBytesWritable(row), byteCount, 0);
-    }
-
-    public boolean addGuidePosts(byte[] row, long byteCount, long rowCount) {
-        return addGuidePosts(new ImmutableBytesWritable(row), byteCount, rowCount);
-    }
-
     public GuidePostsInfo build() {
         this.guidePosts.set(stream.getBuffer(), 0, stream.size());
         GuidePostsInfo guidePostsInfo = new GuidePostsInfo(this.byteCounts, this.guidePosts, this.rowCounts,
-                this.maxLength, this.guidePostsCount);
+                this.maxLength, this.guidePostsCount, this.guidePostsTimestamps);
         return guidePostsInfo;
     }
 
@@ -127,6 +131,10 @@ public class GuidePostsInfoBuilder {
 
     public long getRowCount() {
         return rowCount;
+    }
+    
+    public boolean hasGuidePosts() {
+        return guidePostsCount > 0;
     }
 
 }

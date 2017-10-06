@@ -66,7 +66,7 @@ public class TestParalleIndexWriter {
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     FakeTableFactory factory = new FakeTableFactory(
         Collections.<ImmutableBytesPtr, HTableInterface> emptyMap());
-    ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
+    TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     Abortable mockAbort = Mockito.mock(Abortable.class);
     Stoppable mockStop = Mockito.mock(Stoppable.class);
     // create a simple writer
@@ -116,7 +116,7 @@ public class TestParalleIndexWriter {
     tables.put(tableName, table);
 
     // setup the writer and failure policy
-    ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
+    TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     writer.setup(factory, exec, abort, stop, e);
     writer.write(indexUpdates, true);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",

@@ -352,8 +352,12 @@ public class UpsertCompiler {
         // - transactional table with a connection having an SCN
         if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
             throw new ReadOnlyTableException(schemaName,tableName);
-        }
-        else if (table.isTransactional() && connection.getSCN() != null) {
+        } else if (connection.isBuildingIndex() && table.getType() != PTableType.INDEX) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ONLY_INDEX_UPDATABLE_AT_SCN)
+            .setSchemaName(schemaName)
+            .setTableName(tableName)
+            .build().buildException();
+        } else if (table.isTransactional() && connection.getSCN() != null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE).setSchemaName(schemaName)
             .setTableName(tableName).build().buildException();
         }
@@ -764,6 +768,11 @@ public class UpsertCompiler {
                         public Long getEstimatedBytesToScan() throws SQLException {
                             return aggPlan.getEstimatedBytesToScan();
                         }
+
+                        @Override
+                        public Long getEstimateInfoTimestamp() throws SQLException {
+                            return aggPlan.getEstimateInfoTimestamp();
+                        }
                     };
                 }
             }
@@ -846,7 +855,11 @@ public class UpsertCompiler {
                 public Long getEstimatedBytesToScan() throws SQLException {
                     return queryPlan.getEstimatedBytesToScan();
                 }
-                
+
+                @Override
+                public Long getEstimateInfoTimestamp() throws SQLException {
+                    return queryPlan.getEstimateInfoTimestamp();
+                }
             };
         }
 
@@ -1086,6 +1099,10 @@ public class UpsertCompiler {
                 return 0l;
             }
 
+            @Override
+            public Long getEstimateInfoTimestamp() throws SQLException {
+                return 0l;
+            }
         };
     }
     

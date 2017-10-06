@@ -84,7 +84,7 @@ public class PhoenixIndexImportDirectMapper extends
             String scn = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             String txScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
             if(txScnValue==null) {
-                overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, scn);
+                overrideProps.put(PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, scn);
             }
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
             connection.setAutoCommit(false);

@@ -92,7 +92,6 @@
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
     <snappy.version>0.3</snappy.version>
-    <netty.version>4.0.23.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
@@ -277,24 +276,6 @@
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-            <execution>
-              <id>ClientManagedTimeTests</id>
-                <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
-                <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2500m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
-                <shutdown>kill</shutdown>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -910,11 +891,6 @@
         <groupId>org.apache.htrace</groupId>
         <artifactId>htrace-core</artifactId>
         <version>${htrace.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty-all</artifactId>
-        <version>${netty.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-codec</groupId>

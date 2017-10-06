@@ -45,26 +45,21 @@ import java.sql.ResultSet;
 import java.sql.Types;
 import java.util.Properties;
 
-import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class DistinctCountIT extends BaseClientManagedTimeIT {
+public class DistinctCountIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDistinctCountOnColumn() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT count(DISTINCT A_STRING) FROM aTable";
-
+        String query = "SELECT count(DISTINCT A_STRING) FROM "+tableName;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl(),props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -78,15 +73,13 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountOnRKColumn() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT count(DISTINCT ORGANIZATION_ID) FROM aTable";
+        String query = "SELECT count(DISTINCT ORGANIZATION_ID) FROM "+tableName;
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -101,15 +94,13 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountWithGroupBy() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM aTable group by A_STRING";
+        String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM "+tableName+" group by A_STRING";
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -131,15 +122,13 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountWithGroupByAndOrderBy() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM aTable group by A_STRING order by A_STRING desc";
+        String query = "SELECT A_STRING, count(DISTINCT B_STRING) FROM "+tableName+" group by A_STRING order by A_STRING desc";
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -161,15 +150,13 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountWithGroupByAndOrderByOnDistinctCount() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT A_STRING, count(DISTINCT B_STRING) as COUNT_B_STRING FROM aTable group by A_STRING order by COUNT_B_STRING";
+        String query = "SELECT A_STRING, count(DISTINCT B_STRING) as COUNT_B_STRING FROM "+tableName+" group by A_STRING order by COUNT_B_STRING";
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -191,16 +178,14 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountWithGroupByOrdered() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         String tenantId2 = "00D400000000XHP";
-        initATableValues(tenantId, tenantId2, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, tenantId2, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT organization_id, count(DISTINCT A_STRING) FROM aTable group by organization_id";
+        String query = "SELECT organization_id, count(DISTINCT A_STRING) FROM "+tableName+" group by organization_id";
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -219,14 +204,13 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountOn2Columns() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT count(DISTINCT A_STRING), count(DISTINCT B_STRING) FROM aTable";
+        String query = "SELECT count(DISTINCT A_STRING), count(DISTINCT B_STRING) FROM "+tableName;
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -242,15 +226,13 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testDistinctCountONE() throws Exception {
-        long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(tenantId, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT count(DISTINCT 1) FROM aTable";
+        String query = "SELECT count(DISTINCT 1) FROM "+tableName;
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -264,15 +246,14 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
     }
     
     @Test
-    public void testDistinctCountONEWithEmptyResult() throws Exception {
-        long ts = nextTimestamp();
+    public void testDistinctCountOneWithEmptyResult() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(null, null, getDefaultSplits(tenantId), null, ts);
+        String tableName = generateUniqueName();
+        initATableValues(null, null, getDefaultSplits(tenantId), null, tableName);
 
-        String query = "SELECT count(DISTINCT 1) FROM aTable";
+        String query = "SELECT count(DISTINCT 1) FROM "+tableName;
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -285,23 +266,17 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
         }
     }
     
-    protected static void initATableValues(String tenantId1, String tenantId2, byte[][] splits, Date date, Long ts) throws Exception {
-        if (ts == null) {
-            ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, splits, null);
-        } else {
-            ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, splits, ts-2, null);
-        }
+    protected static void initATableValues(String tenantId1, String tenantId2, byte[][] splits, Date date,
+            String tableName) throws Exception {
+        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits, null);
         
         Properties props = new Properties();
-        if (ts != null) {
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, ts.toString());
-        }
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "ATABLE(" +
+                    "upsert into " + tableName +
+                    " (" +
                     "    ORGANIZATION_ID, " +
                     "    ENTITY_ID, " +
                     "    A_STRING, " +
@@ -459,24 +434,18 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountOnIndexTab() throws Exception {
-        long ts = nextTimestamp();
-        String ddl = "create table personal_details (id integer not null, first_name char(15),\n"
+        String tableName=generateUniqueName();
+        String indexName=generateUniqueName();
+        String ddl = "create table "+tableName+" (id integer not null, first_name char(15),\n"
                 + "    last_name char(15), CONSTRAINT pk PRIMARY KEY (id))";
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute(ddl);
-        conn.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE INDEX personal_details_idx ON personal_details(first_name)");
-        conn.close();
+        conn.createStatement().execute("CREATE INDEX "+indexName+" ON "+tableName+"(first_name)");
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
-        conn = DriverManager.getConnection(getUrl(), props);
-        stmt = conn.prepareStatement("upsert into personal_details(id, first_name, "
+        stmt = conn.prepareStatement("upsert into "+tableName+" (id, first_name, "
                 + "last_name) VALUES (?, ?, ?)");
         stmt.setInt(1, 1);
         stmt.setString(2, "NAME1");
@@ -491,11 +460,8 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
         stmt.setString(3, "LN3");
         stmt.execute();
         conn.commit();
-        conn.close();
 
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
-        conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT COUNT (DISTINCT first_name) FROM personal_details";
+        String query = "SELECT COUNT (DISTINCT first_name) FROM "+tableName;
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
         assertTrue(rs.next());

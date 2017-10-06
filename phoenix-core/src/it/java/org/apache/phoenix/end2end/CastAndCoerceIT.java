@@ -33,7 +33,6 @@ import java.sql.ResultSet;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -43,13 +42,13 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class CastAndCoerceIT extends BaseQueryIT {
 
-    public CastAndCoerceIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+    public CastAndCoerceIT(String indexDDL, boolean columnEncoded) throws Exception {
+        super(indexDDL, columnEncoded, false);
     }
     
     @Parameters(name="CastAndCoerceIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
-        return QueryIT.data();
+        return BaseQueryIT.allIndexes();
     }
     
     @Test

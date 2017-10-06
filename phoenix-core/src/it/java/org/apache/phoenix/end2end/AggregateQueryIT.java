@@ -32,6 +32,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -41,11 +42,17 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.runners.Parameterized.Parameters;
 
 public class AggregateQueryIT extends BaseQueryIT {
 
-    public AggregateQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, false);
+    @Parameters(name="AggregateQueryIT_{index}") // name is used by failsafe as file name in reports
+    public static Collection<Object> data() {
+        return BaseQueryIT.allIndexes();
+    }
+    
+    public AggregateQueryIT(String indexDDL, boolean columnEncoded) throws Exception {
+        super(indexDDL, columnEncoded, false);
     }
 
     @Test
@@ -96,7 +103,7 @@ public class AggregateQueryIT extends BaseQueryIT {
             HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableNameBytes);
             htable.clearRegionCache();
             int nRegions = htable.getRegionLocations().size();
-            admin.split(tableNameBytes, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A" + Character.valueOf((char) ('3' + nextRunCount()))))); // vary split point with test run
+            admin.split(tableNameBytes, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A3")));
             int retryCount = 0;
             do {
                 Thread.sleep(2000);

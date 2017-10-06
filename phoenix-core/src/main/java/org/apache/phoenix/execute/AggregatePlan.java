@@ -227,6 +227,7 @@ public class AggregatePlan extends BaseQueryPlan {
                 : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false, caches);
         estimatedRows = iterators.getEstimatedRowCount();
         estimatedSize = iterators.getEstimatedByteCount();
+        estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();
         splits = iterators.getSplits();
         scans = iterators.getScans();
 

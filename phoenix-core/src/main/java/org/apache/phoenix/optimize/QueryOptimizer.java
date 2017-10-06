@@ -227,7 +227,8 @@ public class QueryOptimizer {
         // We will or will not do tuple projection according to the data plan.
         boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
         // Check index state of now potentially updated index table to make sure it's active
-        if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
+        PIndexState indexState = resolver.getTables().get(0).getTable().getIndexState();
+        if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
                 indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
@@ -243,9 +244,10 @@ public class QueryOptimizer {
                         && !plan.getContext().getDataColumns().isEmpty()) {
                     return null;
                 }
+                indexState = plan.getTableRef().getTable().getIndexState();
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.
-                if (plan.getTableRef().getTable().getIndexState() == PIndexState.ACTIVE) {
+                if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE) {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
                     } else if (index.getIndexType() == IndexType.GLOBAL) {

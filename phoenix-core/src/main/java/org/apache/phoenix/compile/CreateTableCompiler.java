@@ -52,7 +52,6 @@ import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -84,7 +83,6 @@ public class CreateTableCompiler {
         final PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
         PTableType type = create.getTableType();
-        PhoenixConnection connectionToBe = connection;
         PTable parentToBe = null;
         ViewType viewTypeToBe = null;
         Scan scan = new Scan();
@@ -148,24 +146,6 @@ public class CreateTableCompiler {
                     viewStatementToBe = QueryUtil.getViewStatement(baseTableName.getSchemaName(), baseTableName.getTableName(), buf.toString());
                 }
                 if (viewTypeToBe != ViewType.MAPPED) {
-                    Long scn = connection.getSCN();
-                    connectionToBe = (scn != null || tableRef.getTable().isTransactional()) ? connection :
-                        // If we haved no SCN on our connection and the base table is not transactional, freeze the SCN at when
-                        // the base table was resolved to prevent any race condition on
-                        // the error checking we do for the base table. The only potential
-                        // issue is if the base table lives on a different region server
-                        // than the new table will, then we're relying here on the system
-                        // clocks being in sync.
-                        new PhoenixConnection(
-                            // When the new table is created, we still want to cache it
-                            // on our connection.
-                            new DelegateConnectionQueryServices(connection.getQueryServices()) {
-                                @Override
-                                public void addTable(PTable table, long resolvedTime) throws SQLException {
-                                    connection.addTable(table, resolvedTime);
-                                }
-                            },
-                            connection, tableRef.getCurrentTime()+1);
                     viewColumnConstantsToBe = new byte[nColumns][];
                     ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
                     where.accept(visitor);
@@ -201,7 +181,7 @@ public class CreateTableCompiler {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
                 .setMessage("Node: " + node).build().buildException();
         }
-        final MetaDataClient client = new MetaDataClient(connectionToBe);
+        final MetaDataClient client = new MetaDataClient(connection);
         final PTable parent = parentToBe;
         
         return new BaseMutationPlan(context, operation) {

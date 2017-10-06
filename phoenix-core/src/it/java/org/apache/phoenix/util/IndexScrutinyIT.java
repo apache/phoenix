@@ -35,7 +35,7 @@ public class IndexScrutinyIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
+            conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true, SALT_BUCKETS=2");
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v)");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb')");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc')");
@@ -61,7 +61,7 @@ public class IndexScrutinyIT extends ParallelStatsDisabledIT {
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR, v2 VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v) INCLUDE (v2)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + fullTableName + " (v) INCLUDE (v2)");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb','0')");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc','1')");
             conn.commit();

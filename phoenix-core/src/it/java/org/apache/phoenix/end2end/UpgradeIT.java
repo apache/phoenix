@@ -58,10 +58,16 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -351,8 +357,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     return true;
                 }
             };
-            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade,
-                    conn.unwrap(PhoenixConnection.class), HConstants.LATEST_TIMESTAMP)) {
+            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade, getUrl(), PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES), 
+                    conn.unwrap(PhoenixConnection.class).getMetaDataCache())) {
                 try {
                     phxConn.createStatement().execute(
                             "CREATE TABLE " + generateUniqueName()

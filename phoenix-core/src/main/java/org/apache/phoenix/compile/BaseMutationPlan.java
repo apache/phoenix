@@ -74,4 +74,9 @@ public abstract class BaseMutationPlan implements MutationPlan {
         return 0l;
     }
 
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        return 0l;
+    }
+
 }

@@ -665,10 +665,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     }
 
     @Test
-    public void testUDFsWhenTimestampManagedAtClient() throws Exception {
-        long ts = 100;
+    public void testUDFsWithLatestTimestamp() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(url, props);
         Statement stmt = conn.createStatement();
         String query = "select count(*) from "+ SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_FUNCTION_TABLE + "\"";
@@ -677,7 +675,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         int numRowsBefore = rs.getInt(1);
         stmt.execute("create function mysum61(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();
         rs = stmt.executeQuery(query);
@@ -685,7 +682,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         int numRowsAfter= rs.getInt(1);
         assertEquals(3, numRowsAfter - numRowsBefore);
         stmt.execute("drop function mysum61");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();
         rs = stmt.executeQuery(query);
@@ -711,7 +707,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         }
         stmt.execute("create function mysum61(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();
         try {
@@ -720,7 +715,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
             fail("FunctionNotFoundException should not be thrown");
         }
         conn.createStatement().execute("create table t61(k integer primary key, k1 integer, lastname varchar)");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();
         stmt.execute("upsert into t61 values(1,1,'jock')");
@@ -729,7 +723,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar"+"'");
         stmt.execute("create or replace function myfunction6(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15 ) returns INTEGER as 'org.apache.phoenix.end2end."+MY_SUM_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();
         rs = stmt.executeQuery("select myfunction6(k,12) from t61");
@@ -743,13 +736,11 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertEquals(1, rs.getInt(1));
         stmt.execute("create or replace function myfunction6(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end."+MY_REVERSE_CLASS_NAME+"' using jar "
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar"+"'");
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();
         rs = stmt.executeQuery("select k from t61 where myfunction6(lastname)='kcoj'");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 60));
         props.setProperty(QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB, "false");
         conn = DriverManager.getConnection(url, props);
         stmt = conn.createStatement();

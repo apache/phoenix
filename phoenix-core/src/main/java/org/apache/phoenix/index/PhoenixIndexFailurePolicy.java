@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.write.DelegateIndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
@@ -51,7 +52,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -166,7 +166,15 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         // start by looking at all the tables to which we attempted to write
         long timestamp = 0;
         boolean leaveIndexActive = blockDataTableWritesOnFailure || !disableIndexOnFailure;
+        // if using TrackingParallelWriter, we know which indexes failed and only disable those
+        Set<HTableInterfaceReference> failedTables = cause instanceof MultiIndexWriteFailureException 
+                ? new HashSet<HTableInterfaceReference>(((MultiIndexWriteFailureException)cause).getFailedTables())
+                : Collections.<HTableInterfaceReference>emptySet();
+        
         for (HTableInterfaceReference ref : refs) {
+            if (failedTables.size() > 0 && !failedTables.contains(ref)) {
+                continue; // leave index active if its writes succeeded
+            }
             long minTimeStamp = 0;
 
             // get the minimum timestamp across all the mutations we attempted on that table
@@ -201,7 +209,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             return timestamp;
         }
 
-        PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.ACTIVE;
+        PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.PENDING_ACTIVE;
         // for all the index tables that we've found, try to disable them and if that fails, try to
         for (Map.Entry<String, Long> tableTimeElement :indexTableNames.entrySet()){
             String indexTableName = tableTimeElement.getKey();
@@ -266,12 +274,9 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             Map<ImmutableBytesWritable, String> localIndexNames =
                     new HashMap<ImmutableBytesWritable, String>();
             for (PTable index : indexes) {
-                if (index.getIndexType() == IndexType.LOCAL
-                        && index.getIndexState() == PIndexState.ACTIVE) {
-                    if (localIndex == null) localIndex = index;
-                    localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
-                            index.getViewIndexId())), index.getName().getString());
-                }
+                if (localIndex == null) localIndex = index;
+                localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
+                        index.getViewIndexId())), index.getName().getString());
             }
             if (localIndex == null) {
                 return Collections.emptySet();

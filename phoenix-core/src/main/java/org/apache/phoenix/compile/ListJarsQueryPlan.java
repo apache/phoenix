@@ -264,4 +264,9 @@ public class ListJarsQueryPlan implements QueryPlan {
     public Long getEstimatedBytesToScan() {
         return 0l;
     }
+
+    @Override
+    public Long getEstimateInfoTimestamp() throws SQLException {
+        return 0l;
+    }
 }

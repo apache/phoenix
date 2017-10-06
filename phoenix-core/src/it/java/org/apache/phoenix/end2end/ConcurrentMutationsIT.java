@@ -215,9 +215,9 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    @Repeat(10)
+    @Repeat(5)
     public void testConcurrentUpserts() throws Exception {
-        int nThreads = 8;
+        int nThreads = 4;
         final int batchSize = 200;
         final int nRows = 51;
         final int nIndexValues = 23;

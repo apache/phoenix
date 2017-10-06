@@ -20,7 +20,6 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -34,6 +33,7 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
@@ -268,7 +268,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             @Override
             public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
-                return super.next(result, scannerContext);
+                boolean res = super.next(result);
+                ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+                ScannerContextUtil.updateTimeProgress(scannerContext);
+                return res;
             }
 
             @Override
@@ -280,7 +283,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             @Override
             public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
-                return super.nextRaw(result, scannerContext);
+                boolean res = super.nextRaw(result);
+                ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+                ScannerContextUtil.updateTimeProgress(scannerContext);
+                return res;
             }
             
             @Override

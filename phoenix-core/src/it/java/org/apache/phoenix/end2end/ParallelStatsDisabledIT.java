@@ -33,7 +33,7 @@ import org.junit.experimental.categories.Category;
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static final void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
 

@@ -43,34 +43,31 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-
-public class VariableLengthPKIT extends BaseClientManagedTimeIT {
+public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     private static final String DS1 = "1970-01-01 00:58:00";
     private static final Date D1 = toDate(DS1);
 
     private static Date toDate(String dateString) {
         return DateUtil.parseDate(dateString);
     }
-
-    protected static void initGroupByRowKeyColumns(long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
+    
+    protected static void initGroupByRowKeyColumns(String pTSDBtableName) throws Exception {
+        ensureTableCreated(getUrl(),pTSDBtableName, PTSDB_NAME, null, null, null);
         // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "PTSDB(" +
-                "    INST, " +
-                "    HOST," +
-                "    \"DATE\")" +
-                "VALUES (?, ?, CURRENT_DATE())");
+                "upsert into " + pTSDBtableName+
+                        " (" +
+                        "    INST, " +
+                        "    HOST," +
+                        "    \"DATE\")" +
+                        "VALUES (?, ?, CURRENT_DATE())");
         stmt.setString(1, "ab");
         stmt.setString(2, "a");
         stmt.execute();
@@ -84,44 +81,70 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.close();
     }
 
-    protected static void initTableValues(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, splits, ts-2, null);
+    private static void initVarcharKeyTableValues(byte[][] splits, String varcharKeyTestTableName) throws Exception {
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
 
+        String ddl = "create table " +varcharKeyTestTableName+
+                "   (pk varchar not null primary key)";
+        createTestTable(getUrl(), ddl, splits, null);
+        PreparedStatement stmt = conn.prepareStatement(
+                "upsert into " + varcharKeyTestTableName+
+                        "(pk) " +
+                        "VALUES (?)");
+        stmt.setString(1, "   def");
+        stmt.execute();
+        stmt.setString(1, "jkl   ");
+        stmt.execute();
+        stmt.setString(1, "   ghi   ");
+        stmt.execute();
+
+        conn.commit();
+        conn.close();
+    }
+
+    private static void initPTSDBTableValues(byte[][] splits, String pTSDBtableName) throws Exception {
+        ensureTableCreated(getUrl(),pTSDBtableName, PTSDB_NAME, splits, null, null);
         // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "PTSDB(" +
-                "    INST, " +
-                "    HOST," +
-                "    \"DATE\"," +
-                "    VAL)" +
-                "VALUES (?, ?, ?, ?)");
+                "upsert into " + pTSDBtableName +
+                        " (" +
+                        "    INST, " +
+                        "    HOST," +
+                        "    \"DATE\"," +
+                        "    VAL)" +
+                        "VALUES (?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "abc-def-ghi");
         stmt.setDate(3, new Date(System.currentTimeMillis()));
         stmt.setBigDecimal(4, new BigDecimal(.5));
         stmt.execute();
+        conn.close();
+    }
 
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, splits, ts-2, null);
-        conn.setAutoCommit(false);
+    private static void initBTableValues(byte[][] splits, String bTableName) throws Exception {
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        ensureTableCreated(getUrl(),bTableName, BTABLE_NAME, splits, null, null);
 
-        // Insert all rows at ts
-        stmt = conn.prepareStatement(
-                "upsert into " +
-                "BTABLE(" +
-                "    A_STRING, " +
-                "    A_ID," +
-                "    B_STRING," +
-                "    A_INTEGER," +
-                "    B_INTEGER," +
-                "    C_INTEGER," +
-                "    D_STRING," +
-                "    E_STRING)" +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement(
+                "upsert into " + bTableName+
+                        " (" +
+                        "    A_STRING, " +
+                        "    A_ID," +
+                        "    B_STRING," +
+                        "    A_INTEGER," +
+                        "    B_INTEGER," +
+                        "    C_INTEGER," +
+                        "    D_STRING," +
+                        "    E_STRING)" +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "111");
         stmt.setString(3, "x");
@@ -154,33 +177,19 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.setString(7, null);
         stmt.execute();
 
-        String ddl = "create table VarcharKeyTest" +
-            "   (pk varchar not null primary key)";
-        createTestTable(getUrl(), ddl, splits, ts-2);
-        stmt = conn.prepareStatement(
-                "upsert into " +
-                "VarcharKeyTest(pk) " +
-                "VALUES (?)");
-        stmt.setString(1, "   def");
-        stmt.execute();
-        stmt.setString(1, "jkl   ");
-        stmt.execute();
-        stmt.setString(1, "   ghi   ");
-        stmt.execute();
-
         conn.commit();
         conn.close();
     }
 
     @Test
     public void testSingleColumnScanKey() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM "+bTableName+" WHERE A_STRING=?";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, "abc");
             ResultSet rs = statement.executeQuery();
@@ -198,13 +207,14 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSingleColumnGroupBy() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT INST FROM PTSDB GROUP BY INST";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        String query = "SELECT INST FROM "+pTSDBTableName+" GROUP BY INST";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
+
         try {
-            initTableValues(null, ts);
+            initPTSDBTableValues(null, pTSDBTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -217,13 +227,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testNonfirstColumnGroupBy() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT HOST FROM PTSDB WHERE INST='abc' GROUP BY HOST";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        String query = "SELECT HOST FROM "+pTSDBTableName+" WHERE INST='abc' GROUP BY HOST";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initPTSDBTableValues(null, pTSDBTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -236,13 +246,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testGroupByRowKeyColumns() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT SUBSTR(INST,1,1),HOST FROM PTSDB GROUP BY SUBSTR(INST,1,1),HOST";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        String query = "SELECT SUBSTR(INST,1,1),HOST FROM "+pTSDBTableName+" GROUP BY SUBSTR(INST,1,1),HOST";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initGroupByRowKeyColumns(ts);
+            initGroupByRowKeyColumns(pTSDBTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -259,13 +269,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSkipScan() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT HOST FROM PTSDB WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00')";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        String query = "SELECT HOST FROM "+pTSDBTableName+" WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00')";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initPTSDBTableValues(null, pTSDBTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -278,13 +288,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSkipMax() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT MAX(INST),MAX(\"DATE\") FROM PTSDB WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00')";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        String query = "SELECT MAX(INST),MAX(\"DATE\") FROM "+pTSDBTableName+" WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00')";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initPTSDBTableValues(null, pTSDBTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -297,13 +307,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSkipMaxWithLimit() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT MAX(INST),MAX(\"DATE\") FROM PTSDB WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00') LIMIT 2";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        String query = "SELECT MAX(INST),MAX(\"DATE\") FROM "+pTSDBTableName+" WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00') LIMIT 2";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initPTSDBTableValues(null, pTSDBTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -316,15 +326,15 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSingleColumnKeyFilter() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         // Requires not null column to be projected, since the only one projected in the query is
         // nullable and will cause the no key value to be returned if it is the only one projected.
-        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE B_STRING=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM "+bTableName+" WHERE B_STRING=?";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null, bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, "xy");
             ResultSet rs = statement.executeQuery();
@@ -343,14 +353,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultiColumnEqScanKey() throws Exception {
-        long ts = nextTimestamp();
-        // TODO: add compile test to confirm start/stop scan key
-        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING=? AND A_ID=? AND B_STRING=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM "+bTableName+" WHERE A_STRING=? AND A_ID=? AND B_STRING=?";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null, bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, "abcd");
             statement.setString(2, "222");
@@ -371,14 +380,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultiColumnGTScanKey() throws Exception {
-        long ts = nextTimestamp();
-        // TODO: add compile test to confirm start/stop scan key
-        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING=? AND A_ID=? AND B_STRING>?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM "+bTableName+" WHERE A_STRING=? AND A_ID=? AND B_STRING>?";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null, bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, "abcd");
             statement.setString(2, "222");
@@ -404,14 +412,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultiColumnGTKeyFilter() throws Exception {
-        long ts = nextTimestamp();
-        // TODO: add compile test to confirm start/stop scan key
-        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM BTABLE WHERE A_STRING>? AND A_INTEGER>=?";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT A_STRING,substr(a_id,1,1),B_STRING,A_INTEGER,B_INTEGER FROM "+bTableName+" WHERE A_STRING>? AND A_INTEGER>=?";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null, bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, "abc");
             statement.setInt(2, 4);
@@ -430,22 +437,21 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testNullValueEqualityScan() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
         // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES ('', '', ?, 0.5)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+" VALUES ('', '', ?, 0.5)");
         stmt.setDate(1, D1);
         stmt.execute();
         conn.close();
 
         // Comparisons against null are always false.
-        String query = "SELECT HOST,\"DATE\" FROM PTSDB WHERE HOST='' AND INST=''";
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT HOST,\"DATE\" FROM "+pTSDBTableName+" WHERE HOST='' AND INST=''";
+        url = getUrl();
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -458,14 +464,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testVarLengthPKColScan() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES (?, 'y', ?, 0.5)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+" VALUES (?, 'y', ?, 0.5)");
         stmt.setString(1, "x");
         stmt.setDate(2, D1);
         stmt.execute();
@@ -473,8 +478,8 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.close();
 
-        String query = "SELECT HOST,\"DATE\" FROM PTSDB WHERE INST='x' AND HOST='y'";
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT HOST,\"DATE\" FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
+        url = getUrl();
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -488,14 +493,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testEscapedQuoteScan() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(), pTSDBTableName, PTSDB_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES (?, 'y', ?, 0.5)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+" VALUES (?, 'y', ?, 0.5)");
         stmt.setString(1, "x'y");
         stmt.setDate(2, D1);
         stmt.execute();
@@ -503,9 +507,9 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.close();
 
-        String query1 = "SELECT INST,\"DATE\" FROM PTSDB WHERE INST='x''y'";
-        String query2 = "SELECT INST,\"DATE\" FROM PTSDB WHERE INST='x\\\'y'";
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query1 = "SELECT INST,\"DATE\" FROM "+pTSDBTableName+" WHERE INST='x''y'";
+        String query2 = "SELECT INST,\"DATE\" FROM "+pTSDBTableName+" WHERE INST='x\\\'y'";
+        url = getUrl();
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
@@ -526,14 +530,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         }
     }
 
-    private static void initPtsdbTableValues(long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+    private static void initPTSDBTableValues1(String pTSDBTableName) throws Exception {
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES ('x', 'y', ?, 0.5)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+" VALUES ('x', 'y', ?, 0.5)");
         stmt.setDate(1, D1);
         stmt.execute();
         conn.close();
@@ -541,11 +544,10 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testToStringOnDate() throws Exception {
-        long ts = nextTimestamp();
-        initPtsdbTableValues(ts);
-
-        String query = "SELECT HOST,\"DATE\" FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        initPTSDBTableValues1(pTSDBTableName);
+        String query = "SELECT HOST,\"DATE\" FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -559,14 +561,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         }
     }
 
-    private static void initPtsdbTableValues2(long ts, Date d) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB2_NAME, PTSDB2_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+    private static void initPTSDBTableValues2(String pTSDB2TableName, Date d) throws Exception {
+        ensureTableCreated(getUrl(),pTSDB2TableName, PTSDB2_NAME, null, null, null);
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into "+PTSDB2_NAME+"(inst,\"DATE\",val2) VALUES (?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDB2TableName+"(inst,\"DATE\",val2) VALUES (?, ?, ?)");
         stmt.setString(1, "a");
         stmt.setDate(2, d);
         stmt.setDouble(3, 101.3);
@@ -596,16 +597,17 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRoundOnDate() throws Exception {
-        long ts = nextTimestamp();
+        String pTSDB2TableName = generateUniqueName();
+
         Date date = new Date(System.currentTimeMillis());
-        initPtsdbTableValues2(ts, date);
+        initPTSDBTableValues2(pTSDB2TableName, date);
 
         String query = "SELECT MAX(val2)"
-        + " FROM "+PTSDB2_NAME
-        + " WHERE inst='a'"
-        + " GROUP BY ROUND(\"DATE\",'day',1)"
-        + " ORDER BY MAX(val2)"; // disambiguate row order
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+                + " FROM "+pTSDB2TableName
+                + " WHERE inst='a'"
+                + " GROUP BY ROUND(\"DATE\",'day',1)"
+                + " ORDER BY MAX(val2)"; // disambiguate row order
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -625,16 +627,16 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testOrderBy() throws Exception {
-        long ts = nextTimestamp();
+        String pTSDB2TableName = generateUniqueName();
         Date date = new Date(System.currentTimeMillis());
-        initPtsdbTableValues2(ts, date);
+        initPTSDBTableValues2(pTSDB2TableName, date);
 
         String query = "SELECT inst,MAX(val2),MIN(val2)"
-        + " FROM "+PTSDB2_NAME
-        + " GROUP BY inst,ROUND(\"DATE\",'day',1)"
-        + " ORDER BY inst,ROUND(\"DATE\",'day',1)"
-        ;
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+                + " FROM "+pTSDB2TableName
+                + " GROUP BY inst,ROUND(\"DATE\",'day',1)"
+                + " ORDER BY inst,ROUND(\"DATE\",'day',1)"
+                ;
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -672,14 +674,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectCount() throws Exception {
-        long ts = nextTimestamp();
+        String pTSDB2TableName = generateUniqueName();
         Date date = new Date(System.currentTimeMillis());
-        initPtsdbTableValues2(ts, date);
-
+        initPTSDBTableValues2(pTSDB2TableName, date);
         String query = "SELECT COUNT(*)"
-        + " FROM "+PTSDB2_NAME
-        + " WHERE inst='a'";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+                + " FROM "+pTSDB2TableName
+                + " WHERE inst='a'";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -695,15 +696,14 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testBatchUpsert() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB2_NAME, PTSDB2_NAME, null, ts-2, null);
-        Date d = new Date(ts);
+        String pTSDB2TableName = generateUniqueName();
+        Date d = new Date(System.currentTimeMillis());
+        ensureTableCreated(getUrl(),pTSDB2TableName, PTSDB2_NAME, null, null, null);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        String query = "SELECT SUM(val1),SUM(val2),SUM(val3) FROM "+PTSDB2_NAME;
-        String sql1 = "UPSERT INTO "+PTSDB2_NAME+"(inst,\"DATE\",val1) VALUES (?, ?, ?)";
-        String sql2 = "UPSERT INTO "+PTSDB2_NAME+"(inst,\"DATE\",val2) VALUES (?, ?, ?)";
-        String sql3 = "UPSERT INTO "+PTSDB2_NAME+"(inst,\"DATE\",val3) VALUES (?, ?, ?)";
+        String query = "SELECT SUM(val1),SUM(val2),SUM(val3) FROM "+pTSDB2TableName;
+        String sql1 = "UPSERT INTO "+pTSDB2TableName+"(inst,\"DATE\",val1) VALUES (?, ?, ?)";
+        String sql2 = "UPSERT INTO "+pTSDB2TableName+"(inst,\"DATE\",val2) VALUES (?, ?, ?)";
+        String sql3 = "UPSERT INTO "+pTSDB2TableName+"(inst,\"DATE\",val3) VALUES (?, ?, ?)";
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         // conn.setAutoCommit(true);
@@ -772,7 +772,6 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.close();
 
         // Query at a time after the upsert to confirm they took place
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         conn = DriverManager.getConnection(getUrl(), props);
         {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -788,11 +787,10 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectStar() throws Exception {
-        long ts = nextTimestamp();
-        initPtsdbTableValues(ts);
-
-        String query = "SELECT * FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String pTSDBTableName = generateUniqueName();
+        initPTSDBTableValues1(pTSDBTableName);
+        String query = "SELECT * FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -811,11 +809,12 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testToCharOnDate() throws Exception {
-        long ts = nextTimestamp();
-        initPtsdbTableValues(ts);
+        String pTSDBTableName = generateUniqueName();
 
-        String query = "SELECT HOST,TO_CHAR(\"DATE\") FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        initPTSDBTableValues1(pTSDBTableName);
+
+        String query = "SELECT HOST,TO_CHAR(\"DATE\") FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -830,13 +829,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testToCharWithFormatOnDate() throws Exception {
-        long ts = nextTimestamp();
-        initPtsdbTableValues(ts);
+        String pTSDBTableName = generateUniqueName();
 
+        initPTSDBTableValues1(pTSDBTableName);
         String format = "HH:mm:ss";
         Format dateFormatter = DateUtil.getDateFormatter(format);
-        String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y'";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -851,13 +850,14 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testToDateWithFormatOnDate() throws Exception {
-        long ts = nextTimestamp();
-        initPtsdbTableValues(ts);
+        String pTSDBTableName = generateUniqueName();
+
+        initPTSDBTableValues1(pTSDBTableName);
 
         String format = "yyyy-MM-dd HH:mm:ss.S";
         Format dateFormatter = DateUtil.getDateFormatter(format);
-        String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y' and \"DATE\"=TO_DATE(?,'" + format + "')";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y' and \"DATE\"=TO_DATE(?,'" + format + "')";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -873,16 +873,15 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMissingPKColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         Statement stmt = conn.createStatement();
         try {
-            stmt.execute("upsert into PTSDB(INST,HOST,VAL) VALUES ('abc', 'abc-def-ghi', 0.5)");
+            stmt.execute("upsert into "+pTSDBTableName+"(INST,HOST,VAL) VALUES ('abc', 'abc-def-ghi', 0.5)");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
@@ -893,15 +892,15 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testNoKVColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2, null);
+        String pTSDBTableName = generateUniqueName();
 
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        ensureTableCreated(getUrl(),pTSDBTableName, BTABLE_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into BTABLE VALUES (?, ?, ?, ?, ?)");
+                "upsert into "+pTSDBTableName+" VALUES (?, ?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "123");
         stmt.setString(3, "x");
@@ -911,54 +910,25 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.execute();
     }
 
-    // Broken, since we don't know if insert vs update. @Test
-    public void testMissingKVColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement(
-                "upsert into BTABLE VALUES (?, ?, ?, ?, ?, ?)");
-        stmt.setString(1, "abc");
-        stmt.setString(2, "123");
-        stmt.setString(3, "x");
-        stmt.setInt(4, 1);
-        stmt.setString(5, "ab");
-        stmt.setInt(6, 1);
-        try {
-            stmt.execute();
-            fail();
-        } catch (ConstraintViolationException e) {
-            // Non nullable key value E_STRING has no value
-            assertTrue(e.getMessage().contains("may not be null"));
-        } finally {
-            conn.close();
-        }
-    }
-
     @Test
     public void testTooShortKVColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, BTABLE_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "BTABLE(" +
-                "    A_STRING, " +
-                "    A_ID," +
-                "    B_STRING," +
-                "    A_INTEGER," +
-                "    C_STRING," +
-                "    E_STRING)" +
-                "VALUES (?, ?, ?, ?, ?, ?)");
+                "upsert into " + pTSDBTableName +
+                        " (" +
+                        "    A_STRING, " +
+                        "    A_ID," +
+                        "    B_STRING," +
+                        "    A_INTEGER," +
+                        "    C_STRING," +
+                        "    E_STRING)" +
+                        "VALUES (?, ?, ?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "123");
         stmt.setString(3, "x");
@@ -977,24 +947,23 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testTooShortPKColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, BTABLE_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "BTABLE(" +
-                "    A_STRING, " +
-                "    A_ID," +
-                "    B_STRING," +
-                "    A_INTEGER," +
-                "    C_STRING," +
-                "    E_STRING)" +
-                "VALUES (?, ?, ?, ?, ?, ?)");
+                "upsert into " + pTSDBTableName+
+                        " (" +
+                        "    A_STRING, " +
+                        "    A_ID," +
+                        "    B_STRING," +
+                        "    A_INTEGER," +
+                        "    C_STRING," +
+                        "    E_STRING)" +
+                        "VALUES (?, ?, ?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "12");
         stmt.setString(3, "x");
@@ -1013,24 +982,23 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testTooLongPKColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String bTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),bTableName, BTABLE_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "BTABLE(" +
-                "    A_STRING, " +
-                "    A_ID," +
-                "    B_STRING," +
-                "    A_INTEGER," +
-                "    C_STRING," +
-                "    E_STRING)" +
-                "VALUES (?, ?, ?, ?, ?, ?)");
+                "upsert into " + bTableName+
+                        "(" +
+                        "    A_STRING, " +
+                        "    A_ID," +
+                        "    B_STRING," +
+                        "    A_INTEGER," +
+                        "    C_STRING," +
+                        "    E_STRING)" +
+                        "VALUES (?, ?, ?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "123");
         stmt.setString(3, "x");
@@ -1050,25 +1018,24 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testTooLongKVColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2, null);
-
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
+        String bTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),bTableName, BTABLE_NAME, null, null, null);
+        String url = getUrl(); // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
         // Insert all rows at ts
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " +
-                "BTABLE(" +
-                "    A_STRING, " +
-                "    A_ID," +
-                "    B_STRING," +
-                "    A_INTEGER," +
-                "    C_STRING," +
-                "    D_STRING," +
-                "    E_STRING)" +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)");
+                "upsert into " + bTableName+
+                        "(" +
+                        "    A_STRING, " +
+                        "    A_ID," +
+                        "    B_STRING," +
+                        "    A_INTEGER," +
+                        "    C_STRING," +
+                        "    D_STRING," +
+                        "    E_STRING)" +
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, "abc");
         stmt.setString(2, "123");
         stmt.setString(3, "x");
@@ -1089,13 +1056,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultiFixedLengthNull() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM BTABLE GROUP BY B_INTEGER,C_INTEGER";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT B_INTEGER,C_INTEGER,COUNT(1) FROM "+bTableName+" GROUP BY B_INTEGER,C_INTEGER";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null, bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -1124,13 +1091,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSingleFixedLengthNull() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT C_INTEGER,COUNT(1) FROM BTABLE GROUP BY C_INTEGER";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT C_INTEGER,COUNT(1) FROM "+bTableName+" GROUP BY C_INTEGER";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -1150,13 +1117,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testMultiMixedTypeGroupBy() throws Exception {
-        long ts = nextTimestamp();
-        String query = "SELECT A_ID, E_STRING, D_STRING, C_INTEGER, COUNT(1) FROM BTABLE GROUP BY A_ID, E_STRING, D_STRING, C_INTEGER";
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String bTableName = generateUniqueName();
+        String query = "SELECT A_ID, E_STRING, D_STRING, C_INTEGER, COUNT(1) FROM "+bTableName+" GROUP BY A_ID, E_STRING, D_STRING, C_INTEGER";
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -1189,46 +1156,48 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSubstrFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
+        String varcharKeyTestTable = generateUniqueName();
         String query[] = {
-            "SELECT substr('ABC',-1,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('ABC',-4,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('ABC',2,4) FROM BTABLE LIMIT 1",
-            "SELECT substr('ABC',1,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('ABC',0,1) FROM BTABLE LIMIT 1",
-            // Test for multibyte characters support.
-            "SELECT substr('ĎďĒ',0,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('ĎďĒ',0,2) FROM BTABLE LIMIT 1",
-            "SELECT substr('ĎďĒ',1,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('ĎďĒ',1,2) FROM BTABLE LIMIT 1",
-            "SELECT substr('ĎďĒ',2,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('ĎďĒ',2,2) FROM BTABLE LIMIT 1",
-            "SELECT substr('ĎďĒ',-1,1) FROM BTABLE LIMIT 1",
-            "SELECT substr('Ďďɚʍ',2,4) FROM BTABLE LIMIT 1",
-            "SELECT pk FROM VarcharKeyTest WHERE substr(pk, 0, 3)='jkl'",
+                "SELECT substr('ABC',-1,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ABC',-4,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ABC',2,4) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ABC',1,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ABC',0,1) FROM "+bTableName+" LIMIT 1",
+                // Test for multibyte characters support.
+                "SELECT substr('ĎďĒ',0,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ĎďĒ',0,2) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ĎďĒ',1,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ĎďĒ',1,2) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ĎďĒ',2,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ĎďĒ',2,2) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('ĎďĒ',-1,1) FROM "+bTableName+" LIMIT 1",
+                "SELECT substr('Ďďɚʍ',2,4) FROM "+bTableName+" LIMIT 1",
+                "SELECT pk FROM "+varcharKeyTestTable+" WHERE substr(pk, 0, 3)='jkl'",
         };
         String result[] = {
-            "C",
-            null,
-            "BC",
-            "A",
-            "A",
-            "Ď",
-            "Ďď",
-            "Ď",
-            "Ďď",
-            "ď",
-            "ďĒ",
-            "Ē",
-            "ďɚʍ",
-            "jkl   ",
+                "C",
+                null,
+                "BC",
+                "A",
+                "A",
+                "Ď",
+                "Ďď",
+                "Ď",
+                "Ďď",
+                "ď",
+                "ďĒ",
+                "Ē",
+                "ďɚʍ",
+                "jkl   ",
         };
         assertEquals(query.length,result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
+            initVarcharKeyTableValues(null,varcharKeyTestTable);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1243,51 +1212,51 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRegexReplaceFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         // NOTE: we need to double escape the "\\" here because conn.prepareStatement would
         // also try to evaluate the escaping. As a result, to represent what normally would be
         // a "\d" in this test, it would become "\\\\d".
         String query[] = {
-            "SELECT regexp_replace('', '') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('', 'abc', 'def') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('123abcABC', '[a-z]+') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('123-abc-ABC', '-[a-zA-Z-]+') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('abcABC123', '\\\\d+', '') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('abcABC123', '\\\\D+', '') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('abc', 'abc', 'def') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('abc123ABC', '\\\\d+', 'def') FROM BTABLE LIMIT 1",
-            "SELECT regexp_replace('abc123ABC', '[0-9]+', '#') FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN regexp_replace('abcABC123', '[a-zA-Z]+') = '123' THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT A_STRING FROM BTABLE WHERE A_ID = regexp_replace('abcABC111', '[a-zA-Z]+') LIMIT 1", // 111
-            // Test for multibyte characters support.
-            "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', '[a-zA-Z]+') from BTABLE LIMIT 1",
-            "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', '[Ď-ě]+', '#') from BTABLE LIMIT 1",
-            "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', '.+', 'replacement') from BTABLE LIMIT 1",
-            "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', 'Ďď', 'DD') from BTABLE LIMIT 1",
+                "SELECT regexp_replace('', '') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('', 'abc', 'def') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('123abcABC', '[a-z]+') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('123-abc-ABC', '-[a-zA-Z-]+') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('abcABC123', '\\\\d+', '') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('abcABC123', '\\\\D+', '') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('abc', 'abc', 'def') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('abc123ABC', '\\\\d+', 'def') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('abc123ABC', '[0-9]+', '#') FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN regexp_replace('abcABC123', '[a-zA-Z]+') = '123' THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT A_STRING FROM "+bTableName+" WHERE A_ID = regexp_replace('abcABC111', '[a-zA-Z]+') LIMIT 1", // 111
+                // Test for multibyte characters support.
+                "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', '[a-zA-Z]+') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', '[Ď-ě]+', '#') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', '.+', 'replacement') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_replace('Ďď Ēĕ ĜĞ ϗϘϛϢ', 'Ďď', 'DD') FROM "+bTableName+" LIMIT 1",
         };
         String result[] = {
-            null,
-            null,
-            "123ABC",
-            "123",
-            "abcABC",
-            "123",
-            "def",
-            "abcdefABC",
-            "abc#ABC",
-            "1",
-            "abc", // the first column
-            "Ďď Ēĕ ĜĞ ϗϘϛϢ",
-            "# # ĜĞ ϗϘϛϢ",
-            "replacement",
-            "DD Ēĕ ĜĞ ϗϘϛϢ",
+                null,
+                null,
+                "123ABC",
+                "123",
+                "abcABC",
+                "123",
+                "def",
+                "abcdefABC",
+                "abc#ABC",
+                "1",
+                "abc", // the first column
+                "Ďď Ēĕ ĜĞ ϗϘϛϢ",
+                "# # ĜĞ ϗϘϛϢ",
+                "replacement",
+                "DD Ēĕ ĜĞ ϗϘϛϢ",
         };
         assertEquals(query.length,result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1302,54 +1271,54 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRegexpSubstrFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         String query[] = {
-            "SELECT regexp_substr('', '', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('', '', 1) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('', 'abc', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('abc', '', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123', '123', 3) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123', '123', -4) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123ABC', '[a-z]+', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123ABC', '[0-9]+', 4) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123ABCabc', '\\\\d+', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123ABCabc', '\\\\D+', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123ABCabc', '\\\\D+', 4) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('123ABCabc', '\\\\D+', 7) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('na11-app5-26-sjl', '[^-]+', 0) FROM BTABLE LIMIT 1",
-            "SELECT regexp_substr('na11-app5-26-sjl', '[^-]+') FROM BTABLE LIMIT 1",
-            // Test for multibyte characters support.
-            "SELECT regexp_substr('ĎďĒĕĜĞ', '.+') from BTABLE LIMIT 1",
-            "SELECT regexp_substr('ĎďĒĕĜĞ', '.+', 3) from BTABLE LIMIT 1",
-            "SELECT regexp_substr('ĎďĒĕĜĞ', '[a-zA-Z]+', 0) from BTABLE LIMIT 1",
-            "SELECT regexp_substr('ĎďĒĕĜĞ', '[Ď-ě]+', 3) from BTABLE LIMIT 1",
+                "SELECT regexp_substr('', '', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('', '', 1) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('', 'abc', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('abc', '', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123', '123', 3) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123', '123', -4) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123ABC', '[a-z]+', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123ABC', '[0-9]+', 4) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123ABCabc', '\\\\d+', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123ABCabc', '\\\\D+', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123ABCabc', '\\\\D+', 4) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('123ABCabc', '\\\\D+', 7) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('na11-app5-26-sjl', '[^-]+', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('na11-app5-26-sjl', '[^-]+') FROM "+bTableName+" LIMIT 1",
+                // Test for multibyte characters support.
+                "SELECT regexp_substr('ĎďĒĕĜĞ', '.+') FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('ĎďĒĕĜĞ', '.+', 3) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('ĎďĒĕĜĞ', '[a-zA-Z]+', 0) FROM "+bTableName+" LIMIT 1",
+                "SELECT regexp_substr('ĎďĒĕĜĞ', '[Ď-ě]+', 3) FROM "+bTableName+" LIMIT 1",
         };
         String result[] = {
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            "123",
-            "ABCabc",
-            "ABCabc",
-            "abc",
-            "na11",
-            "na11",
-            "ĎďĒĕĜĞ",
-            "ĒĕĜĞ",
-            null,
-            "Ēĕ",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "123",
+                "ABCabc",
+                "ABCabc",
+                "abc",
+                "na11",
+                "na11",
+                "ĎďĒĕĜĞ",
+                "ĒĕĜĞ",
+                null,
+                "Ēĕ",
         };
         assertEquals(query.length,result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1364,17 +1333,15 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRegexpSubstrFunction2() throws Exception {
-        long ts = nextTimestamp();
+        String tTableName = generateUniqueName();
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(url, props);
-        String ddl = "create table t (k INTEGER NOT NULL PRIMARY KEY, name VARCHAR)";
+        String ddl = "create table " + tTableName + " (k INTEGER NOT NULL PRIMARY KEY, name VARCHAR)";
         conn.createStatement().execute(ddl);
         conn.close();
 
-        String dml = "upsert into t values(?,?)";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+2));
+        String dml = "upsert into " + tTableName + " values(?,?)";
         conn = DriverManager.getConnection(url, props);
         PreparedStatement stmt = conn.prepareStatement(dml);
         String[] values = new String[] {"satax","jruls","hrjcu","yqtrv","jjcvw"};
@@ -1388,8 +1355,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
         // This matches what Oracle returns for regexp_substr, even through
         // it seems oke for "satax", it should return null.
-        String query = "select regexp_substr(name,'[^s]+',1) from t limit 5";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
+        String query = "select regexp_substr(name,'[^s]+',1) from " + tTableName + " limit 5";
         conn = DriverManager.getConnection(url, props);
         ResultSet rs = conn.createStatement().executeQuery(query);
         int count = 0;
@@ -1402,27 +1368,27 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLikeConstant() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         String query[] = {
-            "SELECT CASE WHEN 'ABC' LIKE '' THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 'ABC' LIKE 'A_' THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 'ABC' LIKE 'A__' THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 'AB_C' LIKE 'AB\\_C' THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 'ABC%DE' LIKE 'ABC\\%D%' THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
+                "SELECT CASE WHEN 'ABC' LIKE '' THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 'ABC' LIKE 'A_' THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 'ABC' LIKE 'A__' THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 'AB_C' LIKE 'AB\\_C' THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 'ABC%DE' LIKE 'ABC\\%D%' THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
         };
         String result[] = {
-            "2",
-            "2",
-            "1",
-            "1",
-            "1",
+                "2",
+                "2",
+                "1",
+                "1",
+                "1",
         };
         assertEquals(query.length,result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1437,35 +1403,36 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testInListConstant() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
+
         String query[] = {
-            "SELECT CASE WHEN 'a' IN (null,'a') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN NOT 'a' IN (null,'b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 'a' IN (null,'b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN NOT 'a' IN ('c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 1 IN ('foo',2,1) THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN NOT null IN ('c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN NOT null IN (null,'c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN null IN (null,'c','b') THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
-            "SELECT CASE WHEN 'a' IN (null,1) THEN '1' ELSE '2' END FROM BTABLE LIMIT 1",
+                "SELECT CASE WHEN 'a' IN (null,'a') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN NOT 'a' IN (null,'b') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 'a' IN (null,'b') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN NOT 'a' IN ('c','b') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 1 IN ('foo',2,1) THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN NOT null IN ('c','b') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN NOT null IN (null,'c','b') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN null IN (null,'c','b') THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
+                "SELECT CASE WHEN 'a' IN (null,1) THEN '1' ELSE '2' END FROM "+bTableName+" LIMIT 1",
         };
         String result[] = {
-            "1",
-            "1",
-            "2",
-            "1",
-            "1",
-            "2",
-            "2",
-            "2",
-            "2"
+                "1",
+                "1",
+                "2",
+                "1",
+                "1",
+                "2",
+                "2",
+                "2",
+                "2"
         };
         assertEquals(query.length,result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1480,14 +1447,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLikeOnColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
         // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES (?, ?, ?, 0.5)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+" VALUES (?, ?, ?, 0.5)");
         stmt.setDate(3, D1);
 
         stmt.setString(1, "a");
@@ -1521,13 +1487,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.commit();
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl();
         conn = DriverManager.getConnection(url, props);
         PreparedStatement statement;
         ResultSet rs;
         try {
             // Test 1
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST LIKE 'x%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE INST LIKE 'x%'");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1548,7 +1514,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Test 2
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST LIKE 'xy_a%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE INST LIKE 'xy_a%'");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1560,7 +1526,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Test 3
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST NOT LIKE 'xy_a%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE INST NOT LIKE 'xy_a%'");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1581,12 +1547,12 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Test 4
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'xzabc' LIKE 'xy_a%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE 'xzabc' LIKE 'xy_a%'");
             rs = statement.executeQuery();
             assertFalse(rs.next());
 
             // Test 5
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'abcdef' LIKE '%bCd%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE 'abcdef' LIKE '%bCd%'");
             rs = statement.executeQuery();
             assertFalse(rs.next());
 
@@ -1597,14 +1563,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testILikeOnColumn() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
         // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB(INST, HOST, \"DATE\", VAL, PATTERN VARCHAR) VALUES (?, ?, ?, 0.5, 'x_Z%')");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+"(INST, HOST, \"DATE\", VAL, PATTERN VARCHAR) VALUES (?, ?, ?, 0.5, 'x_Z%')");
         stmt.setDate(3, D1);
 
         stmt.setString(1, "a");
@@ -1638,13 +1603,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.commit();
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        url = getUrl();
         conn = DriverManager.getConnection(url, props);
         PreparedStatement statement;
         ResultSet rs;
         try {
             // Test 1
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST ILIKE 'x%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE INST ILIKE 'x%'");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1665,7 +1630,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Test 2
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST ILIKE 'xy_a%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE INST ILIKE 'xy_a%'");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1677,7 +1642,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Test 3
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE INST NOT ILIKE 'xy_a%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE INST NOT ILIKE 'xy_a%'");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1698,17 +1663,17 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Test 4
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'xzabc' ILIKE 'xy_a%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE 'xzabc' ILIKE 'xy_a%'");
             rs = statement.executeQuery();
             assertFalse(rs.next());
 
             // Test 5
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB WHERE 'abcdef' ILIKE '%bCd%'");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+" WHERE 'abcdef' ILIKE '%bCd%'");
             rs = statement.executeQuery();
             assertTrue(rs.next());
 
             // Test 5
-            statement = conn.prepareStatement("SELECT INST FROM PTSDB(PATTERN VARCHAR) WHERE INST ILIKE PATTERN");
+            statement = conn.prepareStatement("SELECT INST FROM "+pTSDBTableName+"(PATTERN VARCHAR) WHERE INST ILIKE PATTERN");
             rs = statement.executeQuery();
 
             assertTrue(rs.next());
@@ -1729,21 +1694,19 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testIsNullInPK() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2, null);
-
-        // Insert all rows at ts
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
+        String pTSDBTableName = generateUniqueName();
+        ensureTableCreated(getUrl(),pTSDBTableName, PTSDB_NAME, null, null, null);
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB VALUES ('', '', ?, 0.5)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+pTSDBTableName+" VALUES ('', '', ?, 0.5)");
         stmt.setDate(1, D1);
         stmt.execute();
         conn.close();
 
-        String query = "SELECT HOST,INST,\"DATE\" FROM PTSDB WHERE HOST IS NULL AND INST IS NULL AND \"DATE\"=?";
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String query = "SELECT HOST,INST,\"DATE\" FROM "+pTSDBTableName+" WHERE HOST IS NULL AND INST IS NULL AND \"DATE\"=?";
+        url = getUrl();
         conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1761,33 +1724,33 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLengthFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         String query[] = {
-            "SELECT length('') FROM BTABLE LIMIT 1",
-            "SELECT length(' ') FROM BTABLE LIMIT 1",
-            "SELECT length('1') FROM BTABLE LIMIT 1",
-            "SELECT length('1234') FROM BTABLE LIMIT 1",
-            "SELECT length('ɚɦɰɸ') FROM BTABLE LIMIT 1",
-            "SELECT length('ǢǛǟƈ') FROM BTABLE LIMIT 1",
-            "SELECT length('This is a test!') FROM BTABLE LIMIT 1",
-            "SELECT A_STRING FROM BTABLE WHERE length(A_STRING)=3",
+                "SELECT length('') FROM "+bTableName+" LIMIT 1",
+                "SELECT length(' ') FROM "+bTableName+" LIMIT 1",
+                "SELECT length('1') FROM "+bTableName+" LIMIT 1",
+                "SELECT length('1234') FROM "+bTableName+" LIMIT 1",
+                "SELECT length('ɚɦɰɸ') FROM "+bTableName+" LIMIT 1",
+                "SELECT length('ǢǛǟƈ') FROM "+bTableName+" LIMIT 1",
+                "SELECT length('This is a test!') FROM "+bTableName+" LIMIT 1",
+                "SELECT A_STRING FROM "+bTableName+" WHERE length(A_STRING)=3",
         };
         String result[] = {
-            null,
-            "1",
-            "1",
-            "4",
-            "4",
-            "4",
-            "15",
-            "abc",
+                null,
+                "1",
+                "1",
+                "4",
+                "4",
+                "4",
+                "15",
+                "abc",
         };
         assertEquals(query.length,result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1802,13 +1765,13 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testUpperFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         String query[] = {
-                "SELECT upper('abc') FROM BTABLE LIMIT 1",
-                "SELECT upper('Abc') FROM BTABLE LIMIT 1",
-                "SELECT upper('ABC') FROM BTABLE LIMIT 1",
-                "SELECT upper('ĎďĒ') FROM BTABLE LIMIT 1",
-                "SELECT upper('ß') FROM BTABLE LIMIT 1",
+                "SELECT upper('abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT upper('Abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT upper('ABC') FROM "+bTableName+" LIMIT 1",
+                "SELECT upper('ĎďĒ') FROM "+bTableName+" LIMIT 1",
+                "SELECT upper('ß') FROM "+bTableName+" LIMIT 1",
         };
         String result[] = {
                 "ABC",
@@ -1818,11 +1781,11 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
                 "SS",
         };
         assertEquals(query.length, result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1837,14 +1800,14 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLowerFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
         String query[] = {
-                "SELECT lower('abc') FROM BTABLE LIMIT 1",
-                "SELECT lower('Abc') FROM BTABLE LIMIT 1",
-                "SELECT lower('ABC') FROM BTABLE LIMIT 1",
-                "SELECT lower('ĎďĒ') FROM BTABLE LIMIT 1",
-                "SELECT lower('ß') FROM BTABLE LIMIT 1",
-                "SELECT lower('SS') FROM BTABLE LIMIT 1",
+                "SELECT lower('abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT lower('Abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT lower('ABC') FROM "+bTableName+" LIMIT 1",
+                "SELECT lower('ĎďĒ') FROM "+bTableName+" LIMIT 1",
+                "SELECT lower('ß') FROM "+bTableName+" LIMIT 1",
+                "SELECT lower('SS') FROM "+bTableName+" LIMIT 1",
         };
         String result[] = {
                 "abc",
@@ -1855,11 +1818,11 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
                 "ss",
         };
         assertEquals(query.length, result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1874,35 +1837,37 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRTrimFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
+        String varcharKeyTestTable = generateUniqueName();
         String query[] = {
-            "SELECT rtrim('') FROM BTABLE LIMIT 1",
-            "SELECT rtrim(' ') FROM BTABLE LIMIT 1",
-            "SELECT rtrim('   ') FROM BTABLE LIMIT 1",
-            "SELECT rtrim('abc') FROM BTABLE LIMIT 1",
-            "SELECT rtrim('abc   ') FROM BTABLE LIMIT 1",
-            "SELECT rtrim('abc   def') FROM BTABLE LIMIT 1",
-            "SELECT rtrim('abc   def   ') FROM BTABLE LIMIT 1",
-            "SELECT rtrim('ĎďĒ   ') FROM BTABLE LIMIT 1",
-            "SELECT pk FROM VarcharKeyTest WHERE rtrim(pk)='jkl' LIMIT 1",
+                "SELECT rtrim('') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim(' ') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim('   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim('abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim('abc   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim('abc   def') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim('abc   def   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT rtrim('ĎďĒ   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT pk FROM "+varcharKeyTestTable+" WHERE rtrim(pk)='jkl' LIMIT 1",
         };
         String result[] = {
-            null,
-            null,
-            null,
-            "abc",
-            "abc",
-            "abc   def",
-            "abc   def",
-            "ĎďĒ",
-            "jkl   ",
+                null,
+                null,
+                null,
+                "abc",
+                "abc",
+                "abc   def",
+                "abc   def",
+                "ĎďĒ",
+                "jkl   ",
         };
         assertEquals(query.length, result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
+            initVarcharKeyTableValues(null,varcharKeyTestTable);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1917,35 +1882,37 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLTrimFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
+        String varcharKeyTestTable = generateUniqueName();
         String query[] = {
-            "SELECT ltrim('') FROM BTABLE LIMIT 1",
-            "SELECT ltrim(' ') FROM BTABLE LIMIT 1",
-            "SELECT ltrim('   ') FROM BTABLE LIMIT 1",
-            "SELECT ltrim('abc') FROM BTABLE LIMIT 1",
-            "SELECT ltrim('   abc') FROM BTABLE LIMIT 1",
-            "SELECT ltrim('abc   def') FROM BTABLE LIMIT 1",
-            "SELECT ltrim('   abc   def') FROM BTABLE LIMIT 1",
-            "SELECT ltrim('   ĎďĒ') FROM BTABLE LIMIT 1",
-            "SELECT pk FROM VarcharKeyTest WHERE ltrim(pk)='def' LIMIT 1",
+                "SELECT ltrim('') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim(' ') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim('   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim('abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim('   abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim('abc   def') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim('   abc   def') FROM "+bTableName+" LIMIT 1",
+                "SELECT ltrim('   ĎďĒ') FROM "+bTableName+" LIMIT 1",
+                "SELECT pk FROM "+varcharKeyTestTable+" WHERE ltrim(pk)='def' LIMIT 1",
         };
         String result[] = {
-            null,
-            null,
-            null,
-            "abc",
-            "abc",
-            "abc   def",
-            "abc   def",
-            "ĎďĒ",
-            "   def",
+                null,
+                null,
+                null,
+                "abc",
+                "abc",
+                "abc   def",
+                "abc   def",
+                "ĎďĒ",
+                "   def",
         };
         assertEquals(query.length, result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
+            initVarcharKeyTableValues(null,varcharKeyTestTable);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();
@@ -1960,24 +1927,24 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSubstrFunctionOnRowKeyInWhere() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
+        String substrTestTableName = generateUniqueName();
+        String url = getUrl();
         Connection conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("CREATE TABLE substr_test (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
+        conn.createStatement().execute("CREATE TABLE "+substrTestTableName+" (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
+        url = getUrl();
         conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abc','a')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd','b')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abce','c')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcde','d')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abc','a')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd','b')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abce','c')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcde','d')");
         conn.commit();
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        url = getUrl();
         conn = DriverManager.getConnection(url);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from substr_test where substr(s1,1,4) = 'abcd'");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from "+substrTestTableName+" where substr(s1,1,4) = 'abcd'");
         assertTrue(rs.next());
         assertEquals("abcd",rs.getString(1));
         assertTrue(rs.next());
@@ -1987,26 +1954,26 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRTrimFunctionOnRowKeyInWhere() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
+        String substrTestTableName = generateUniqueName();
+        String url = getUrl();
         Connection conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("CREATE TABLE substr_test (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
+        conn.createStatement().execute("CREATE TABLE "+substrTestTableName+" (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
+        url = getUrl();
         conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abc','a')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd','b')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd ','c')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd  ','c')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd  a','c')"); // Need TRAVERSE_AND_LEAVE for cases like this
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcde','d')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abc','a')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd','b')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd ','c')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd  ','c')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd  a','c')"); // Need TRAVERSE_AND_LEAVE for cases like this
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcde','d')");
         conn.commit();
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        url = getUrl();
         conn = DriverManager.getConnection(url);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from substr_test where rtrim(s1) = 'abcd'");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from "+substrTestTableName+" where rtrim(s1) = 'abcd'");
         assertTrue(rs.next());
         assertEquals("abcd",rs.getString(1));
         assertTrue(rs.next());
@@ -2018,25 +1985,25 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testLikeFunctionOnRowKeyInWhere() throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts);
+        String substrTestTableName = generateUniqueName();
+        String url = getUrl();
         Connection conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("CREATE TABLE substr_test (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
+        conn.createStatement().execute("CREATE TABLE "+substrTestTableName+" (s1 varchar not null, s2 varchar not null constraint pk primary key(s1,s2))");
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 2);
+        url = getUrl();
         conn = DriverManager.getConnection(url);
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abc','a')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd','b')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd-','c')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abcd-1','c')");
-        conn.createStatement().execute("UPSERT INTO substr_test VALUES('abce','d')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abc','a')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd','b')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd-','c')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abcd-1','c')");
+        conn.createStatement().execute("UPSERT INTO "+substrTestTableName+" VALUES('abce','d')");
         conn.commit();
         conn.close();
 
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
+        url = getUrl();
         conn = DriverManager.getConnection(url);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from substr_test where s1 like 'abcd%1'");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT s1 from "+substrTestTableName+" where s1 like 'abcd%1'");
         assertTrue(rs.next());
         assertEquals("abcd-1",rs.getString(1));
         assertFalse(rs.next());
@@ -2044,41 +2011,43 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testTrimFunction() throws Exception {
-        long ts = nextTimestamp();
+        String bTableName = generateUniqueName();
+        String varcharKeyTestTable = generateUniqueName();
         String query[] = {
-            "SELECT trim('') FROM BTABLE LIMIT 1",
-            "SELECT trim(' ') FROM BTABLE LIMIT 1",
-            "SELECT trim('   ') FROM BTABLE LIMIT 1",
-            "SELECT trim('abc') FROM BTABLE LIMIT 1",
-            "SELECT trim('   abc') FROM BTABLE LIMIT 1",
-            "SELECT trim('abc   ') FROM BTABLE LIMIT 1",
-            "SELECT trim('abc   def') FROM BTABLE LIMIT 1",
-            "SELECT trim('   abc   def') FROM BTABLE LIMIT 1",
-            "SELECT trim('abc   def   ') FROM BTABLE LIMIT 1",
-            "SELECT trim('   abc   def   ') FROM BTABLE LIMIT 1",
-            "SELECT trim('   ĎďĒ   ') FROM BTABLE LIMIT 1",
-            "SELECT pk FROM VarcharKeyTest WHERE trim(pk)='ghi'",
+                "SELECT trim('') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim(' ') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('   abc') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('abc   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('abc   def') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('   abc   def') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('abc   def   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('   abc   def   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT trim('   ĎďĒ   ') FROM "+bTableName+" LIMIT 1",
+                "SELECT pk FROM "+varcharKeyTestTable+" WHERE trim(pk)='ghi'",
         };
         String result[] = {
-            null,
-            null,
-            null,
-            "abc",
-            "abc",
-            "abc",
-            "abc   def",
-            "abc   def",
-            "abc   def",
-            "abc   def",
-            "ĎďĒ",
-            "   ghi   ",
+                null,
+                null,
+                null,
+                "abc",
+                "abc",
+                "abc",
+                "abc   def",
+                "abc   def",
+                "abc   def",
+                "abc   def",
+                "ĎďĒ",
+                "   ghi   ",
         };
         assertEquals(query.length, result.length);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            initTableValues(null, ts);
+            initBTableValues(null,bTableName);
+            initVarcharKeyTableValues(null,varcharKeyTestTable);
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
                 ResultSet rs = statement.executeQuery();

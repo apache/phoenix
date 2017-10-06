@@ -21,9 +21,9 @@ import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
+import static org.apache.phoenix.util.TestUtil.ROW3;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.ROW6;
-import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -34,7 +34,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -44,17 +46,19 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Lists;
+
 
 @RunWith(Parameterized.class)
 public class GroupByIT extends BaseQueryIT {
 
-    public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) throws Exception {
-        super(indexDDL, mutable, columnEncoded, true);
+    public GroupByIT(String indexDDL, boolean columnEncoded) throws Exception {
+        super(indexDDL, columnEncoded, false);
     }
     
     @Parameters(name="GroupByIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
-        return QueryIT.data();
+        return BaseQueryIT.allIndexes();
     }
     
     @Test
@@ -203,54 +207,6 @@ public class GroupByIT extends BaseQueryIT {
     }
 
     @Test
-    public void testUngroupedAggregation() throws Exception {
-        String query = "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setString(2, B_VALUE);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(4, rs.getLong(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-        conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, tenantId);
-            statement.setString(2, B_VALUE);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(4, rs.getLong(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
-    public void testUngroupedAggregationNoWhere() throws Exception {
-        String query = "SELECT count(*) FROM " + tableName;
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(9, rs.getLong(1));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
     public void testGroupByWithIntegerDivision1() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -365,105 +321,63 @@ public class GroupByIT extends BaseQueryIT {
         conn.close();
     }
 
+    @SuppressWarnings("unchecked")
     @Test
-    public void testPointInTimeUngroupedAggregation() throws Exception {
-        // Override value that was set at creation time
-        String url = getUrl();
+    public void testGroupByCondition() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        String updateStmt =
-                "upsert into " + tableName + " (" + "    ORGANIZATION_ID, " + "    ENTITY_ID, "
-                        + "    A_STRING) " + "VALUES (?, ?, ?)";
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW5);
-        stmt.setString(3, null);
-        stmt.execute();
-        stmt.setString(3, C_VALUE);
-        stmt.execute();
-        stmt.setString(2, ROW7);
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        upsertConn.commit();
-        upsertConn.close();
-        long upsert1Time = System.currentTimeMillis();
-        long timeDelta = 100;
-        Thread.sleep(timeDelta);
-
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        upsertConn.close();
-        
-        long queryTime = upsert1Time + timeDelta / 2;
-        String query =
-                "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
-        // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement statement = conn.prepareStatement(query);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
         statement.setString(1, tenantId);
-        statement.setString(2, B_VALUE);
         ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        assertFalse(rs.next());
-        conn.close();
-    }
+        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,8L));
+        try {
+            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            List<List<Object>> expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(1L,false),
+                    Arrays.<Object>asList(1L,true));
+            assertValuesEqualsResultSet(rs, expectedResults);
+        } finally {
+            conn.close();
+        }
 
-    @Test
-    public void testPointInTimeUngroupedLimitedAggregation() throws Exception {
-        String updateStmt =
-                "upsert into " + tableName + " (" + "    ORGANIZATION_ID, " + "    ENTITY_ID, "
-                        + "    A_STRING) " + "VALUES (?, ?, ?)";
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.setString(3, C_VALUE);
-        stmt.execute();
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        stmt.setString(3, B_VALUE);
-        stmt.execute();
-        stmt.setString(3, B_VALUE);
-        stmt.execute();
-        upsertConn.close();
-        long upsert1Time = System.currentTimeMillis();
-        long timeDelta = 100;
-        Thread.sleep(timeDelta);
-        
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        upsertConn.close();
-
-        long queryTime = upsert1Time + timeDelta / 2;
-        String query =
-                "SELECT count(1) FROM " + tableName
-                        + " WHERE organization_id=? and a_string = ? LIMIT 3";
-        // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement statement = conn.prepareStatement(query);
+        conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            statement = conn.prepareStatement("UPSERT into " + tableName + " (organization_id,entity_id,a_integer) values(?,?,null)");
+            statement.setString(1, tenantId);
+            statement.setString(2, ROW3);
+            statement.executeUpdate();
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+        conn = DriverManager.getConnection(getUrl(), props);
+        statement = conn.prepareStatement("SELECT count(*) FROM " + tableName + " WHERE organization_id=? GROUP BY a_integer=6");
         statement.setString(1, tenantId);
-        statement.setString(2, B_VALUE);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(4, rs.getLong(1)); // LIMIT applied at end, so all rows would be counted
-        assertFalse(rs.next());
-        conn.close();
+        rs = statement.executeQuery();
+        assertValueEqualsResultSet(rs, Arrays.<Object>asList(1L,1L,7L));
+        statement = conn.prepareStatement("SELECT a_integer, entity_id FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null)");
+        statement.setString(1, tenantId);
+        rs = statement.executeQuery();
+        List<List<Object>> expectedResults = Lists.newArrayList(
+                Arrays.<Object>asList(null,ROW3),
+                Arrays.<Object>asList(5,ROW5),
+                Arrays.<Object>asList(6,ROW6));
+        assertValuesEqualsResultSet(rs, expectedResults);
+        try {
+            statement = conn.prepareStatement("SELECT count(*),a_integer=6 FROM " + tableName + " WHERE organization_id=? and (a_integer IN (5,6) or a_integer is null) GROUP BY a_integer=6");
+            statement.setString(1, tenantId);
+            rs = statement.executeQuery();
+            expectedResults = Lists.newArrayList(
+                    Arrays.<Object>asList(1L,null),
+                    Arrays.<Object>asList(1L,false),
+                    Arrays.<Object>asList(1L,true));
+            assertValuesEqualsResultSet(rs, expectedResults);
+        } finally {
+            conn.close();
+        }
     }
+    
+
 }

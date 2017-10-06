@@ -30,7 +30,6 @@ import java.util.Properties;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -42,18 +41,15 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.CompareFilter;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -67,9 +63,9 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -85,9 +81,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -96,9 +94,14 @@ import com.google.common.collect.Maps;
  * Coprocessor for metadata related operations. This coprocessor would only be registered
  * to SYSTEM.TABLE.
  */
+@SuppressWarnings("deprecation")
 public class MetaDataRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
     public static final String REBUILD_INDEX_APPEND_TO_URL_STRING = "REBUILDINDEX";
+    private static final byte[] SYSTEM_CATALOG_KEY = SchemaUtil.getTableKey(
+            ByteUtil.EMPTY_BYTE_ARRAY,
+            QueryConstants.SYSTEM_SCHEMA_NAME_BYTES,
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
@@ -192,14 +195,17 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         if (deprecationLogger != null) {
             deprecationLogger.setLevel(Level.WARN);
         }
-        try {
-            Class.forName(PhoenixDriver.class.getName());
-            initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
-            // starts index rebuild schedule work
-            BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
-            executor.scheduleWithFixedDelay(task, initialRebuildTaskDelay, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
-        } catch (ClassNotFoundException ex) {
-            LOG.error("BuildIndexScheduleTask cannot start!", ex);
+        // Ensure we only run one of the index rebuilder tasks
+        if (ServerUtil.isKeyInRegion(SYSTEM_CATALOG_KEY, e.getEnvironment().getRegion())) {
+            try {
+                Class.forName(PhoenixDriver.class.getName());
+                initRebuildIndexConnectionProps(e.getEnvironment().getConfiguration());
+                // starts index rebuild schedule work
+                BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
+                executor.scheduleWithFixedDelay(task, initialRebuildTaskDelay, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
+            } catch (ClassNotFoundException ex) {
+                LOG.error("BuildIndexScheduleTask cannot start!", ex);
+            }
         }
     }
 
@@ -208,22 +214,25 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
      *
      */
     public static class BuildIndexScheduleTask extends TimerTask {
-        // inProgress is to prevent timer from invoking a new task while previous one is still
-        // running
-        private final static AtomicInteger inProgress = new AtomicInteger(0);
         RegionCoprocessorEnvironment env;
-        private long rebuildIndexBatchSize = HConstants.LATEST_TIMESTAMP;
-        private long configuredBatches = 10;
-        private long indexDisableTimestampThreshold;
+        private final long rebuildIndexBatchSize;
+        private final long configuredBatches;
+        private final long indexDisableTimestampThreshold;
         private final ReadOnlyProps props;
+        private final List<String> onlyTheseTables;
 
         public BuildIndexScheduleTask(RegionCoprocessorEnvironment env) {
+            this(env,null);
+        }
+
+        public BuildIndexScheduleTask(RegionCoprocessorEnvironment env, List<String> onlyTheseTables) {
+            this.onlyTheseTables = onlyTheseTables == null ? null : ImmutableList.copyOf(onlyTheseTables);
             this.env = env;
             Configuration configuration = env.getConfiguration();
             this.rebuildIndexBatchSize = configuration.getLong(
                     QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, HConstants.LATEST_TIMESTAMP);
             this.configuredBatches = configuration.getLong(
-                    QueryServices.INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE, configuredBatches);
+                    QueryServices.INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE, 10);
             this.indexDisableTimestampThreshold =
                     configuration.getLong(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD);
@@ -238,11 +247,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             // separately, all updating the same data.
             RegionScanner scanner = null;
             PhoenixConnection conn = null;
-            if (inProgress.getAndIncrement() > 0) {
-                inProgress.decrementAndGet();
-                LOG.debug("New ScheduledBuildIndexTask skipped as there is already one running");
-                return;
-            }
             try {
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -267,7 +271,10 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 do {
                     results.clear();
                     hasMore = scanner.next(results);
-                    if (results.isEmpty()) break;
+                    if (results.isEmpty()) {
+                        LOG.debug("Found no indexes with non zero INDEX_DISABLE_TIMESTAMP");
+                        break;
+                    }
 
                     Result r = Result.create(results);
                     byte[] disabledTimeStamp = r.getValue(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -275,6 +282,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     Cell indexStateCell = r.getColumnLatestCell(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES);
 
                     if (disabledTimeStamp == null || disabledTimeStamp.length == 0) {
+                        LOG.debug("Null or empty INDEX_DISABLE_TIMESTAMP");
                         continue;
                     }
 
@@ -285,10 +293,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
                     if ((dataTable == null || dataTable.length == 0) || indexStateCell == null) {
                         // data table name can't be empty
+                        LOG.debug("Null or data table name or index state");
                         continue;
                     }
 
-                    byte[] indexState = CellUtil.cloneValue(indexStateCell);
+                    byte[] indexStateBytes = CellUtil.cloneValue(indexStateCell);
                     byte[][] rowKeyMetaData = new byte[3][];
                     SchemaUtil.getVarChars(r.getRow(), 3, rowKeyMetaData);
                     byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
@@ -300,22 +309,33 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                 + "so, Index rebuild has been skipped for row=" + r);
                         continue;
                     }
+                    
+                    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
+                    if (onlyTheseTables != null && !onlyTheseTables.contains(dataTableFullName)) {
+                        LOG.debug("Could not find " + dataTableFullName + " in " + onlyTheseTables);
+                        continue;
+                    }
 
                     if (conn == null) {
                         conn = getRebuildIndexConnection(env.getConfiguration());
                         dataTableToIndexesMap = Maps.newHashMap();
                     }
-                    String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
                     PTable dataPTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
 
                     String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTable);
                     PTable indexPTable = PhoenixRuntime.getTableNoCache(conn, indexTableFullName);
                     // Sanity check in case index was removed from table
                     if (!dataPTable.getIndexes().contains(indexPTable)) {
+                        LOG.debug(dataTableFullName + " does not contain " + indexPTable.getName().getString());
                         continue;
                     }
                     
-                    if (!MetaDataUtil.tableRegionsOnline(this.env.getConfiguration(), indexPTable)) {
+                    PIndexState indexState = PIndexState.fromSerializedValue(indexStateBytes[0]);
+                    // Only perform relatively expensive check for all regions online when index
+                    // is disabled or pending active since that's the state it's placed into when
+                    // an index write fails.
+                    if ((indexState == PIndexState.DISABLE || indexState == PIndexState.PENDING_ACTIVE)
+                            && !MetaDataUtil.tableRegionsOnline(this.env.getConfiguration(), indexPTable)) {
                         LOG.debug("Index rebuild has been skipped because not all regions of index table="
                                 + indexPTable.getName() + " are online.");
                         continue;
@@ -342,9 +362,15 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
                     // Allow index to begin incremental maintenance as index is back online and we
                     // cannot transition directly from DISABLED -> ACTIVE
-                    if (Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexState) == 0) {
+                    if (indexState == PIndexState.DISABLE) {
                         IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.INACTIVE, null);
                         continue; // Must wait until clients start to do index maintenance again
+                    } else if (indexState == PIndexState.PENDING_ACTIVE) {
+                        IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, null);
+                        continue; // Must wait until clients start to do index maintenance again
+                    } else if (indexState != PIndexState.INACTIVE && indexState != PIndexState.ACTIVE) {
+                        LOG.warn("Unexpected index state of " + indexTableFullName + "=" + indexState + ". Skipping partial rebuild attempt.");
+                        continue;
                     }
                     long currentTime = EnvironmentEdgeManager.currentTimeMillis();
                     long forwardOverlapDurationMs = env.getConfiguration().getLong(
@@ -352,19 +378,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                     QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME);
                     // Wait until no failures have occurred in at least forwardOverlapDurationMs
                     if (indexStateCell.getTimestamp() + forwardOverlapDurationMs > currentTime) {
+                        LOG.debug("Still must wait " + (indexStateCell.getTimestamp() + forwardOverlapDurationMs - currentTime) + " before starting rebuild for " + indexTableFullName);
                         continue; // Haven't waited long enough yet
                     }
-                    Long upperBoundOfRebuild = HConstants.LATEST_TIMESTAMP;
-                    if (Bytes.compareTo(PIndexState.INACTIVE.getSerializedBytes(), indexState) == 0) {
-                        upperBoundOfRebuild = indexStateCell.getTimestamp() + forwardOverlapDurationMs;
-                    } else if (Bytes.compareTo(PIndexState.ACTIVE.getSerializedBytes(), indexState) == 0) {
-                        // Since the index state cell is updated every time the INDEX_DISABLED_TIMESTAMP
-                        // changes, we know the upper bound.
-                        upperBoundOfRebuild = indexStateCell.getTimestamp() + 1;
-                    } else {
-                        LOG.warn("Unexpected index state of " + indexTableFullName + ":" + Bytes.toStringBinary(indexState));
-                        continue; // Ignore as this is an unexpected state
-                    }
+                    Long upperBoundOfRebuild = indexStateCell.getTimestamp() + forwardOverlapDurationMs;
+                    // Pass in upperBoundOfRebuild when setting index state or increasing disable ts
+                    // and fail if index timestamp > upperBoundOfRebuild.
                     List<Pair<PTable,Long>> indexesToPartiallyRebuild = dataTableToIndexesMap.get(dataPTable);
                     if (indexesToPartiallyRebuild == null) {
                         indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(dataPTable.getIndexes().size());
@@ -377,7 +396,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 } while (hasMore);
 
 				if (dataTableToIndexesMap != null) {
-					long backwardOverlapDurationMs = env.getConfiguration().getLong(
+                    long backwardOverlapDurationMs = env.getConfiguration().getLong(
 							QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME_ATTRIB,
 							env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB, 
 							        QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME));
@@ -385,7 +404,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 						PTable dataPTable = entry.getKey();
 						List<Pair<PTable,Long>> pairs = entry.getValue();
                         List<PTable> indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(pairs.size());
-						try (HTableInterface metaTable = env.getTable(
+						try (
+                        HTableInterface metaTable = env.getTable(
 								SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props))) {
 							long earliestDisableTimestamp = Long.MAX_VALUE;
                             long latestUpperBoundTimestamp = Long.MIN_VALUE;
@@ -422,23 +442,21 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 							}
 							// No indexes are disabled, so skip this table
 							if (earliestDisableTimestamp == Long.MAX_VALUE) {
+		                        LOG.debug("No indexes are disabled so continuing");
 								continue;
 							}
 							long scanBeginTime = Math.max(0, earliestDisableTimestamp - backwardOverlapDurationMs);
+                            long scanEndTime = Math.min(latestUpperBoundTimestamp,
+                                    getTimestampForBatch(scanBeginTime,batchExecutedPerTableMap.get(dataPTable.getName())));
 							LOG.info("Starting to build " + dataPTable + " indexes " + indexesToPartiallyRebuild
-									+ " from timestamp=" + scanBeginTime + " until " + latestUpperBoundTimestamp);
+									+ " from timestamp=" + scanBeginTime + " until " + scanEndTime);
 							
 							TableRef tableRef = new TableRef(null, dataPTable, HConstants.LATEST_TIMESTAMP, false);
 							// TODO Need to set high timeout
 							PostDDLCompiler compiler = new PostDDLCompiler(conn);
-							MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null,
-									HConstants.LATEST_TIMESTAMP);
-							Scan dataTableScan = IndexManagementUtil.newLocalStateScan(plan.getContext().getScan(),
-									maintainers);
+							MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, scanEndTime);
+							Scan dataTableScan = IndexManagementUtil.newLocalStateScan(plan.getContext().getScan(), maintainers);
 
-							long scanEndTime = Math.min(latestUpperBoundTimestamp,
-							        getTimestampForBatch(scanBeginTime,batchExecutedPerTableMap.get(dataPTable.getName())));
-							// We can't allow partial results
 							dataTableScan.setTimeRange(scanBeginTime, scanEndTime);
 							dataTableScan.setCacheBlocks(false);
 							dataTableScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
@@ -465,30 +483,17 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 										indexPTable.getSchemaName().getString(),
 										indexPTable.getTableName().getString());
 								if (scanEndTime == latestUpperBoundTimestamp) {
-								    // Finished building. Pass in the expected value for the index disabled timestamp
-								    // and only set to active if it hasn't changed (i.e. a write failed again, before
-								    // we're done). We take the absolute value because if the option to leave the
-								    // index active upon failure is used, we'll see a negative value when a write
-								    // fails.
-									IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, Math.abs(indexPTable.getIndexDisableTimestamp()));
+									IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L, latestUpperBoundTimestamp);
 									batchExecutedPerTableMap.remove(dataPTable.getName());
                                     LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
 								} else {
-								    // Maintain sign of INDEX_DISABLE_TIMESTAMP (see comment above)
-									if (!updateDisableTimestamp(conn, indexTableFullName, scanEndTime * signOfDisableTimeStamp, metaTable, indexPTable.getIndexDisableTimestamp())) {
-									    LOG.warn("The index disabled timestamp for " + indexTableFullName + " was updated outside of rebuilder. Will reattempt rebuild next iteration.");
-									}
+								    // Increment timestamp so that client sees updated disable timestamp
+                                    IndexUtil.updateIndexState(conn, indexTableFullName, indexPTable.getIndexState(), scanEndTime * signOfDisableTimeStamp, latestUpperBoundTimestamp);
 									Long noOfBatches = batchExecutedPerTableMap.get(dataPTable.getName());
 									if (noOfBatches == null) {
 										noOfBatches = 0l;
 									}
 									batchExecutedPerTableMap.put(dataPTable.getName(), ++noOfBatches);
-									// clearing cache to get the updated
-									// disabled timestamp
-									new MetaDataClient(conn).updateCache(dataPTable.getSchemaName().getString(),
-											dataPTable.getTableName().getString());
-									new MetaDataClient(conn).updateCache(indexPTable.getSchemaName().getString(),
-											indexPTable.getTableName().getString());
 									LOG.info("During Round-robin build: Successfully updated index disabled timestamp  for "
 													+ indexTableFullName + " to " + scanEndTime);
 								}
@@ -501,7 +506,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 			} catch (Throwable t) {
 				LOG.warn("ScheduledBuildIndexTask failed!", t);
 			} finally {
-				inProgress.decrementAndGet();
 				if (scanner != null) {
 					try {
 						scanner.close();
@@ -533,17 +537,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         }
     }
     
-	private static boolean updateDisableTimestamp(PhoenixConnection conn, String indexTableName,
-	        long disabledTimestamp, HTableInterface metaTable, long expectedDisabledTimestamp) throws IOException {
-		byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
-		Put put = new Put(indexTableKey);
-		put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
-				PLong.INSTANCE.toBytes(disabledTimestamp));
-		return metaTable.checkAndPut(indexTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-				PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES, CompareOp.EQUAL, PLong.INSTANCE.toBytes(expectedDisabledTimestamp),
-				put);
-	}
-
     @VisibleForTesting
     public static synchronized void initRebuildIndexConnectionProps(Configuration config) {
         if (rebuildIndexConnectionProps == null) {
@@ -560,9 +553,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             int indexRebuildRpcRetriesCounter =
                     config.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
-            // Set SCN so that we don't ping server and have the upper bound set back to
-            // the timestamp when the failure occurred.
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
             // Set various phoenix and hbase level timeouts and rpc retries
             props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
                 Long.toString(indexRebuildQueryTimeoutMs));

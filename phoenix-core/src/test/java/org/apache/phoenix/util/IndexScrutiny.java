@@ -25,6 +25,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
@@ -39,20 +40,39 @@ public class IndexScrutiny {
     public static long scrutinizeIndex(Connection conn, String fullTableName, String fullIndexName) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable ptable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+        int tableColumnOffset = 0;
+        List<PColumn> tableColumns = ptable.getColumns();
+        List<PColumn> tablePKColumns = ptable.getPKColumns();
+        if (ptable.getBucketNum() != null) {
+            tableColumnOffset = 1;
+            tableColumns = tableColumns.subList(tableColumnOffset, tableColumns.size());
+            tablePKColumns = tablePKColumns.subList(tableColumnOffset, tablePKColumns.size());
+        }
         PTable pindex = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
+        List<PColumn> indexColumns = pindex.getColumns();
+        int indexColumnOffset = 0;
+        if (pindex.getBucketNum() != null) {
+            indexColumnOffset = 1;
+        }
+        if (pindex.getViewIndexId() != null) {
+            indexColumnOffset++;
+        }
+        if (indexColumnOffset > 0) {
+            indexColumns = indexColumns.subList(indexColumnOffset, indexColumns.size());
+        }
         StringBuilder indexQueryBuf = new StringBuilder("SELECT ");
-        for (PColumn dcol : ptable.getPKColumns()) {
+        for (PColumn dcol : tablePKColumns) {
             indexQueryBuf.append("CAST(\"" + IndexUtil.getIndexColumnName(dcol) + "\" AS " + dcol.getDataType().getSqlTypeName() + ")");
             indexQueryBuf.append(",");
         }
-        for (PColumn icol : pindex.getColumns()) {
+        for (PColumn icol :indexColumns) {
             PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
             if (SchemaUtil.isPKColumn(icol) && !SchemaUtil.isPKColumn(dcol)) {
                 indexQueryBuf.append("CAST (\"" + icol.getName().getString() + "\" AS " + dcol.getDataType().getSqlTypeName() + ")");
                 indexQueryBuf.append(",");
             }
         }
-        for (PColumn icol : pindex.getColumns()) {
+        for (PColumn icol : indexColumns) {
             if (!SchemaUtil.isPKColumn(icol)) {
                 PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
                 indexQueryBuf.append("CAST (\"" + icol.getName().getString() + "\" AS " + dcol.getDataType().getSqlTypeName() + ")");
@@ -63,11 +83,11 @@ public class IndexScrutiny {
         indexQueryBuf.append("\nFROM " + fullIndexName);
         
         StringBuilder tableQueryBuf = new StringBuilder("SELECT ");
-        for (PColumn dcol : ptable.getPKColumns()) {
+        for (PColumn dcol : tablePKColumns) {
             tableQueryBuf.append("\"" + dcol.getName().getString() + "\"");
             tableQueryBuf.append(",");
         }
-        for (PColumn icol : pindex.getColumns()) {
+        for (PColumn icol : indexColumns) {
             PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
             if (SchemaUtil.isPKColumn(icol) && !SchemaUtil.isPKColumn(dcol)) {
                 if (dcol.getFamilyName() != null) {
@@ -78,7 +98,7 @@ public class IndexScrutiny {
                 tableQueryBuf.append(",");
             }
         }
-        for (PColumn icol : pindex.getColumns()) {
+        for (PColumn icol : indexColumns) {
             if (!SchemaUtil.isPKColumn(icol)) {
                 PColumn dcol = IndexUtil.getDataColumn(ptable, icol.getName().getString());
                 if (dcol.getFamilyName() != null) {
@@ -91,13 +111,13 @@ public class IndexScrutiny {
         }
         tableQueryBuf.setLength(tableQueryBuf.length()-1);
         tableQueryBuf.append("\nFROM " + fullTableName + "\nWHERE (");
-        for (PColumn dcol : ptable.getPKColumns()) {
+        for (PColumn dcol : tablePKColumns) {
             tableQueryBuf.append("\"" + dcol.getName().getString() + "\"");
             tableQueryBuf.append(",");
         }
         tableQueryBuf.setLength(tableQueryBuf.length()-1);
         tableQueryBuf.append(") = ((");
-        for (int i = 0; i < ptable.getPKColumns().size(); i++) {
+        for (int i = 0; i < tablePKColumns.size(); i++) {
             tableQueryBuf.append("?");
             tableQueryBuf.append(",");
         }
@@ -114,11 +134,12 @@ public class IndexScrutiny {
         while (irs.next()) {
             icount++;
             StringBuilder pkBuf = new StringBuilder("(");
-            for (int i = 0; i < ptable.getPKColumns().size(); i++) {
-                PColumn dcol = ptable.getPKColumns().get(i);
-                Object pkVal = irs.getObject(i+1);
-                PDataType pkType = PDataType.fromTypeId(irsmd.getColumnType(i + 1));
-                istmt.setObject(i+1, pkVal, dcol.getDataType().getSqlType());
+            for (int i = 0; i < tablePKColumns.size(); i++) {
+                PColumn dcol = tablePKColumns.get(i);
+                int offset = i+1;
+                Object pkVal = irs.getObject(offset);
+                PDataType pkType = PDataType.fromTypeId(irsmd.getColumnType(offset));
+                istmt.setObject(offset, pkVal, dcol.getDataType().getSqlType());
                 pkBuf.append(pkType.toStringLiteral(pkVal));
                 pkBuf.append(",");
             }
