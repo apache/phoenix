@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -750,10 +751,25 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + "(k, v1) VALUES(?,?)");
-            stmt.setString(1, "a");
-            stmt.setString(2, "y");
+            if (mutable) {
+	            stmt.setString(1, "a");
+	            stmt.setString(2, "y");
+	            stmt.execute();
+	            conn.commit();
+            }
+            stmt.setString(1, "b");
+            stmt.setString(2, "x");
             stmt.execute();
             conn.commit();
+	            
+            // the index table is one row
+            HTable table = new HTable(getUtility().getConfiguration(), fullTableName);
+            ResultScanner resultScanner = table.getScanner(new Scan());
+            for (Result result : resultScanner) {
+            	System.out.println(result);
+            }
+            resultScanner.close();
+            table.close();
 
             query = "SELECT * FROM " + fullTableName;
 
@@ -761,10 +777,15 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
-            assertEquals("y", rs.getString(2));
+            assertEquals(mutable ? "y" : "x", rs.getString(2));
+            assertEquals("1", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals("x", rs.getString(2));
+            assertNull(rs.getString(3));
             assertFalse(rs.next());
+            }
         }
-    }
 
     @Test
     public void testMultipleUpdatesAcrossRegions() throws Exception {
