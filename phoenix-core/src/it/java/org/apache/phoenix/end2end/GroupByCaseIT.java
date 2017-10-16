@@ -928,6 +928,69 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testCountNullInEncodedNonEmptyKeyValueCF() throws Exception {
+        testCountNullInNonEmptyKeyValueCF(1);
+    }
+    
+    @Test
+    public void testCountNullInNonEncodedNonEmptyKeyValueCF() throws Exception {
+        testCountNullInNonEmptyKeyValueCF(0);
+    }
+
+    @Test
+    public void testNestedGroupedAggregationWithBigInt() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try(Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            String createQuery="CREATE TABLE "+tableName+" (a BIGINT NOT NULL,c BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (a, c))";
+            String updateQuery="UPSERT INTO "+tableName+"(a,c) VALUES(4444444444444444444, 5555555555555555555)";
+            String query="SELECT a FROM (SELECT a, c FROM "+tableName+" GROUP BY a, c) GROUP BY a, c";
+            conn.prepareStatement(createQuery).execute();
+            conn.prepareStatement(updateQuery).execute();
+            conn.commit();
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4444444444444444444L,rs.getLong(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    private void testCountNullInNonEmptyKeyValueCF(int columnEncodedBytes) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            //Type is INT
+            String intTableName=generateUniqueName();
+            String sql="create table " + intTableName + " (mykey integer not null primary key, A.COLA integer, B.COLB integer) "
+                    + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME = ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES = " + columnEncodedBytes + ", DISABLE_WAL=true";
+
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (1,1)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (2,1)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (3,1,2)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (4,1)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (5,1)");
+            conn.commit();
+
+            TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(intTableName)));
+
+            sql="select count(*) from "+intTableName;
+            ResultSet rs=conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            
+            sql="select count(*) from "+intTableName + " where b.colb is not null";
+            rs=conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+
+            sql="select count(*) from "+intTableName + " where b.colb is null";
+            rs=conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+        }
+    }
+
     private void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
         for(int rowIndex=0;rowIndex<rows.length;rowIndex++) {
             assertTrue(rs.next());
