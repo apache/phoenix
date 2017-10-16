@@ -133,8 +133,9 @@ public class PLong extends PWholeNumber<Long> {
     public void coerceBytes(ImmutableBytesWritable ptr, Object object, PDataType actualType,
             Integer maxLength, Integer scale, SortOrder actualModifier, Integer desiredMaxLength, Integer desiredScale,
             SortOrder expectedModifier) {
+
         // Decrease size of TIMESTAMP to size of LONG and continue coerce
-        if (ptr.getLength() > getByteSize()) {
+        if (ptr.getLength() > getByteSize() && actualType.isCoercibleTo(PTimestamp.INSTANCE)) {
             ptr.set(ptr.get(), ptr.getOffset(), getByteSize());
         }
         super.coerceBytes(ptr, object, actualType, maxLength, scale, actualModifier, desiredMaxLength,
