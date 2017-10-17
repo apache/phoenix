@@ -21,6 +21,7 @@ import org.apache.phoenix.schema.types.PUnsignedIntArray;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.util.VarBinaryFormatter;
 
 import com.force.db.i18n.LinguisticSort;
 import com.force.i18n.LocaleUtils;
@@ -98,23 +99,10 @@ public class CollationKeyFunction extends ScalarFunction {
 			byte[] collationKeyByteArray = collator.getCollationKey(inputValue).toByteArray();
 
 			if(LOG.isDebugEnabled()) {
-				LOG.debug("Collation key bytes:" + Arrays.toString(collationKeyByteArray));
+				LOG.debug("Collation key bytes: " + VarBinaryFormatter.INSTANCE.format(collationKeyByteArray));
 			}
 			
-			// byte is signed in Java, but we need unsigned values for comparison
-			// https://www.programcreek.com/java-api-examples/index.php?api=java.text.CollationKey
-			// Byte.toUnsignedInt will convert a byte value between [-128,127] to an int value
-			// between [0,255]
-			Integer[] collationKeyUnsignedIntArray = new Integer[collationKeyByteArray.length];
-			for(int i=0; i < collationKeyByteArray.length; i ++) {
-				collationKeyUnsignedIntArray[i] = Byte.toUnsignedInt(collationKeyByteArray[i]);
-			}
-			
-			if(LOG.isDebugEnabled()) {
-				LOG.debug("Collation key bytes (unsigned):" + Arrays.toString(collationKeyUnsignedIntArray));
-			}
-			
-			ptr.set(PIntegerArray.INSTANCE.toBytes(new PhoenixArray(PInteger.INSTANCE, collationKeyUnsignedIntArray)));
+			ptr.set(collationKeyByteArray);
 			return true;
 		} catch (ExpressionEvaluationException e) {
 			LOG.debug("ExpressionEvaluationException caught: " + e.getMessage());
@@ -124,7 +112,7 @@ public class CollationKeyFunction extends ScalarFunction {
 
 	@Override
 	public PDataType getDataType() {
-		return PIntegerArray.INSTANCE;
+		return PVarbinary.INSTANCE;
 	}
 
 	@Override
