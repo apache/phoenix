@@ -29,6 +29,12 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Before;
 import org.junit.Test;
 
+/**
+ * End2End test that tests the COLLATION_KEY in an ORDER BY clause
+ * 
+ * @author snakhoda-sfdc
+ *
+ */
 public class CollationKeyFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
 	private String tableName;
@@ -94,7 +100,7 @@ public class CollationKeyFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 	 */
 	private void queryDataColumnWithCollKeyOrdering(String localeString, Integer[] expectedIndexOrder)
 			throws SQLException {
-		String query = String.format("SELECT id, data FROM %s ORDER BY COLLKEY(data, '%s')", tableName, localeString);
+		String query = String.format("SELECT id, data FROM %s ORDER BY COLLATION_KEY(data, '%s')", tableName, localeString);
 
 		Connection conn = DriverManager.getConnection(getUrl());
 		PreparedStatement ps = conn.prepareStatement(query);
