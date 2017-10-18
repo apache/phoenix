@@ -87,4 +87,13 @@ public abstract class ScalarFunction extends FunctionExpression {
     public KeyPart newKeyPart(KeyPart childPart) {
         return null;
     }
+    
+    /**
+     * Used to determine if the same ScalarFunction instance may be
+     * used by multiple threads. 
+     * @return true if function is thread safe and false otherwise.
+     */
+    public boolean isThreadSafe() {
+        return true;
+    }
 }
