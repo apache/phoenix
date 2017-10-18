@@ -110,7 +110,7 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
 
     @Override
     public Expression visitLeave(ScalarFunction node, List<Expression> l) {
-        return isCloneNode(node, l) ? node.clone(l) : node;
+        return isCloneNode(node, l) || !node.isThreadSafe() ? node.clone(l) : node;
     }
 
     public Expression visitLeave(UDFExpression node, List<Expression> l) {
