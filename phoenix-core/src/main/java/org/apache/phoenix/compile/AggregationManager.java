@@ -17,8 +17,13 @@
  */
 package org.apache.phoenix.compile;
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Sets;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
@@ -26,12 +31,7 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import com.google.common.collect.Sets;
 
 /**
  * 
@@ -84,7 +84,7 @@ public class AggregationManager {
                 @Override
                 public Iterator<Expression> visitEnter(SingleAggregateFunction function) {
                     aggFuncSet.add(function);
-                    return Iterators.emptyIterator();
+                    return Collections.emptyIterator();
                 }
             });
         }

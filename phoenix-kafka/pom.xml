@@ -26,7 +26,7 @@
 	<parent>
 		<groupId>org.apache.phoenix</groupId>
 		<artifactId>phoenix</artifactId>
-		<version>4.12.0-HBase-1.3-SNAPSHOT</version>
+		<version>4.13.0-SNAPSHOT</version>
 	</parent>
 	<artifactId>phoenix-kafka</artifactId>
 	<name>Phoenix - Kafka</name>
@@ -151,10 +151,6 @@
 		<dependency>
 			<groupId>org.apache.htrace</groupId>
 			<artifactId>htrace-core</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>io.netty</groupId>
-			<artifactId>netty-all</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>

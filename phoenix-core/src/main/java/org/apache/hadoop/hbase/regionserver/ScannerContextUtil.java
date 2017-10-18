@@ -15,23 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
 
-import java.util.Arrays;
-import java.util.Collection;
+package org.apache.hadoop.hbase.regionserver;
 
-import org.junit.runners.Parameterized.Parameters;
 
-public class NonColumnEncodedImmutableTxStatsCollectorIT extends StatsCollectorIT {
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 
-    public NonColumnEncodedImmutableTxStatsCollectorIT(boolean mutable, boolean transactional,
-            boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
+import java.util.List;
+
+/**
+ * @ScannerContext has all methods package visible. To properly update the context progress for our scanners we
+ * need this helper
+ */
+public class ScannerContextUtil {
+    public static void incrementSizeProgress(ScannerContext sc, List<Cell> cells) {
+        for (Cell cell : cells) {
+            sc.incrementSizeProgress(CellUtil.estimatedHeapSizeOfWithoutTags(cell));
+        }
     }
 
-    @Parameters(name = "mutable = {0}, transactional = {1}, isUserTableNamespaceMapped = {2}, columnEncoded = {3}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(
-            new Boolean[][] { { false, true, false, false }, { false, true, true, false } });
+    public static void updateTimeProgress(ScannerContext sc) {
+        sc.updateTimeProgress();
     }
 }

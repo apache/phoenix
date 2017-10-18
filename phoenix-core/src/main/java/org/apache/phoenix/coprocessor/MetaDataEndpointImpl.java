@@ -96,7 +96,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -236,6 +235,7 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -3645,14 +3645,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private static MetaDataMutationResult checkKeyInRegion(byte[] key, Region region, MutationCode code) {
-        byte[] startKey = region.getRegionInfo().getStartKey();
-        byte[] endKey = region.getRegionInfo().getEndKey();
-        if (Bytes.compareTo(startKey, key) <= 0
-                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
-                    endKey) < 0)) {
-            return null; // normal case;
-        }
-        return new MetaDataMutationResult(code, EnvironmentEdgeManager.currentTimeMillis(), null);
+        return ServerUtil.isKeyInRegion(key, region) ? null : 
+            new MetaDataMutationResult(code, EnvironmentEdgeManager.currentTimeMillis(), null);
     }
 
     private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, Region region) {

@@ -276,18 +276,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
             throws IOException {
-        try {
-            while (shouldAdvance()) {
-                hasMore = scanner.nextRaw(result, scannerContext);
-                processResults(result, false); // TODO detect if limit used here
-                result.clear();
-            }
-            
-            return nextInQueue(result);
-        } catch (Throwable t) {
-            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
-            return false; // impossible
-        }
+        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
     }
 
     @Override
@@ -302,33 +291,12 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result) throws IOException {
-        try {
-            while (shouldAdvance()) {
-                hasMore = scanner.next(result);
-                processResults(result, false);
-                result.clear();
-            }
-            
-            return nextInQueue(result);
-        } catch (Throwable t) {
-            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
-            return false; // impossible
-        }
+        throw new IOException("Next should not be used in HashJoin scanner");
     }
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        try {
-            while (shouldAdvance()) {
-                hasMore = scanner.next(result, scannerContext);
-                processResults(result, false); // TODO detect if limit used here
-                result.clear();
-            }
-            return nextInQueue(result);
-        } catch (Throwable t) {
-            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
-            return false; // impossible
-        }
+        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
     }
 
     @Override
