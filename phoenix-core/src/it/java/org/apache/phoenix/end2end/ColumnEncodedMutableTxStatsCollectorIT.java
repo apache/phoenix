@@ -29,10 +29,9 @@ public class ColumnEncodedMutableTxStatsCollectorIT extends StatsCollectorIT {
         super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
     }
 
-    @Parameters(
-            name = "columnEncoded = {0}, mutable = {1}, transactional = {2}, isUserTableNamespaceMapped = {3}")
+    @Parameters(name = "mutable = {0}, transactional = {1}, isUserTableNamespaceMapped = {2}, columnEncoded = {3}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(
-            new Boolean[][] { { true, true, true, false }, { true, true, true, true } });
+            new Boolean[][] { { true, true, false, true }, { true, true, true, true } });
     }
 }
