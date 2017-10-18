@@ -43,11 +43,41 @@ import com.force.db.i18n.LinguisticSort;
 import com.force.i18n.LocaleUtils;
 
 /**
- * A Phoenix Function that calculates a collation key for an input string based
- * on a caller-provided locale and collator strength and decomposition settings.
+ * A Phoenix Function that calculates a collation key for an input
+ * string based on a caller-provided locale and collator strength and
+ * decomposition settings.
  * 
- * It uses the open-source grammaticus and i18n packages to obtain the collators
- * it needs.
+ * The locale should be specified as xx_yy_variant where xx is the ISO
+ * 639-1 2-letter language code, yy is the the ISO 3166 2-letter
+ * country code. Both countryCode and variant are optional. For
+ * example, zh_TW_STROKE, zh_TW and zh are all valid locale
+ * representations. Note the language code, country code and variant
+ * are used as arguments to the constructor of java.util.Locale.
+ *
+ * This function uses the open-source grammaticus and i18n-util
+ * packages to obtain the collators it needs from the provided locale.
+ *
+ * The LinguisticSort implementation in i18n-util encapsulates
+ * sort-related functionality for a substantive list of locales. For
+ * each locale, it provides a collator and an Oracle-specific database
+ * function that can be used to sort strings according to the natural
+ * language rules of that locale.
+ *
+ * This function uses the collator returned by
+ * LinguisticSort.getCollator to produce a collation key for its input
+ * string. A user can expect that the sorting semantics of this
+ * function for a given locale is equivalent to the sorting behaviour
+ * of an Oracle query that is constructed using the Oracle functions
+ * returned by LinguisticSort for that locale.
+ *
+ * The optional third argument to the function is a boolean that
+ * specifies whether to use the upper-case collator (case-insensitive)
+ * returned by LinguisticSort.getUpperCaseCollator.
+ *
+ * The optional fourth and fifth arguments are used to set
+ * respectively the strength and composition of the collator returned
+ * by LinguisticSort using the setStrength and setDecomposition
+ * methods of java.text.Collator.
  * 
  * @author snakhoda-sfdc
  *
