@@ -25,7 +25,6 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -63,8 +62,6 @@ import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
-import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.security.User;
@@ -90,18 +87,12 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Lists;
@@ -839,49 +830,6 @@ public class Indexer extends BaseRegionObserver {
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
     desc.addCoprocessor(Indexer.class.getName(), null, priority, properties);
-  }
-  
-  @Override
-  public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-          final StoreFile resultFile, CompactionRequest request) throws IOException {
-      // If we're compacting all files, then delete markers are removed
-      // and we must permanently disable an index that needs to be
-      // partially rebuild because we're potentially losing the information
-      // we need to successfully rebuilt it.
-      if (request.isAllFiles() || request.isMajor()) {
-          // Compaction and split upcalls run with the effective user context of the requesting user.
-          // This will lead to failure of cross cluster RPC if the effective user is not
-          // the login user. Switch to the login user context to ensure we have the expected
-          // security context.
-          User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-              @Override
-              public Void run() throws Exception {
-                  String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                  try {
-                      PhoenixConnection conn =  QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class);
-                      PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
-                      // FIXME: we may need to recurse into children of this table too
-                      for (PTable index : table.getIndexes()) {
-                          if (index.getIndexDisableTimestamp() != 0) {
-                              try {
-                                  LOG.info("Major compaction running while index on table is disabled.  Clearing index disable timestamp: " + fullTableName);
-                                  IndexUtil.updateIndexState(conn, index.getName().getString(), PIndexState.DISABLE, Long.valueOf(0L));
-                              } catch (SQLException e) {
-                                  LOG.warn("Unable to permanently disable index " + index.getName().getString(), e);
-                              }
-                          }
-                      }
-                  } catch (Exception e) {
-                      // If we can't reach the stats table, don't interrupt the normal
-                      // compaction operation, just log a warning.
-                      if (LOG.isWarnEnabled()) {
-                          LOG.warn("Unable to permanently disable indexes being partially rebuild for " + fullTableName, e);
-                      }
-                  }
-                  return null;
-              }
-          });
-      }
   }
 }
 
