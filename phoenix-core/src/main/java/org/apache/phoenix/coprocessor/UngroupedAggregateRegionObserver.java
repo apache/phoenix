@@ -97,6 +97,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
@@ -108,8 +109,10 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
@@ -133,7 +136,10 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -142,7 +148,10 @@ import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
 import com.google.common.base.Throwables;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -926,7 +935,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> e, final Store store,
+    public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final StoreFile resultFile, CompactionRequest request) throws IOException {
         // If we're compacting all files, then delete markers are removed
         // and we must permanently disable an index that needs to be
@@ -940,47 +949,65 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
                 @Override
                 public Void run() throws Exception {
-                    MutationCode mutationCode = null;
-                    long disableIndexTimestamp = 0;
-
-                    try (CoprocessorHConnection coprocessorHConnection =
-                            new CoprocessorHConnection(compactionConfig,
-                                    (HRegionServer) e.getEnvironment()
-                                            .getRegionServerServices());
-                            HTableInterface htable =
-                                    coprocessorHConnection
-                                            .getTable(SchemaUtil.getPhysicalTableName(
-                                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                                                compactionConfig))) {
-                        String tableName = e.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                        // FIXME: if this is an index on a view, we won't find a row for it in SYSTEM.CATALOG
-                        // Instead, we need to disable all indexes on the view.
-                        byte[] tableKey = SchemaUtil.getTableKeyFromFullName(tableName);
-                        Get get = new Get(tableKey);
-                        get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES);
-                        Result result = htable.get(get);
-                        if (!result.isEmpty()) {
-                            Cell cell = result.listCells().get(0);
-                            if (cell.getValueLength() > 0) {
-                                disableIndexTimestamp = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
-                                if (disableIndexTimestamp != 0) {
-                                    logger.info("Major compaction running while index on table is disabled.  Clearing index disable timestamp: " + tableName);
-                                    mutationCode = IndexUtil.updateIndexState(tableKey, 0L, htable, PIndexState.DISABLE).getMutationCode();
-                                }
-                            }
-                        }
-                    } catch (Throwable t) { // log, but swallow exception as we don't want to impact compaction
-                        logger.warn("Potential failure to permanently disable index during compaction " +  e.getEnvironment().getRegionInfo().getTable().getNameAsString(), t);
-                    } finally {
-                        if (disableIndexTimestamp != 0 && mutationCode != MutationCode.TABLE_ALREADY_EXISTS && mutationCode != MutationCode.TABLE_NOT_FOUND) {
-                            logger.warn("Attempt to permanently disable index " + e.getEnvironment().getRegionInfo().getTable().getNameAsString() + 
-                                    " during compaction" + (mutationCode == null ? "" : " failed with code = " + mutationCode));
-                        }
-                    }
+                    String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+                    clearTsOnDisabledIndexes(fullTableName);
                     return null;
                 }
             });
         }
+    }
+
+    @VisibleForTesting
+    public void clearTsOnDisabledIndexes(final String fullTableName) {
+        try (PhoenixConnection conn =
+                QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class)) {
+            String baseTable = fullTableName;
+            PTable table = PhoenixRuntime.getTableNoCache(conn, baseTable);
+            List<PTable> indexes;
+            // if it's an index table, we just need to check if it's disabled
+            if (PTableType.INDEX.equals(table.getType())) {
+                indexes = Lists.newArrayList(table.getIndexes());
+                indexes.add(table);
+            } else {
+                // for a data table, check all its indexes
+                indexes = table.getIndexes();
+            }
+            // FIXME need handle views and indexes on views as well
+            // if any index is disabled, we won't have all the data for a rebuild after compaction
+            for (PTable index : indexes) {
+                if (index.getIndexDisableTimestamp() != 0) {
+                    try {
+                        logger.info(
+                            "Major compaction running while index on table is disabled.  Clearing index disable timestamp: "
+                                    + index);
+                        IndexUtil.updateIndexState(conn, index.getName().getString(),
+                            PIndexState.DISABLE, Long.valueOf(0L));
+                    } catch (SQLException e) {
+                        logger.warn(
+                            "Unable to permanently disable index " + index.getName().getString(),
+                            e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (e instanceof TableNotFoundException) {
+                logger.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
+                // non-Phoenix HBase tables won't be found, do nothing
+                return;
+            }
+            // If we can't reach the stats table, don't interrupt the normal
+            // compaction operation, just log a warning.
+            if (logger.isWarnEnabled()) {
+                logger.warn("Unable to permanently disable indexes being partially rebuild for "
+                        + fullTableName,
+                    e);
+            }
+        }
+    }
+
+    @VisibleForTesting
+    public void setCompactionConfig(Configuration compactionConfig) {
+        this.compactionConfig = compactionConfig;
     }
 
     private static PTable deserializeTable(byte[] b) {
