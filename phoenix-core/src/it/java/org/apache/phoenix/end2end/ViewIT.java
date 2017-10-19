@@ -790,4 +790,78 @@ public class ViewIT extends BaseViewIT {
         String[] actualPKs = pkCols.toArray(new String[0]);
         assertArrayEquals(expectedPKs, actualPKs);
     }
+
+	@Test
+	public void testCompositeDescPK() throws SQLException {
+		Properties props = new Properties();
+		try (Connection globalConn = DriverManager.getConnection(getUrl(), props)) {
+			String tableName = generateUniqueName();
+			String viewName = generateUniqueName();
+
+			// create global base table
+			globalConn.createStatement().execute("CREATE TABLE " + tableName
+					+ " (TENANT_ID CHAR(15) NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, CREATED_DATE DATE, CREATED_BY CHAR(15), SYSTEM_MODSTAMP DATE CONSTRAINT PK PRIMARY KEY (TENANT_ID, KEY_PREFIX)) VERSIONS=1, MULTI_TENANT=true, IMMUTABLE_ROWS=TRUE, REPLICATION_SCOPE=1");
+
+			// create various tenant specific views
+			globalConn.createStatement()
+					.execute("CREATE VIEW " + viewName
+							+ " (pk1 VARCHAR(10) NOT NULL, pk2 VARCHAR(10) NOT NULL, col1 DATE, col3 DECIMAL CONSTRAINT PK PRIMARY KEY (pk1 DESC, pk2 DESC)) AS SELECT * FROM "
+							+ tableName + " WHERE KEY_PREFIX = 'abc' ");
+
+			String tenantId = "tenantId";
+			Properties tenantProps = new Properties();
+			tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+			// create a tenant specific view
+			try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+				// upsert rows
+				tenantConn.createStatement().execute("UPSERT INTO " + viewName
+						+ " (pk1, pk2, col1, col3) VALUES ('testa', 'testb', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
+				tenantConn.createStatement().execute("UPSERT INTO " + viewName
+						+ " (pk1, pk2, col1, col3) VALUES ('testa', 'testc', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
+				tenantConn.createStatement().execute("UPSERT INTO " + viewName
+						+ " (pk1, pk2, col1, col3) VALUES ('testa', 'testd', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
+				tenantConn.createStatement().execute("UPSERT INTO " + viewName
+						+ " (pk1, pk2, col1, col3) VALUES ('testa', 'teste', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
+				tenantConn.createStatement().execute("UPSERT INTO " + viewName
+						+ " (pk1, pk2, col1, col3) VALUES ('testb', 'testa', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
+				tenantConn.commit();
+
+				// run queries
+				ResultSet rs = tenantConn.createStatement()
+						.executeQuery("SELECT count(*) FROM " + viewName + " WHERE pk1 = 'testa'");
+				assertTrue(rs.next());
+				assertEquals(4, rs.getLong(1));
+				assertFalse(rs.next());
+
+				rs = tenantConn.createStatement().executeQuery("SELECT count(*) FROM " + viewName);
+				assertTrue(rs.next());
+				assertEquals(5, rs.getLong(1));
+				assertFalse(rs.next());
+
+				rs = tenantConn.createStatement()
+						.executeQuery("SELECT count(*) FROM " + viewName + " WHERE pk1 >= 'testa'");
+				assertTrue(rs.next());
+				assertEquals(5, rs.getLong(1));
+				assertFalse(rs.next());
+
+				rs = tenantConn.createStatement()
+						.executeQuery("SELECT count(*) FROM " + viewName + " WHERE pk1 <= 'testa'");
+				assertTrue(rs.next());
+				assertEquals(4, rs.getLong(1));
+				assertFalse(rs.next());
+
+				rs = tenantConn.createStatement()
+						.executeQuery("SELECT count(*) FROM " + viewName + " WHERE pk1 > 'testa'");
+				assertTrue(rs.next());
+				assertEquals(1, rs.getLong(1));
+				assertFalse(rs.next());
+
+				rs = tenantConn.createStatement()
+						.executeQuery("SELECT count(*) FROM " + viewName + " WHERE pk1 < 'testa'");
+				assertTrue(rs.next());
+				assertEquals(0, rs.getLong(1));
+				assertFalse(rs.next());
+			}
+		}
+	}
 }
