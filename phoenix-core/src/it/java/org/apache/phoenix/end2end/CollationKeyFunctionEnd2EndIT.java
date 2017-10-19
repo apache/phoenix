@@ -24,6 +24,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.Collator;
 
 import static org.junit.Assert.assertEquals;
 import org.junit.Before;
@@ -38,7 +39,11 @@ import org.junit.Test;
 public class CollationKeyFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
 	private String tableName;
-	private String[] dataArray = new String[] { "\u963f", "\u55c4", "\u963e", "\u554a", "\u4ec8", "\u3d9a", "\u9f51" };
+	private String[] dataArray = new String[] {
+			// (0-6) chinese characters
+			"\u963f", "\u55c4", "\u963e", "\u554a", "\u4ec8", "\u3d9a", "\u9f51",
+			// (7-13) western characters, some with accent
+			"a", "b", "ä", "A", "a", "ä", "A" };
 
 	@Before
 	public void initAndPopulateTable() throws Exception {
@@ -66,53 +71,113 @@ public class CollationKeyFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testZhSort() throws Exception {
-		queryDataColumnWithCollKeyOrdering("zh", new Integer[] { 3, 0, 1, 6, 5, 4, 2 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh", 0, 6, new Integer[] { 3, 0, 1, 6, 5, 4, 2 });
 	}
 
 	@Test
 	public void testZhTwSort() throws Exception {
-		queryDataColumnWithCollKeyOrdering("zh_TW", new Integer[] { 0, 3, 4, 1, 5, 2, 6 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW", 0, 6, new Integer[] { 0, 3, 4, 1, 5, 2, 6 });
 	}
 
 	@Test
 	public void testZhTwStrokeSort() throws Exception {
-		queryDataColumnWithCollKeyOrdering("zh_TW_STROKE", new Integer[] { 4, 2, 0, 3, 1, 6, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW_STROKE", 0, 6, new Integer[] { 4, 2, 0, 3, 1, 6, 5 });
 	}
 
 	@Test
 	public void testZhStrokeSort() throws Exception {
-		queryDataColumnWithCollKeyOrdering("zh__STROKE", new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__STROKE", 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
 	}
 
 	@Test
 	public void testZhPinyinSort() throws Exception {
-		queryDataColumnWithCollKeyOrdering("zh__PINYIN", new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__PINYIN", 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
 	}
 
+	@Test
+	public void testUpperCaseSort() throws Exception {
+		queryWithCollKeyUpperCaseWithExpectedOrder("en", 7, 13, new Integer[] { 7, 10, 11, 13, 9, 12, 8 });
+	}
+
+	@Test
+	public void testPrimaryStrengthSort() throws Exception {
+		queryWithCollKeyWithStrengthWithExpectedOrder("en", Collator.PRIMARY, false, 7, 13,
+				new Integer[] { 7, 9, 10, 11, 12, 13, 8 });
+	}
+	
+	@Test
+	public void testSecondaryStrengthSort() throws Exception {
+		queryWithCollKeyWithStrengthWithExpectedOrder("en", Collator.SECONDARY, false, 7, 13,
+				new Integer[] { 7, 10, 11, 13, 9, 12, 8 });
+	}
+
+	@Test
+	public void testTertiaryStrengthSort() throws Exception {
+		queryWithCollKeyWithStrengthWithExpectedOrder("en", Collator.TERTIARY, false, 7, 13,
+				new Integer[] { 7, 11, 10, 13, 9, 12, 8 });
+	}
+
+	@Test
+	public void testTertiaryStrengthSortDesc() throws Exception {
+		queryWithCollKeyWithStrengthWithExpectedOrder("en", Collator.TERTIARY, true, 7, 13,
+				new Integer[] { 8, 12, 9, 13, 10, 11, 7 });
+	}
+
+	
 	/**
-	 * Issue a query ordered by the collation key of the data column according to the provided localeString,
-	 * and compare the ID and data columns to the expected order.
+	 * Issue a query ordered by the collation key (with COLLATION_KEY called
+	 * with default args) of the data column according to the provided
+	 * localeString, and compare the ID and data columns to the expected order.
 	 * 
 	 * @param expectedIndexOrder
 	 *            an array of indexes into the dataArray in the order we expect.
 	 *            This is the same as the ID column
 	 * @throws SQLException
 	 */
-	private void queryDataColumnWithCollKeyOrdering(String localeString, Integer[] expectedIndexOrder)
-			throws SQLException {
-		String query = String.format("SELECT id, data FROM %s ORDER BY COLLATION_KEY(data, '%s')", tableName, localeString);
+	private void queryWithCollKeyDefaultArgsWithExpectedOrder(String localeString, Integer beginIndex, Integer endIndex,
+			Integer[] expectedIndexOrder) throws Exception {
+		String query = String.format(
+				"SELECT id, data FROM %s WHERE ID BETWEEN %d AND %d ORDER BY COLLATION_KEY(data, '%s')", tableName,
+				beginIndex, endIndex, localeString);
+		queryWithExpectedOrder(query, expectedIndexOrder);
+	}
 
+	/**
+	 * Same as above, except the upperCase collator argument is set to true
+	 */
+	private void queryWithCollKeyUpperCaseWithExpectedOrder(String localeString, Integer beginIndex, Integer endIndex,
+			Integer[] expectedIndexOrder) throws Exception {
+		String query = String.format(
+				"SELECT id, data FROM %s WHERE ID BETWEEN %d AND %d ORDER BY COLLATION_KEY(data, '%s', true), id",
+				tableName, beginIndex, endIndex, localeString);
+		queryWithExpectedOrder(query, expectedIndexOrder);
+	}
+
+	/**
+	 * Same as above, except the collator strength is set
+	 */
+	private void queryWithCollKeyWithStrengthWithExpectedOrder(String localeString, Integer strength, boolean isDescending,
+			Integer beginIndex, Integer endIndex, Integer[] expectedIndexOrder) throws Exception {
+		String sortOrder = isDescending ? "DESC" : "";
+		
+		String query = String.format(
+				"SELECT id, data FROM %s WHERE ID BETWEEN %d AND %d ORDER BY COLLATION_KEY(data, '%s', false, %d) %s, id %s",
+				tableName, beginIndex, endIndex, localeString, strength, sortOrder, sortOrder);
+		queryWithExpectedOrder(query, expectedIndexOrder);
+	}
+
+	private void queryWithExpectedOrder(String query, Integer[] expectedIndexOrder) throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
 		PreparedStatement ps = conn.prepareStatement(query);
 		ResultSet rs = ps.executeQuery();
 		int i = 0;
 		while (rs.next()) {
 			int expectedId = expectedIndexOrder[i];
-			assertEquals("For row " + i + "The ID did not match the expected index", expectedId, rs.getInt(1));
-			assertEquals("For row " + i + "The data did not match the expected entry from the data array",
+			assertEquals("For row " + i + ": The ID did not match the expected index", expectedId, rs.getInt(1));
+			assertEquals("For row " + i + ": The data did not match the expected entry from the data array",
 					dataArray[expectedId], rs.getString(2));
 			i++;
 		}
-		assertEquals("The result set returned a different number of rows from the data array", dataArray.length, i);
+		assertEquals("The result set returned a different number of rows from the data array", expectedIndexOrder.length, i);
 	}
 }

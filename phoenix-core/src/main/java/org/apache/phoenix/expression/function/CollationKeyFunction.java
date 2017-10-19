@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.text.Collator;
+import java.text.RuleBasedCollator;
 import java.util.List;
 import java.util.Locale;
 
@@ -41,43 +42,40 @@ import org.apache.phoenix.util.VarBinaryFormatter;
 
 import com.force.db.i18n.LinguisticSort;
 import com.force.i18n.LocaleUtils;
+import com.ibm.icu.impl.jdkadapter.CollatorICU;
+import com.ibm.icu.text.RuleBasedBreakIterator;
 
 /**
- * A Phoenix Function that calculates a collation key for an input
- * string based on a caller-provided locale and collator strength and
- * decomposition settings.
+ * A Phoenix Function that calculates a collation key for an input string based
+ * on a caller-provided locale and collator strength and decomposition settings.
  * 
- * The locale should be specified as xx_yy_variant where xx is the ISO
- * 639-1 2-letter language code, yy is the the ISO 3166 2-letter
- * country code. Both countryCode and variant are optional. For
- * example, zh_TW_STROKE, zh_TW and zh are all valid locale
- * representations. Note the language code, country code and variant
- * are used as arguments to the constructor of java.util.Locale.
+ * The locale should be specified as xx_yy_variant where xx is the ISO 639-1
+ * 2-letter language code, yy is the the ISO 3166 2-letter country code. Both
+ * countryCode and variant are optional. For example, zh_TW_STROKE, zh_TW and zh
+ * are all valid locale representations. Note the language code, country code
+ * and variant are used as arguments to the constructor of java.util.Locale.
  *
- * This function uses the open-source grammaticus and i18n-util
- * packages to obtain the collators it needs from the provided locale.
+ * This function uses the open-source grammaticus and i18n-util packages to
+ * obtain the collators it needs from the provided locale.
  *
- * The LinguisticSort implementation in i18n-util encapsulates
- * sort-related functionality for a substantive list of locales. For
- * each locale, it provides a collator and an Oracle-specific database
- * function that can be used to sort strings according to the natural
- * language rules of that locale.
+ * The LinguisticSort implementation in i18n-util encapsulates sort-related
+ * functionality for a substantive list of locales. For each locale, it provides
+ * a collator and an Oracle-specific database function that can be used to sort
+ * strings according to the natural language rules of that locale.
  *
- * This function uses the collator returned by
- * LinguisticSort.getCollator to produce a collation key for its input
- * string. A user can expect that the sorting semantics of this
- * function for a given locale is equivalent to the sorting behaviour
- * of an Oracle query that is constructed using the Oracle functions
- * returned by LinguisticSort for that locale.
+ * This function uses the collator returned by LinguisticSort.getCollator to
+ * produce a collation key for its input string. A user can expect that the
+ * sorting semantics of this function for a given locale is equivalent to the
+ * sorting behaviour of an Oracle query that is constructed using the Oracle
+ * functions returned by LinguisticSort for that locale.
  *
- * The optional third argument to the function is a boolean that
- * specifies whether to use the upper-case collator (case-insensitive)
- * returned by LinguisticSort.getUpperCaseCollator.
+ * The optional third argument to the function is a boolean that specifies
+ * whether to use the upper-case collator (case-insensitive) returned by
+ * LinguisticSort.getUpperCaseCollator.
  *
- * The optional fourth and fifth arguments are used to set
- * respectively the strength and composition of the collator returned
- * by LinguisticSort using the setStrength and setDecomposition
- * methods of java.text.Collator.
+ * The optional fourth and fifth arguments are used to set respectively the
+ * strength and composition of the collator returned by LinguisticSort using the
+ * setStrength and setDecomposition methods of java.text.Collator.
  * 
  * @author snakhoda-sfdc
  *
@@ -181,7 +179,14 @@ public class CollationKeyFunction extends ScalarFunction {
 
 	@Override
 	public String getName() {
-		return "COLLATION_KEY";
+		return NAME;
+	}
+
+	@Override
+	public boolean isThreadSafe() {
+		// ICU4J Collators are not thread-safe unless they are frozen.
+		// TODO: Look into calling freeze() on them to be able return true here.
+		return false;
 	}
 
 	/**
@@ -205,9 +210,9 @@ public class CollationKeyFunction extends ScalarFunction {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("child: " + childIndex + ", expression: " + expression);
 		}
-		if (!(expression instanceof LiteralExpression)) {
-			throw new ExpressionEvaluationException(expression);
-		}
+		// It's safe to assume expression is a LiteralExpression since
+		// only arguments marked as isConstant = true should be handled through
+		// this method.
 		return type.cast(((LiteralExpression) expression).getValue());
 	}
 
