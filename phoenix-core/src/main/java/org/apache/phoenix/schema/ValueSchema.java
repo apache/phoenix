@@ -217,7 +217,7 @@ public abstract class ValueSchema implements Writable {
             this.type = field.getDataType();
             this.byteSize = field.byteSize;
             this.count = count;
-            this.sortOrder = SortOrder.getDefault();
+            this.sortOrder = field.getSortOrder();
         }
         
         @Override
