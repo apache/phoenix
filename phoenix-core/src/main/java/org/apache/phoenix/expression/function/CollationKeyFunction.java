@@ -21,7 +21,6 @@ import java.io.DataInput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.text.Collator;
-import java.text.RuleBasedCollator;
 import java.util.List;
 import java.util.Locale;
 
@@ -42,8 +41,6 @@ import org.apache.phoenix.util.VarBinaryFormatter;
 
 import com.force.db.i18n.LinguisticSort;
 import com.force.i18n.LocaleUtils;
-import com.ibm.icu.impl.jdkadapter.CollatorICU;
-import com.ibm.icu.text.RuleBasedBreakIterator;
 
 /**
  * A Phoenix Function that calculates a collation key for an input string based
