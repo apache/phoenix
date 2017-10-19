@@ -602,6 +602,9 @@ public class MetaDataClient {
             }
 
             if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS && result.getTable() == null) {
+                    result.setTable(table);
+                }
                 return result;
             }
             MutationCode code = result.getMutationCode();
