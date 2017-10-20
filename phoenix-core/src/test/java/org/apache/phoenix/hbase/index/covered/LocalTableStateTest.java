@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -57,13 +58,13 @@ public class LocalTableStateTest {
   private static final IndexMetaData indexMetaData = new IndexMetaData() {
 
     @Override
-    public boolean isImmutableRows() {
-        return false;
+    public ReplayWrite getReplayWrite() {
+        return null;
     }
 
     @Override
-    public ReplayWrite getReplayWrite() {
-        return null;
+    public boolean requiresPriorRowState(Mutation m) {
+        return true;
     }
       
   };
@@ -120,14 +121,14 @@ public class LocalTableStateTest {
       IndexMetaData indexMetaData = new IndexMetaData() {
 
           @Override
-          public boolean isImmutableRows() {
-              return false;
-          }
-
-          @Override
           public ReplayWrite getReplayWrite() {
               return null;
           }
+
+        @Override
+        public boolean requiresPriorRowState(Mutation m) {
+            return true;
+        }
             
         };
     Put m = new Put(row);
@@ -157,16 +158,16 @@ public class LocalTableStateTest {
       IndexMetaData indexMetaData = new IndexMetaData() {
 
           @Override
-          public boolean isImmutableRows() {
-              return true;
-          }
-
-          @Override
           public ReplayWrite getReplayWrite() {
               return null;
           }
+
+        @Override
+        public boolean requiresPriorRowState(Mutation m) {
+            return false;
+        }
             
-        };
+    };
     Put m = new Put(row);
     m.add(fam, qual, ts, val);
     // setup mocks
