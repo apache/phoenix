@@ -145,7 +145,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         Mockito.when(mockRegionInfo.getEndKey()).thenReturn(Bytes.toBytes("z"));
 
         mockIndexMetaData = Mockito.mock(PhoenixIndexMetaData.class);
-        Mockito.when(mockIndexMetaData.isImmutableRows()).thenReturn(false);
+        Mockito.when(mockIndexMetaData.requiresPriorRowState((Mutation)Mockito.any())).thenReturn(true);
         Mockito.when(mockIndexMetaData.getIndexMaintainers())
                 .thenReturn(Collections.singletonList(getTestIndexMaintainer()));
 

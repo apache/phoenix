@@ -89,7 +89,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -284,16 +283,6 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         } else {
             findPriorValueMutations = mutations;
         }
-        while(mutationIterator.hasNext()) {
-            Mutation m = mutationIterator.next();
-            // add the mutation to the batch set
-            ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-            if (mutations != findPriorValueMutations && isDeleteMutation(m)) {
-                addMutation(findPriorValueMutations, row, m);
-            }
-            addMutation(mutations, row, m);
-        }
-        
         // Collect the set of mutable ColumnReferences so that we can first
         // run a scan to get the current state. We'll need this to delete
         // the existing index rows.
@@ -309,6 +298,17 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             mutableColumns.addAll(allColumns);
         }
 
+        while(mutationIterator.hasNext()) {
+            Mutation m = mutationIterator.next();
+            // add the mutation to the batch set
+            ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+            // if we have no non PK columns, no need to find the prior values
+            if (mutations != findPriorValueMutations && indexMetaData.requiresPriorRowState(m)) {
+                addMutation(findPriorValueMutations, row, m);
+            }
+            addMutation(mutations, row, m);
+        }
+        
         Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(mutations.size() * 2 * indexMaintainers.size());
         try {
             // Track if we have row keys with Delete mutations (or Puts that are
@@ -363,17 +363,6 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         return indexUpdates;
     }
 
-    private static boolean isDeleteMutation(Mutation m) {
-        for (Map.Entry<byte[],List<Cell>> cellMap : m.getFamilyCellMap().entrySet()) {
-            for (Cell cell : cellMap.getValue()) {
-                if (cell.getTypeByte() != KeyValue.Type.Put.getCode() || TransactionUtil.isDelete(cell)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private void processMutation(RegionCoprocessorEnvironment env,
             PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
             ResultScanner scanner,
@@ -398,6 +387,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         for (Mutation m : mutations.values()) {
             TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), txnContext.getWritePointer(), m);
             generatePuts(indexMetaData, indexUpdates, state);
+            generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
         }
     }
 

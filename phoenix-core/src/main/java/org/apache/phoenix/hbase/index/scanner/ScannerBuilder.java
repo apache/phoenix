@@ -71,7 +71,7 @@ public class ScannerBuilder {
     // filter out kvs based on deletes
     ApplyAndFilterDeletesFilter deleteFilter = new ApplyAndFilterDeletesFilter(getAllFamilies(indexedColumns));
     filters.addFilter(deleteFilter);
-
+    
     // combine the family filters and the rest of the filters as a
     return getFilteredScanner(filters, returnNullIfRowNotFound, deleteFilter.getDeleteTracker());
   }
