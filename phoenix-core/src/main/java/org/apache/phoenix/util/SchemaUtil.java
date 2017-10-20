@@ -613,7 +613,7 @@ public class SchemaUtil {
         PhoenixConnection metaConnection = null;
         Statement stmt = null;
         try {
-            metaConnection = new PhoenixConnection(conn.getQueryServices(), conn, scn);
+            metaConnection = new PhoenixConnection(conn, scn);
             try {
                 stmt = metaConnection.createStatement();
                 stmt.executeUpdate("ALTER TABLE SYSTEM.\"TABLE\" ADD IF NOT EXISTS " + columnDef);

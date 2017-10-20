@@ -1748,6 +1748,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         if (!isTableDeleted(table)) {
                             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
                             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            builder.setTable(PTableImpl.toProto(table));
                             done.run(builder.build());
                             return;
                         }

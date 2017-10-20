@@ -205,13 +205,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public PhoenixConnection(PhoenixConnection connection, long scn)
             throws SQLException {
-        this(connection.getQueryServices(), connection, scn);
+        this(connection, newPropsWithSCN(scn, connection.getClientInfo()));
     }
 
-    public PhoenixConnection(ConnectionQueryServices services,
-            PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,
-                connection.getClientInfo()), connection.metaData, connection
+	public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
+        this(connection.getQueryServices(), connection.getURL(), props, connection.metaData, connection
                 .getMutationState(), connection.isDescVarLengthRowKeyUpgrade(),
                 connection.isRunningUpgrade(), connection.buildingIndex);
         this.isAutoCommit = connection.isAutoCommit;

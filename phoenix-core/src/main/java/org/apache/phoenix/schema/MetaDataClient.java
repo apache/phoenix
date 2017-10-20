@@ -329,7 +329,14 @@ public class MetaDataClient {
                     LINK_TYPE + 
                     ") VALUES (?, ?, ?, ?, ?, ?)";
     
-    private static final String CREATE_VIEW_INDEX_PARENT_LINK = CREATE_CHILD_LINK;
+    private static final String CREATE_VIEW_INDEX_PARENT_LINK =
+    		"UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    COLUMN_FAMILY + "," +
+                    LINK_TYPE + 
+                    ") VALUES (?, ?, ?, ?, ?)";
     
     private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
@@ -1863,9 +1870,8 @@ public class MetaDataClient {
 	                linkStatement.setString(1, tenantIdStr);
 	                linkStatement.setString(2, schemaName);
 	                linkStatement.setString(3, tableName);
-	                linkStatement.setString(4, parent.getTenantId()!=null ? parent.getTenantId().getString() : null);
-	                linkStatement.setString(5, parent.getName().getString());
-	                linkStatement.setByte(6, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
+	                linkStatement.setString(4, parent.getName().getString());
+	                linkStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
 	                linkStatement.execute();
                 }
             }

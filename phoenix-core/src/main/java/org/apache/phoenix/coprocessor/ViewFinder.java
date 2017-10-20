@@ -106,7 +106,7 @@ class ViewFinder {
                 if (linkType==PTable.LinkType.PARENT_TABLE) {
                     viewTenantId = result.getValue(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
                 } else if (linkType==PTable.LinkType.CHILD_TABLE || linkType==PTable.LinkType.VIEW_INDEX_PARENT_TABLE) {
-                    viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+                    viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
                 } 
                 else if (linkType==PTable.LinkType.PHYSICAL_TABLE && result.getValue(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES)!=null) {
                     // do not links from indexes to their physical table

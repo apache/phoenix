@@ -1146,6 +1146,49 @@ public class UpgradeUtil {
         }
     }
     
+    public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
+    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+        try (PhoenixConnection queryConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
+        		PhoenixConnection upsertConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP)) {
+            logger.info("Upgrading metadata to add parent links for indexes on views");
+			String indexQuery = "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG WHERE LINK_TYPE = "
+					+ LinkType.INDEX_TABLE.getSerializedValue();
+			String createViewIndexLink = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_FAMILY, LINK_TYPE) VALUES (?,?,?,?,?) ";
+            ResultSet rs = queryConn.createStatement().executeQuery(indexQuery);
+            String prevTenantId = null;
+            PhoenixConnection metaConn = queryConn;
+            Properties props = new Properties(queryConn.getClientInfo());
+			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
+            while (rs.next()) {
+            	String tenantId = rs.getString("TENANT_ID");
+				if (prevTenantId != tenantId) {
+					prevTenantId = tenantId;
+					props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            		metaConn = new PhoenixConnection(oldMetaConnection, props); 
+            	}
+            	String schemaName = rs.getString("TABLE_SCHEM");
+            	String parentTableName = rs.getString("TABLE_NAME");
+            	String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
+            	String indexName = rs.getString("COLUMN_FAMILY");
+            	PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
+            	if (table==null) {
+            		throw new TableNotFoundException(fullParentTableName);
+            	}
+            	if (table.getType().equals(PTableType.VIEW)) {
+            		PreparedStatement prepareStatement = upsertConn.prepareStatement(createViewIndexLink);
+            		prepareStatement.setString(1, tenantId);
+            		prepareStatement.setString(2, schemaName);
+            		prepareStatement.setString(3, indexName);
+            		prepareStatement.setString(4, parentTableName);
+            		prepareStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
+            		prepareStatement.execute();
+            		upsertConn.commit();
+            	}
+            }
+            queryConn.getQueryServices().clearCache();
+        }
+    }
+    
     private static void upsertBaseColumnCountInHeaderRow(PhoenixConnection metaConnection,
             String tenantId, String schemaName, String viewOrTableName, int baseColumnCount)
             throws SQLException {
