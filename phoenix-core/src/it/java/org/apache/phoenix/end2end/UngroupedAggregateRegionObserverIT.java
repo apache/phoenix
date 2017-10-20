@@ -110,7 +110,7 @@ public class UngroupedAggregateRegionObserverIT extends ParallelStatsDisabledIT 
             stopCapturingIndexLog();
             // uneventful - nothing should be logged
             Mockito.verify(mockAppender, never())
-                    .doAppend((LoggingEvent) captorLoggingEvent.capture());
+                    .doAppend(captorLoggingEvent.capture());
         }
     }
 
@@ -154,8 +154,8 @@ public class UngroupedAggregateRegionObserverIT extends ParallelStatsDisabledIT 
         ungroupedObserver.clearTsOnDisabledIndexes(tableToCompact);
         stopCapturingIndexLog();
         // an event should've been logged
-        Mockito.verify(mockAppender).doAppend((LoggingEvent) captorLoggingEvent.capture());
-        LoggingEvent loggingEvent = (LoggingEvent) captorLoggingEvent.getValue();
+        Mockito.verify(mockAppender).doAppend(captorLoggingEvent.capture());
+        LoggingEvent loggingEvent = captorLoggingEvent.getValue();
         assertThat(loggingEvent.getLevel(), is(Level.INFO));
         // index should be permanently disabled (disabletime of 0)
         assertTrue(TestUtil.checkIndexState(pConn, indexTableFullName, PIndexState.DISABLE, 0L));
@@ -175,8 +175,8 @@ public class UngroupedAggregateRegionObserverIT extends ParallelStatsDisabledIT 
             ungroupedObserver.clearTsOnDisabledIndexes(nonPhoenixTable);
             stopCapturingIndexLog();
             // a debug level event should've been logged
-            Mockito.verify(mockAppender).doAppend((LoggingEvent) captorLoggingEvent.capture());
-            LoggingEvent loggingEvent = (LoggingEvent) captorLoggingEvent.getValue();
+            Mockito.verify(mockAppender).doAppend(captorLoggingEvent.capture());
+            LoggingEvent loggingEvent = captorLoggingEvent.getValue();
             assertThat(loggingEvent.getLevel(), is(Level.DEBUG));
         }
     }
