@@ -164,8 +164,27 @@ public class LocalTableState implements TableState {
      * @throws IOException
      */
     public Pair<CoveredDeleteScanner, IndexUpdate> getIndexedColumnsTableState(
-        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData) throws IOException {
-        ensureLocalStateInitialized(indexedColumns, ignoreNewerMutations, indexMetaData);
+        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean isStateForDeletes, IndexMetaData indexMetaData) throws IOException {
+        // check to see if we haven't initialized any columns yet
+        Collection<? extends ColumnReference> toCover = this.columnSet.findNonCoveredColumns(indexedColumns);
+        
+        // add the covered columns to the set
+        for (ColumnReference ref : toCover) {
+            this.columnSet.addColumn(ref);
+        }
+        boolean requiresPriorRowState = indexMetaData.requiresPriorRowState(update);
+        if (!toCover.isEmpty()) {
+            // no need to perform scan to find prior row values when the indexed columns are immutable, as
+            // by definition, there won't be any. If we have indexed non row key columns, then we need to
+            // look up the row so that we can formulate the delete of the index row correctly. We'll always
+            // have our "empty" key value column, so we check if we have more than that as a basis for
+            // needing to lookup the prior row values.
+            if (requiresPriorRowState) {
+                // add the current state of the row. Uses listCells() to avoid a new array creation.
+                this.addUpdateCells(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).listCells(), false);
+            }
+        }
+
         // filter out things with a newer timestamp and track the column references to which it applies
         ColumnTracker tracker = new ColumnTracker(indexedColumns);
         synchronized (this.trackedColumns) {
@@ -175,35 +194,27 @@ public class LocalTableState implements TableState {
             }
         }
 
-        CoveredDeleteScanner scanner = this.scannerBuilder.buildIndexedColumnScanner(indexedColumns, tracker, ts, returnNullScannerIfRowNotFound);
-
+        CoveredDeleteScanner scanner = this.scannerBuilder.buildIndexedColumnScanner(indexedColumns, tracker, ts,
+                // If we're determining the index state for deletes and either
+                // a) we've looked up the prior row state or
+                // b) we're inserting immutable data
+                // then allow a null scanner to be returned.
+                // FIXME: this is crappy code - we need to simplify the global mutable secondary index implementation
+                // TODO: use mutable transactional secondary index implementation instead (PhoenixTransactionalIndexer)
+                isStateForDeletes && (requiresPriorRowState || insertingData(update)));
         return new Pair<CoveredDeleteScanner, IndexUpdate>(scanner, new IndexUpdate(tracker));
     }
 
-    /**
-     * Initialize the managed local state. Generally, this will only be called by
-     * {@link #getNonIndexedColumnsTableState(List)}, which is unlikely to be called concurrently from the outside. Even
-     * then, there is still fairly low contention as each new Put/Delete will have its own table state.
-     * @param indexMetaData TODO
-     */
-    private synchronized void ensureLocalStateInitialized(Collection<? extends ColumnReference> columns, boolean ignoreNewerMutations, IndexMetaData indexMetaData)
-            throws IOException {
-        // check to see if we haven't initialized any columns yet
-        Collection<? extends ColumnReference> toCover = this.columnSet.findNonCoveredColumns(columns);
-        // we have all the columns loaded, so we are good to go.
-        if (toCover.isEmpty()) { return; }
-
-        // no need to perform scan to find prior row values when the indexed columns are immutable, as
-        // by definition, there won't be any.
-        if (!indexMetaData.isImmutableRows()) {
-            // add the current state of the row. Uses listCells() to avoid a new array creation.
-            this.addUpdateCells(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).listCells(), false);
+ 
+    private static boolean insertingData(Mutation m) {
+        for (Collection<Cell> cells : m.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (KeyValue.Type.codeToType(cell.getTypeByte()) != KeyValue.Type.Put) {
+                    return false;
+                }
+            }
         }
-
-        // add the covered columns to the set
-        for (ColumnReference ref : toCover) {
-            this.columnSet.addColumn(ref);
-        }
+        return true;
     }
 
     @Override
@@ -264,9 +275,9 @@ public class LocalTableState implements TableState {
     }
 
     @Override
-    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData)
+    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean isStateForDeletes, IndexMetaData indexMetaData)
             throws IOException {
-        Pair<CoveredDeleteScanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, returnNullScannerIfRowNotFound, indexMetaData);
+        Pair<CoveredDeleteScanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, isStateForDeletes, indexMetaData);
         ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(pair.getFirst(), getCurrentRowKey());
         return new Pair<ValueGetter, IndexUpdate>(valueGetter, pair.getSecond());
     }

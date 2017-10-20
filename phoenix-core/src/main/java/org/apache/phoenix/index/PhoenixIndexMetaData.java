@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
@@ -43,6 +44,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     private final IndexMetaDataCache indexMetaDataCache;
     private final ReplayWrite replayWrite;
     private final boolean isImmutable;
+    private final boolean hasNonPkColumns;
     
     private static IndexMetaDataCache getIndexMetaData(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
         if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
@@ -102,10 +104,13 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
         this.indexMetaDataCache = getIndexMetaData(env, attributes);
         boolean isImmutable = true;
+        boolean hasNonPkColumns = false;
         for (IndexMaintainer maintainer : indexMetaDataCache.getIndexMaintainers()) {
             isImmutable &= maintainer.isImmutableRows();
+            hasNonPkColumns |= !maintainer.getIndexedColumns().isEmpty();
         }
         this.isImmutable = isImmutable;
+        this.hasNonPkColumns = hasNonPkColumns;
         this.attributes = attributes;
         this.replayWrite = getReplayWrite(attributes);
     }
@@ -122,12 +127,17 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         return attributes;
     }
     
+    @Override
     public ReplayWrite getReplayWrite() {
         return replayWrite;
     }
-
-    @Override
+    
     public boolean isImmutableRows() {
         return isImmutable;
+    }
+
+    @Override
+    public boolean requiresPriorRowState(Mutation m) {
+        return !isImmutable || (indexMetaDataCache.getIndexMaintainers().get(0).isRowDeleted(m) && hasNonPkColumns);
     }
 }

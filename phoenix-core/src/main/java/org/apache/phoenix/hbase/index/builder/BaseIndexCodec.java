@@ -23,25 +23,22 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
-/**
- *
- */
 public abstract class BaseIndexCodec implements IndexCodec {
 
-  @Override
-  public void initialize(RegionCoprocessorEnvironment env) throws IOException {
-    // noop
-  }
+    @Override
+    public void initialize(RegionCoprocessorEnvironment env) throws IOException {
+        // noop
+    }
 
-  /**
-   * {@inheritDoc}
-   * <p>
-   * By default, the codec is always enabled. Subclasses should override this method if they want do
-   * decide to index on a per-mutation basis.
- * @throws IOException 
-   */
-  @Override
-  public boolean isEnabled(Mutation m) throws IOException {
-    return true;
-  }
+    /**
+     * {@inheritDoc}
+     * <p>
+     * By default, the codec is always enabled. Subclasses should override this method if they want do
+     * decide to index on a per-mutation basis.
+     * @throws IOException 
+     */
+    @Override
+    public boolean isEnabled(Mutation m) throws IOException {
+        return true;
+    }
 }
