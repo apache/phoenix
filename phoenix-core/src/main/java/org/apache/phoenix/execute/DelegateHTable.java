@@ -279,7 +279,30 @@ public class DelegateHTable implements HTableInterface {
         return delegate.checkAndMutate(row, family, qualifier, compareOp, value, mutation);
     }
 
-	@Override
+    private int operationTimeout = 0;
+    private int rpcTimeout = 0;
+
+    @Override
+    public void setOperationTimeout(int i) {
+        this.operationTimeout = i;
+    }
+
+    @Override
+    public int getOperationTimeout() {
+        return operationTimeout;
+    }
+
+    @Override
+    public void setRpcTimeout(int i) {
+        this.rpcTimeout = i;
+    }
+
+    @Override
+    public int getRpcTimeout() {
+        return rpcTimeout;
+    }
+
+    @Override
 	public boolean[] existsAll(List<Get> gets) throws IOException {
 		return delegate.existsAll(gets);
 	}
