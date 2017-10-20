@@ -22,6 +22,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -294,7 +295,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         if (!mutable && columnEncoded) {
             KeyValueColumnExpression colExpression = new SingleCellColumnExpression(localIndexCol, "0:V2", localIndexTable.getEncodingScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-            colExpression.evaluate(new ResultTuple(result), ptr);
+            assertTrue(colExpression.evaluate(new ResultTuple(result), ptr));
             colValue = ptr.copyBytesIfNecessary();
         }
         else {

@@ -344,13 +344,14 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
             String dml = "DELETE from " + fullDataTableName + " WHERE long_col2 = 2";
             try {
                 conn.createStatement().execute(dml);
-                if (!mutable) {
+                if (!mutable && !localIndex) {
                     fail();
                 }
             } catch (SQLException e) {
-                if (!mutable) {
-                    assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
+                if (mutable || localIndex) {
+                    throw e;
                 }
+                assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
             }
 
             if (!mutable) {
