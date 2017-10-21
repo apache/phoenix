@@ -1742,6 +1742,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 PTable table =
                         loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP, clientVersion);
                 if (table != null) {
+                	table = combineColumns(table, tenantIdBytes, schemaName, tableName, clientTimeStamp, clientVersion).getFirst();
                     if (table.getTimeStamp() < clientTimeStamp) {
                         // If the table is older than the client time stamp and it's deleted,
                         // continue
@@ -1753,7 +1754,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             return;
                         }
                     } else {
-                        table = combineColumns(table, tenantIdBytes, schemaName, tableName, clientTimeStamp, clientVersion).getFirst();
                         builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_TABLE_FOUND);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                         builder.setTable(PTableImpl.toProto(table));
