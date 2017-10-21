@@ -406,9 +406,15 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                             "CREATE TABLE "
                                     + tableName
                                     + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2))");
+            final ConnectionQueryServices delegate = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices servicesWithUpgrade = new DelegateConnectionQueryServices(delegate) {
+                @Override
+                public boolean isUpgradeRequired() {
+                    return true;
+                }
+            };
 			try (PhoenixConnection phxConn = new PhoenixConnection(conn.unwrap(PhoenixConnection.class),
-					HConstants.LATEST_TIMESTAMP)) {
-            	phxConn.setRunningUpgrade(true);
+					servicesWithUpgrade, conn.getClientInfo())) {
                 // Because upgrade is required, this SQL should fail.
                 try {
                     phxConn.createStatement().executeQuery("SELECT * FROM " + tableName);
