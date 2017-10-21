@@ -939,7 +939,26 @@ public class AggregateIT extends ParallelStatsDisabledIT {
     public void testCountNullInNonEncodedNonEmptyKeyValueCF() throws Exception {
         testCountNullInNonEmptyKeyValueCF(0);
     }
-    
+
+    @Test
+    public void testNestedGroupedAggregationWithBigInt() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try(Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            String createQuery="CREATE TABLE "+tableName+" (a BIGINT NOT NULL,c BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (a, c))";
+            String updateQuery="UPSERT INTO "+tableName+"(a,c) VALUES(4444444444444444444, 5555555555555555555)";
+            String query="SELECT a FROM (SELECT a, c FROM "+tableName+" GROUP BY a, c) GROUP BY a, c";
+            conn.prepareStatement(createQuery).execute();
+            conn.prepareStatement(updateQuery).execute();
+            conn.commit();
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4444444444444444444L,rs.getLong(1));
+            assertFalse(rs.next());
+        }
+    }
+
     private void testCountNullInNonEmptyKeyValueCF(int columnEncodedBytes) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             //Type is INT

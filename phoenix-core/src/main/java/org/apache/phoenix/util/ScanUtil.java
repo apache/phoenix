@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -823,7 +824,7 @@ public class ScanUtil {
         Iterator<Filter> filterIterator;
         Filter topLevelFilter = scan.getFilter();
         if (topLevelFilter == null) {
-            filterIterator = Iterators.emptyIterator();
+            filterIterator = Collections.emptyIterator();
         } else if (topLevelFilter instanceof FilterList) {
             filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
         } else {

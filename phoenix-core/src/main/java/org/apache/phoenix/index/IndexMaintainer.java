@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
@@ -1048,10 +1049,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private enum DeleteType {SINGLE_VERSION, ALL_VERSIONS};
-    private DeleteType getDeleteTypeOrNull(Collection<KeyValue> pendingUpdates) {
+    private DeleteType getDeleteTypeOrNull(Collection<? extends Cell> pendingUpdates) {
+        return getDeleteTypeOrNull(pendingUpdates, this.nDataCFs);
+    }
+   
+    private DeleteType getDeleteTypeOrNull(Collection<? extends Cell> pendingUpdates, int nCFs) {
         int nDeleteCF = 0;
         int nDeleteVersionCF = 0;
-        for (KeyValue kv : pendingUpdates) {
+        for (Cell kv : pendingUpdates) {
         	if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
                 nDeleteVersionCF++;
             }
@@ -1064,22 +1069,34 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // This is what a delete looks like on the server side for mutable indexing...
         // Should all be one or the other for DeleteFamily versus DeleteFamilyVersion, but just in case not
         DeleteType deleteType = null; 
-        if (nDeleteVersionCF > 0 && nDeleteVersionCF >= this.nDataCFs) {
+        if (nDeleteVersionCF > 0 && nDeleteVersionCF >= nCFs) {
         	deleteType = DeleteType.SINGLE_VERSION;
         } else {
 			int nDelete = nDeleteCF + nDeleteVersionCF;
-			if (nDelete>0 && nDelete >= this.nDataCFs) {
+			if (nDelete>0 && nDelete >= nCFs) {
 				deleteType = DeleteType.ALL_VERSIONS;
 			}
 		}
         return deleteType;
     }
     
-    public boolean isRowDeleted(Collection<KeyValue> pendingUpdates) {
+    public boolean isRowDeleted(Collection<? extends Cell> pendingUpdates) {
         return getDeleteTypeOrNull(pendingUpdates) != null;
     }
     
-    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<KeyValue> pendingUpdates, long ts) throws IOException {
+    public boolean isRowDeleted(Mutation m) {
+        if (m.getFamilyCellMap().size() < this.nDataCFs) {
+            return false;
+        }
+        for (List<Cell> cells : m.getFamilyCellMap().values()) {
+            if (getDeleteTypeOrNull(cells, 1) == null) { // Checking CFs one by one
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<? extends Cell> pendingUpdates, long ts) throws IOException {
         if (pendingUpdates.isEmpty()) {
             return false;
         }

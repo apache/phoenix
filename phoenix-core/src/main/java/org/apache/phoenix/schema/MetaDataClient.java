@@ -612,6 +612,9 @@ public class MetaDataClient {
             }
 
             if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS && result.getTable() == null) {
+                    result.setTable(table);
+                }
                 return result;
             }
             MutationCode code = result.getMutationCode();
@@ -1879,7 +1882,7 @@ public class MetaDataClient {
             PrimaryKeyConstraint pkConstraint = statement.getPrimaryKeyConstraint();
             String pkName = null;
             List<Pair<ColumnName,SortOrder>> pkColumnsNames = Collections.<Pair<ColumnName,SortOrder>>emptyList();
-            Iterator<Pair<ColumnName,SortOrder>> pkColumnsIterator = Iterators.emptyIterator();
+            Iterator<Pair<ColumnName,SortOrder>> pkColumnsIterator = Collections.emptyIterator();
             if (pkConstraint != null) {
                 pkColumnsNames = pkConstraint.getColumnNames();
                 pkColumnsIterator = pkColumnsNames.iterator();

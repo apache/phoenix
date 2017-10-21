@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.hbase.index.covered;
 
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 
 public interface IndexMetaData {
     public static final IndexMetaData NULL_INDEX_META_DATA = new IndexMetaData() {
 
         @Override
-        public boolean isImmutableRows() {
-            return false;
+        public boolean requiresPriorRowState(Mutation m) {
+            return true;
         }
 
         @Override
@@ -32,7 +33,13 @@ public interface IndexMetaData {
           return null;
         }};
 
-    public boolean isImmutableRows();
+        
+    /**
+     * Determines whether or not we need to look up the old row to retrieve old row values for maintaining the index.
+     * @param m mutation being performed on the data table
+     * @return true if prior row state is required and false otherwise
+     */
+    public boolean requiresPriorRowState(Mutation m);
 
     public ReplayWrite getReplayWrite();
 }
