@@ -65,8 +65,6 @@ public class ConnectionQueryServicesImplTest {
         // Should be called after upgradeSystemTables()
         // Proves that execution proceeded
         verify(cqs).getSystemTableNames(any(HBaseAdmin.class));
-        // createSysMutexTable is also invoked only when ensureSystemTablesUpgrade doesn't short-circuit
-        verify(cqs).createSysMutexTable(any(HBaseAdmin.class), any(ReadOnlyProps.class));
 
         try {
             // Verifies that the exception is propagated back to the caller
