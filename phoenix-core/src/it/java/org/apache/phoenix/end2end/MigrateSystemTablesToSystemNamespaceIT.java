@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
@@ -233,7 +234,9 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
             });
             fail("Multiple clients should not be able to migrate simultaneously.");
         } catch (Exception e) {
-            // ignore
+            if(!(e.getCause() instanceof UpgradeInProgressException)) {
+                fail("UpgradeInProgressException expected since the user is trying to migrate when SYSMUTEX is locked.");
+            }
         }
 
         hbaseTables = getHBaseTables();

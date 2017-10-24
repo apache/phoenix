@@ -3143,15 +3143,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // We will not reach here if we fail to acquire the lock, since it throws UpgradeInProgressException
 
             // Handle the upgrade of SYSMUTEX table separately since it doesn't have any entries in SYSCAT
+            logger.info("Migrating SYSTEM.MUTEX table to SYSTEM namespace.");
             String sysMutexSrcTableName = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
             String sysMutexDestTableName = SchemaUtil.getPhysicalName(sysMutexSrcTableName.getBytes(), props).getNameAsString();
             UpgradeUtil.mapTableToNamespace(admin, sysMutexSrcTableName, sysMutexDestTableName, PTableType.SYSTEM);
+            tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME);
 
             byte[] mappedSystemTable = SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName();
             metatable = getTable(mappedSystemTable);
             if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)) {
                 if (!admin.tableExists(mappedSystemTable)) {
+                    logger.info("Migrating SYSTEM.CATALOG table to SYSTEM namespace.");
                     // Actual migration of SYSCAT table
                     UpgradeUtil.mapTableToNamespace(admin, metatable,
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props, null, PTableType.SYSTEM,
@@ -3164,6 +3167,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
             }
             for (TableName table : tableNames) {
+                logger.info(String.format("Migrating %s table to SYSTEM namespace.", table.getNameAsString()));
                 UpgradeUtil.mapTableToNamespace(admin, metatable, table.getNameAsString(), props, null, PTableType.SYSTEM,
                         null);
                 ConnectionQueryServicesImpl.this.removeTable(null, table.getNameAsString(), null,
