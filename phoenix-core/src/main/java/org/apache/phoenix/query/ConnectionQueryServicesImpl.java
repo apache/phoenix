@@ -2529,7 +2529,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
     }
 
-    private void createOtherSystemTables(PhoenixConnection metaConnection, HBaseAdmin hBaseAdmin) throws SQLException {
+    private void createOtherSystemTables(PhoenixConnection metaConnection, HBaseAdmin hbaseAdmin) throws SQLException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
         } catch (TableAlreadyExistsException e) {
@@ -2545,7 +2545,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // SYSTEM.MUTEX table should not be exposed to user. Hence it is directly created and used via HBase API.
         // Using 'CREATE TABLE' statement will add entries to SYSTEM.CATALOG table, which should not happen.
         try {
-            createSysMutexTable(hBaseAdmin, ConnectionQueryServicesImpl.this.getProps());
+            createSysMutexTable(hbaseAdmin, ConnectionQueryServicesImpl.this.getProps());
         } catch (IOException ignore) {}
     }
 
@@ -3136,7 +3136,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Try acquiring a lock in SYSMUTEX table before migrating the tables since it involves disabling the table
             // If we cannot acquire lock, it means some old client is either migrating SYSCAT or trying to upgrade the
             // schema of SYSCAT table and hence it should not be interrupted
-            acquiredMutexLock = acquireUpgradeMutex(0, mutexRowKey);
+            acquiredMutexLock = acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP, mutexRowKey);
             if(acquiredMutexLock) {
                 logger.debug("Acquired lock in SYSMUTEX table for migrating SYSTEM tables to SYSTEM namespace");
             }
@@ -3258,9 +3258,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private byte[] getSysMutexPhysicalTableNameBytes() throws IOException, SQLException {
         byte[] sysMutexPhysicalTableNameBytes = null;
         try(HBaseAdmin admin = getAdmin()) {
-            if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+            if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
                 sysMutexPhysicalTableNameBytes = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES;
-            } else if (admin.tableExists(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props).getName())) {
+            } else if (admin.tableExists(TableName.valueOf(
+                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props).getName()))) {
                 sysMutexPhysicalTableNameBytes = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props).getName();
             }
         }
