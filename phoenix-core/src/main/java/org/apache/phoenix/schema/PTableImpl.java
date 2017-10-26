@@ -301,13 +301,13 @@ public class PTableImpl implements PTable {
     }
 
     // for views, the basePTable is for attributes we inherit from the physical table
-    public static PTableImpl makePTable(PTable table, PTable basePTable, Collection<PColumn> columns, long timestamp) throws SQLException {
+    public static PTableImpl makePTable(PTable table, PTable basePTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount) throws SQLException {
         return new PTableImpl(
             table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timestamp,
             table.getSequenceNumber(), table.getPKName(), basePTable.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
             table.getIndexes(), basePTable.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
             table.isWALDisabled(), basePTable.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-            basePTable.getColumns().size(), table.rowKeyOrderOptimizable(), basePTable.isTransactional(), table.getUpdateCacheFrequency(),
+            baseTableColumnCount, table.rowKeyOrderOptimizable(), basePTable.isTransactional(), table.getUpdateCacheFrequency(),
             table.getIndexDisableTimestamp(), basePTable.isNamespaceMapped(), basePTable.getAutoPartitionSeqName(), basePTable.isAppendOnlySchema(),
             basePTable.getImmutableStorageScheme(), basePTable.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
     }

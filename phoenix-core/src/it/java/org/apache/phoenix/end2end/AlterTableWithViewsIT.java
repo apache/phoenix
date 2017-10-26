@@ -339,7 +339,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 // the base column count and ordinal positions of columns is updated in the ptable (at read time) 
                 PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
                 PTable view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
-                assertEquals(isMultiTenant ? 7 : 6, view.getBaseColumnCount());
+                assertEquals(isMultiTenant ? 5: 4, view.getBaseColumnCount());
                 assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
             }
         } 
@@ -464,7 +464,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             // the base column count is updated in the ptable
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
-            assertEquals(isMultiTenant ? 6 : 5, view.getBaseColumnCount());
+            assertEquals(isMultiTenant ? 4 : 3, view.getBaseColumnCount());
         } 
     }
     
@@ -642,8 +642,8 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             PTable view1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
             PTable view2 = viewConn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
-            assertEquals(isMultiTenant ? 6 : 5, view1.getBaseColumnCount());
-            assertEquals(isMultiTenant ? 6 : 5, view2.getBaseColumnCount());
+            assertEquals(isMultiTenant ? 4 : 3, view1.getBaseColumnCount());
+            assertEquals(isMultiTenant ? 4 : 3, view2.getBaseColumnCount());
         }
     }
     
@@ -771,6 +771,8 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             // Drop the column inherited from base table to make it diverged
             String dropColumn = "ALTER VIEW " + view1 + " DROP COLUMN V2";
             viewConn.createStatement().execute(dropColumn);
+            PTable table = PhoenixRuntime.getTableNoCache(viewConn, view1);
+            assertEquals(QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT, table.getBaseColumnCount());
             
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR";
             conn.createStatement().execute(alterBaseTable);
