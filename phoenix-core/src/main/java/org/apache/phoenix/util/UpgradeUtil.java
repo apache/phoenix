@@ -1735,26 +1735,7 @@ public class UpgradeUtil {
                         ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
-        boolean srcTableExists=admin.tableExists(srcTableName);
-        // we need to move physical table in actual namespace for TABLE and Index
-        if (srcTableExists && (PTableType.TABLE.equals(pTableType)
-                || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
-            boolean destTableExists=admin.tableExists(destTableName);
-            if (!destTableExists) {
-                String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
-                logger.info("Disabling table " + srcTableName + " ..");
-                admin.disableTable(srcTableName);
-                logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
-                admin.snapshot(snapshotName, srcTableName);
-                logger.info(
-                        String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
-                admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
-                logger.info(String.format("deleting old table %s..", srcTableName));
-                admin.deleteTable(srcTableName);
-                logger.info(String.format("deleting snapshot %s..", snapshotName));
-                admin.deleteSnapshot(snapshotName);
-            }
-        }
+        mapTableToNamespace(admin, srcTableName, destTableName, pTableType);
 
         byte[] tableKey = SchemaUtil.getTableKey(tenantId != null ? tenantId.getString() : null,
                 SchemaUtil.getSchemaNameFromFullName(phoenixTableName),
@@ -1775,6 +1756,29 @@ public class UpgradeUtil {
             put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
                     PBoolean.INSTANCE.toBytes(Boolean.TRUE));
             metatable.put(put);
+        }
+    }
+
+    public static void mapTableToNamespace(HBaseAdmin admin, String srcTableName, String destTableName, PTableType pTableType) throws IOException {
+        boolean srcTableExists=admin.tableExists(srcTableName);
+        // we need to move physical table in actual namespace for TABLE and Index
+        if (srcTableExists && (PTableType.TABLE.equals(pTableType)
+                || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
+            boolean destTableExists=admin.tableExists(destTableName);
+            if (!destTableExists) {
+                String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
+                logger.info("Disabling table " + srcTableName + " ..");
+                admin.disableTable(srcTableName);
+                logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
+                admin.snapshot(snapshotName, srcTableName);
+                logger.info(
+                        String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
+                admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
+                logger.info(String.format("deleting old table %s..", srcTableName));
+                admin.deleteTable(srcTableName);
+                logger.info(String.format("deleting snapshot %s..", snapshotName));
+                admin.deleteSnapshot(snapshotName);
+            }
         }
     }
 
