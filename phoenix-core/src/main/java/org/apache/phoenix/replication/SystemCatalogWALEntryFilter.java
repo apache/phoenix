@@ -40,9 +40,6 @@ import java.util.List;
  */
 public class SystemCatalogWALEntryFilter implements WALEntryFilter {
 
-  private static byte[] CHILD_TABLE_BYTES =
-      new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
-
   @Override
   public WAL.Entry filter(WAL.Entry entry) {
 
@@ -86,7 +83,7 @@ public class SystemCatalogWALEntryFilter implements WALEntryFilter {
       if (isChildLink) {
         ImmutableBytesWritable columnValue = new ImmutableBytesWritable(cell.getValueArray(),
             cell.getValueOffset(), cell.getValueLength());
-        if (columnValue.compareTo(CHILD_TABLE_BYTES) == 0) {
+        if (columnValue.compareTo(PTable.LinkType.CHILD_TABLE.getSerializedValueAsByteArray()) == 0) {
           byte[][] rowViewKeyMetadata = new byte[5][];
           SchemaUtil.getVarChars(key.get(), key.getOffset(),
               key.getLength(), 0, rowViewKeyMetadata);
