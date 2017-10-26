@@ -57,10 +57,9 @@ public class SystemTablePermissionsIT {
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
             "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
                 "SYSTEM.MUTEX"));
-    // PHOENIX-XXXX SYSTEM.MUTEX isn't being created in the SYSTEM namespace as it should be.
     private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
             Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
-                "SYSTEM.MUTEX"));
+                "SYSTEM:MUTEX"));
 
     private static final String TABLE_NAME =
         SystemTablePermissionsIT.class.getSimpleName().toUpperCase();
