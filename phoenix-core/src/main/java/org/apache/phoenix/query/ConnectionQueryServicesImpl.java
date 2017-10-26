@@ -2529,7 +2529,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
     }
 
-    private void createOtherSystemTables(PhoenixConnection metaConnection, HBaseAdmin hbaseAdmin) throws SQLException {
+    private void createOtherSystemTables(PhoenixConnection metaConnection, HBaseAdmin hbaseAdmin) throws SQLException, IOException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
         } catch (TableAlreadyExistsException e) {
@@ -2541,12 +2541,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_FUNCTION_METADATA);
         } catch (TableAlreadyExistsException ignore) {}
-        // We catch TableExistsException in createSysMutexTable() and ignore it. Hence we will also ignore IOException here.
-        // SYSTEM.MUTEX table should not be exposed to user. Hence it is directly created and used via HBase API.
-        // Using 'CREATE TABLE' statement will add entries to SYSTEM.CATALOG table, which should not happen.
+
+        // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
             createSysMutexTable(hbaseAdmin, ConnectionQueryServicesImpl.this.getProps());
-        } catch (IOException ignore) {}
+        } catch (IOException exception) {
+            logger.error("Failed to created SYSMUTEX table. Upgrade or migration is not possible without it. Please retry.");
+            throw exception;
+        }
     }
 
     /**
