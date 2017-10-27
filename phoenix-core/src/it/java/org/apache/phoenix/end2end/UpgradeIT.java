@@ -621,7 +621,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     schemaName == null ? new byte[0] : Bytes.toBytes(schemaName),
                     Bytes.toBytes(tableName));
         Put viewColumnDefinitionPut = new Put(rowKey, HConstants.LATEST_TIMESTAMP);
-        viewColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+        viewColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
             PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES, HConstants.LATEST_TIMESTAMP, null);
 
         try (PhoenixConnection conn =
@@ -735,7 +735,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                 byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
                 byte[] qualifier = UPGRADE_MUTEX;
                 Put put = new Put(row);
-                put.add(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
+                put.addColumn(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
                 sysMutexTable.put(put);
                 sysMutexTable.flushCommits();
             }

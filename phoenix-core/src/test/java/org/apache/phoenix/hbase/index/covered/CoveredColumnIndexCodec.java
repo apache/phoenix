@@ -101,7 +101,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
         // add each of the corresponding families to the put
         int count = 0;
         for (ColumnEntry column : columns) {
-            indexInsert.add(INDEX_ROW_COLUMN_FAMILY,
+            indexInsert.addColumn(INDEX_ROW_COLUMN_FAMILY,
                     ArrayUtils.addAll(Bytes.toBytes(count++), toIndexQualifier(column.ref)), null);
         }
     }

@@ -242,19 +242,19 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         try {
             htable = conn2.getQueryServices().getTable(htableName);
             Put put = new Put(PInteger.INSTANCE.toBytes(1));
-            put.add(cfB, c1, PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, c2, PLong.INSTANCE.toBytes(2));
+            put.addColumn(cfB, c1, PInteger.INSTANCE.toBytes(1));
+            put.addColumn(cfC, c2, PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
             put = new Put(PInteger.INSTANCE.toBytes(2));
-            put.add(cfC, c2, PLong.INSTANCE.toBytes(10));
-            put.add(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
+            put.addColumn(cfC, c2, PLong.INSTANCE.toBytes(10));
+            put.addColumn(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             put = new Put(PInteger.INSTANCE.toBytes(3));
-            put.add(cfB, c1, PInteger.INSTANCE.toBytes(3));
-            put.add(cfC, c2, PLong.INSTANCE.toBytes(10));
-            put.add(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
+            put.addColumn(cfB, c1, PInteger.INSTANCE.toBytes(3));
+            put.addColumn(cfC, c2, PLong.INSTANCE.toBytes(10));
+            put.addColumn(cfC, c3, PVarchar.INSTANCE.toBytes("abcd"));
             htable.put(put);
 
             conn2.close();

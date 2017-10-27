@@ -1033,11 +1033,11 @@ public class PTableImpl implements PTable {
             if (PTableImpl.this.isTransactional()) {
                 Put put = new Put(key);
                 if (families.isEmpty()) {
-                    put.add(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker(), ts,
+                    put.addColumn(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker(), ts,
                             HConstants.EMPTY_BYTE_ARRAY);
                 } else {
                     for (PColumnFamily colFamily : families) {
-                        put.add(colFamily.getName().getBytes(), TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker(), ts,
+                        put.addColumn(colFamily.getName().getBytes(), TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker(), ts,
                                 HConstants.EMPTY_BYTE_ARRAY);
                     }
                 }
@@ -1045,7 +1045,7 @@ public class PTableImpl implements PTable {
             } else {
                 Delete delete = new Delete(key);
                 for (PColumnFamily colFamily : families) {
-                	delete.deleteFamily(colFamily.getName().getBytes(), ts);
+                       delete.addFamily(colFamily.getName().getBytes(), ts);
                 }
                 deleteRow = delete;
             }

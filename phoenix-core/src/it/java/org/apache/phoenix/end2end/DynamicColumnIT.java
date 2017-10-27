@@ -88,12 +88,12 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 byte[] key = Bytes.toBytes("entry1");
 
                 Put put = new Put(key);
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
-                put.add(FAMILY_NAME_A, f1v1, Bytes.toBytes("f1value1"));
-                put.add(FAMILY_NAME_A, f1v2, Bytes.toBytes("f1value2"));
-                put.add(FAMILY_NAME_B, f2v1, Bytes.toBytes("f2value1"));
-                put.add(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
+                put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
+                put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
+                put.addColumn(FAMILY_NAME_A, f1v1, Bytes.toBytes("f1value1"));
+                put.addColumn(FAMILY_NAME_A, f1v2, Bytes.toBytes("f1value2"));
+                put.addColumn(FAMILY_NAME_B, f2v1, Bytes.toBytes("f2value1"));
+                put.addColumn(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
                 mutations.add(put);
 
                 hTable.batch(mutations);

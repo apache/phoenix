@@ -1148,15 +1148,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 ColumnReference indexColumn = coveredColumnsMap.get(ref);
                 // If table delete was single version, then index delete should be as well
                 if (deleteType == DeleteType.SINGLE_VERSION) {
-                    delete.deleteFamilyVersion(indexColumn.getFamily(), ts);
+                    delete.addFamilyVersion(indexColumn.getFamily(), ts);
                 } else {
-                    delete.deleteFamily(indexColumn.getFamily(), ts);
+                    delete.addFamily(indexColumn.getFamily(), ts);
                 }
             }
             if (deleteType == DeleteType.SINGLE_VERSION) {
-                delete.deleteFamilyVersion(emptyCF, ts);
+                delete.addFamilyVersion(emptyCF, ts);
             } else {
-                delete.deleteFamily(emptyCF, ts);
+                delete.addFamily(emptyCF, ts);
             }
             delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
             return delete;
@@ -1175,9 +1175,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     ColumnReference indexColumn = coveredColumnsMap.get(ref);
                     // If point delete for data table, then use point delete for index as well
                     if (kv.getTypeByte() == KeyValue.Type.Delete.getCode()) { 
-                        delete.deleteColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
+                        delete.addColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     } else {
-                        delete.deleteColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
+                        delete.addColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     }
                 }
             }

@@ -208,7 +208,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
     Put p = new Put(rowkey);
-    p.add(family, Bytes.toBytes("qual"), Bytes.toBytes("value"));
+    p.addColumn(family, Bytes.toBytes("qual"), Bytes.toBytes("value"));
     region.put(p);
 
     // we should then see the server go down

@@ -22,7 +22,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -51,17 +50,12 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
-import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
-import com.google.common.collect.LinkedListMultimap;
-import com.google.common.collect.Multimap;
 
 public class TestIndexWriter {
   private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
@@ -111,7 +105,7 @@ public class TestIndexWriter {
 
     byte[] tableName = this.testName.getTableName();
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     Collection<Pair<Mutation, byte[]>> indexUpdates = Arrays.asList(new Pair<Mutation, byte[]>(m,
         tableName));
 
@@ -189,7 +183,7 @@ public class TestIndexWriter {
 
     // update a single table
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     final List<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 

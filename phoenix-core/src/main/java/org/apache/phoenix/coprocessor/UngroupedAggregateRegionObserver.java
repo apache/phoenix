@@ -144,7 +144,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -735,7 +734,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 if (!timeStamps.contains(kvts)) {
                                     Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
                                         kv.getRowLength());
-                                    put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
+                                    put.addColumn(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
                                         ByteUtil.EMPTY_BYTE_ARRAY);
                                     mutations.add(put);
                                 }

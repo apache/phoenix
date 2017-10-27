@@ -96,8 +96,8 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
             
             bKey = key = ByteUtil.concat(Bytes.toBytes(20), Bytes.toBytes(200L), Bytes.toBytes("b"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50000L));
             mutations.add(put);
             // FIXME: the version of the Delete constructor without the lock args was introduced
             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
@@ -106,30 +106,30 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
             Delete del = new Delete(key, ts);
             mutations.add(del);
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(2000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(20000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(2000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(20000L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(10), Bytes.toBytes(100L), Bytes.toBytes("a"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50L));
             mutations.add(put);
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(30), Bytes.toBytes(300L), Bytes.toBytes("c"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(3000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(30000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(3000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(30000L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(40), Bytes.toBytes(400L), Bytes.toBytes("d"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(4000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(4000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
             mutations.add(put);
             
             hTable.batch(mutations);
@@ -286,9 +286,9 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         // negative number for an unsigned type
         key = ByteUtil.concat(Bytes.toBytes(-10), Bytes.toBytes(100L), Bytes.toBytes("e"));
         put = new Put(key);
-        put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
-        put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
-        put.add(family, QueryConstants.EMPTY_COLUMN_BYTES, HConstants.LATEST_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY);
+        put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
+        put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
+        put.addColumn(family, QueryConstants.EMPTY_COLUMN_BYTES, HConstants.LATEST_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
         hTable.batch(mutations);
     

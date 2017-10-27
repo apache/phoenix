@@ -39,12 +39,10 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.codec.Codec;
 import org.apache.hadoop.hbase.io.util.LRUDictionary;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 /**
  * Simple test to read/write simple files via our custom {@link WALCellCodec} to ensure properly
@@ -93,14 +91,14 @@ public class ReadWriteKeyValuesWithCodecTest {
     // Build up a couple of edits
     List<WALEdit> edits = new ArrayList<WALEdit>();
     Put p = new Put(ROW);
-    p.add(FAMILY, null, Bytes.toBytes("v1"));
+    p.addColumn(FAMILY, null, Bytes.toBytes("v1"));
 
     WALEdit withPut = new WALEdit();
     addMutation(withPut, p, FAMILY);
     edits.add(withPut);
 
     Delete d = new Delete(ROW);
-    d.deleteColumn(FAMILY, null);
+    d.addColumn(FAMILY, null);
     WALEdit withDelete = new WALEdit();
     addMutation(withDelete, d, FAMILY);
     edits.add(withDelete);

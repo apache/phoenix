@@ -2502,7 +2502,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                         PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
                 Put put = new Put(mutexRowKey);
-                put.add(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
+                put.addColumn(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
                 sysMutexTable.put(put);
             }
         } catch (TableExistsException e) {

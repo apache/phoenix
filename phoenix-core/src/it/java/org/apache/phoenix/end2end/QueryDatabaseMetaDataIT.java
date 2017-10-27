@@ -867,8 +867,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                     pconn.getQueryServices()
                             .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
             Put put = new Put(Bytes.toBytes("0"));
-            put.add(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
+            put.addColumn(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
+            put.addColumn(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
             // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true

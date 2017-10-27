@@ -107,8 +107,8 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
     private void insertData(final byte[] tableName, HBaseAdmin admin, HTableInterface t) throws IOException,
             InterruptedException {
         Put p = new Put(Bytes.toBytes("row"));
-        p.add(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
-        p.add(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
+        p.addColumn(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
+        p.addColumn(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
         t.put(p);
         t.flushCommits();
         admin.flush(tableName);
