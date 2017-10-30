@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertArrayEquals;
@@ -56,8 +57,10 @@ import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PNameFactory;
@@ -68,8 +71,9 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Ignore;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 public class LocalIndexIT extends BaseLocalIndexIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
@@ -722,4 +726,44 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         }
     }
 
+    @Test // See https://issues.apache.org/jira/browse/PHOENIX-4289
+    public void testEstimatesWithLocalIndexes() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int guidePostWidth = 20;
+            conn.createStatement()
+                    .execute("CREATE TABLE " + tableName
+                            + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (107,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (108,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (109,2,4)");
+            conn.commit();
+            conn.createStatement().execute(
+                "CREATE LOCAL INDEX " + indexName + " ON " + tableName + " (a) INCLUDE (b) ");
+            String ddl = "ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION = false";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql =
+                    "SELECT COUNT(*) " + " FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            assertTrue("Index " + indexName + " should have been used",
+                rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getTableRef()
+                        .getTable().getName().getString().equals(indexName));
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
+        }
+    }
 }
