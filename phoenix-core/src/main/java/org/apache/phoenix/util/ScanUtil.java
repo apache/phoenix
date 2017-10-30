@@ -431,8 +431,11 @@ public class ScanUtil {
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
             // A null or empty byte array is always represented as a zero byte
             byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0, field);
-            
-            if ( !isFixedWidth && ( sepByte == QueryConstants.DESC_SEPARATOR_BYTE 
+            // The result of an RVC evaluation can come with a trailing separator already, so we
+            // should avoid adding another one.
+            if ( !isFixedWidth
+                    && ( bytes.length == 0 || key[offset - 1] != sepByte )
+                    && ( sepByte == QueryConstants.DESC_SEPARATOR_BYTE
                                     || ( !exclusiveUpper 
                                          && (fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower) ) ) ) {
                 key[offset++] = sepByte;

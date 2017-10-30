@@ -167,6 +167,15 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "IN", "('o2')"),
             table);
     }
+
+    @Test
+    public void inDescCompositePK3() throws Exception {
+        String table = generateUniqueName();
+        String ddl = "CREATE table " + table + " (oid INTEGER NOT NULL, code VARCHAR NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        Object[][] insertedRows = new Object[][]{{1, "o1"}, {2, "o2"}, {3, "o3"}};
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{2, "o2"}, {1, "o1"}},
+            new WhereCondition("(oid, code)", "IN", "((1, 'o1'), (2, 'o2'))"), table);
+    }
     
     @Test
     public void likeDescCompositePK1() throws Exception {
