@@ -1076,6 +1076,23 @@ public class MetaDataClient {
         }
     }
 
+    private boolean hasItBeenLongEnoughSinceLastUpdateStats(PName physicalName) throws SQLException {
+        ReadOnlyProps props = connection.getQueryServices().getProps();
+        final long msMinBetweenUpdates = props
+                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
+                        props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+                                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
+        String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
+                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+        ResultSet rs = connection.createStatement().executeQuery(query);
+        long msSinceLastUpdate = Long.MAX_VALUE;
+        if (rs.next()) {
+            msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+        }
+        return msSinceLastUpdate >= msMinBetweenUpdates;
+    }
+
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
             throws SQLException {
         // Don't mistakenly commit pending rows
@@ -1085,7 +1102,9 @@ public class MetaDataClient {
         PTable table = resolver.getTables().get(0).getTable();
         long rowCount = 0;
         if (updateStatisticsStmt.updateColumns()) {
-            rowCount += updateStatisticsInternal(table.getPhysicalName(), table, updateStatisticsStmt.getProps());
+            if (hasItBeenLongEnoughSinceLastUpdateStats(table.getPhysicalName())) {
+                rowCount += updateStatisticsInternal(table.getPhysicalName(), table, updateStatisticsStmt.getProps());
+            }
         }
         if (updateStatisticsStmt.updateIndex()) {
             // TODO: If our table is a VIEW with multiple indexes or a TABLE with local indexes,
@@ -1093,7 +1112,10 @@ public class MetaDataClient {
             // across all indexes in that case so that we don't re-calculate the same stats
             // multiple times.
             for (PTable index : table.getIndexes()) {
-                rowCount += updateStatisticsInternal(index.getPhysicalName(), index, updateStatisticsStmt.getProps());
+                // Local indexes are handled below
+                if (index.getIndexType() != IndexType.LOCAL && hasItBeenLongEnoughSinceLastUpdateStats(index.getPhysicalName())) {
+                    rowCount += updateStatisticsInternal(index.getPhysicalName(), index, updateStatisticsStmt.getProps());
+                }
             }
             // If analyzing the indexes of a multi-tenant table or a table with view indexes
             // then analyze all of those indexes too.
@@ -1106,12 +1128,32 @@ public class MetaDataClient {
                             return physicalName;
                         }
                     };
-                    rowCount += updateStatisticsInternal(physicalName, indexLogicalTable, updateStatisticsStmt.getProps());
+                    if (hasItBeenLongEnoughSinceLastUpdateStats(physicalName)) {
+                        rowCount += updateStatisticsInternal(physicalName, indexLogicalTable, updateStatisticsStmt.getProps());
+                    }
                 }
                 PName physicalName = table.getPhysicalName();
                 List<byte[]> localCFs = MetaDataUtil.getLocalIndexColumnFamilies(connection, physicalName.getBytes());
                 if (!localCFs.isEmpty()) {
-                    rowCount += updateStatisticsInternal(physicalName, table, updateStatisticsStmt.getProps(), localCFs);
+                    /*
+                     * Because local indexes share the same physical table as the data table, when
+                     * stats collection has been requested for both the data table and the local
+                     * index on it, checking when update stats was last run on the physical table
+                     * can prevent update stats from being run for the local index. Consequently and
+                     * unfortunately, we cannot tell when was last stats updated for a local index.
+                     * As a result, if a user requests that he/she wants to collect stats for a
+                     * local index only, we don't have any state available to prevent it from
+                     * running if it is being requested to run too soon. For now, in this special
+                     * case, we are just going to have to rely on the last_stats_update_time for the
+                     * physical table.
+                     */
+                    boolean collectStatsForLocalIndexes = true;
+                    if (updateStatisticsStmt.updateIndexOnly()) {
+                        collectStatsForLocalIndexes = hasItBeenLongEnoughSinceLastUpdateStats(physicalName);
+                    }
+                    if (collectStatsForLocalIndexes) {
+                        rowCount += updateStatisticsInternal(physicalName, table, updateStatisticsStmt.getProps(), localCFs);
+                    }
                 }
             }
         }
@@ -1130,57 +1172,42 @@ public class MetaDataClient {
     
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
-        final long msMinBetweenUpdates = props
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
-                        props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
-                                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
-        byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
-                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-        ResultSet rs = connection.createStatement().executeQuery(query);
-        long msSinceLastUpdate = Long.MAX_VALUE;
-        if (rs.next()) {
-            msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
-        }
         long rowCount = 0;
-        if (msSinceLastUpdate >= msMinBetweenUpdates) {
-            /*
-             * Execute a COUNT(*) through PostDDLCompiler as we need to use the logicalTable passed through,
-             * since it may not represent a "real" table in the case of the view indexes of a base table.
-             */
-            PostDDLCompiler compiler = new PostDDLCompiler(connection);
-            //even if table is transactional, while calculating stats we scan the table non-transactionally to
-            //view all the data belonging to the table
-            PTable nonTxnLogicalTable = new DelegateTable(logicalTable) {
-                @Override
-                public boolean isTransactional() {
-                    return false;
-                }
-            };
-            TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
-            MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, cfs, null, clientTimeStamp);
-            Scan scan = plan.getContext().getScan();
-            scan.setCacheBlocks(false);
-            scan.setAttribute(ANALYZE_TABLE, TRUE_BYTES);
-            boolean runUpdateStatsAsync = props.getBoolean(QueryServices.RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC);
-            scan.setAttribute(RUN_UPDATE_STATS_ASYNC_ATTRIB, runUpdateStatsAsync ? TRUE_BYTES : FALSE_BYTES);
-            if (statsProps != null) {
-                Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
-                if (gp_width != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
-                }
-                Object gp_per_region = statsProps.get(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB);
-                if (gp_per_region != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
-                }
+        /*
+         * Execute a COUNT(*) through PostDDLCompiler as we need to use the logicalTable passed through,
+         * since it may not represent a "real" table in the case of the view indexes of a base table.
+         */
+        PostDDLCompiler compiler = new PostDDLCompiler(connection);
+        //even if table is transactional, while calculating stats we scan the table non-transactionally to
+        //view all the data belonging to the table
+        PTable nonTxnLogicalTable = new DelegateTable(logicalTable) {
+            @Override
+            public boolean isTransactional() {
+                return false;
             }
-            MutationState mutationState = plan.execute();
-            rowCount = mutationState.getUpdateCount();
+        };
+        TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
+        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, cfs, null, clientTimeStamp);
+        Scan scan = plan.getContext().getScan();
+        scan.setCacheBlocks(false);
+        scan.setAttribute(ANALYZE_TABLE, TRUE_BYTES);
+        boolean runUpdateStatsAsync = props.getBoolean(QueryServices.RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC);
+        scan.setAttribute(RUN_UPDATE_STATS_ASYNC_ATTRIB, runUpdateStatsAsync ? TRUE_BYTES : FALSE_BYTES);
+        if (statsProps != null) {
+            Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
+            if (gp_width != null) {
+                scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
+            }
+            Object gp_per_region = statsProps.get(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB);
+            if (gp_per_region != null) {
+                scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
+            }
         }
+        MutationState mutationState = plan.execute();
+        rowCount = mutationState.getUpdateCount();
 
         /*
          *  Update the stats table so that client will pull the new one with the updated stats.

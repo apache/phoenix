@@ -306,6 +306,18 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         final Long estimatedRows;
         final Long estimateInfoTs;
 
+        public Long getEstimatedBytes() {
+            return estimatedBytes;
+        }
+
+        public Long getEstimatedRows() {
+            return estimatedRows;
+        }
+
+        public Long getEstimateInfoTs() {
+            return estimateInfoTs;
+        }
+
         Estimate(Long rows, Long bytes, Long ts) {
             this.estimatedBytes = bytes;
             this.estimatedRows = rows;

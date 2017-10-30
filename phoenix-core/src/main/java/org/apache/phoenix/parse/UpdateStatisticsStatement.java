@@ -46,6 +46,10 @@ public class UpdateStatisticsStatement extends SingleTableStatement {
         return scope == INDEX || scope == ALL;
     }
 
+    public boolean updateIndexOnly() {
+        return scope == INDEX;
+    }
+
     public boolean updateAll() {
         return scope == ALL;
     }
