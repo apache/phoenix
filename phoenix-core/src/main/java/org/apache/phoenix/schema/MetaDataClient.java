@@ -236,7 +236,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -1088,7 +1087,7 @@ public class MetaDataClient {
         PTable table = resolver.getTables().get(0).getTable();
         long rowCount = 0;
         if (updateStatisticsStmt.updateColumns()) {
-            rowCount += updateStatisticsInternal(table.getPhysicalName(), table, updateStatisticsStmt.getProps());
+            rowCount += updateStatisticsInternal(table.getPhysicalName(), table, updateStatisticsStmt.getProps(), true);
         }
         if (updateStatisticsStmt.updateIndex()) {
             // TODO: If our table is a VIEW with multiple indexes or a TABLE with local indexes,
@@ -1096,25 +1095,50 @@ public class MetaDataClient {
             // across all indexes in that case so that we don't re-calculate the same stats
             // multiple times.
             for (PTable index : table.getIndexes()) {
-                rowCount += updateStatisticsInternal(index.getPhysicalName(), index, updateStatisticsStmt.getProps());
+                // If the table is a view, then we will end up calling update stats
+                // here for all the view indexes on it. We take care of local indexes later.
+                if (index.getIndexType() != IndexType.LOCAL) {
+                    rowCount += updateStatisticsInternal(table.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                }
+            }
+            /*
+             * Update stats for local indexes. This takes care of local indexes on the the table
+             * as well as local indexes on any views on it.
+             */
+            PName physicalName = table.getPhysicalName();
+            List<byte[]> localCFs = MetaDataUtil.getLocalIndexColumnFamilies(connection, physicalName.getBytes());
+            if (!localCFs.isEmpty()) {
+                /*
+                 * We need to pass checkLastStatsUpdateTime as false here. Local indexes are on the
+                 * same table as the physical table. So when the user has requested to update stats
+                 * for both table and indexes on it, we need to make sure that we don't re-check
+                 * LAST_UPDATE_STATS time. If we don't do that then we will end up *not* collecting
+                 * stats for local indexes which would be bad.
+                 *
+                 * Note, that this also means we don't have a way of controlling how often update
+                 * stats can run for local indexes. Consider the case when the user calls UPDATE STATS TABLE
+                 * followed by UPDATE STATS TABLE INDEX. When the second statement is being executed,
+                 * this causes us to skip the check and execute stats collection possibly a bit too frequently.
+                 */
+                rowCount += updateStatisticsInternal(physicalName, table, updateStatisticsStmt.getProps(), localCFs, false);
             }
             // If analyzing the indexes of a multi-tenant table or a table with view indexes
             // then analyze all of those indexes too.
             if (table.getType() != PTableType.VIEW) {
                 if (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
-                    final PName physicalName = PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes()));
+                    final PName viewIndexPhysicalTableName = PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes()));
                     PTable indexLogicalTable = new DelegateTable(table) {
                         @Override
                         public PName getPhysicalName() {
-                            return physicalName;
+                            return viewIndexPhysicalTableName;
                         }
                     };
-                    rowCount += updateStatisticsInternal(physicalName, indexLogicalTable, updateStatisticsStmt.getProps());
-                }
-                PName physicalName = table.getPhysicalName();
-                List<byte[]> localCFs = MetaDataUtil.getLocalIndexColumnFamilies(connection, physicalName.getBytes());
-                if (!localCFs.isEmpty()) {
-                    rowCount += updateStatisticsInternal(physicalName, table, updateStatisticsStmt.getProps(), localCFs);
+                    /*
+                     * Note for future maintainers: local indexes whether on a table or on a view,
+                     * reside on the same physical table as the base table and not the view index
+                     * table. So below call is collecting stats only for non-local view indexes.
+                     */
+                    rowCount += updateStatisticsInternal(viewIndexPhysicalTableName, indexLogicalTable, updateStatisticsStmt.getProps(), true);
                 }
             }
         }
@@ -1127,27 +1151,29 @@ public class MetaDataClient {
         };
     }
 
-    private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps) throws SQLException {
-        return updateStatisticsInternal(physicalName, logicalTable, statsProps, null);
+    private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, boolean checkLastStatsUpdateTime) throws SQLException {
+        return updateStatisticsInternal(physicalName, logicalTable, statsProps, null, checkLastStatsUpdateTime);
     }
     
-    private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs) throws SQLException {
+    private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs, boolean checkLastStatsUpdateTime) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
                 .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
                         props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
-        byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
-        String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
-                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-        ResultSet rs = connection.createStatement().executeQuery(query);
         long msSinceLastUpdate = Long.MAX_VALUE;
-        if (rs.next()) {
-            msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+        if (checkLastStatsUpdateTime) {
+            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                    + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
+                    + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+            ResultSet rs = connection.createStatement().executeQuery(query);
+
+            if (rs.next()) {
+                msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+            }
         }
         long rowCount = 0;
         if (msSinceLastUpdate >= msMinBetweenUpdates) {
@@ -1976,14 +2002,14 @@ public class MetaDataClient {
                 }
             }
 
-            boolean useStatsForParallelization = true;
-            Boolean useStatsForParallelizationProp = (Boolean) TableProperty.USE_STATS_FOR_PARALLELIZATION.getValue(tableProps);
+            boolean useStatsForParallelization =
+                    connection.getQueryServices().getProps().getBoolean(
+                        QueryServices.USE_STATS_FOR_PARALLELIZATION,
+                        QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION);
+            Boolean useStatsForParallelizationProp =
+                    (Boolean) TableProperty.USE_STATS_FOR_PARALLELIZATION.getValue(tableProps);
             if (useStatsForParallelizationProp != null) {
                 useStatsForParallelization = useStatsForParallelizationProp;
-            } else {
-                useStatsForParallelization = connection.getQueryServices().getProps().getBoolean(
-                    QueryServices.USE_STATS_FOR_PARALLELIZATION,
-                    QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION);
             }
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;

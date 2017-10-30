@@ -32,6 +32,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.EnvironmentEdge;
@@ -305,6 +306,18 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         final Long estimatedBytes;
         final Long estimatedRows;
         final Long estimateInfoTs;
+
+        public Long getEstimatedBytes() {
+            return estimatedBytes;
+        }
+
+        public Long getEstimatedRows() {
+            return estimatedRows;
+        }
+
+        public Long getEstimateInfoTs() {
+            return estimateInfoTs;
+        }
 
         Estimate(Long rows, Long bytes, Long ts) {
             this.estimatedBytes = bytes;
