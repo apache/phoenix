@@ -2356,13 +2356,38 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return addColumn(oldMetaConnection, tableName, timestamp, columns, true);
     }
 
+    // Available for testing
+    protected long getSystemTableVersion() {
+        return MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
+    }
+    
+    // Available for testing
+    protected void setUpgradeRequired() {
+        this.upgradeRequired.set(true);
+    }
+    
+    // Available for testing
+    protected boolean isInitialized() {
+        return initialized;
+    }
+    
+    // Available for testing
+    protected void setInitialized(boolean isInitialized) {
+        initialized = isInitialized;
+    }
+
+    // Available for testing
+    protected String getSystemCatalogDML() {
+        return QueryConstants.CREATE_TABLE_METADATA;
+    }
+
     @Override
     public void init(final String url, final Properties props) throws SQLException {
         try {
             PhoenixContextExecutor.call(new Callable<Void>() {
                 @Override
                 public Void call() throws Exception {
-                    if (initialized) {
+                    if (isInitialized()) {
                         if (initializationException != null) {
                             // Throw previous initialization exception, as we won't resuse this instance
                             throw initializationException;
@@ -2370,7 +2395,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         return null;
                     }
                     synchronized (ConnectionQueryServicesImpl.this) {
-                        if (initialized) {
+                        if (isInitialized()) {
                             if (initializationException != null) {
                                 // Throw previous initialization exception, as we won't resuse this instance
                                 throw initializationException;
@@ -2412,7 +2437,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                                    Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+                                    Long.toString(getSystemTableVersion()));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             try (HBaseAdmin hBaseAdmin = getAdmin();
@@ -2420,7 +2445,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                          scnProps, newEmptyMetaData())) {
                                 try {
                                     metaConnection.setRunningUpgrade(true);
-                                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
+                                    metaConnection.createStatement().executeUpdate(getSystemCatalogDML());
                                 } catch (NewerTableAlreadyExistsException ignore) {
                                     // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed
                                     // timestamp. A TableAlreadyExistsException is not thrown, since the table only exists
@@ -2428,7 +2453,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 } catch (TableAlreadyExistsException e) {
                                     long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                                     if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP) {
-                                        ConnectionQueryServicesImpl.this.upgradeRequired.set(true);
+                                        setUpgradeRequired();
                                     }
                                 } catch (PhoenixIOException e) {
                                     if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
@@ -2487,7 +2512,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         throw initializationException;
                                     }
                                 } finally {
-                                    initialized = true;
+                                    setInitialized(true);
                                 }
                             }
                         }
@@ -2570,7 +2595,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
         boolean snapshotCreated = false;
         try {
-            if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
+            if (!isUpgradeRequired()) {
                 throw new UpgradeNotRequiredException();
             }
             Properties scnProps = PropertiesUtil.deepCopy(props);
