@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -387,11 +388,8 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     @Test
     public void testBytesRowsForSelectOnTenantViews() throws Exception {
         String tenant1View = generateUniqueName();
-        ;
         String tenant2View = generateUniqueName();
-        ;
         String tenant3View = generateUniqueName();
-        ;
         String multiTenantBaseTable = generateUniqueName();
         String tenant1 = "tenant1";
         String tenant2 = "tenant2";
@@ -501,6 +499,211 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             assertEquals((Long) 1399l, info.estimatedBytes);
             assertEquals((Long) 16l, info.estimatedRows);
             assertEquals((Long) prevGuidePostTimestamp, info.estimateInfoTs);
+        }
+    }
+
+    @Test // See https://issues.apache.org/jira/browse/PHOENIX-4287
+    public void testEstimatesForAggregateQueries() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int guidePostWidth = 20;
+            String ddl =
+                    "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
+                            + ", USE_STATS_FOR_PARALLELIZATION=false";
+            byte[][] splits =
+                    new byte[][] { Bytes.toBytes(102), Bytes.toBytes(105), Bytes.toBytes(108) };
+            BaseTest.createTestTable(getUrl(), ddl, splits, null);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (107,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (108,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (109,2,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql = "SELECT COUNT(*) " + " FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Now let's make sure that when using stats for parallelization, our estimates
+            // and query results stay the same
+            conn.createStatement().execute(
+                "ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION=true");
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
+        }
+    }
+
+    @Test
+    public void testSelectQueriesWithStatsForParallelizationOff() throws Exception {
+        testSelectQueriesWithFilters(false);
+    }
+
+    @Test
+    public void testSelectQueriesWithStatsForParallelizationOn() throws Exception {
+        testSelectQueriesWithFilters(true);
+    }
+
+    private void testSelectQueriesWithFilters(boolean useStatsForParallelization) throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int guidePostWidth = 20;
+            String ddl =
+                    "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
+                            + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization;
+            byte[][] splits =
+                    new byte[][] { Bytes.toBytes(102), Bytes.toBytes(105), Bytes.toBytes(108) };
+            BaseTest.createTestTable(getUrl(), ddl, splits, null);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,101,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,102,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,103,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,104,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,105,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,106,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (107,107,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (108,108,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (109,109,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // query whose start key is before any data
+            String sql = "SELECT a FROM " + tableName + " WHERE K >= 99";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            int i = 0;
+            int numRows = 10;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            assertEquals(numRows, i);
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertEquals((Long) 930l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // query whose start key is after any data
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 110";
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 0l, info.getEstimatedRows());
+            assertEquals((Long) 0l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose end key is before any data
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 98";
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 0l, info.getEstimatedRows());
+            assertEquals((Long) 0l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose end key is after any data. In this case, we return the estimate as
+            // scanning all the guide posts.
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 110";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 10;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            assertEquals(numRows, i);
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertEquals((Long) 930l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key and end key is before any data. In this case, we return the
+            // estimate as
+            // scanning the first guide post
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 90 AND K >= 80";
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 0l, info.getEstimatedRows());
+            assertEquals((Long) 0l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key and end key is after any data. In this case, we return the
+            // estimate as
+            // scanning no guide post
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 130 AND K >= 120";
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 0l, info.getEstimatedRows());
+            assertEquals((Long) 0l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key is before and end key is between data. In this case, we return
+            // the estimate as
+            // scanning no guide post
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 102 AND K >= 90";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 3;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            info = getByteRowEstimates(conn, sql, binds);
+            // Depending on the guidepost boundary, this estimate
+            // can be slightly off. It's called estimate for a reason.
+            assertEquals((Long) 4l, info.getEstimatedRows());
+            assertEquals((Long) 330l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+            // Query whose start key is between and end key is after data.
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 120 AND K >= 100";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 10;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            info = getByteRowEstimates(conn, sql, binds);
+            // Depending on the guidepost boundary, this estimate
+            // can be slightly off. It's called estimate for a reason.
+            assertEquals((Long) 9l, info.getEstimatedRows());
+            assertEquals((Long) 900l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+            // Query whose start key and end key are both between data.
+            sql = "SELECT a FROM " + tableName + " WHERE K <= 109 AND K >= 100";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 10;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            info = getByteRowEstimates(conn, sql, binds);
+            // Depending on the guidepost boundary, this estimate
+            // can be slightly off. It's called estimate for a reason.
+            assertEquals((Long) 9l, info.getEstimatedRows());
+            assertEquals((Long) 900l, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
         }
     }
 
