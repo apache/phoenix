@@ -190,7 +190,9 @@ public class MutationState implements SQLCloseable {
 
     public MutationState(TableRef table, Map<ImmutableBytesPtr,RowMutationState> mutations, long sizeOffset, long maxSize, long maxSizeBytes, PhoenixConnection connection) throws SQLException {
         this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
-        this.mutations.put(table, mutations);
+        if (!mutations.isEmpty()) {
+            this.mutations.put(table, mutations);
+        }
         this.numRows = mutations.size();
         throwIfTooBig();
     }

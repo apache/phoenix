@@ -366,7 +366,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection) {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
-        assert(dataTable.getType() == PTableType.SYSTEM || dataTable.getType() == PTableType.TABLE || dataTable.getType() == PTableType.VIEW);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
@@ -411,15 +410,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nDataPKColumns = dataRowKeySchema.getFieldCount() - dataPosOffset;
         // For indexes on views, we need to remember which data columns are "constants"
         // These are the values in a VIEW where clause. For these, we don't put them in the
-        // index, as they're the same for every row in the index.
-        if (dataTable.getType() == PTableType.VIEW) {
-            List<PColumn>dataPKColumns = dataTable.getPKColumns();
-            for (int i = dataPosOffset; i < dataPKColumns.size(); i++) {
-                PColumn dataPKColumn = dataPKColumns.get(i);
-                if (dataPKColumn.getViewConstant() != null) {
-                    bitSet.set(i);
-                    nDataPKColumns--;
-                }
+        // index, as they're the same for every row in the index. The data table can be
+        // either a VIEW or PROJECTED
+        List<PColumn>dataPKColumns = dataTable.getPKColumns();
+        for (int i = dataPosOffset; i < dataPKColumns.size(); i++) {
+            PColumn dataPKColumn = dataPKColumns.get(i);
+            if (dataPKColumn.getViewConstant() != null) {
+                bitSet.set(i);
+                nDataPKColumns--;
             }
         }
         this.indexTableName = indexTableName;
@@ -543,11 +541,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         for (int i = 0; i < index.getColumnFamilies().size(); i++) {
             PColumnFamily family = index.getColumnFamilies().get(i);
             for (PColumn indexColumn : family.getColumns()) {
-                PColumn dataColumn = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-                byte[] dataColumnCq = dataColumn.getColumnQualifierBytes();
-                byte[] indexColumnCq = indexColumn.getColumnQualifierBytes();
-                this.coveredColumnsMap.put(new ColumnReference(dataColumn.getFamilyName().getBytes(), dataColumnCq), 
-                        new ColumnReference(indexColumn.getFamilyName().getBytes(), indexColumnCq));
+                PColumn dataColumn = IndexUtil.getDataColumnOrNull(dataTable, indexColumn.getName().getString());
+                // This can happen during deletion where we don't need covered columns
+                if (dataColumn != null) {
+                    byte[] dataColumnCq = dataColumn.getColumnQualifierBytes();
+                    byte[] indexColumnCq = indexColumn.getColumnQualifierBytes();
+                    this.coveredColumnsMap.put(new ColumnReference(dataColumn.getFamilyName().getBytes(), dataColumnCq), 
+                            new ColumnReference(indexColumn.getFamilyName().getBytes(), indexColumnCq));
+                }
             }
         }
         this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
@@ -758,8 +759,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int minLength = length - maxTrailingNulls;
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            while (length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+            int index = dataRowKeySchema.getFieldCount() - 1;
+            while (index >= 0 && !dataRowKeySchema.getField(index).getDataType().isFixedWidth() && length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
                 length--;
+                index--;
             }
             // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
             // we store this in nIndexSaltBuckets, as we only use this function for local indexes

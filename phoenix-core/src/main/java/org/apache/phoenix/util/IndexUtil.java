@@ -207,27 +207,35 @@ public class IndexUtil {
     }
     
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
+        PColumn column = getDataColumnOrNull(dataTable, indexColumnName);
+        if (column == null) {
+            throw new IllegalArgumentException("Could not find column \"" + SchemaUtil.getColumnName(getDataColumnFamilyName(indexColumnName), getDataColumnName(indexColumnName)) + " in " + dataTable);
+        }
+        return column;
+    }
+    
+    public static PColumn getDataColumnOrNull(PTable dataTable, String indexColumnName) {
         int pos = indexColumnName.indexOf(INDEX_COLUMN_NAME_SEP);
         if (pos < 0) {
-            throw new IllegalArgumentException("Could not find expected '" + INDEX_COLUMN_NAME_SEP +  "' separator in index column name of \"" + indexColumnName + "\"");
+            return null;
         }
         if (pos == 0) {
             try {
                 return dataTable.getPKColumn(indexColumnName.substring(1));
             } catch (ColumnNotFoundException e) {
-                throw new IllegalArgumentException("Could not find PK column \"" +  indexColumnName.substring(pos+1) + "\" in index column name of \"" + indexColumnName + "\"", e);
+                return null;
             }
         }
         PColumnFamily family;
         try {
             family = dataTable.getColumnFamily(getDataColumnFamilyName(indexColumnName));                
         } catch (ColumnFamilyNotFoundException e) {
-            throw new IllegalArgumentException("Could not find column family \"" +  indexColumnName.substring(0, pos) + "\" in index column name of \"" + indexColumnName + "\"", e);
+            return null;
         }
         try {
             return family.getPColumnForColumnName(indexColumnName.substring(pos+1));
         } catch (ColumnNotFoundException e) {
-            throw new IllegalArgumentException("Could not find column \"" +  indexColumnName.substring(pos+1) + "\" in index column name of \"" + indexColumnName + "\"", e);
+            return null;
         }
     }
     
@@ -686,7 +694,7 @@ public class IndexUtil {
     }
 
     public static byte[][] getViewConstants(PTable dataTable) {
-        if (dataTable.getType() != PTableType.VIEW) return null;
+        if (dataTable.getType() != PTableType.VIEW && dataTable.getType() != PTableType.PROJECTED) return null;
         int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         List<byte[]> viewConstants = new ArrayList<byte[]>();

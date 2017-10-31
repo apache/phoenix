@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
-
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -66,6 +64,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PColumnFamilyImpl;
@@ -73,9 +72,9 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
-import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -871,7 +870,9 @@ public class FromCompiler {
                     TableRef tableRef = iterator.next();
                     try {
                         PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
-                        if (theColumnFamilyRef != null) { throw new TableNotFoundException(cfName); }
+                        if (columnFamily == null) { 
+                            throw new TableNotFoundException(cfName); 
+                        }
                         theColumnFamilyRef = new ColumnFamilyRef(tableRef, columnFamily);
                     } catch (ColumnFamilyNotFoundException e) {}
                 }
@@ -914,10 +915,42 @@ public class FromCompiler {
                     PColumn column = tableRef.getTable().getColumnForColumnName(colName);
                     return new ColumnRef(tableRef, column.getPosition());
                 } catch (TableNotFoundException e) {
-                    // Try using the tableName as a columnFamily reference instead
-                    ColumnFamilyRef cfRef = resolveColumnFamily(schemaName, tableName);
-                    PColumn column = cfRef.getFamily().getPColumnForColumnName(colName);
-                    return new ColumnRef(cfRef.getTableRef(), column.getPosition());
+                    TableRef theTableRef = null;
+                    PColumn theColumn = null;
+                    PColumnFamily theColumnFamily = null;
+                    if (schemaName != null) {
+                        try {
+                            // Try schemaName as the tableName and use tableName as column family name
+                            theTableRef = resolveTable(null, schemaName);
+                            theColumnFamily = theTableRef.getTable().getColumnFamily(tableName);
+                            theColumn = theColumnFamily.getPColumnForColumnName(colName);
+                        } catch (MetaDataEntityNotFoundException e2) {
+                        }
+                    } 
+                    if (theColumn == null) {
+                        // Try using the tableName as a columnFamily reference instead
+                        // and resolve column in each column family.
+                        Iterator<TableRef> iterator = tables.iterator();
+                        while (iterator.hasNext()) {
+                            TableRef tableRef = iterator.next();
+                            try {
+                                PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(tableName);
+                                PColumn column = columnFamily.getPColumnForColumnName(colName);
+                                if (theColumn != null) {
+                                    throw new AmbiguousColumnException(colName);
+                                }
+                                theTableRef = tableRef;
+                                theColumnFamily = columnFamily;
+                                theColumn = column;
+                            } catch (MetaDataEntityNotFoundException e1) {
+                            }
+                        }
+                        if (theColumn == null) { 
+                            throw new ColumnNotFoundException(colName);
+                        }
+                    }
+                    ColumnFamilyRef cfRef = new ColumnFamilyRef(theTableRef, theColumnFamily);
+                    return new ColumnRef(cfRef.getTableRef(), theColumn.getPosition());
                 }
             }
         }
