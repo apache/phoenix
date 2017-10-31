@@ -31,6 +31,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
@@ -780,6 +781,100 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
         public void advanceTime(long t) {
             this.time += t;
+        }
+    }
+
+    @Test
+    public void testPartialStatsForTenantViews() throws Exception {
+        String tenant1View = generateUniqueName();
+        String tenant2View = generateUniqueName();
+        String multiTenantTable = generateUniqueName();
+        String tenantId1 = "00Dabcdetenant1";
+        String tenantId2 = "00Dabcdetenant2";
+
+        String ddl =
+                "CREATE TABLE " + multiTenantTable
+                        + " (orgId CHAR(15) NOT NULL, pk2 CHAR(3) NOT NULL, a bigint, b bigint CONSTRAINT PK PRIMARY KEY "
+                        + "(ORGID, PK2)) MULTI_TENANT=true, GUIDE_POSTS_WIDTH=20";
+        createTestTable(getUrl(), ddl, null, null);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // split such that some data for view2 resides on region of view1
+            try (HBaseAdmin admin =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                byte[] splitKey = Bytes.toBytes("00Dabcdetenant200B");
+                admin.split(Bytes.toBytes(multiTenantTable), splitKey);
+            }
+
+            /**
+             * Insert 2 rows for tenant1 and 6 for tenant2
+             */
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId1 + "','00A',1,1)");
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId1 + "','00B',2,2)");
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId2 + "','00A',3,3)");
+            // We split at tenant2 + 00B. So the following rows will reside in a different region
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId2 + "','00B',4,4)");
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId2 + "','00C',5,5)");
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId2 + "','00D',6,6)");
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId2 + "','00E',7,7)");
+            conn.createStatement().execute(
+                "upsert into " + multiTenantTable + " values ('" + tenantId2 + "','00F',8,8)");
+            conn.commit();
+        }
+        try (Connection conn = getTenantConnection(tenantId1)) {
+            conn.createStatement().execute(
+                "CREATE VIEW " + tenant1View + " AS SELECT * FROM " + multiTenantTable);
+        }
+        try (Connection conn = getTenantConnection(tenantId2)) {
+            conn.createStatement().execute(
+                "CREATE VIEW " + tenant2View + " AS SELECT * FROM " + multiTenantTable);
+        }
+        String sql = "";
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            /*
+             * I have seen compaction running and generating stats for the second region of
+             * tenant2View So let's disable compaction on the table, delete any stats we have
+             * collected in SYSTEM.STATS table, clear cache and run update stats to make sure our
+             * test gets a deterministic setup.
+             */
+            String disableCompaction =
+                    "ALTER TABLE " + multiTenantTable + " SET COMPACTION_ENABLED = false";
+            conn.createStatement().executeUpdate(disableCompaction);
+            String delete =
+                    "DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + multiTenantTable + "'";
+            conn.createStatement().executeUpdate(delete);
+            conn.commit();
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+        }
+        // Now let's run update stats on tenant1View
+        try (Connection conn = getTenantConnection(tenantId1)) {
+            conn.createStatement().execute("UPDATE STATISTICS " + tenant1View);
+        }
+        // query tenant2 view
+        try (Connection conn = getTenantConnection(tenantId2)) {
+            sql = "SELECT * FROM " + tenant2View;
+
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            /*
+             * Because we ran update stats only for tenant1View, there is only partial guidepost
+             * info available for tenant2View.
+             */
+            assertEquals((Long) 1l, info.estimatedRows);
+            // ok now run update stats for tenant2 view
+            conn.createStatement().execute("UPDATE STATISTICS " + tenant2View);
+            /*
+             * And now, let's recheck our estimate info. We should have all the rows of view2
+             * available now.
+             */
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 6l, info.estimatedRows);
         }
     }
 }
