@@ -434,7 +434,7 @@ public class ScanUtil {
             // The result of an RVC evaluation can come with a trailing separator already, so we
             // should avoid adding another one.
             if ( !isFixedWidth
-                    && ( bytes.length == 0 || slotSpan[i] == 0 || key[offset - 1] != sepByte )
+                    && ( bytes.length == 0 || key[offset - 1] != sepByte )
                     && ( sepByte == QueryConstants.DESC_SEPARATOR_BYTE
                                     || ( !exclusiveUpper 
                                          && (fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower) ) ) ) {
