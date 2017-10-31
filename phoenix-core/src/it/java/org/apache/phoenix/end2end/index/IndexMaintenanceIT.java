@@ -23,7 +23,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -36,7 +35,6 @@ import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -341,22 +339,10 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
             assertEquals(2, rs.getInt(1));
 
             conn.setAutoCommit(true);
-            String dml = "DELETE from " + fullDataTableName + " WHERE long_col2 = 2";
-            try {
-                conn.createStatement().execute(dml);
-                if (!mutable && !localIndex) {
-                    fail();
-                }
-            } catch (SQLException e) {
-                if (mutable || localIndex) {
-                    throw e;
-                }
-                assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
-            }
+            conn.createStatement().execute("DELETE from " + fullDataTableName + " WHERE long_col2 = 2");
 
             if (!mutable) {
-                dml = "DELETE from " + fullDataTableName + " WHERE 2*long_col2 = 4";
-                conn.createStatement().execute(dml);
+                conn.createStatement().execute("DELETE from " + fullDataTableName + " WHERE 2*long_col2 = 4");
             }
 
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullDataTableName);

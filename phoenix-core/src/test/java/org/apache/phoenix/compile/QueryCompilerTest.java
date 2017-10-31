@@ -1235,33 +1235,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testDeleteFromImmutableWithKV() throws Exception {
-        String ddl = "CREATE TABLE t (k1 VARCHAR, v1 VARCHAR, v2 VARCHAR CONSTRAINT pk PRIMARY KEY(k1)) immutable_rows=true";
-        String indexDDL = "CREATE INDEX i ON t (v1)";
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
-            conn.createStatement().execute(ddl);
-            assertImmutableRows(conn, "T", true);
-            conn.createStatement().execute(indexDDL);
-            assertImmutableRows(conn, "I", true);
-            conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
-        }
-        // Test with one index having the referenced key value column, but one not having it.
-        // Still should fail
-        try {
-            indexDDL = "CREATE INDEX i2 ON t (v2)";
-            conn.createStatement().execute(indexDDL);
-            conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
-        }
-    }
-    
-    @Test
     public void testInvalidNegativeArrayIndex() throws Exception {
         String query = "SELECT a_double_array[-20] FROM table_with_array";
         Connection conn = DriverManager.getConnection(getUrl());
