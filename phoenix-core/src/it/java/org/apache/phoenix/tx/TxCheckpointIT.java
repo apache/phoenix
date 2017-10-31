@@ -311,7 +311,6 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
-		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		ResultSet rs;
 		try (Connection conn = getConnection()) {
 			conn.setAutoCommit(false);
@@ -400,6 +399,23 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(1,rs.getLong(1));
             assertFalse(rs.next());
+            
+            conn.createStatement().execute("drop index " + indexName + " on " + fullTableName + "1");
+            conn.createStatement().execute("delete from " + fullTableName + "1 where id1=fk1b AND fk1b=id1");
+            conn.createStatement().execute("delete from " + fullTableName + "1 where id1 in (select fk1a from " + fullTableName + "1 join " + fullTableName + "2 on (fk2=id1))");
+            assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+            assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
+    
+            rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
+            assertTrue(rs.next());
+            assertEquals(1,rs.getLong(1));
+            assertFalse(rs.next());
+    
+            rs = conn.createStatement().executeQuery("select /*+ INDEX(DEMO IDX) */ id1 from " + fullTableName + "1");
+            assertTrue(rs.next());
+            assertEquals(1,rs.getLong(1));
+            assertFalse(rs.next());
+    
 		}
     }  
 
