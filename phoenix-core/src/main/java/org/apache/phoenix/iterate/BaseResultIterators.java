@@ -35,7 +35,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -152,7 +151,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Long estimateInfoTimestamp;
     private boolean hasGuidePosts;
     private Scan scan;
-    private boolean useStatsForParallelization;
+    private final boolean useStatsForParallelization;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
@@ -492,7 +491,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        this.useStatsForParallelization = table.useStatsForParallelization();
+        this.useStatsForParallelization =
+                table.useStatsForParallelization() == null
+                        ? context.getConnection().getQueryServices().getConfiguration().getBoolean(
+                            USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
+                        : table.useStatsForParallelization();
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {

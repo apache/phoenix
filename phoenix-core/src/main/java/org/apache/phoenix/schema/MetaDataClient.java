@@ -2002,15 +2002,8 @@ public class MetaDataClient {
                 }
             }
 
-            boolean useStatsForParallelization =
-                    connection.getQueryServices().getProps().getBoolean(
-                        QueryServices.USE_STATS_FOR_PARALLELIZATION,
-                        QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION);
             Boolean useStatsForParallelizationProp =
                     (Boolean) TableProperty.USE_STATS_FOR_PARALLELIZATION.getValue(tableProps);
-            if (useStatsForParallelizationProp != null) {
-                useStatsForParallelization = useStatsForParallelizationProp;
-            }
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;
             if (transactional) {
@@ -2606,7 +2599,11 @@ public class MetaDataClient {
             }
             tableUpsert.setByte(26, immutableStorageScheme.getSerializedMetadataValue());
             tableUpsert.setByte(27, encodingScheme.getSerializedMetadataValue());
-            tableUpsert.setBoolean(28, useStatsForParallelization);
+            if (useStatsForParallelizationProp == null) {
+                tableUpsert.setNull(28, Types.BOOLEAN);
+            } else {
+                tableUpsert.setBoolean(28, useStatsForParallelizationProp);
+            }
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -2711,7 +2708,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns.values(),
                         parent == null ? null : parent.getSchemaName(), parent == null ? null : parent.getTableName(), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForParallelization);
+                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForParallelizationProp);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;
@@ -3304,11 +3301,12 @@ public class MetaDataClient {
                     }
                 }
                 Boolean useStatsForParallelization = null;
-                if (useStatsForParallelizationProp != null) {
-                    if (useStatsForParallelizationProp.booleanValue() != table.useStatsForParallelization()) {
-                        useStatsForParallelization = useStatsForParallelizationProp;
-                        changingPhoenixTableProperty = true;
-                    }
+                if (useStatsForParallelizationProp != null
+                        && (table.useStatsForParallelization() == null
+                                || (useStatsForParallelizationProp.booleanValue() != table
+                                        .useStatsForParallelization()))) {
+                    useStatsForParallelization = useStatsForParallelizationProp;
+                    changingPhoenixTableProperty = true;
                 }
                 Boolean isTransactional = null;
                 if (isTransactionalProp != null) {
