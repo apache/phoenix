@@ -757,7 +757,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ;
                 Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2) : conn) {
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTable + " ("
-                    + " %s PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                    + " %s PK1 VARCHAR NOT NULL, V0 VARCHAR, V1 VARCHAR, V2 VARCHAR "
                     + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK1)"
                     + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
@@ -774,7 +774,8 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             PTable table = PhoenixRuntime.getTableNoCache(viewConn, view1);
             assertEquals(QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT, table.getBaseColumnCount());
             
-            String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR";
+            // Add a new regular column and pk column  to the base table
+            String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR, PK2 VARCHAR PRIMARY KEY";
             conn.createStatement().execute(alterBaseTable);
             
             // Column V3 shouldn't have propagated to the diverged view.
@@ -788,6 +789,36 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             // However, column V3 should have propagated to the non-diverged view.
             sql = "SELECT V3 FROM " + view2;
             viewConn2.createStatement().execute(sql);
+
+			// PK2 should be in both views
+			sql = "SELECT PK2 FROM " + view1;
+			viewConn2.createStatement().execute(sql);
+			sql = "SELECT PK2 FROM " + view2;
+			viewConn2.createStatement().execute(sql);
+
+			// Drop a column from the base table
+			alterBaseTable = "ALTER TABLE " + baseTable + " DROP COLUMN V1";
+			conn.createStatement().execute(alterBaseTable);
+
+			// V1 should be dropped from both diverged and non-diverged views
+			sql = "SELECT V1 FROM " + view1;
+			try {
+				viewConn.createStatement().execute(sql);
+			} catch (SQLException e) {
+				assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+			}
+			sql = "SELECT V1 FROM " + view2;
+			try {
+				viewConn2.createStatement().execute(sql);
+			} catch (SQLException e) {
+				assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+			}
+
+			// V2 should be still exist in both diverged and non-diverged views
+			sql = "SELECT V0 FROM " + view1;
+			viewConn.createStatement().execute(sql);
+			sql = "SELECT V0 FROM " + view2;
+			viewConn2.createStatement().execute(sql);
         } 
     }
     

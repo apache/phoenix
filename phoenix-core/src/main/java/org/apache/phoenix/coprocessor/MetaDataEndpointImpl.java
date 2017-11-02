@@ -661,15 +661,24 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 					if (someTablesColumns != null) {
 						for (int j = someTablesColumns.size() - 1; j >= 0; j--) {
 							PColumn column = someTablesColumns.get(j);
-							// for diverged views we only include pk columns of the base table that were created after the view was created
-							// we have to include these pk columns to be able to support adding pk columns to the diverged view
+							// For diverged views we always include pk columns
+							// of the base table. We have to include these pk
+							// columns to be able to support adding pk columns
+							// to the diverged view
+							// We only include regular columns that were created
+							// before the view diverged
 							if (isDiverged && column.getFamilyName()!=null && column.getTimestamp() > table.getTimeStamp()) {
 								continue;
 							}
-							// NEED TO CHECK IF THIS COLUMN IS IN THE EXCLUDED
-							// LIST AS WELL!
+							// need to check if this column is in the list of excluded (dropped) columns of the view
 							int existingIndex = excludedColumns.indexOf(column);
 							if (existingIndex != -1) {
+								// if it is, only exclude the column if was
+								// created before the column was dropped in the
+								// view in order to handle the case where a base
+								// table column is dropped in a view, then
+								// dropped in the base table and then added back
+								// to the base table
 								if (column.getTimestamp() <= excludedColumns.get(existingIndex).getTimestamp()) {
 									continue;
 								}
