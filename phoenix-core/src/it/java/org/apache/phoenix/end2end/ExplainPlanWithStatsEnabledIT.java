@@ -72,8 +72,8 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     private static void createIndex(String indexName, String table, long guidePostWidth)
             throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + table
-                    + " (c1.a) INCLUDE (c2.b) ");
+            conn.createStatement().execute(
+                "CREATE INDEX " + indexName + " ON " + table + " (c1.a) INCLUDE (c2.b) ");
             conn.createStatement().execute("UPDATE STATISTICS " + indexName);
         }
     }
@@ -558,9 +558,10 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             Estimate info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10l, info.getEstimatedRows());
             assertTrue(info.getEstimateInfoTs() > 0);
-            
+
             // Now, let's disable USE_STATS_FOR_PARALLELIZATION on the table
-            conn.createStatement().execute("ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION = " + false);
+            conn.createStatement().execute(
+                "ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION = " + false);
             rs = conn.createStatement().executeQuery(sql);
             // stats are not being used for parallelization. So number of scans is lower.
             assertEquals(4, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
@@ -570,11 +571,11 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10l, info.getEstimatedRows());
             assertTrue(info.getEstimateInfoTs() > 0);
-            
+
             // assert that the aggregate query on view also works correctly
             String viewName = "V_" + generateUniqueName();
-            conn.createStatement()
-                    .execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName + " USE_STATS_FOR_PARALLELIZATION = false");
+            conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM "
+                    + tableName + " USE_STATS_FOR_PARALLELIZATION = false");
             sql = "SELECT COUNT(*) FROM " + viewName;
             rs = conn.createStatement().executeQuery(sql);
             // stats are not being used for parallelization. So number of scans is lower.
@@ -595,21 +596,21 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             rs = conn.createStatement().executeQuery(sql);
             // stats are being used for parallelization. So number of scans is higher.
             assertEquals(14, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
-                .getScans().get(0).size());
+                    .getScans().get(0).size());
             assertTrue(rs.next());
             assertEquals(10, rs.getInt(1));
             info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10l, info.getEstimatedRows());
             assertTrue(info.getEstimateInfoTs() > 0);
 
-            conn.createStatement().execute(
-                "ALTER TABLE " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
+            conn.createStatement()
+                    .execute("ALTER TABLE " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
             sql = "SELECT COUNT(*) FROM " + viewName;
             // query the view
             rs = conn.createStatement().executeQuery(sql);
             // stats are not being used for parallelization. So number of scans is higher.
             assertEquals(14, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
-                .getScans().get(0).size());
+                    .getScans().get(0).size());
             assertTrue(rs.next());
             assertEquals(10, rs.getInt(1));
             info = getByteRowEstimates(conn, sql, binds);
@@ -942,6 +943,129 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
              */
             info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 6l, info.estimatedRows);
+        }
+    }
+
+    @Test
+    public void testIndexesUseStatsIfOnForParentTable() throws Exception {
+        testIndexesInheritUseStatsPropFromParentTable(true);
+    }
+
+    @Test
+    public void testIndexesDontUseStatsIfOffForParentTable() throws Exception {
+        testIndexesInheritUseStatsPropFromParentTable(false);
+    }
+
+    private void testIndexesInheritUseStatsPropFromParentTable(boolean useStats) throws Exception {
+        String baseTable = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl =
+                    "CREATE TABLE " + baseTable
+                            + " (k INTEGER PRIMARY KEY, a bigint, b bigint, c bigint) GUIDE_POSTS_WIDTH=20, USE_STATS_FOR_PARALLELIZATION="
+                            + useStats;
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("upsert into " + baseTable + " values (100,1,1,1)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (101,2,2,2)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (102,3,3,3)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (103,4,4,4)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (104,5,5,5)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (105,6,6,6)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (106,7,7,7)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (107,8,8,8)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (108,9,9,9)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (109,10,10,10)");
+            conn.commit();
+
+            // Create global index on base table
+            String globalIndex = "GI_" + generateUniqueName();
+            ddl = "CREATE INDEX " + globalIndex + " ON " + baseTable + " (a) INCLUDE (b) ";
+            conn.createStatement().execute(ddl);
+
+            // Create local index on base table
+            String localIndex = "LI_" + generateUniqueName();
+            ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + baseTable + " (b) INCLUDE (c) ";
+            conn.createStatement().execute(ddl);
+
+            // Create a view and an index on it
+            String view = "V_" + generateUniqueName();
+            ddl =
+                    "CREATE VIEW " + view + " AS SELECT * FROM " + baseTable
+                            + " USE_STATS_FOR_PARALLELIZATION=" + useStats;
+            conn.createStatement().execute(ddl);
+            String viewIndex = "VI_" + generateUniqueName();
+            ddl = "CREATE INDEX " + viewIndex + " ON " + view + " (b)";
+            conn.createStatement().execute(ddl);
+
+            // collect stats for all
+            conn.createStatement().execute("UPDATE STATISTICS " + baseTable);
+
+            // query against the base table
+            String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + baseTable;
+            PhoenixResultSet rs =
+                    conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against base table
+            assertEquals(baseTable,
+                rs.getStatement().getQueryPlan().getTableRef().getTable().getName().getString());
+            assertEquals(useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
+
+            // query against the global index
+            query = "SELECT B FROM " + baseTable + " WHERE A > 0";
+            rs = conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against global index
+            assertEquals(globalIndex, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getTableRef().getTable().getName().getString());
+            assertEquals(useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
+
+            // query against the local index
+            query = "SELECT C FROM " + baseTable + " WHERE B > 0";
+            rs = conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against global index
+            assertEquals(localIndex, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getTableRef().getTable().getName().getString());
+            assertEquals(useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
+
+            // query against the view
+            query = "SELECT * FROM " + view;
+            rs = conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against view
+            assertEquals(view, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getTableRef().getTable().getName().getString());
+            assertEquals(useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
+
+            // query against the view index
+            query = "SELECT 1 FROM " + view + " WHERE B > 0";
+            rs = conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against viewIndex
+            assertEquals(viewIndex, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getTableRef().getTable().getName().getString());
+            assertEquals(useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
+
+            // flip the use stats property on the view and see if view index picks it up
+            conn.createStatement().execute(
+                "ALTER VIEW " + view + " SET USE_STATS_FOR_PARALLELIZATION=" + !useStats);
+
+            // query against the view
+            query = "SELECT * FROM " + view;
+            rs = conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against view
+            assertEquals(view, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getTableRef().getTable().getName().getString());
+            assertEquals(!useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
+
+            // query against the view index
+            query = "SELECT 1 FROM " + view + " WHERE B > 0";
+            rs = conn.createStatement().executeQuery(query).unwrap(PhoenixResultSet.class);
+            // assert query is against viewIndex
+            assertEquals(viewIndex, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getTableRef().getTable().getName().getString());
+            assertEquals(!useStats ? 11 : 1, rs.unwrap(PhoenixResultSet.class).getStatement()
+                    .getQueryPlan().getScans().get(0).size());
         }
     }
 }
