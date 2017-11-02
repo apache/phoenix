@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.schema.stats;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
@@ -41,13 +41,18 @@ import java.util.Random;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -55,9 +60,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.schema.stats.StatisticsUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -82,6 +85,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private String physicalTableName;
     private final boolean userTableNamespaceMapped;
     private final boolean mutable;
+    private static final int defaultGuidePostWidth = 20;
     
     protected StatsCollectorIT(boolean mutable, boolean transactional, boolean userTableNamespaceMapped, boolean columnEncoded) {
         StringBuilder sb = new StringBuilder();
@@ -119,10 +123,10 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         // enable name space mapping at global level on both client and server side
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(defaultGuidePostWidth));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(defaultGuidePostWidth));
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
@@ -731,4 +735,97 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Test
+    public void testGuidePostWidthUsedInDefaultStatsCollector() throws Exception {
+        String baseTable = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl =
+                    "CREATE TABLE " + baseTable
+                            + " (k INTEGER PRIMARY KEY, a bigint, b bigint, c bigint) "
+                            + tableDDLOptions;
+            BaseTest.createTestTable(getUrl(), ddl, null, null);
+            conn.createStatement().execute("upsert into " + baseTable + " values (100,1,1,1)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (101,2,2,2)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (102,3,3,3)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (103,4,4,4)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (104,5,5,5)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (105,6,6,6)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (106,7,7,7)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (107,8,8,8)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (108,9,9,9)");
+            conn.createStatement().execute("upsert into " + baseTable + " values (109,10,10,10)");
+            conn.commit();
+            DefaultStatisticsCollector statsCollector = getDefaultStatsCollectorForTable(baseTable);
+            statsCollector.init();
+            assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
+
+            // ok let's create a global index now and see what guide post width is used for it
+            String globalIndex = "GI_" + generateUniqueName();
+            ddl = "CREATE INDEX " + globalIndex + " ON " + baseTable + " (a) INCLUDE (b) ";
+            conn.createStatement().execute(ddl);
+            statsCollector = getDefaultStatsCollectorForTable(globalIndex);
+            statsCollector.init();
+            assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
+
+            // let's check out local index too
+            String localIndex = "LI_" + generateUniqueName();
+            ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + baseTable + " (b) INCLUDE (c) ";
+            conn.createStatement().execute(ddl);
+            // local indexes reside on the same table as base data table
+            statsCollector = getDefaultStatsCollectorForTable(baseTable);
+            statsCollector.init();
+            assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
+
+            // now let's create a view and an index on it and see what guide post width is used for
+            // it
+            String view = "V_" + generateUniqueName();
+            ddl = "CREATE VIEW " + view + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(ddl);
+            String viewIndex = "VI_" + generateUniqueName();
+            ddl = "CREATE INDEX " + viewIndex + " ON " + view + " (b)";
+            conn.createStatement().execute(ddl);
+            String viewIndexTableName = MetaDataUtil.getViewIndexTableName(baseTable);
+            statsCollector = getDefaultStatsCollectorForTable(viewIndexTableName);
+            statsCollector.init();
+            assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
+            /*
+             * Fantastic! Now let's change the guide post width of the base table. This should
+             * change the guide post width we are using in DefaultStatisticsCollector for all
+             * indexes too.
+             */
+            long newGpWidth = 500;
+            conn.createStatement()
+                    .execute("ALTER TABLE " + baseTable + " SET GUIDE_POSTS_WIDTH=" + newGpWidth);
+
+            // base table
+            statsCollector = getDefaultStatsCollectorForTable(baseTable);
+            statsCollector.init();
+            assertEquals(newGpWidth, statsCollector.getGuidePostDepth());
+
+            // global index table
+            statsCollector = getDefaultStatsCollectorForTable(globalIndex);
+            statsCollector.init();
+            assertEquals(newGpWidth, statsCollector.getGuidePostDepth());
+
+            // view index table
+            statsCollector = getDefaultStatsCollectorForTable(viewIndexTableName);
+            statsCollector.init();
+            assertEquals(newGpWidth, statsCollector.getGuidePostDepth());
+        }
+    }
+
+    private DefaultStatisticsCollector getDefaultStatsCollectorForTable(String tableName)
+            throws Exception {
+        RegionCoprocessorEnvironment env = getRegionEnvrionment(tableName);
+        return (DefaultStatisticsCollector) StatisticsCollectorFactory
+                .createStatisticsCollector(env, tableName, System.currentTimeMillis(), null, null);
+    }
+
+    private RegionCoprocessorEnvironment getRegionEnvrionment(String tableName)
+            throws IOException, InterruptedException {
+        return getUtility()
+                .getRSForFirstRegionInTable(TableName.valueOf(tableName))
+                .getOnlineRegionsLocalContext().iterator().next().getCoprocessorHost()
+                .findCoprocessorEnvironment(UngroupedAggregateRegionObserver.class.getName());
+    }
 }
