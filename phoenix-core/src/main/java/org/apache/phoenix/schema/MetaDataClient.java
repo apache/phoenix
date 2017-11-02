@@ -1949,6 +1949,13 @@ public class MetaDataClient {
             }
             String autoPartitionSeq = (String) TableProperty.AUTO_PARTITION_SEQ.getValue(tableProps);
             Long guidePostsWidth = (Long) TableProperty.GUIDE_POSTS_WIDTH.getValue(tableProps);
+
+            // We only allow setting guide post width for a base table
+            if (guidePostsWidth != null && tableType != PTableType.TABLE) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH)
+                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+            }
+
             Boolean storeNullsProp = (Boolean) TableProperty.STORE_NULLS.getValue(tableProps);
             if (storeNullsProp == null) {
                 if (parent == null) {
