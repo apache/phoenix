@@ -29,6 +29,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
@@ -56,6 +57,15 @@ public class QueryParserTest {
         assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
     }
     
+    private void parseQueryThatShouldFail(String sql) throws Exception {
+        try {
+            parseQuery(sql);
+            fail("Query should throw a PhoenixParserException \n " + sql);
+        }
+        catch (PhoenixParserException e){
+        }
+    }
+
     @Test
     public void testParsePreQuery0() throws Exception {
         String sql = ((
@@ -781,5 +791,16 @@ public class QueryParserTest {
         String unicodeEnSpace = String.valueOf(Character.toChars(8194));
         String sql = Joiner.on(unicodeEnSpace).join(new String[] {"SELECT", "*", "FROM", "T"});
         parseQuery(sql);
+    }
+
+    @Test
+    public void testInvalidTableOrSchemaName() throws Exception {
+        // namespace separator (:) cannot be used
+        parseQueryThatShouldFail("create table a:b (id varchar not null primary key)");
+        parseQueryThatShouldFail("create table \"a:b\" (id varchar not null primary key)");
+        // name separator (.) cannot be used without double quotes
+        parseQueryThatShouldFail("create table a.b.c.d (id varchar not null primary key)");
+        parseQuery("create table \"a.b\".\"c.d\" (id varchar not null primary key)");
+        parseQuery("create table \"a.b.c.d\" (id varchar not null primary key)");
     }
 }
