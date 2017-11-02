@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.schema.stats.StatsCollectorIT;
 import org.junit.runners.Parameterized.Parameters;
 
 public class NonColumnEncodedImmutableTxStatsCollectorIT extends StatsCollectorIT {
