@@ -27,6 +27,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -35,6 +36,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.GlobalPermissionOrBuilder;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -743,4 +745,75 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
         conn2.close();
     }
+
+    @Test
+    public void testSettingGuidePostWidth() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTable = generateUniqueName();
+            int guidePostWidth = 20;
+            String ddl =
+                    "CREATE TABLE " + dataTable + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth;
+            conn.createStatement().execute(ddl);
+            assertEquals(20, checkGuidePostWidth(dataTable));
+            String viewName = "V_" + generateUniqueName();
+            ddl =
+                    "CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+
+            // let the view creation go through
+            ddl = "CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable;
+            conn.createStatement().execute(ddl);
+
+            String globalIndex = "GI_" + generateUniqueName();
+            ddl =
+                    "CREATE INDEX " + globalIndex + " ON " + dataTable
+                            + "(a) INCLUDE (b) GUIDE_POSTS_WIDTH = " + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+            String localIndex = "LI_" + generateUniqueName();
+            ddl =
+                    "CREATE LOCAL INDEX " + localIndex + " ON " + dataTable
+                            + "(b) INCLUDE (a) GUIDE_POSTS_WIDTH = " + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+            String viewIndex = "VI_" + generateUniqueName();
+            ddl =
+                    "CREATE LOCAL INDEX " + viewIndex + " ON " + dataTable
+                            + "(b) INCLUDE (a) GUIDE_POSTS_WIDTH = " + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+        }
+    }
+
+    private int checkGuidePostWidth(String tableName) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String query =
+                    "SELECT GUIDE_POSTS_WIDTH FROM SYSTEM.CATALOG WHERE TABLE_NAME = ? AND COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, tableName);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            return rs.getInt(1);
+        }
+    }
+
 }
