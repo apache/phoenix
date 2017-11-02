@@ -73,7 +73,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + table
-                    + " (c1.a) INCLUDE (c2.b) GUIDE_POSTS_WIDTH = " + guidePostWidth);
+                    + " (c1.a) INCLUDE (c2.b) ");
             conn.createStatement().execute("UPDATE STATISTICS " + indexName);
         }
     }
