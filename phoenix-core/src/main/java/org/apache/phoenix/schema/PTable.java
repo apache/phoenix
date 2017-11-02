@@ -705,7 +705,7 @@ public interface PTable extends PMetaDataEntity {
     ImmutableStorageScheme getImmutableStorageScheme();
     QualifierEncodingScheme getEncodingScheme();
     EncodedCQCounter getEncodedCQCounter();
-    boolean useStatsForParallelization();
+    Boolean useStatsForParallelization();
     
     /**
      * Class to help track encoded column qualifier counters per column family.
