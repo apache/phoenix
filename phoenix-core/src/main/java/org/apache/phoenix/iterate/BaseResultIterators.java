@@ -82,6 +82,7 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -98,7 +99,10 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
@@ -491,11 +495,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        this.useStatsForParallelization =
-                table.useStatsForParallelization() == null
-                        ? context.getConnection().getQueryServices().getConfiguration().getBoolean(
-                            USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
-                        : table.useStatsForParallelization();
+        this.useStatsForParallelization = getStatsForParallelizationProp(context, table);
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -1238,4 +1238,35 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     public Long getEstimateInfoTimestamp() {
         return this.estimateInfoTimestamp;
     }
+
+    private boolean getStatsForParallelizationProp(StatementContext context, PTable table) {
+        Boolean useStats = table.useStatsForParallelization();
+        if (useStats != null) {
+            return useStats;
+        }
+        /*
+         * For a view index, we use the property set on view. For indexes on base table, whether
+         * global or local, we use the property set on the base table.
+         */
+        if (table.getType() == PTableType.INDEX) {
+            PhoenixConnection conn = context.getConnection();
+            String parentTableName = table.getParentName().getString();
+            try {
+                PTable parentTable =
+                        conn.getTable(new PTableKey(conn.getTenantId(), parentTableName));
+                useStats = parentTable.useStatsForParallelization();
+                if (useStats != null) {
+                    return useStats;
+                }
+            } catch (TableNotFoundException e) {
+                logger.warn("Unable to find parent table \"" + parentTableName + "\" of table \""
+                        + table.getName().getString()
+                        + "\" to determine USE_STATS_FOR_PARALLELIZATION",
+                    e);
+            }
+        }
+        return context.getConnection().getQueryServices().getConfiguration()
+                .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
+    }
+
 }
