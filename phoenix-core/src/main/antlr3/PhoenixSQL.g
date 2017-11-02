@@ -1071,14 +1071,21 @@ cursor_name returns [CursorName ret]
 
 // TODO: figure out how not repeat this two times
 table_name returns [TableName ret]
-    :   t=identifier {$ret = factory.table(null, t); }
-    |   s=identifier DOT t=identifier {$ret = factory.table(s, t); }
+    :   t=table_identifier {$ret = factory.table(null, t); }
+    |   s=table_identifier DOT t=table_identifier {$ret = factory.table(s, t); }
     ;
 
 // TODO: figure out how not repeat this two times
 from_table_name returns [TableName ret]
-    :   t=identifier {$ret = factory.table(null, t); }
-    |   s=identifier DOT t=identifier {$ret = factory.table(s, t); }
+    :   t=table_identifier {$ret = factory.table(null, t); }
+    |   s=table_identifier DOT t=table_identifier {$ret = factory.table(s, t); }
+    ;
+
+table_identifier returns [String ret]
+    :   c=identifier {
+           if (c.contains(QueryConstants.NAMESPACE_SEPARATOR) ) { throw new RuntimeException("Table or schema name cannot contain colon"); }
+           $ret = c;
+    }
     ;
     
 // The lowest level function, which includes literals, binds, but also parenthesized expressions, functions, and case statements.
