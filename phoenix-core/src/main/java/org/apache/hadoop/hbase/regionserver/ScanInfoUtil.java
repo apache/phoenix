@@ -15,24 +15,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.hadoop.hbase.regionserver;
 
-import java.util.Arrays;
-import java.util.Collection;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 
-import org.apache.phoenix.schema.stats.StatsCollectorIT;
-import org.junit.runners.Parameterized.Parameters;
-
-public class ColumnEncodedMutableTxStatsCollectorIT extends StatsCollectorIT {
-
-    public ColumnEncodedMutableTxStatsCollectorIT(boolean mutable, boolean transactional,
-            boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
+public class ScanInfoUtil {
+    private ScanInfoUtil() {
     }
-
-    @Parameters(name = "mutable = {0}, transactional = {1}, isUserTableNamespaceMapped = {2}, columnEncoded = {3}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(
-            new Boolean[][] { { true, true, false, true }, { true, true, true, true } });
+    
+    public static boolean isKeepDeletedCells(ScanInfo scanInfo) {
+        return scanInfo.getKeepDeletedCells() != KeepDeletedCells.FALSE;
+    }
+    
+    public static ScanInfo cloneScanInfoWithKeepDeletedCells(ScanInfo scanInfo) {
+        return new ScanInfo(scanInfo.getConfiguration(), scanInfo.getFamily(), Math.max(scanInfo.getMinVersions(), 1),
+                    scanInfo.getMaxVersions(), scanInfo.getTtl(), KeepDeletedCells.TRUE,
+                    scanInfo.getTimeToPurgeDeletes(), scanInfo.getComparator());
     }
 }

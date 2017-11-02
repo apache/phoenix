@@ -19,6 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
@@ -68,6 +69,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
 
     public static final long MIN_TABLE_TIMESTAMP = 0;
+    public static final long MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP = 0;
+    public static final String MIGRATION_IN_PROGRESS = "MigrationInProgress";
 
     public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
     public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
@@ -87,7 +90,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0 = MIN_TABLE_TIMESTAMP + 20;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_10_0 = MIN_TABLE_TIMESTAMP + 25;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0 = MIN_TABLE_TIMESTAMP + 27;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0 = MIN_TABLE_TIMESTAMP + 28;
+    // Since there's no upgrade code, keep the version the same as the previous version
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0;
     
@@ -95,6 +99,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // Key is the SYSTEM.CATALOG timestamp for the version and value is the version string.
     private static final NavigableMap<Long, String> TIMESTAMP_VERSION_MAP = new TreeMap<>();
     static {
+        TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP, MIGRATION_IN_PROGRESS);
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, "4.1.x");
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0, "4.2.0");
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1, "4.2.1");
@@ -429,6 +434,14 @@ public abstract class MetaDataProtocol extends MetaDataService {
         }
     }
   
+    public static long getPriorVersion() {
+        Iterator<Long> iterator = TIMESTAMP_VERSION_MAP.descendingKeySet().iterator();
+        if (!iterator.hasNext()) {
+            return -1;
+        }
+        return iterator.next();
+    }
+    
     public static String getVersion(long serverTimestamp) {
         /*
          * It is possible that when clients are trying to run upgrades concurrently, we could be at an intermediate

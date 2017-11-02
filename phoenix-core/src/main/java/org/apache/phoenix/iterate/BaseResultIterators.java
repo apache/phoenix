@@ -151,7 +151,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Long estimateInfoTimestamp;
     private boolean hasGuidePosts;
     private Scan scan;
-    private boolean useStatsForParallelization;
+    private final boolean useStatsForParallelization;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
@@ -492,8 +492,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         initializeScan(plan, perScanLimit, offset, scan);
         this.useStatsForParallelization =
-                context.getConnection().getQueryServices().getConfiguration().getBoolean(
-                    USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
+                table.useStatsForParallelization() == null
+                        ? context.getConnection().getQueryServices().getConfiguration().getBoolean(
+                            USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
+                        : table.useStatsForParallelization();
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -587,15 +589,29 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return context.getConnection().getQueryServices().getTableStats(key);
     }
 
-    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
+    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan,
+            byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation,
+            GuidePostEstimate estimate, Long gpsRows, Long gpsBytes) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
             if (regionLocation.getServerName() != null) {
                 scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
             }
-        	scans.add(scan);
+            if (useStatsForParallelization || crossedRegionBoundary) {
+                scans.add(scan);
+            }
+            if (estimate != null && gpsRows != null) {
+                estimate.rowsEstimate += gpsRows;
+            }
+            if (estimate != null && gpsBytes != null) {
+                estimate.bytesEstimate += gpsBytes;
+            }
         }
-        if (startNewScan && !scans.isEmpty()) {
+        if (startNewScan && !scans.isEmpty() && useStatsForParallelization) {
+            /*
+             * Note that even if region boundary was crossed, if we are not using stats for
+             * parallelization, nothing gets added to the parallel scans.
+             */
             parallelScans.add(scans);
             scans = Lists.newArrayListWithExpectedSize(1);
         }
@@ -655,13 +671,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     newScan.setStopRow(regionInfo.getEndKey());
                 }
             }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation, null, null, null);
             regionIndex++;
         }
         if (!scans.isEmpty()) { // Add any remaining scans
             parallelScans.add(scans);
         }
         return parallelScans;
+    }
+
+    private static class GuidePostEstimate {
+        private long bytesEstimate;
+        private long rowsEstimate;
     }
 
     /**
@@ -723,8 +744,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         DataInput input = null;
         PrefixByteDecoder decoder = null;
         int guideIndex = 0;
-        long estimatedRows = 0;
-        long estimatedSize = 0;
+        GuidePostEstimate estimates = new GuidePostEstimate();
         long estimateTs = Long.MAX_VALUE;
         long minGuidePostTimestamp = Long.MAX_VALUE;
         try {
@@ -765,6 +785,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     endRegionKey = regionInfo.getEndKey();
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
                 }
+                byte[] initialKeyBytes = currentKeyBytes;
                 while (intersectWithGuidePosts && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
                     Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                         false);
@@ -772,12 +793,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
                             regionInfo.getStartKey(), regionInfo.getEndKey(),
                             newScan.getStartRow(), newScan.getStopRow());
-                        estimatedRows += gps.getRowCounts()[guideIndex];
-                        estimatedSize += gps.getByteCounts()[guideIndex];
                     }
-                    if (useStatsForParallelization) {
-                        scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
-                    }
+                    scans =
+                            addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false,
+                                regionLocation, estimates, gps.getRowCounts()[guideIndex],
+                                gps.getByteCounts()[guideIndex]);
                     currentKeyBytes = currentGuidePostBytes;
                     try {
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
@@ -796,12 +816,19 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         intersectWithGuidePosts = false;
                     }
                 }
+                if (!useStatsForParallelization) {
+                    /*
+                     * If we are not using stats for generating parallel scans, we need to reset the
+                     * currentKey back to what it was at the beginning of the loop.
+                     */
+                    currentKeyBytes = initialKeyBytes;
+                }
                 Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
                 if(newScan != null) {
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                         regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
                 }
-                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation, null, null, null);
                 currentKeyBytes = endKey;
                 regionIndex++;
             }
@@ -816,8 +843,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 this.estimatedSize = gps.getByteCounts()[0];
                 this.estimateInfoTimestamp = gps.getGuidePostTimestamps()[0];
             } else if (hasGuidePosts) {
-                this.estimatedRows = estimatedRows;
-                this.estimatedSize = estimatedSize;
+                this.estimatedRows = estimates.rowsEstimate;
+                this.estimatedSize = estimates.bytesEstimate;
                 this.estimateInfoTimestamp = estimateTs;
             } else {
                 this.estimatedRows = null;
@@ -830,7 +857,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         } finally {
             if (stream != null) Closeables.closeQuietly(stream);
         }
-        
         sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
         return parallelScans;
     }

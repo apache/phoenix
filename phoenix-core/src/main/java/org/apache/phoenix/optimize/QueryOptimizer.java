@@ -429,7 +429,7 @@ public class QueryOptimizer {
             
         });
         
-        return bestCandidates;
+        return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
     }
 
     

@@ -79,6 +79,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -163,6 +164,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  */
 
 public abstract class BaseTest {
+    public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
+    
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
     protected static final int DEFAULT_TXN_TIMEOUT_SECONDS = 30;
@@ -440,7 +443,7 @@ public abstract class BaseTest {
      * @return url to be used by clients to connect to the cluster.
      * @throws IOException 
      */
-    protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) throws IOException {
+    protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
             return initMiniCluster(conf, overrideProps);
@@ -538,8 +541,9 @@ public abstract class BaseTest {
      * Initialize the mini cluster using phoenix-test specific configuration.
      * @param overrideProps TODO
      * @return url to be used by clients to connect to the mini cluster.
+     * @throws Exception 
      */
-    private static String initMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
+    private static String initMiniCluster(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
@@ -559,8 +563,9 @@ public abstract class BaseTest {
      * Initialize the cluster in distributed mode
      * @param overrideProps TODO
      * @return url to be used by clients to connect to the mini cluster.
+     * @throws Exception 
      */
-    private static String initClusterDistributedMode(Configuration conf, ReadOnlyProps overrideProps) {
+    private static String initClusterDistributedMode(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         setTestConfigForDistribuedCluster(conf, overrideProps);
         try {
             IntegrationTestingUtility util =  new IntegrationTestingUtility(conf);
@@ -572,13 +577,13 @@ public abstract class BaseTest {
         return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
 
-    private static void setTestConfigForDistribuedCluster(Configuration conf, ReadOnlyProps overrideProps) {
+    private static void setTestConfigForDistribuedCluster(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         setDefaultTestConfig(conf, overrideProps);
     }
     
-    private static void setDefaultTestConfig(Configuration conf, ReadOnlyProps overrideProps) {
+    private static void setDefaultTestConfig(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         ConfigUtil.setReplicationConfigIfAbsent(conf);
-        QueryServices services = new PhoenixTestDriver().getQueryServices();
+        QueryServices services = newTestDriver(overrideProps).getQueryServices();
         for (Entry<String,String> entry : services.getProps()) {
             conf.set(entry.getKey(), entry.getValue());
         }
@@ -594,11 +599,11 @@ public abstract class BaseTest {
         }
     }
     
-    public static Configuration setUpConfigForMiniCluster(Configuration conf) {
+    public static Configuration setUpConfigForMiniCluster(Configuration conf) throws Exception {
         return setUpConfigForMiniCluster(conf, ReadOnlyProps.EMPTY_PROPS);
     }
     
-    public static Configuration setUpConfigForMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
+    public static Configuration setUpConfigForMiniCluster(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         assertNotNull(conf);
         setDefaultTestConfig(conf, overrideProps);
         /*
@@ -625,12 +630,24 @@ public abstract class BaseTest {
         return conf;
     }
 
+    private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
+        PhoenixTestDriver newDriver;
+        String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);
+        if (driverClassName == null) {
+            newDriver = new PhoenixTestDriver(props);
+        } else {
+            Class<?> clazz = Class.forName(driverClassName);
+            Constructor constr = clazz.getConstructor(ReadOnlyProps.class);
+            newDriver = (PhoenixTestDriver)constr.newInstance(props);
+        }
+        return newDriver;
+    }
     /**
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
     public static PhoenixTestDriver initAndRegisterTestDriver(String url, ReadOnlyProps props) throws Exception {
-        PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
+        PhoenixTestDriver newDriver = newTestDriver(props);
         DriverManager.registerDriver(newDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
         if (oldDriver != newDriver) {

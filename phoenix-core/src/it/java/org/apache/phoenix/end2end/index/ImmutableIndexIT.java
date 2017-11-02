@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end.index;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -51,7 +50,6 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -149,18 +147,14 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
             conn.setAutoCommit(true);
             String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
-            try {
-                conn.createStatement().execute(dml);
-                if (!localIndex) {
-                    fail();
-                }
-            } catch (SQLException e) {
-                if (localIndex) {
-                    throw e;
-                }
-                assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(),
-                    e.getErrorCode());
-            }
+            conn.createStatement().execute(dml);
+
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
 
             conn.createStatement().execute("DROP TABLE " + fullTableName);
         }
