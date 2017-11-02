@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -34,6 +33,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -352,7 +352,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     }
 
     @Test
-    public void testSettingUseStatsForQueryPlanProperty() throws Exception {
+    public void testSettingUseStatsForParallelizationProperty() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String table = generateUniqueName();
             String ddl =
@@ -360,20 +360,31 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                             + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR) USE_STATS_FOR_PARALLELIZATION = false";
             conn.createStatement().execute(ddl);
             assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), false);
+
             ddl = "ALTER TABLE " + table + " SET USE_STATS_FOR_PARALLELIZATION = true";
             conn.createStatement().execute(ddl);
             assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), true);
+
+            table = generateUniqueName();
+            ddl =
+                    "CREATE TABLE " + table
+                            + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR) USE_STATS_FOR_PARALLELIZATION = false";
+            conn.createStatement().execute(ddl);
+            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), false);
+
             table = generateUniqueName();
             ddl = "CREATE TABLE " + table + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)";
             conn.createStatement().execute(ddl);
-            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class),
-                DEFAULT_USE_STATS_FOR_PARALLELIZATION);
+
+            // because we didn't set the property, PTable.useStatsForParallelization() should return
+            // null
+            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), null);
         }
     }
 
     private static void assertUseStatsForQueryFlag(String tableName, PhoenixConnection conn,
-            boolean flag) throws TableNotFoundException, SQLException {
-        assertEquals(flag,
+            Boolean expected) throws TableNotFoundException, SQLException {
+        assertEquals(expected,
             conn.unwrap(PhoenixConnection.class).getMetaDataCache()
                     .getTableRef(new PTableKey(null, tableName)).getTable()
                     .useStatsForParallelization());
@@ -383,7 +394,12 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         stmt.setString(1, tableName);
         ResultSet rs = stmt.executeQuery();
         rs.next();
-        assertEquals(flag, rs.getBoolean(1));
+        boolean b = rs.getBoolean(1);
+        if (expected == null) {
+            assertTrue(rs.wasNull());
+        } else {
+            assertEquals(expected, b);
+        }
     }
 
     @Test
@@ -510,8 +526,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             int guidePostWidth = 20;
             String ddl =
                     "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
-                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
-                            + ", USE_STATS_FOR_PARALLELIZATION=false";
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth;
             byte[][] splits =
                     new byte[][] { Bytes.toBytes(102), Bytes.toBytes(105), Bytes.toBytes(108) };
             BaseTest.createTestTable(getUrl(), ddl, splits, null);
@@ -531,18 +546,70 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         List<Object> binds = Lists.newArrayList();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String sql = "SELECT COUNT(*) " + " FROM " + tableName;
+            // We don't have the use stats for parallelization property
+            // set on the table. In this case, we end up defaulting to the
+            // value set in config which is true.
             ResultSet rs = conn.createStatement().executeQuery(sql);
+            // stats are being used for parallelization. So number of scans is higher.
+            assertEquals(14, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getScans().get(0).size());
             assertTrue(rs.next());
             assertEquals(10, rs.getInt(1));
             Estimate info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10l, info.getEstimatedRows());
             assertTrue(info.getEstimateInfoTs() > 0);
+            
+            // Now, let's disable USE_STATS_FOR_PARALLELIZATION on the table
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION = " + false);
+            rs = conn.createStatement().executeQuery(sql);
+            // stats are not being used for parallelization. So number of scans is lower.
+            assertEquals(4, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getScans().get(0).size());
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
+            
+            // assert that the aggregate query on view also works correctly
+            String viewName = "V_" + generateUniqueName();
+            conn.createStatement()
+                    .execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName + " USE_STATS_FOR_PARALLELIZATION = false");
+            sql = "SELECT COUNT(*) FROM " + viewName;
+            rs = conn.createStatement().executeQuery(sql);
+            // stats are not being used for parallelization. So number of scans is lower.
+            assertEquals(4, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                    .getScans().get(0).size());
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
 
             // Now let's make sure that when using stats for parallelization, our estimates
-            // and query results stay the same
+            // and query results stay the same for view and base table
             conn.createStatement().execute(
                 "ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION=true");
+            sql = "SELECT COUNT(*) FROM " + tableName;
+            // query the table
             rs = conn.createStatement().executeQuery(sql);
+            // stats are being used for parallelization. So number of scans is higher.
+            assertEquals(14, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                .getScans().get(0).size());
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            conn.createStatement().execute(
+                "ALTER TABLE " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
+            sql = "SELECT COUNT(*) FROM " + viewName;
+            // query the view
+            rs = conn.createStatement().executeQuery(sql);
+            // stats are not being used for parallelization. So number of scans is higher.
+            assertEquals(14, rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan()
+                .getScans().get(0).size());
             assertTrue(rs.next());
             assertEquals(10, rs.getInt(1));
             info = getByteRowEstimates(conn, sql, binds);
