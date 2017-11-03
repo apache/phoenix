@@ -331,8 +331,9 @@ public class DeleteCompiler {
         @Override
         public MutationState execute() throws SQLException {
             MutationState state = firstPlan.execute();
+            statement.getConnection().getMutationState().join(state);
             for (MutationPlan plan : plans.subList(1, plans.size())) {
-                plan.execute();
+                statement.getConnection().getMutationState().join(plan.execute());
             }
             return state;
         }
@@ -564,7 +565,7 @@ public class DeleteCompiler {
                         while (iterator.hasNext()) {
                             mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                         }
-                        return new MutationState(context.getCurrentTable(), mutation, 0, maxSize, maxSizeBytes, connection);
+                        return new MutationState(plan.getTableRef(), mutation, 0, maxSize, maxSizeBytes, connection);
                     }
     
                     @Override
