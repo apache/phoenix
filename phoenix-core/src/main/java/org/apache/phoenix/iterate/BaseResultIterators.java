@@ -1246,9 +1246,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
         /*
          * For a view index, we use the property set on view. For indexes on base table, whether
-         * global or local, we use the property set on the base table.
+         * global or local, we use the property set on the base table. Null check needed when
+         * dropping local indexes.
          */
-        if (table.getType() == PTableType.INDEX) {
+        if (table.getType() == PTableType.INDEX && table.getParentName() != null) {
             PhoenixConnection conn = context.getConnection();
             String parentTableName = table.getParentName().getString();
             try {
