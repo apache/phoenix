@@ -134,6 +134,7 @@
                   <include>io.dropwizard.metrics:metrics-core</include>
                   <include>org.apache.thrift:libthrift</include>
                   <include>com.clearspring.analytics:stream</include>
+                  <include>com.salesforce.i18n:i18n-util</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>

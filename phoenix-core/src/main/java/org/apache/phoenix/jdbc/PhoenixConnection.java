@@ -105,6 +105,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
@@ -116,6 +117,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.VarBinaryFormatter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -336,6 +338,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         formatters.put(PUnsignedTimestamp.INSTANCE, timestampFormat);
         formatters.put(PDecimal.INSTANCE,
                 FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
+        formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
         // We do not limit the metaData on a connection less than the global
         // one,
         // as there's not much that will be cached here.
