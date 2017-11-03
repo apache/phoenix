@@ -81,7 +81,7 @@ cp bin/* $DIR_BIN;
 cp -R $DIR_PHERF_CONF $DIR_BIN;
 
 # Copy release docs
-cp README $DIR_REL_BIN_PATH;
+cp README* $DIR_REL_BIN_PATH;
 cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
 # Copy examples
