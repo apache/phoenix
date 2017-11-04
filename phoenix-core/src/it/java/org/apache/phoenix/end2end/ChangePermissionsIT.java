@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -144,7 +145,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
             verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
         } else {
-            verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, "\"" + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"", true), superUser1);
         }
 
         // Create new table. Create indexes, views and view indexes on top of it. Verify the contents by querying it
@@ -235,7 +236,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
             verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
         } else {
-            verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, "\"" + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"", true), superUser1);
         }
 
         // Create MultiTenant Table (View Index Table should be automatically created)
