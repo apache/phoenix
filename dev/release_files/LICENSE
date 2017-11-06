@@ -254,6 +254,8 @@ Janino Compiler (https://github.com/janino-compiler/janino)
 
 Hamcrest-core 1.3 (http://www.hamcrest.org) Copyright (c) 2000-2006, www.hamcrest.org
 
+i18n-util 1.0.1 (https://github.com/salesforce/i18n-util) Copyright (c) 2017, Salesforce.com, Inc. All rights reserved.
+
 ---
 
 This product bundles the following products which are licensed with
