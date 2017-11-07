@@ -91,8 +91,23 @@ public class QueryOptimizer {
     }
     
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        List<QueryPlan>plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, true);
-        return plans.get(0);
+        List<QueryPlan> plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, false);
+        if (plans.size() == 1) {
+            return plans.get(0);
+        }
+
+        // Get the best plan based on their costs. Costs will be ZERO if stats are not
+        // available, thus the first plan will be returned.
+        Cost minCost = null;
+        QueryPlan bestPlan = null;
+        for (QueryPlan plan : plans) {
+            Cost cost = plan.getCost();
+            if (minCost == null || cost.compareTo(minCost) < 0) {
+                minCost = cost;
+                bestPlan = plan;
+            }
+        }
+        return bestPlan;
     }
     
     public List<QueryPlan> getBestPlan(QueryPlan dataPlan, PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
@@ -428,7 +443,16 @@ public class QueryOptimizer {
             }
             
         });
-        
+
+        // Add all the remaining plans to the list for cost-based decision.
+        if (!stopAtBestPlan) {
+            for (QueryPlan plan : stillCandidates) {
+                if (!bestCandidates.contains(plan)) {
+                    bestCandidates.add(plan);
+                }
+            }
+        }
+
         return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
     }
 

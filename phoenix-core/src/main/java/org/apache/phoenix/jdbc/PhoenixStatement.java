@@ -91,6 +91,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
@@ -642,6 +643,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 @Override
                 public long getEstimatedSize() {
                     return 0;
+                }
+
+                @Override
+                public Cost getCost() {
+                    return Cost.ZERO;
                 }
 
                 @Override

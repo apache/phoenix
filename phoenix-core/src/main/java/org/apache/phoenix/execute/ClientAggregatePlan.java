@@ -56,12 +56,14 @@ import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.UngroupedAggregatingResultIterator;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 import com.google.common.collect.Lists;
@@ -84,6 +86,25 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // another one.
         this.serverAggregators = ServerAggregators.deserialize(context.getScan()
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration());
+    }
+
+    @Override
+    public Cost getCost() throws SQLException {
+        Long byteCount = getEstimatedBytesToScan();
+        if (byteCount == null) {
+            return Cost.ZERO;
+        }
+
+        int parallelLevel = 1;
+        Cost cost = CostUtil.estimateAggregateCost(byteCount,
+                !groupBy.isUngroupedAggregate(), clientAggregators.getEstimatedByteSize(), parallelLevel);
+        if (!orderBy.getOrderByExpressions().isEmpty()) {
+            double outputBytes = CostUtil.estimateAggregateOutputBytes(
+                    byteCount, !groupBy.isUngroupedAggregate(), clientAggregators.getEstimatedByteSize());
+            Cost orderByCost = CostUtil.estimateOrderByCost(outputBytes, parallelLevel);
+            cost = cost.plus(orderByCost);
+        }
+        return super.getCost().plus(cost);
     }
 
     @Override
