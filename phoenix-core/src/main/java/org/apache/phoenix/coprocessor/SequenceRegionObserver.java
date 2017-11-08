@@ -89,15 +89,6 @@ public class SequenceRegionObserver implements RegionObserver {
                         QueryConstants.EMPTY_COLUMN_BYTES, timestamp, errorCodeBuf)));
     }
     
-    private static void acquireLock(Region region, byte[] key, List<RowLock> locks)
-        throws IOException {
-        RowLock rowLock = region.getRowLock(key, false);
-        if (rowLock == null) {
-            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
-        }
-        locks.add(rowLock);
-    }
-    
     /**
      * Use PreIncrement hook of BaseRegionObserver to overcome deficiencies in Increment
      * implementation (HBASE-10254):
@@ -121,7 +112,7 @@ public class SequenceRegionObserver implements RegionObserver {
         TimeRange tr = increment.getTimeRange();
         region.startRegionOperation();
         try {
-            acquireLock(region, row, locks);
+            ServerUtil.acquireLock(region, row, locks);
             try {
                 long maxTimestamp = tr.getMax();
                 boolean validateOnly = true;
@@ -278,11 +269,11 @@ public class SequenceRegionObserver implements RegionObserver {
                 }
                 // update the KeyValues on the server
                 Mutation[] mutations = new Mutation[]{put};
-                region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
+                region.batchMutate(mutations);
                 // return a Result with the updated KeyValues
                 return Result.create(cells);
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
             ServerUtil.throwIOException("Increment of sequence " + Bytes.toStringBinary(row), t);
@@ -378,7 +369,7 @@ public class SequenceRegionObserver implements RegionObserver {
         List<RowLock> locks = Lists.newArrayList();
         region.startRegionOperation();
         try {
-            acquireLock(region, row, locks);
+            ServerUtil.acquireLock(region, row, locks);
             try {
                 byte[] family = CellUtil.cloneFamily(keyValue);
                 byte[] qualifier = CellUtil.cloneQualifier(keyValue);
@@ -428,7 +419,7 @@ public class SequenceRegionObserver implements RegionObserver {
                     }
                 }
                 Mutation[] mutations = new Mutation[]{m};
-                region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
+                region.batchMutate(mutations);
                 long serverTimestamp = MetaDataUtil.getClientTimeStamp(m);
                 // Return result with single KeyValue. The only piece of information
                 // the client cares about is the timestamp, which is the timestamp of
@@ -436,7 +427,7 @@ public class SequenceRegionObserver implements RegionObserver {
                 return Result.create(Collections.singletonList(
                   (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
             ServerUtil.throwIOException("Increment of sequence " + Bytes.toStringBinary(row), t);

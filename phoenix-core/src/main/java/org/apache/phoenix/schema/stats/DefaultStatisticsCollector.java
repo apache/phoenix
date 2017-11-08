@@ -203,7 +203,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 // families when we're collecting stats for a local index.
                 boolean collectingForLocalIndex = scan != null && !scan.getFamilyMap().isEmpty() && MetaDataUtil.isLocalIndexFamily(scan.getFamilyMap().keySet().iterator().next());
                 for (Store store : region.getStores()) {
-                    ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
+                    ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getColumnFamilyDescriptor().getName());
                     boolean isLocalIndexStore = MetaDataUtil.isLocalIndexFamily(cfKey);
                     if (isLocalIndexStore != collectingForLocalIndex) {
                         continue;

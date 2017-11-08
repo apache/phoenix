@@ -1405,7 +1405,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // Place a lock using key for the table to be created
             byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             try {
-                acquireLock(region, tableKey, locks);
+                ServerUtil.acquireLock(region, tableKey, locks);
 
                 // If the table key resides outside the region, return without doing anything
                 MetaDataMutationResult result = checkTableKeyInRegion(tableKey, region);
@@ -1423,7 +1423,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // For an index on view, the view header row needs to be locked. 
                     result = checkTableKeyInRegion(parentTableKey, region);
                     if (result == null) {
-                        acquireLock(region, parentTableKey, locks);
+                        ServerUtil.acquireLock(region, parentTableKey, locks);
                         parentCacheKey = new ImmutableBytesPtr(parentTableKey);
                         parentTable = loadTable(env, parentTableKey, parentCacheKey, clientTimeStamp,
                                 clientTimeStamp, clientVersion);
@@ -1632,7 +1632,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(builder.build());
                 return;
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
             logger.error("createTable failed", t);
@@ -1646,16 +1646,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= configuration
             .getInt(QueryServices.MAX_INDEXES_PER_TABLE,
                 QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
-    }
-
-    private static RowLock acquireLock(Region region, byte[] key, List<RowLock> locks)
-        throws IOException {
-        RowLock rowLock = region.getRowLock(key, false);
-        if (rowLock == null) {
-            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
-        }
-        locks.add(rowLock);
-        return rowLock;
     }
 
     private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
@@ -1883,7 +1873,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(MetaDataMutationResult.toProto(result));
                 return;
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
           logger.error("dropTable failed", t);
@@ -1962,7 +1952,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
                                 Delete delete = new Delete(viewKey, clientTimeStamp);
                                 rowsToDelete.add(delete);
-                                acquireLock(region, viewKey, locks);
+                                ServerUtil.acquireLock(region, viewKey, locks);
                                 MetaDataMutationResult result = doDropTable(viewKey, viewTenantId, viewSchemaName,
                                         viewName, null, PTableType.VIEW, rowsToDelete, invalidateList, locks,
                                         tableNamesToDelete, sharedTablesToDelete, false, clientVersion);
@@ -2025,7 +2015,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // of the client.
             Delete delete = new Delete(indexKey, clientTimeStamp);
             rowsToDelete.add(delete);
-            acquireLock(region, indexKey, locks);
+            ServerUtil.acquireLock(region, indexKey, locks);
             MetaDataMutationResult result =
                     doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX,
                         rowsToDelete, invalidateList, locks, tableNamesToDelete, sharedTablesToDelete, false, clientVersion);
@@ -2061,7 +2051,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             List<RowLock> locks = Lists.newArrayList();
             try {
-                acquireLock(region, key, locks);
+                ServerUtil.acquireLock(region, key, locks);
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
@@ -2155,7 +2145,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, table);
                 }
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
             ServerUtil.throwIOException(SchemaUtil.getTableName(schemaName, tableName), t);
@@ -2356,7 +2346,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] viewKey = SchemaUtil.getTableKey(tenantId, schema, table);
             
             // lock the rows corresponding to views so that no other thread can modify the view meta-data
-            RowLock viewRowLock = acquireLock(region, viewKey, locks);
+            RowLock viewRowLock = ServerUtil.acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock, clientVersion);
             
             ColumnOrdinalPositionUpdateList ordinalPositionList = new ColumnOrdinalPositionUpdateList();
@@ -2681,7 +2671,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
             // lock the rows corresponding to views so that no other thread can modify the view
             // meta-data
-            RowLock viewRowLock = acquireLock(region, viewKey, locks);
+            RowLock viewRowLock = ServerUtil.acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock, clientVersion);
 
             ColumnOrdinalPositionUpdateList ordinalPositionList =
@@ -3223,10 +3213,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if(functionsAvailable.size() == numFunctions) return functionsAvailable;
             return null;
         } finally {
-            for (Region.RowLock lock : rowLocks) {
-                lock.release();
-            }
-            rowLocks.clear();
+            ServerUtil.releaseRowLocks(rowLocks);
         }
     }
 
@@ -3380,7 +3367,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // Since we're dropping the index, lock it to ensure
                 // that a change in index state doesn't
                 // occur while we're dropping it.
-                acquireLock(region, indexKey, locks);
+                ServerUtil.acquireLock(region, indexKey, locks);
                 // Drop the index table. The doDropTable will expand
                 // this to all of the table rows and invalidate the
                 // index table
@@ -3772,7 +3759,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         long clientTimeStamp = request.getClientTimestamp();
         List<RowLock> locks = Lists.newArrayList();
         try {
-            acquireLock(region, lockKey, locks);
+            ServerUtil.acquireLock(region, lockKey, locks);
             // Get as of latest timestamp so we can detect if we have a
             // newer schema that already
             // exists without making an additional query
@@ -3802,7 +3789,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             done.run(builder.build());
             return;
         } finally {
-            region.releaseRowLocks(locks);
+            ServerUtil.releaseRowLocks(locks);
         }
     }
 
@@ -3876,7 +3863,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(functionMetaData);
             try {
-                acquireLock(region, lockKey, locks);
+                ServerUtil.acquireLock(region, lockKey, locks);
                 // Get as of latest timestamp so we can detect if we have a newer function that already
                 // exists without making an additional query
                 ImmutableBytesPtr cacheKey = new FunctionBytesPtr(lockKey);
@@ -3919,7 +3906,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(builder.build());
                 return;
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
           logger.error("createFunction failed", t);
@@ -3948,7 +3935,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(functionMetaData);
             try {
-                acquireLock(region, lockKey, locks);
+                ServerUtil.acquireLock(region, lockKey, locks);
                 List<byte[]> keys = new ArrayList<byte[]>(1);
                 keys.add(lockKey);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
@@ -3971,7 +3958,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(MetaDataMutationResult.toProto(result));
                 return;
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
           logger.error("dropFunction failed", t);
@@ -4046,7 +4033,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(schemaMutations);
             try {
-                acquireLock(region, lockKey, locks);
+                ServerUtil.acquireLock(region, lockKey, locks);
                 // Get as of latest timestamp so we can detect if we have a newer schema that already exists without
                 // making an additional query
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(lockKey);
@@ -4086,7 +4073,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(builder.build());
                 return;
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
             logger.error("Creating the schema" + schemaName + "failed", t);
@@ -4110,7 +4097,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(schemaMetaData);
             try {
-                acquireLock(region, lockKey, locks);
+                ServerUtil.acquireLock(region, lockKey, locks);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>(1);
                 result = doDropSchema(clientTimeStamp, schemaName, lockKey, schemaMetaData, invalidateList);
                 if (result.getMutationCode() != MutationCode.SCHEMA_ALREADY_EXISTS) {
@@ -4129,7 +4116,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(MetaDataMutationResult.toProto(result));
                 return;
             } finally {
-                region.releaseRowLocks(locks);
+                ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
             logger.error("drop schema failed:", t);

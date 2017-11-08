@@ -335,8 +335,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           if (!mutations.isEmpty()) {
               Region region = e.getEnvironment().getRegion();
               // Otherwise, submit the mutations directly here
-                region.batchMutate(mutations.toArray(new Mutation[0]), HConstants.NO_NONCE,
-                    HConstants.NO_NONCE);
+                region.batchMutate(mutations.toArray(new Mutation[0]));
           }
           return Result.EMPTY_RESULT;
       } catch (Throwable t) {

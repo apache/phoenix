@@ -711,9 +711,7 @@ public class IndexUtil {
                 m.setDurability(Durability.SKIP_WAL);
             }
         }
-        region.batchMutate(
-            mutations.toArray(new Mutation[mutations.size()]),
-            HConstants.NO_NONCE, HConstants.NO_NONCE);
+        region.batchMutate(mutations.toArray(new Mutation[mutations.size()]));
     }
     
     public static MetaDataMutationResult updateIndexState(String indexTableName, long minTimeStamp,

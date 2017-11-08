@@ -183,15 +183,14 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     CoveredColumnIndexSpecifierBuilder builder = new CoveredColumnIndexSpecifierBuilder();
     builder.addIndexGroup(fam1);
     builder.build(htd);
-
-    // create the region + its WAL
-    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd); // FIXME: Uses private type
-    region0.close();
-    region0.getWAL().close();
-
     WALFactory walFactory = new WALFactory(this.conf, null, "localhost,1234");
 
     WAL wal = createWAL(this.conf, walFactory);
+    // create the region + its WAL
+    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal); // FIXME: Uses private type
+    region0.close();
+    region0.getWAL().close();
+
     HRegionServer mockRS = Mockito.mock(HRegionServer.class);
     // mock out some of the internals of the RSS, so we can run CPs
     when(mockRS.getWAL(null)).thenReturn(wal);
@@ -202,7 +201,6 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     when(mockRS.getServerName()).thenReturn(mockServerName);
     HRegion region = spy(new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS));
     region.initialize();
-    when(region.getSequenceId()).thenReturn(0l);
 
 
     //make an attempted write to the primary that should also be indexed

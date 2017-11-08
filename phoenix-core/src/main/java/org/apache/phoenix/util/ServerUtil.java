@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
@@ -234,4 +236,22 @@ public class ServerUtil {
                     endKey) < 0));
     }
 
+    public static RowLock acquireLock(Region region, byte[] key, List<RowLock> locks)
+            throws IOException {
+        RowLock rowLock = region.getRowLock(key, false);
+        if (rowLock == null) {
+            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
+        }
+        locks.add(rowLock);
+        return rowLock;
+    }
+
+    public static void releaseRowLocks(List<RowLock> rowLocks) {
+        if (rowLocks != null) {
+            for (RowLock rowLock : rowLocks) {
+                rowLock.release();
+            }
+            rowLocks.clear();
+        }
+    }
 }

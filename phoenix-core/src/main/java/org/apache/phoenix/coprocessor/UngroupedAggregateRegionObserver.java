@@ -54,12 +54,14 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -252,7 +254,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       }
       // TODO: should we use the one that is all or none?
       logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
-      region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
+      region.batchMutate(mutations.toArray(mutationArray));
     }
 
     private void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, boolean useIndexProto) {
@@ -269,14 +271,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private void commitBatchWithHTable(HTable table, List<Mutation> mutations) throws IOException {
+    private void commitBatchWithHTable(Table table, List<Mutation> mutations) throws IOException {
       if (mutations.isEmpty()) {
           return;
       }
 
         logger.debug("Committing batch of " + mutations.size() + " mutations for " + table);
         try {
-            table.batch(mutations);
+            table.batch(mutations, null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
@@ -412,13 +414,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] deleteCQ = null;
         byte[] deleteCF = null;
         byte[] emptyCF = null;
-        HTable targetHTable = null;
+        Table targetHTable = null;
         boolean isPKChanging = false;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            targetHTable = new HTable(upsertSelectConfig, projectedTable.getPhysicalName().getBytes());
+            targetHTable =
+                    ConnectionFactory.createConnection(upsertSelectConfig).getTable(
+                        TableName.valueOf(projectedTable.getPhysicalName().getBytes()));
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
             isPKChanging = ExpressionUtil.isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
@@ -457,7 +461,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         MutationList mutations = new MutationList();
         boolean needToWrite = false;
         Configuration conf = env.getConfiguration();
-        long flushSize = region.getTableDesc().getMemStoreFlushSize();
+        long flushSize = region.getTableDescriptor().getMemStoreFlushSize();
 
         if (flushSize <= 0) {
             flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
@@ -858,7 +862,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     private void commit(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemStoreSize,
-            byte[] indexMaintainersPtr, byte[] txState, HTable targetHTable, boolean useIndexProto,
+            byte[] indexMaintainersPtr, byte[] txState, Table targetHTable, boolean useIndexProto,
                         boolean isPKChanging)
             throws IOException {
         List<Mutation> localRegionMutations = Lists.newArrayList();
@@ -872,7 +876,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         remoteRegionMutations.clear();
     }
 
-    private void separateLocalAndRemoteMutations(HTable targetHTable, Region region, List<Mutation> mutations,
+    private void separateLocalAndRemoteMutations(Table targetHTable, Region region, List<Mutation> mutations,
                                                  List<Mutation> localRegionMutations, List<Mutation> remoteRegionMutations,
                                                  boolean isPKChanging){
         boolean areMutationsInSameTable = areMutationsInSameTable(targetHTable, region);
@@ -894,8 +898,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private boolean areMutationsInSameTable(HTable targetHTable, Region region) {
-        return (targetHTable == null || Bytes.compareTo(targetHTable.getTableName(),
+    private boolean areMutationsInSameTable(Table targetHTable, Region region) {
+        return (targetHTable == null || Bytes.compareTo(targetHTable.getName(),
                 region.getTableDesc().getTableName().getName()) == 0);
     }
 
@@ -1074,8 +1078,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
-                                    HConstants.NO_NONCE);
+                            region.batchMutate(mutations.toArray(new Mutation[mutations.size()]));
                             uuidValue = ServerCacheClient.generateId();
                             mutations.clear();
                         }
@@ -1084,8 +1087,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE);
+                    region.batchMutate(mutations.toArray(new Mutation[mutations.size()]));
                 }
             }
         } catch (IOException e) {
