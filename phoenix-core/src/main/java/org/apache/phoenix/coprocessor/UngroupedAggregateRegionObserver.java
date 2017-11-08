@@ -36,6 +36,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
@@ -53,22 +54,19 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.CoprocessorHConnection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -81,7 +79,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
@@ -98,7 +95,6 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -136,7 +132,6 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -148,9 +143,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Predicate;
 import com.google.common.base.Throwables;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -162,7 +155,7 @@ import com.google.common.primitives.Ints;
  *
  * @since 0.1
  */
-public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
+public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver implements RegionCoprocessor {
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
     public static final String DELETE_AGG = "DeleteAgg";
@@ -206,8 +199,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
 
     @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
+
+    
+    @Override
     public void start(CoprocessorEnvironment e) throws IOException {
-        super.start(e);
         // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
         // be able to get a single backing buffer for a KeyValue.
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
@@ -243,7 +241,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         Mutation[] mutationArray = new Mutation[mutations.size()];
       // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
       // flush happen which decrease the memstore size and then writes allowed on the region.
-      for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
+      for (int i = 0; region.getMemStoreSize() > blockingMemstoreSize && i < 30; i++) {
           try {
               checkForRegionClosing();
               Thread.sleep(100);
@@ -712,7 +710,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 Delete delete = new Delete(results.get(0).getRowArray(),
                                     results.get(0).getRowOffset(),
                                     results.get(0).getRowLength());
-                                delete.deleteColumns(deleteCF,  deleteCQ, ts);
+                                delete.addColumn(deleteCF,  deleteCQ, ts);
                                 // force tephra to ignore this deletes
                                 delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                                 mutations.add(delete);
@@ -902,8 +900,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-            final InternalScanner scanner, final ScanType scanType) throws IOException {
+    public InternalScanner preCompact(
+            org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            InternalScanner scanner, ScanType scanType,
+            org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker tracker,
+            CompactionRequest request) throws IOException {
         // Compaction and split upcalls run with the effective user context of the requesting user.
         // This will lead to failure of cross cluster RPC if the effective user is not
         // the login user. Switch to the login user context to ensure we have the expected
@@ -918,7 +919,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
                         StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
                             c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
-                            store.getFamily().getName());
+                            store.getColumnFamilyDescriptor().getName());
                         internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
                     } catch (IOException e) {
                         // If we can't reach the stats table, don't interrupt the normal
@@ -934,8 +935,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-            final StoreFile resultFile, CompactionRequest request) throws IOException {
+    public void postCompact(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            Store store, StoreFile resultFile,
+            org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker tracker,
+            CompactionRequest request) throws IOException {
+    
         // If we're compacting all files, then delete markers are removed
         // and we must permanently disable an index that needs to be
         // partially rebuild because we're potentially losing the information

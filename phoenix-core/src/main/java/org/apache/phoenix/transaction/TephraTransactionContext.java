@@ -24,17 +24,19 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.tephra.Transaction;
+import org.apache.tephra.Transaction.VisibilityLevel;
 import org.apache.tephra.TransactionAware;
 import org.apache.tephra.TransactionCodec;
 import org.apache.tephra.TransactionConflictException;
@@ -42,20 +44,19 @@ import org.apache.tephra.TransactionContext;
 import org.apache.tephra.TransactionFailureException;
 import org.apache.tephra.TransactionManager;
 import org.apache.tephra.TransactionSystemClient;
-import org.apache.tephra.Transaction.VisibilityLevel;
 import org.apache.tephra.TxConstants;
 import org.apache.tephra.distributed.PooledClientProvider;
+import org.apache.tephra.distributed.TransactionService;
 import org.apache.tephra.distributed.TransactionServiceClient;
 import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
 import org.apache.tephra.inmemory.InMemoryTxSystemClient;
+import org.apache.tephra.metrics.TxMetricsCollector;
+import org.apache.tephra.persist.HDFSTransactionStateStorage;
+import org.apache.tephra.snapshot.SnapshotCodecProvider;
 import org.apache.tephra.util.TxUtils;
 import org.apache.tephra.visibility.FenceWait;
 import org.apache.tephra.visibility.VisibilityFence;
 import org.apache.tephra.zookeeper.TephraZKClientService;
-import org.apache.tephra.distributed.TransactionService;
-import org.apache.tephra.metrics.TxMetricsCollector;
-import org.apache.tephra.persist.HDFSTransactionStateStorage;
-import org.apache.tephra.snapshot.SnapshotCodecProvider;
 import org.apache.twill.discovery.DiscoveryService;
 import org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.twill.internal.utils.Networks;
@@ -63,12 +64,11 @@ import org.apache.twill.zookeeper.RetryStrategies;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.apache.twill.zookeeper.ZKClientServices;
 import org.apache.twill.zookeeper.ZKClients;
+import org.slf4j.Logger;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.inject.util.Providers;
-
-import org.slf4j.Logger;
 
 public class TephraTransactionContext implements PhoenixTransactionContext {
 
@@ -423,7 +423,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public BaseRegionObserver getCoProcessor() {
+    public RegionObserver getCoProcessor() {
         return new TransactionProcessor();
     }
 

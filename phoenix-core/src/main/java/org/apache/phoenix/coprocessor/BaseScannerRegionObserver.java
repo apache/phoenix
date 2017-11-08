@@ -21,13 +21,12 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -50,7 +49,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 
-abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
+abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -134,11 +133,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
     protected QualifierEncodingScheme encodingScheme;
     protected boolean useNewValueColumnQualifier;
-
-    @Override
-    public void start(CoprocessorEnvironment e) throws IOException {
-        super.start(e);
-    }
 
     /**
      * Used by logger to identify coprocessor

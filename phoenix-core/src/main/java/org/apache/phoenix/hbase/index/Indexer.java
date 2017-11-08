@@ -24,7 +24,6 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -32,6 +31,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -50,23 +50,18 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.ScanType;
-import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
@@ -119,7 +114,7 @@ import com.google.common.collect.Multimap;
  * Phoenix always does batch mutations.
  * <p>
  */
-public class Indexer extends BaseRegionObserver {
+public class Indexer implements RegionObserver, RegionCoprocessor {
 
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
@@ -199,6 +194,11 @@ public class Indexer extends BaseRegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
 
   @Override
+  public Optional<RegionObserver> getRegionObserver() {
+    return Optional.of(this);
+  }
+
+  @Override
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
@@ -266,7 +266,6 @@ public class Indexer extends BaseRegionObserver {
         }
       } catch (NoSuchMethodError ex) {
           disabled = true;
-          super.start(e);
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
       }
   }
@@ -301,7 +300,6 @@ public class Indexer extends BaseRegionObserver {
       return;
     }
     if (this.disabled) {
-        super.stop(e);
         return;
       }
     this.stopped = true;
@@ -362,7 +360,6 @@ public class Indexer extends BaseRegionObserver {
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
       if (this.disabled) {
-          super.preBatchMutate(c, miniBatchOp);
           return;
       }
       long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -578,7 +575,6 @@ public class Indexer extends BaseRegionObserver {
   public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
       if (this.disabled) {
-          super.postBatchMutateIndispensably(c, miniBatchOp, success);
           return;
       }
       long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -755,29 +751,6 @@ public class Indexer extends BaseRegionObserver {
       }
   }
 
-  /**
-   * Create a custom {@link InternalScanner} for a compaction that tracks the versions of rows that
-   * are removed so we can clean then up from the the index table(s).
-   * <p>
-   * This is not yet implemented - its not clear if we should even mess around with the Index table
-   * for these rows as those points still existed. TODO: v2 of indexing
-   */
-  @Override
-  public InternalScanner preCompactScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-          final Store store, final List<? extends KeyValueScanner> scanners, final ScanType scanType,
-          final long earliestPutTs, final InternalScanner s) throws IOException {
-      // Compaction and split upcalls run with the effective user context of the requesting user.
-      // This will lead to failure of cross cluster RPC if the effective user is not
-      // the login user. Switch to the login user context to ensure we have the expected
-      // security context.
-      // NOTE: Not necessary here at this time but leave in place to document this critical detail.
-      return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-          @Override
-          public InternalScanner run() throws Exception {
-              return Indexer.super.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s);
-          }
-      });
-  }
 
   /**
    * Exposed for testing!

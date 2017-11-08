@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -40,12 +41,12 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -95,7 +96,7 @@ import com.google.common.collect.Maps;
  * to SYSTEM.TABLE.
  */
 @SuppressWarnings("deprecation")
-public class MetaDataRegionObserver extends BaseRegionObserver {
+public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
     public static final String REBUILD_INDEX_APPEND_TO_URL_STRING = "REBUILDINDEX";
     private static final byte[] SYSTEM_CATALOG_KEY = SchemaUtil.getTableKey(
@@ -116,6 +117,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             boolean abortRequested) {
         executor.shutdownNow();
         GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
+    }
+    
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
     }
 
     @Override

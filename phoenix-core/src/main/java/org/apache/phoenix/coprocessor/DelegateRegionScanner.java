@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 
@@ -30,11 +30,6 @@ public class DelegateRegionScanner implements RegionScanner {
 
     public DelegateRegionScanner(RegionScanner scanner) {
         this.delegate = scanner;
-    }
-
-    @Override
-    public HRegionInfo getRegionInfo() {
-        return delegate.getRegionInfo();
     }
 
     @Override
@@ -85,5 +80,16 @@ public class DelegateRegionScanner implements RegionScanner {
     @Override
     public int getBatch() {
         return delegate.getBatch();
+    }
+
+    @Override
+    public void shipped() throws IOException {
+        delegate.shipped();
+        
+    }
+
+    @Override
+    public RegionInfo getRegionInfo() {
+        return delegate.getRegionInfo();
     }
 }

@@ -33,6 +33,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
@@ -45,14 +46,14 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
@@ -101,7 +102,7 @@ import com.google.common.primitives.Longs;
  * bit simpler than the non transactional case. For example, there's no need to muck with the WAL, as failure scenarios
  * are handled by aborting the transaction.
  */
-public class PhoenixTransactionalIndexer extends BaseRegionObserver {
+public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoprocessor {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTransactionalIndexer.class);
 
@@ -117,7 +118,12 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     private PhoenixIndexCodec codec;
     private IndexWriter writer;
     private boolean stopped;
-
+    
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
+    
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)e;

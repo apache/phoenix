@@ -34,9 +34,9 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
@@ -73,7 +73,7 @@ import com.google.common.collect.Lists;
  * 
  * @since 3.0.0
  */
-public class SequenceRegionObserver extends BaseRegionObserver {
+public class SequenceRegionObserver implements RegionObserver {
     public static final String OPERATION_ATTRIB = "SEQUENCE_OPERATION";
     public static final String MAX_TIMERANGE_ATTRIB = "MAX_TIMERANGE";
     public static final String CURRENT_VALUE_ATTRIB = "CURRENT_VALUE";
@@ -399,7 +399,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 Mutation m = null;
                 switch (op) {
                 case RETURN_SEQUENCE:
-                    KeyValue currentValueKV = result.raw()[0];
+                    KeyValue currentValueKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.rawCells()[0]);
                     long expectedValue = PLong.INSTANCE.getCodec().decodeLong(append.getAttribute(CURRENT_VALUE_ATTRIB), 0, SortOrder.getDefault());
                     long value = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(),
                       currentValueKV.getValueOffset(), SortOrder.getDefault());
