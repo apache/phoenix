@@ -21,6 +21,9 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Arrays;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -43,6 +46,7 @@ import org.apache.phoenix.pig.util.TableSchemaParserFunction;
 import org.apache.phoenix.pig.util.TypeUtil;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.StoreFuncInterface;
@@ -87,14 +91,15 @@ import org.slf4j.LoggerFactory;
 public class PhoenixHBaseStorage implements StoreFuncInterface {
 
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixHBaseStorage.class);
-    
+    private static final Set<String> PROPS_TO_IGNORE = new HashSet<>(Arrays.asList(PhoenixRuntime.CURRENT_SCN_ATTRIB));
+
     private Configuration config;
     private RecordWriter<NullWritable, PhoenixRecordWritable> writer;
     private List<ColumnInfo> columnInfo = null;
     private String contextSignature = null;
     private ResourceSchema schema;  
     private long batchSize;
-    private final PhoenixOutputFormat outputFormat = new PhoenixOutputFormat();
+    private final PhoenixOutputFormat outputFormat = new PhoenixOutputFormat<PhoenixRecordWritable>(PROPS_TO_IGNORE);
     // Set of options permitted
     private final static Options validOptions = new Options();
     private final static CommandLineParser parser = new GnuParser();
@@ -228,5 +233,4 @@ public class PhoenixHBaseStorage implements StoreFuncInterface {
         schema = s;
         getUDFProperties().setProperty(contextSignature + SCHEMA, ObjectSerializer.serialize(schema));
     }
-
 }
