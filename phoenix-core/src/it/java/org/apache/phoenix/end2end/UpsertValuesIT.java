@@ -37,10 +37,10 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -662,7 +662,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         }
         // Issue a raw hbase scan and assert that key values have the expected column qualifiers.
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            HTableInterface table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName));
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName));
             ResultScanner scanner = table.getScanner(new Scan());
             Result next = scanner.next();
             assertTrue(next.containsColumn(Bytes.toBytes("CF1"), PInteger.INSTANCE.toBytes(1)));

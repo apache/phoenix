@@ -34,7 +34,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -747,7 +747,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            HTableInterface htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
+            Table htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
             assertFalse(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
             assertFalse(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertFalse(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());

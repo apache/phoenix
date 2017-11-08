@@ -28,9 +28,10 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.HTablePool;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -42,7 +43,6 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 
 
-@SuppressWarnings("deprecation")
 public class ServerUtil {
     private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
     
@@ -157,14 +157,13 @@ public class ServerUtil {
      * This code works around HBASE-11837 which causes HTableInterfaces retrieved from
      * RegionCoprocessorEnvironment to not read local data.
      */
-    private static HTableInterface getTableFromSingletonPool(RegionCoprocessorEnvironment env, byte[] tableName) throws IOException {
+    private static Table getTableFromSingletonPool(RegionCoprocessorEnvironment env, TableName tableName) throws IOException {
         // It's ok to not ever do a pool.close() as we're storing a single
         // table only. The HTablePool holds no other resources that this table
         // which will be closed itself when it's no longer needed.
-        @SuppressWarnings("resource")
-        HTablePool pool = new HTablePool(env.getConfiguration(),1);
+        Connection conn = ConnectionFactory.createConnection(env.getConfiguration());
         try {
-            return pool.getTable(tableName);
+            return conn.getTable(tableName);
         } catch (RuntimeException t) {
             // handle cases that an IOE is wrapped inside a RuntimeException like HTableInterface#createHTableInterface
             if(t.getCause() instanceof IOException) {
@@ -175,16 +174,16 @@ public class ServerUtil {
         }
     }
     
-    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, HTableInterface writerTable) throws IOException {
+    public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, Table writerTable) throws IOException {
         if (coprocessorScanWorks(env)) {
             return writerTable;
         }
-        return getTableFromSingletonPool(env, writerTable.getTableName());
+        return getTableFromSingletonPool(env, writerTable.getName());
     }
     
-    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, byte[] tableName) throws IOException {
+    public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, TableName tableName) throws IOException {
         if (coprocessorScanWorks(env)) {
-            return env.getTable(TableName.valueOf(tableName));
+            return env.getTable(tableName);
         }
         return getTableFromSingletonPool(env, tableName);
     }

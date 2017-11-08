@@ -19,36 +19,36 @@ package org.apache.phoenix.transaction;
 
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HTableDescriptor;
 
 import java.io.IOException;
 import java.util.List;
 
-public interface PhoenixTransactionalTable extends HTableInterface {
+public interface PhoenixTransactionalTable extends Table {
 
     /**
-     * Transaction version of {@link HTableInterface#get(Get get)}
+     * Transaction version of {@link Table#get(Get get)}
      * @param get
      * @throws IOException
      */
     public Result get(Get get) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#put(Put put)}
+     * Transactional version of {@link Table#put(Put put)}
      * @param put
      * @throws IOException
      */
     public void put(Put put) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#delete(Delete delete)}
+     * Transactional version of {@link Table#delete(Delete delete)}
      *
      * @param delete
      * @throws IOException
@@ -56,7 +56,7 @@ public interface PhoenixTransactionalTable extends HTableInterface {
     public void delete(Delete delete) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#getScanner(Scan scan)}
+     * Transactional version of {@link Table#getScanner(Scan scan)}
      *
      * @param scan
      * @return ResultScanner
@@ -87,31 +87,31 @@ public interface PhoenixTransactionalTable extends HTableInterface {
     public boolean exists(Get get) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#get(List gets)}
+     * Transactional version of {@link Table#get(List gets)}
      * @throws IOException
      */
     public Result[] get(List<Get> gets) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#getScanner(byte[] family)}
+     * Transactional version of {@link Table#getScanner(byte[] family)}
      * @throws IOException
      */
     public ResultScanner getScanner(byte[] family) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#getScanner(byte[] family, byte[] qualifier)}
+     * Transactional version of {@link Table#getScanner(byte[] family, byte[] qualifier)}
      * @throws IOException
      */
     public ResultScanner getScanner(byte[] family, byte[] qualifier) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#put(List puts)}
+     * Transactional version of {@link Table#put(List puts)}
      * @throws IOException
      */
     public void put(List<Put> puts) throws IOException;
 
     /**
-     * Transactional version of {@link HTableInterface#delete(List deletes)}
+     * Transactional version of {@link Table#delete(List deletes)}
      * @throws IOException
      */
     public void delete(List<Delete> deletes) throws IOException;

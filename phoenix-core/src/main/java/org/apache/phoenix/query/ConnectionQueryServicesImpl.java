@@ -106,13 +106,14 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
+import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -281,7 +282,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final Object connectionCountLock = new Object();
     private final boolean returnSequenceValues ;
 
-    private HConnection connection;
+    private Connection connection;
     private ZKClientService txZKClientService;
     private volatile boolean initialized;
     private volatile int nSequenceSaltBuckets;
@@ -423,7 +424,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public HTableInterface getTable(byte[] tableName) throws SQLException {
+    public Table getTable(byte[] tableName) throws SQLException {
         try {
             return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, null);
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
@@ -435,7 +436,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
-        HTableInterface htable = getTable(tableName);
+        Table htable = getTable(tableName);
         try {
             return htable.getTableDescriptor();
         } catch (IOException e) {
@@ -544,8 +545,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void clearTableRegionCache(byte[] tableName) throws SQLException {
-        connection.clearRegionCache(TableName.valueOf(tableName));
+    public void clearTableRegionCache(TableName tableName) throws SQLException {
+        ((ClusterConnection)connection).clearRegionCache(tableName);
     }
 
     @Override
@@ -564,7 +565,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 List<HRegionLocation> locations = Lists.newArrayList();
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
-                    HRegionLocation regionLocation = connection.getRegionLocation(
+                    HRegionLocation regionLocation = ((ClusterConnection)connection).getRegionLocation(
                             TableName.valueOf(tableName), currentKey, reload);
                     locations.add(regionLocation);
                     currentKey = regionLocation.getRegionInfo().getEndKey();
@@ -1170,7 +1171,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean isIncompatible = false;
         int minHBaseVersion = Integer.MAX_VALUE;
         boolean isTableNamespaceMappingEnabled = false;
-        HTableInterface ht = null;
+        Table ht = null;
         try {
             List<HRegionLocation> locations = this
                     .getAllTableRegions(metaTable);
@@ -1271,7 +1272,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     connection.relocateRegion(SchemaUtil.getPhysicalName(tableName, this.getProps()), tableKey);
                 }
 
-                HTableInterface ht = this.getTable(SchemaUtil.getPhysicalName(tableName, this.getProps()).getName());
+                Table ht = this.getTable(SchemaUtil.getPhysicalName(tableName, this.getProps()).getName());
                 try {
                     final Map<byte[], MetaDataResponse> results =
                             ht.coprocessorService(MetaDataService.class, tableKey, tableKey, callable);
@@ -1323,14 +1324,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean wasDeleted = false;
         try (HBaseAdmin admin = getAdmin()) {
             try {
-                HTableDescriptor desc = admin.getTableDescriptor(physicalIndexName);
+                TableName physicalIndexTableName = TableName.valueOf(physicalIndexName);
+                HTableDescriptor desc = admin.getTableDescriptor(physicalIndexTableName);
                 if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
-                        admin.disableTable(physicalIndexName);
-                        admin.deleteTable(physicalIndexName);
-                        clearTableRegionCache(physicalIndexName);
+                        admin.disableTable(physicalIndexTableName);
+                        admin.deleteTable(physicalIndexTableName);
+                        clearTableRegionCache(physicalIndexTableName);
                         wasDeleted = true;
                     } else {
                         this.tableStatsCache.invalidateAll(desc);
@@ -1366,7 +1368,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     for(String cf: columnFamiles) {
                         admin.deleteColumn(physicalTableName, cf);
                     }
-                    clearTableRegionCache(physicalTableName);
+                    clearTableRegionCache(TableName.valueOf(physicalTableName));
                     wasDeleted = true;
                 }
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
@@ -1626,7 +1628,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         admin.disableTable(tableName);
                         admin.deleteTable(tableName);
                         tableStatsCache.invalidateAll(htableDesc);
-                        clearTableRegionCache(tableName);
+                        clearTableRegionCache(TableName.valueOf(tableName));
                     } catch (TableNotFoundException ignore) {
                     }
                 }
@@ -2513,7 +2515,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
             tableDesc.addFamily(columnDesc);
             admin.createTable(tableDesc);
-            try (HTableInterface sysMutexTable = getTable(mutexTableName.getName())) {
+            try (Table sysMutexTable = getTable(mutexTableName.getName())) {
                 byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                         PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
                 Put put = new Put(mutexRowKey);
@@ -2845,7 +2847,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA_BYTES,
                                 PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE_BYTES,
                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                        clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
+                        clearTableRegionCache(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
                     }
                     nSequenceSaltBuckets = nSaltBuckets;
                 } else {
@@ -3113,7 +3115,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
 
-        HTableInterface metatable = null;
+        Table metatable = null;
         try (HBaseAdmin admin = getAdmin()) {
              // SYSTEM namespace needs to be created via HBase API's because "CREATE SCHEMA" statement tries to write its metadata
              // in SYSTEM:CATALOG table. Without SYSTEM namespace, SYSTEM:CATALOG table cannot be created.
@@ -3207,7 +3209,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
         }
 
-        try (HTableInterface sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
+        try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
             byte[] oldValue = UPGRADE_MUTEX_UNLOCKED;
@@ -3243,7 +3245,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             return true;
         }
 
-        try (HTableInterface sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
+        try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
             byte[] expectedValue = UPGRADE_MUTEX_LOCKED;
@@ -3457,7 +3459,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             latestMetaData = newEmptyMetaData();
         }
         tableStatsCache.invalidateAll();
-        try (HTableInterface htable =
+        try (Table htable =
                 this.getTable(
                     SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
                         this.getProps()).getName())) {
@@ -3561,9 +3563,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
-            HTableInterface htable = this.getTable(SchemaUtil
+            Table htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, this.getProps()).getName());
-            htable.setAutoFlush(true);
             try {
                 Result result = htable.append(append);
                 return sequence.createSequence(result, minValue, maxValue, cycle);
@@ -3589,7 +3590,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.dropSequence(timestamp);
-            HTableInterface htable = this.getTable(SchemaUtil
+            Table htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, this.getProps()).getName());
             try {
                 Result result = htable.append(append);
@@ -3686,11 +3687,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toIncrementList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES,this.getProps()).getName());
+            Table hTable = this.getTable(SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES,this.getProps()).getName());
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
-                resultObjects= hTable.batch(incrementBatch);
+                resultObjects= hTable.batch(incrementBatch, null);
             } catch (IOException e) {
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e) {
@@ -3735,7 +3736,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // clear the meta data cache for the table here
         try {
             SQLException sqlE = null;
-            HTableInterface htable = this.getTable(SchemaUtil
+            Table htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
 
             try {
@@ -3810,12 +3811,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toReturnList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(SchemaUtil
+            Table hTable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, this.getProps()).getName());
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
-                resultObjects= hTable.batch(mutations);
+                hTable.batch(mutations, resultObjects);
             } catch (IOException e){
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e){
@@ -3864,11 +3865,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (mutations.isEmpty()) {
             return;
         }
-        HTableInterface hTable = this.getTable(
+        Table hTable = this.getTable(
                 SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, this.getProps()).getName());
         SQLException sqlE = null;
         try {
-            hTable.batch(mutations);
+            hTable.batch(mutations, null);
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
         } catch (InterruptedException e) {

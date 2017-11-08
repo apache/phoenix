@@ -22,8 +22,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
@@ -143,7 +143,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     if (LOG.isTraceEnabled()) {
                         LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                     }
-                    HTableInterface table = null;
+                    Table table = null;
                     try {
                         if (allowLocalUpdates
                                 && env != null

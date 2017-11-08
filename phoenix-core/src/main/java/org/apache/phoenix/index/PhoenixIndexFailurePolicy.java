@@ -35,8 +35,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -194,7 +194,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             timestamp = minTimeStamp;
 
             // If the data table has local index column families then get local indexes to disable.
-            if (ref.getTableName().equals(env.getRegion().getTableDesc().getNameAsString())
+            if (ref.getTableName().equals(env.getRegion().getTableDesc().getTableName().getNameAsString())
                     && MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDesc())) {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
@@ -225,7 +225,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 minTimeStamp *= -1;
             }
             // Disable the index by using the updateIndexState method of MetaDataProtocol end point coprocessor.
-            try (HTableInterface systemTable = env.getTable(SchemaUtil
+            try (Table systemTable = env.getTable(SchemaUtil
                     .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
                 MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
                         systemTable, newState);

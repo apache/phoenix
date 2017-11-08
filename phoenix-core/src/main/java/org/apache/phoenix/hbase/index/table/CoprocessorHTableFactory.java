@@ -22,7 +22,7 @@ import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 public class CoprocessorHTableFactory implements HTableFactory {
@@ -34,12 +34,12 @@ public class CoprocessorHTableFactory implements HTableFactory {
     }
 
     @Override
-    public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
+    public Table getTable(ImmutableBytesPtr tablename) throws IOException {
         return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
     }
     
     @Override
-    public HTableInterface getTable(ImmutableBytesPtr tablename,ExecutorService pool) throws IOException {
+    public Table getTable(ImmutableBytesPtr tablename,ExecutorService pool) throws IOException {
         return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
     }
 

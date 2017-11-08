@@ -24,8 +24,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.CapturingAbortable;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
@@ -149,7 +149,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 @SuppressWarnings("deprecation")
                 @Override
                 public Boolean call() throws Exception {
-                    HTableInterface table = null;
+                    Table table = null;
                     try {
                         // this may have been queued, but there was an abort/stop so we try to early exit
                         throwFailureIfDone();

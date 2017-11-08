@@ -38,10 +38,10 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -84,7 +84,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         }
         
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        HTableInterface hTable = services.getTable(tableBytes);
+        Table hTable = services.getTable(tableBytes);
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             List<Row> mutations = new ArrayList<Row>();
@@ -132,7 +132,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
             put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
             mutations.add(put);
             
-            hTable.batch(mutations);
+            hTable.batch(mutations, null);
             
             Result r = hTable.get(new Get(bKey));
             assertFalse(r.isEmpty());
@@ -273,7 +273,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         String tableName = initTableValues();
         String query = "SELECT string_key FROM " + tableName + " WHERE uint_key > 100000";
         PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
-        HTableInterface hTable = conn.getQueryServices().getTable(tableName.getBytes());
+        Table hTable = conn.getQueryServices().getTable(tableName.getBytes());
         
         List<Row> mutations = new ArrayList<Row>();
         byte[] family = Bytes.toBytes("1");
@@ -290,7 +290,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
         put.addColumn(family, QueryConstants.EMPTY_COLUMN_BYTES, HConstants.LATEST_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
-        hTable.batch(mutations);
+        hTable.batch(mutations, null);
     
         // Demonstrates weakness of HBase Bytes serialization. Negative numbers
         // show up as bigger than positive numbers

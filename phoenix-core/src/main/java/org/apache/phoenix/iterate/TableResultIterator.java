@@ -37,8 +37,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient;
@@ -75,7 +75,7 @@ import com.google.common.annotations.VisibleForTesting;
  */
 public class TableResultIterator implements ResultIterator {
     private final Scan scan;
-    private final HTableInterface htable;
+    private final Table htable;
     private final ScanMetricsHolder scanMetricsHolder;
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
@@ -188,7 +188,7 @@ public class TableResultIterator implements ResultIterator {
                                 newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
                             }
                         }
-                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName());
 						if (e1 instanceof HashJoinCacheNotFoundException) {
 							logger.debug(
 									"Retrying when Hash Join cache is not found on the server ,by sending the cache again");

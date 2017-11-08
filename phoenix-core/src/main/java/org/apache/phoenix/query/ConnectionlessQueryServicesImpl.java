@@ -37,8 +37,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -149,7 +149,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public HTableInterface getTable(byte[] tableName) throws SQLException {
+    public Table getTable(byte[] tableName) throws SQLException {
         throw new UnsupportedOperationException();
     }
 
@@ -388,7 +388,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public void clearTableRegionCache(byte[] tableName) throws SQLException {
+    public void clearTableRegionCache(TableName tableName) throws SQLException {
     }
 
     @Override

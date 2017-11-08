@@ -62,6 +62,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -450,7 +451,7 @@ public class TestUtil {
 
     public static void clearMetaDataCache(Connection conn) throws Throwable {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        HTableInterface htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
             HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
                 @Override
@@ -781,7 +782,7 @@ public class TestUtil {
         if (table.isTransactional()) {
             mutationState.startTransaction();
         }
-        try (HTableInterface htable = mutationState.getHTable(table)) {
+        try (Table htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);
@@ -808,7 +809,7 @@ public class TestUtil {
                 scan.setStopRow(Bytes.add(markerRowKey, new byte[] { 0 }));
                 scan.setRaw(true);
         
-                try (HTableInterface htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
+                try (Table htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
                     ResultScanner scanner = htableForRawScan.getScanner(scan);
                     List<Result> results = Lists.newArrayList(scanner);
                     LOG.info("Results: " + results);
@@ -832,7 +833,7 @@ public class TestUtil {
         conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
     }
 
-    public static void dumpTable(HTableInterface table) throws IOException {
+    public static void dumpTable(Table table) throws IOException {
         System.out.println("************ dumping " + table + " **************");
         Scan s = new Scan();
         s.setRaw(true);;
@@ -852,7 +853,7 @@ public class TestUtil {
     }
 
     public static void dumpIndexStatus(Connection conn, String indexName) throws IOException, SQLException {
-        try (HTableInterface table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) { 
+        try (Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) { 
             System.out.println("************ dumping index status for " + indexName + " **************");
             Scan s = new Scan();
             s.setRaw(true);

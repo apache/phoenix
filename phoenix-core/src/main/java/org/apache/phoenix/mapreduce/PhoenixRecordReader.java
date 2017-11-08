@@ -24,6 +24,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
@@ -109,7 +110,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             // Clear the table region boundary cache to make sure long running jobs stay up to date
             byte[] tableNameBytes = queryPlan.getTableRef().getTable().getPhysicalName().getBytes();
             ConnectionQueryServices services = queryPlan.getContext().getConnection().getQueryServices();
-            services.clearTableRegionCache(tableNameBytes);
+            services.clearTableRegionCache(TableName.valueOf(tableNameBytes));
 
             long renewScannerLeaseThreshold = queryPlan.getContext().getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
             boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();

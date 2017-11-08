@@ -46,10 +46,10 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -954,7 +954,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
             PTable index = pconn.getTable(new PTableKey(null, fullIndexName));
             byte[] physicalIndexTable = index.getPhysicalName().getBytes();
-            try (HTableInterface hIndex = pconn.getQueryServices().getTable(physicalIndexTable)) {
+            try (Table hIndex = pconn.getQueryServices().getTable(physicalIndexTable)) {
                 Scan scan = new Scan();
                 scan.setRaw(true);
                 if (this.transactional) {

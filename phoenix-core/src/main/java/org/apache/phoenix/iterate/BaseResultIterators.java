@@ -949,7 +949,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2){
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
-                                services.clearTableRegionCache(physicalTableName);
+                                services.clearTableRegionCache(TableName.valueOf(physicalTableName));
                                 context.getOverallQueryMetrics().cacheRefreshedDueToSplits();
                             }
                             // Resubmit just this portion of work again

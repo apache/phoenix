@@ -22,13 +22,13 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -36,6 +36,8 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -56,11 +58,11 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
 
     private TephraTransactionContext tephraTransactionContext;
 
-    public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
+    public TephraTransactionTable(PhoenixTransactionContext ctx, Table hTable) {
         this(ctx, hTable, null);
     }
 
-    public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, PTable pTable) {
+    public TephraTransactionTable(PhoenixTransactionContext ctx, Table hTable, PTable pTable) {
 
         assert(ctx instanceof TephraTransactionContext);
 
@@ -171,32 +173,6 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
         transactionAwareHTable.close();
     }
 
-    @Override
-    public long incrementColumnValue(byte[] row, byte[] family,
-            byte[] qualifier, long amount, boolean writeToWAL)
-            throws IOException {
-        return transactionAwareHTable.incrementColumnValue(row, family, qualifier, amount, writeToWAL);
-    }
-
-    @Override
-    public Boolean[] exists(List<Get> gets) throws IOException {
-        return transactionAwareHTable.exists(gets);
-    }
-
-    @Override
-    public void setAutoFlush(boolean autoFlush, boolean clearBufferOnFail) {
-        transactionAwareHTable.setAutoFlush(autoFlush, clearBufferOnFail);
-    }
-
-    @Override
-    public void setAutoFlushTo(boolean autoFlush) {
-        transactionAwareHTable.setAutoFlush(autoFlush);
-    }
-
-    @Override
-    public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
-        return transactionAwareHTable.getRowOrBefore(row, family);
-    }
 
     @Override
     public TableName getName() {
@@ -215,22 +191,10 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
-    public Object[] batch(List<? extends Row> actions) throws IOException,
-            InterruptedException {
-        return transactionAwareHTable.batch(actions);
-    }
-
-    @Override
     public <R> void batchCallback(List<? extends Row> actions,
             Object[] results, Callback<R> callback) throws IOException,
             InterruptedException {
         transactionAwareHTable.batchCallback(actions, results, callback);
-    }
-
-    @Override
-    public <R> Object[] batchCallback(List<? extends Row> actions,
-            Callback<R> callback) throws IOException, InterruptedException {
-        return transactionAwareHTable.batchCallback(actions, callback);
     }
 
     @Override
@@ -329,22 +293,65 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
-    public void setOperationTimeout(int i) {
-//        transactionAwareHTable.setOperationTimeout(i);
+    public void setOperationTimeout(int operationTimeout) {
+        transactionAwareHTable.setOperationTimeout(operationTimeout);
     }
 
     @Override
     public int getOperationTimeout() {
-        return 0; //transactionAwareHTable.getOperationTimeout();
+        return transactionAwareHTable.getOperationTimeout();
     }
 
     @Override
-    public void setRpcTimeout(int i) {
-//        transactionAwareHTable.setRpcTimeout(i);
+    public void setRpcTimeout(int rpcTimeout) {
+        transactionAwareHTable.setRpcTimeout(rpcTimeout);
     }
 
     @Override
     public int getRpcTimeout() {
-        return 0; //transactionAwareHTable.getRpcTimeout();
+        return transactionAwareHTable.getRpcTimeout();
+    }
+
+    @Override
+    public TableDescriptor getDescriptor() throws IOException {
+        return transactionAwareHTable.getDescriptor();
+    }
+
+    @Override
+    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
+            byte[] value, Put put) throws IOException {
+        return transactionAwareHTable.checkAndPut(row, family, qualifier, op, value, put);
+    }
+
+    @Override
+    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
+            byte[] value, Delete delete) throws IOException {
+        return transactionAwareHTable.checkAndDelete(row, family, qualifier, op, value, delete);
+    }
+
+    @Override
+    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
+            byte[] value, RowMutations mutation) throws IOException {
+        return transactionAwareHTable.checkAndMutate(row, family, qualifier, op, value, mutations);
+    }
+
+    @Override
+    public int getReadRpcTimeout() {
+        return transactionAwareHTable.getReadRpcTimeout();
+    }
+
+    @Override
+    public void setReadRpcTimeout(int readRpcTimeout) {
+        transactionAwareHTable.setReadRpcTimeout(readRpcTimeout);
+    }
+
+    @Override
+    public int getWriteRpcTimeout() {
+        return transactionAwareHTable.getWriteRpcTimeout();
+    }
+
+    @Override
+    public void setWriteRpcTimeout(int writeRpcTimeout) {
+        return transactionAwareHTable.setWriteRpcTimeout(writeRpcTimeout);
     }
 }

@@ -31,9 +31,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -65,7 +65,7 @@ public class TestParalleIndexWriter {
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     FakeTableFactory factory = new FakeTableFactory(
-        Collections.<ImmutableBytesPtr, HTableInterface> emptyMap());
+        Collections.<ImmutableBytesPtr, Table> emptyMap());
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     Abortable mockAbort = Mockito.mock(Abortable.class);
     Stoppable mockStop = Mockito.mock(Stoppable.class);
@@ -86,8 +86,8 @@ public class TestParalleIndexWriter {
     Abortable abort = new StubAbortable();
     Stoppable stop = Mockito.mock(Stoppable.class);
     ExecutorService exec = Executors.newFixedThreadPool(1);
-    Map<ImmutableBytesPtr, HTableInterface> tables =
-        new LinkedHashMap<ImmutableBytesPtr, HTableInterface>();
+    Map<ImmutableBytesPtr, Table> tables =
+        new LinkedHashMap<ImmutableBytesPtr, Table>();
     FakeTableFactory factory = new FakeTableFactory(tables);
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
@@ -100,7 +100,7 @@ public class TestParalleIndexWriter {
         ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     indexUpdates.put(new HTableInterfaceReference(tableName), m);
 
-    HTableInterface table = Mockito.mock(HTableInterface.class);
+    Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
     Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
 
@@ -111,7 +111,7 @@ public class TestParalleIndexWriter {
         return null;
       }
     });
-    Mockito.when(table.getTableName()).thenReturn(test.getTableName());
+    Mockito.when(table.getName()).thenReturn(org.apache.hadoop.hbase.TableName.valueOf(test.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(tableName, table);
 

@@ -33,9 +33,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.PhoenixParserException;
@@ -109,7 +109,7 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(WEB_STATS_SCHEMA_NAME,WEB_STATS));
+        Table hTable = services.getTable(SchemaUtil.getTableNameAsBytes(WEB_STATS_SCHEMA_NAME,WEB_STATS));
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             Put put;
@@ -136,7 +136,7 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
             put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID3_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID3_LOGIN_TIME));
             mutations.add(put);
 
-            hTable.batch(mutations);
+            hTable.batch(mutations, null);
 
         } finally {
             hTable.close();

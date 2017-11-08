@@ -20,8 +20,9 @@ package org.apache.phoenix.query;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Table;
 
 /**
  * Creates clients to access HBase tables.
@@ -39,16 +40,16 @@ public interface HTableFactory {
      * @return An client to access an HBase table.
      * @throws IOException if a server or network exception occurs
      */
-    HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException;
+    Table getTable(byte[] tableName, Connection connection, ExecutorService pool) throws IOException;
 
     /**
      * Default implementation.  Uses standard HBase HTables.
      */
     static class HTableFactoryImpl implements HTableFactory {
         @Override
-        public HTableInterface getTable(byte[] tableName, HConnection connection, ExecutorService pool) throws IOException {
+        public Table getTable(byte[] tableName, Connection connection, ExecutorService pool) throws IOException {
             // Let the HBase client manage the thread pool instead of passing ours through
-            return connection.getTable(tableName);
+            return connection.getTable(TableName.valueOf(tableName));
         }
     }
 }

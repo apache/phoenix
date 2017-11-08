@@ -46,11 +46,14 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
+import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -431,8 +434,9 @@ public class IndexTool extends Configured implements Tool {
             final Configuration configuration = job.getConfiguration();
             final String physicalIndexTable =
                     PhoenixConfigurationUtil.getPhysicalTableName(configuration);
-            final HTable htable = new HTable(configuration, physicalIndexTable);
-            HFileOutputFormat.configureIncrementalLoad(job, htable);
+            org.apache.hadoop.hbase.client.Connection conn = ConnectionFactory.createConnection(configuration);
+            TableName tablename = TableName.valueOf(physicalIndexTable);
+            HFileOutputFormat2.configureIncrementalLoad(job, conn.getTable(tablename),conn.getRegionLocator(tablename));
             return job;
                
         }

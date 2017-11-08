@@ -26,9 +26,10 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
@@ -66,7 +67,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * @return the HTableInterface
      * @throws SQLException 
      */
-    public HTableInterface getTable(byte[] tableName) throws SQLException;
+    public Table getTable(byte[] tableName) throws SQLException;
 
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
@@ -93,7 +94,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public int getLowestClusterHBaseVersion();
     public HBaseAdmin getAdmin() throws SQLException;
 
-    void clearTableRegionCache(byte[] tableName) throws SQLException;
+    void clearTableRegionCache(TableName name) throws SQLException;
 
     boolean hasIndexWALCodec();
     

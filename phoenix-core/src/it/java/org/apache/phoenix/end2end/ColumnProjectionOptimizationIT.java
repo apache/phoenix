@@ -45,8 +45,8 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.types.PInteger;
@@ -238,7 +238,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         byte[] c1 = Bytes.toBytes("COL1");
         byte[] c2 = Bytes.toBytes("COL2");
         byte[] c3 = Bytes.toBytes("COL3");
-        HTableInterface htable = null;
+        Table htable = null;
         try {
             htable = conn2.getQueryServices().getTable(htableName);
             Put put = new Put(PInteger.INSTANCE.toBytes(1));

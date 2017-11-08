@@ -107,12 +107,12 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -1711,10 +1711,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // RegionScanner scanner = region.getScanner(scan);
         // The following *should* work, but doesn't due to HBASE-11837
         // TableName systemCatalogTableName = region.getTableDesc().getTableName();
-        // HTableInterface hTable = env.getTable(systemCatalogTableName);
+        // Table hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
-        try (HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
-            region.getTableDesc().getTableName().getName())) {
+        try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
+            region.getTableDesc().getTableName())) {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<ViewInfo> viewInfoList = Lists.newArrayList();
@@ -1760,10 +1760,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // RegionScanner scanner = region.getScanner(scan);
         // The following *should* work, but doesn't due to HBASE-11837
         // TableName systemCatalogTableName = region.getTableDesc().getTableName();
-        // HTableInterface hTable = env.getTable(systemCatalogTableName);
+        // Table hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
-        try (HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
-            region.getTableDesc().getTableName().getName())) {
+        try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
+            region.getTableDesc().getTableName())) {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<ViewInfo> viewInfoList = Lists.newArrayList();

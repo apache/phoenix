@@ -30,10 +30,10 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
@@ -124,7 +124,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 env.getRegion().getTableDesc());
         } else {
             long guidepostWidth = -1;
-            HTableInterface htable = null;
+            Table htable = null;
             try {
                 // Next check for GUIDE_POST_WIDTH on table
                 htable = env.getTable(

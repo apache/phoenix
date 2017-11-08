@@ -164,12 +164,12 @@ public class SnapshotScanner extends AbstractClientScanner {
       }
 
       @Override
-      public HTableInterface getTable(TableName tableName) throws IOException {
+      public Table getTable(TableName tableName) throws IOException {
         throw new UnsupportedOperationException();
       }
 
       @Override
-      public HTableInterface getTable(TableName tableName, ExecutorService executorService)
+      public Table getTable(TableName tableName, ExecutorService executorService)
           throws IOException {
         throw new UnsupportedOperationException();
       }

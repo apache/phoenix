@@ -19,6 +19,7 @@ package org.apache.phoenix.hive.mapreduce;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -26,6 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -33,8 +35,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HConnectionManager;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -150,7 +151,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         setScanCacheSize(jobConf);
 
         // Adding Localization
-        HConnection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf));
+        org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf));
         RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
                 .getTableRef().getTable().getPhysicalName().toString()));
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection

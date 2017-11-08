@@ -26,9 +26,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.CoprocessorHConnection;
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -95,7 +96,7 @@ public class IndexWriterUtils {
         IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
         if (env instanceof RegionCoprocessorEnvironment) {
             RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) env;
-            RegionServerServices services = e.getRegionServerServices();
+            RegionServerServices services =e.getRegionServerServices();
             if (services instanceof HRegionServer) {
                 return new CoprocessorHConnectionTableFactory(conf, (HRegionServer) services);
             }
@@ -110,7 +111,7 @@ public class IndexWriterUtils {
      */
     private static class CoprocessorHConnectionTableFactory implements HTableFactory {
         @GuardedBy("CoprocessorHConnectionTableFactory.this")
-        private HConnection connection;
+        private Connection connection;
         private final Configuration conf;
         private final HRegionServer server;
 
@@ -119,7 +120,7 @@ public class IndexWriterUtils {
             this.server = server;
         }
 
-        private synchronized HConnection getConnection(Configuration conf) throws IOException {
+        private synchronized Connection getConnection(Configuration conf) throws IOException {
             if (connection == null || connection.isClosed()) {
                 connection = new CoprocessorHConnection(conf, server);
             }
@@ -127,8 +128,8 @@ public class IndexWriterUtils {
         }
 
         @Override
-        public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
-            return getConnection(conf).getTable(tablename.copyBytesIfNecessary());
+        public Table getTable(ImmutableBytesPtr tablename) throws IOException {
+            return getConnection(conf).getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
         }
 
         @Override
@@ -143,9 +144,9 @@ public class IndexWriterUtils {
         }
 
         @Override
-        public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool)
+        public Table getTable(ImmutableBytesPtr tablename, ExecutorService pool)
                 throws IOException {
-            return getConnection(conf).getTable(tablename.copyBytesIfNecessary(), pool);
+            return getConnection(conf).getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
         }
     }
 }

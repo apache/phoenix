@@ -22,25 +22,25 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * Simple table factory that just looks up the tables based on name. Useful for mocking up
- * {@link HTableInterface}s without having to mock up the factory too.
+ * {@link Table}s without having to mock up the factory too.
  */
 class FakeTableFactory implements HTableFactory {
 
   boolean shutdown = false;
-  private Map<ImmutableBytesPtr, HTableInterface> tables;
+  private Map<ImmutableBytesPtr, Table> tables;
 
-  public FakeTableFactory(Map<ImmutableBytesPtr, HTableInterface> tables) {
+  public FakeTableFactory(Map<ImmutableBytesPtr, Table> tables) {
     this.tables = tables;
   }
 
   @Override
-  public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
+  public Table getTable(ImmutableBytesPtr tablename) throws IOException {
     return getTable(tablename, null);
   }
 
@@ -50,7 +50,7 @@ class FakeTableFactory implements HTableFactory {
   }
 
     @Override
-    public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool) throws IOException {
+    public Table getTable(ImmutableBytesPtr tablename, ExecutorService pool) throws IOException {
         return this.tables.get(tablename);
     }
 }

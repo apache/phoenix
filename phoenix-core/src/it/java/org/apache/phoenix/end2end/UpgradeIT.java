@@ -47,9 +47,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RowMutations;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -626,7 +626,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
         try (PhoenixConnection conn =
                 (DriverManager.getConnection(getUrl())).unwrap(PhoenixConnection.class)) {
-            try (HTableInterface htable =
+            try (Table htable =
                     conn.getQueryServices().getTable(
                         Bytes.toBytes(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))) {
                 RowMutations mutations = new RowMutations(rowKey);
@@ -731,13 +731,12 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     private void putUnlockKVInSysMutex(byte[] row) throws Exception {
         try (Connection conn = getConnection(false, null)) {
             ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            try (HTableInterface sysMutexTable = services.getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+            try (Table sysMutexTable = services.getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
                 byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
                 byte[] qualifier = UPGRADE_MUTEX;
                 Put put = new Put(row);
                 put.addColumn(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
                 sysMutexTable.put(put);
-                sysMutexTable.flushCommits();
             }
         }
     }

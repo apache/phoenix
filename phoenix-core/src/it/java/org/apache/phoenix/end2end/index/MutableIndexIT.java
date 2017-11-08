@@ -41,7 +41,7 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
@@ -658,7 +658,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         TableName indexTable = TableName.valueOf(localIndex?tableName: indexName);
         admin.flush(indexTable);
         boolean merged = false;
-        HTableInterface table = connectionQueryServices.getTable(indexTable.getName());
+        Table table = connectionQueryServices.getTable(indexTable.getName());
         // merge regions until 1 left
         long numRegions = 0;
         while (true) {

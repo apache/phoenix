@@ -34,8 +34,9 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HConnectionManager;
+import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -44,6 +45,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.RequestConverter;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService.BlockingInterface;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
@@ -528,11 +530,11 @@ public class MetaDataUtil {
      * @throws
      */
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
-        HConnection hcon = null;
+        Connection hcon = null;
 
         try {
-            hcon = HConnectionManager.getConnection(conf);
-            List<HRegionLocation> locations = hcon.locateRegions(
+            hcon = ConnectionFactory.createConnection(conf);
+            List<HRegionLocation> locations = ((ClusterConnection)hcon).locateRegions(
                 org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
 
             for (HRegionLocation loc : locations) {
@@ -540,7 +542,7 @@ public class MetaDataUtil {
                     ServerName sn = loc.getServerName();
                     if (sn == null) continue;
 
-                    AdminService.BlockingInterface admin = hcon.getAdmin(sn);
+                    AdminService.BlockingInterface admin = (BlockingInterface) ((ClusterConnection)hcon).getAdmin(sn);
                     GetRegionInfoRequest request = RequestConverter.buildGetRegionInfoRequest(
                         loc.getRegionInfo().getRegionName());
 

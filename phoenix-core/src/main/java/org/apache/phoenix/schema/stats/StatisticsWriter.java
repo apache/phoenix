@@ -32,12 +32,12 @@ import java.util.List;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
@@ -80,24 +80,24 @@ public class StatisticsWriter implements Closeable {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
         }
-        HTableInterface statsWriterTable = env.getTable(
+        Table statsWriterTable = env.getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
-        HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
+        Table statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
                 clientTimeStamp, guidePostDepth);
         return statsTable;
     }
 
-    private final HTableInterface statsWriterTable;
+    private final Table statsWriterTable;
     // In HBase 0.98.4 or above, the reader and writer will be the same.
     // In pre HBase 0.98.4, there was a bug in using the HTable returned
     // from a coprocessor for scans, so in that case it'll be different.
-    private final HTableInterface statsReaderTable;
+    private final Table statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
     private final long guidePostDepth;
     
-    private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName,
+    private StatisticsWriter(Table statsReaderTable, Table statsWriterTable, String tableName,
             long clientTimeStamp, long guidePostDepth) {
         this.statsReaderTable = statsReaderTable;
         this.statsWriterTable = statsWriterTable;

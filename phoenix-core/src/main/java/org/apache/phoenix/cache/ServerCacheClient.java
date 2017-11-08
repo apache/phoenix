@@ -43,6 +43,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
@@ -256,7 +257,7 @@ public class ServerCacheClient {
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
                     final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
-                    final HTableInterface htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
+                    final Table htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
                     closeables.add(htable);
                     futures.add(executor.submit(new JobCallable<Boolean>() {
                         
@@ -330,7 +331,7 @@ public class ServerCacheClient {
      * @throws IllegalStateException if hashed table cannot be removed on any region server on which it was added
      */
     private void removeServerCache(final ServerCache cache, Set<HRegionLocation> remainingOnServers) throws SQLException {
-        HTableInterface iterateOverTable = null;
+        Table iterateOverTable = null;
         final byte[] cacheId = cache.getId();
         try {
             ConnectionQueryServices services = connection.getQueryServices();
@@ -431,7 +432,7 @@ public class ServerCacheClient {
 
     public boolean addServerCache(byte[] startkeyOfRegion, ServerCache cache, HashCacheFactory cacheFactory,
              byte[] txState, PTable pTable) throws Exception {
-        HTableInterface table = null;
+        Table table = null;
         boolean success = true;
         byte[] cacheId = cache.getId();
         try {
@@ -453,7 +454,7 @@ public class ServerCacheClient {
         }
     }
     
-    public boolean addServerCache(HTableInterface htable, byte[] key, final PTable cacheUsingTable, final byte[] cacheId,
+    public boolean addServerCache(Table htable, byte[] key, final PTable cacheUsingTable, final byte[] cacheId,
             final ImmutableBytesWritable cachePtr, final ServerCacheFactory cacheFactory, final byte[] txState)
             throws Exception {
         byte[] keyInRegion = getKeyInRegion(key);

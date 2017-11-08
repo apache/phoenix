@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -187,7 +187,7 @@ public class FromCompiler {
                 boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(), connection.getQueryServices().getProps());
                 byte[] fullTableName = SchemaUtil.getPhysicalHBaseTableName(
                     baseTable.getSchemaName(), baseTable.getTableName(), isNamespaceMapped).getBytes();
-                HTableInterface htable = null;
+                Table htable = null;
                 try {
                     htable = services.getTable(fullTableName);
                 } catch (UnsupportedOperationException ignore) {

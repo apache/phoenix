@@ -38,9 +38,10 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -286,8 +287,8 @@ public class MutationState implements SQLCloseable {
     // be called by TableResultIterator in a multi-threaded manner. Since we do not want to expose
     // the Transaction outside of MutationState, this seems reasonable, as the member variables
     // would not change as these threads are running.
-    public HTableInterface getHTable(PTable table) throws SQLException {
-        HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
+    public Table getHTable(PTable table) throws SQLException {
+        Table htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
             PhoenixTransactionalTable phoenixTransactionTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, htable, table);
             // Using cloned mutationState as we may have started a new transaction already
@@ -779,7 +780,7 @@ public class MutationState implements SQLCloseable {
     private class MetaDataAwareHTable extends DelegateHTable {
         private final TableRef tableRef;
         
-        private MetaDataAwareHTable(HTableInterface delegate, TableRef tableRef) {
+        private MetaDataAwareHTable(Table delegate, TableRef tableRef) {
             super(delegate);
             this.tableRef = tableRef;
         }
@@ -809,7 +810,7 @@ public class MutationState implements SQLCloseable {
                         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                         for (PTable index : rowKeyIndexes) {
                             List<Delete> indexDeletes = IndexUtil.generateDeleteIndexData(table, index, deletes, ptr, connection.getKeyValueBuilder(), connection);
-                            HTableInterface hindex = connection.getQueryServices().getTable(index.getPhysicalName().getBytes());
+                            Table hindex = connection.getQueryServices().getTable(index.getPhysicalName().getBytes());
                             hindex.delete(indexDeletes);
                         }
                     }
@@ -976,7 +977,7 @@ public class MutationState implements SQLCloseable {
                     // region servers.
                     shouldRetry = cache!=null;
                     SQLException sqlE = null;
-                    HTableInterface hTable = connection.getQueryServices().getTable(htableName);
+                    Table hTable = connection.getQueryServices().getTable(htableName);
                     try {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
@@ -1000,7 +1001,8 @@ public class MutationState implements SQLCloseable {
                         child.addTimelineAnnotation("Attempt " + retryCount);
                         List<List<Mutation>> mutationBatchList = getMutationBatchList(batchSize, batchSizeBytes, mutationList);
                         for (List<Mutation> mutationBatch : mutationBatchList) {
-                            hTable.batch(mutationBatch);
+                            // TODO need to get the the results of batch and fail if any exceptions.
+                            hTable.batch(mutationBatch, null);
                             batchCount++;
                         }
                         if (logger.isDebugEnabled()) logger.debug("Sent batch of " + numMutations + " for " + Bytes.toString(htableName));
@@ -1027,7 +1029,7 @@ public class MutationState implements SQLCloseable {
                                 // If it fails again, we don't retry.
                                 String msg = "Swallowing exception and retrying after clearing meta cache on connection. " + inferredE;
                                 logger.warn(LogUtil.addCustomAnnotations(msg, connection));
-                                connection.getQueryServices().clearTableRegionCache(htableName);
+                                connection.getQueryServices().clearTableRegionCache(TableName.valueOf(htableName));
 
                                 // add a new child span as this one failed
                                 child.addTimelineAnnotation(msg);

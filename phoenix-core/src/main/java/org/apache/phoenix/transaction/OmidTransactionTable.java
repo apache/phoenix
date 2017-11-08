@@ -28,7 +28,6 @@ import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -36,6 +35,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -48,7 +48,7 @@ import com.google.protobuf.ServiceException;
 
 public class OmidTransactionTable implements PhoenixTransactionalTable {
 
-    public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
+    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable) {
         // TODO Auto-generated constructor stub
     }
 
@@ -159,36 +159,6 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     @Override
     public void close() throws IOException {
         // TODO Auto-generated method stub
-    }
-
-    @Override
-    public long incrementColumnValue(byte[] row, byte[] family,
-            byte[] qualifier, long amount, boolean writeToWAL)
-            throws IOException {
-        // TODO Auto-generated method stub
-        return 0;
-    }
-
-    @Override
-    public Boolean[] exists(List<Get> gets) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
-    public void setAutoFlush(boolean autoFlush, boolean clearBufferOnFail) {
-        // TODO Auto-generated method stub
-    }
-
-    @Override
-    public void setAutoFlushTo(boolean autoFlush) {
-        // TODO Auto-generated method stub
-    }
-
-    @Override
-    public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
     }
 
     @Override

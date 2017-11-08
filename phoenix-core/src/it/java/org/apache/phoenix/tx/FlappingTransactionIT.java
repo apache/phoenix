@@ -34,9 +34,9 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -214,7 +214,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
-        HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
+        Table htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
         stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
         conn.commit();
 

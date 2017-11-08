@@ -20,8 +20,8 @@ package org.apache.phoenix.query;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HConnectionManager;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 
 /**
  * Factory for creating {@link HConnection}
@@ -36,15 +36,15 @@ public interface HConnectionFactory {
      * @param configuration object
      * @return A HConnection instance
      */
-    HConnection createConnection(Configuration conf) throws IOException;
+    Connection createConnection(Configuration conf) throws IOException;
 
     /**
      * Default implementation.  Uses standard HBase HConnections.
      */
     static class HConnectionFactoryImpl implements HConnectionFactory {
         @Override
-        public HConnection createConnection(Configuration conf) throws IOException {
-            return HConnectionManager.createConnection(conf);
+        public Connection createConnection(Configuration conf) throws IOException {
+            return ConnectionFactory.createConnection(conf);
         }
     }
 }

@@ -39,9 +39,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -100,7 +100,7 @@ public class TestIndexWriter {
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     ExecutorService exec = Executors.newFixedThreadPool(1);
-    Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
+    Map<ImmutableBytesPtr, Table> tables = new HashMap<ImmutableBytesPtr, Table>();
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
@@ -109,7 +109,7 @@ public class TestIndexWriter {
     Collection<Pair<Mutation, byte[]>> indexUpdates = Arrays.asList(new Pair<Mutation, byte[]>(m,
         tableName));
 
-    HTableInterface table = Mockito.mock(HTableInterface.class);
+    Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
     Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
 
@@ -150,7 +150,7 @@ public class TestIndexWriter {
     Abortable abort = new StubAbortable();
     // single thread factory so the older request gets queued
     ExecutorService exec = Executors.newFixedThreadPool(1);
-    Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
+    Map<ImmutableBytesPtr, Table> tables = new HashMap<ImmutableBytesPtr, Table>();
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);

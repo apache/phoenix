@@ -35,9 +35,9 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -76,7 +76,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 admin.createTable(htd);
             }
 
-            try (HTableInterface hTable = services.getTable(Bytes.toBytes(tableName))) {
+            try (Table hTable = services.getTable(Bytes.toBytes(tableName))) {
                 // Insert rows using standard HBase mechanism with standard HBase "types"
                 List<Row> mutations = new ArrayList<Row>();
                 byte[] dv = Bytes.toBytes("DV");
@@ -96,7 +96,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 put.addColumn(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
                 mutations.add(put);
 
-                hTable.batch(mutations);
+                hTable.batch(mutations, null);
 
                 // Create Phoenix table after HBase table was created through the native APIs
                 // The timestamp of the table creation must be later than the timestamp of the data

@@ -33,10 +33,10 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -85,7 +85,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         // Confirm that dropping the view also deletes the rows in the index
         if (saltBuckets == null) {
             try (Connection conn = DriverManager.getConnection(getUrl())) {
-                HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+                Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
                 if(ScanUtil.isLocalIndex(scan)) {
                     ScanUtil.setLocalIndexAttributes(scan, 0, HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, scan.getStartRow(), scan.getStopRow());
                 }

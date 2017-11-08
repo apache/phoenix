@@ -48,8 +48,8 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
@@ -863,7 +863,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                 // expected to fail b/c table is read-only
             }
 
-            HTableInterface htable =
+            Table htable =
                     pconn.getQueryServices()
                             .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
             Put put = new Put(Bytes.toBytes("0"));

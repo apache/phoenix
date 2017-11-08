@@ -38,11 +38,11 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -66,7 +66,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
             descriptor.addFamily(columnDescriptor1);
             descriptor.addFamily(columnDescriptor2);
             admin.createTable(descriptor);
-            HTableInterface t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
+            Table t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             insertData(tableName.getName(), admin, t);
             t.close();
             // create phoenix table that maps to existing HBase table
@@ -104,14 +104,13 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void insertData(final byte[] tableName, HBaseAdmin admin, HTableInterface t) throws IOException,
+    private void insertData(final byte[] tableName, HBaseAdmin admin, Table t) throws IOException,
             InterruptedException {
         Put p = new Put(Bytes.toBytes("row"));
         p.addColumn(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
         p.addColumn(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
         t.put(p);
-        t.flushCommits();
-        admin.flush(tableName);
+        admin.flush(TableName.valueOf(tableName));
     }
 
     /**

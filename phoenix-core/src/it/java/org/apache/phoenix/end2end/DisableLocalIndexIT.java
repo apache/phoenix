@@ -27,7 +27,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -58,7 +58,7 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
         assertFalse(admin.tableExists(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName)));
         admin.close();
         try {
-            HTableInterface t = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
+            Table t = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
             t.getTableDescriptor(); // Exception no longer thrown by getTable, but instead need to force an RPC
             fail("Local index table should not have been created");
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {

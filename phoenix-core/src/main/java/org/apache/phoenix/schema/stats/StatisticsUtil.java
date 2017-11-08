@@ -26,10 +26,10 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -128,7 +128,7 @@ public class StatisticsUtil {
         return key;
     }
 
-    public static GuidePostsInfo readStatistics(HTableInterface statsHTable, GuidePostsKey key, long clientTimeStamp)
+    public static GuidePostsInfo readStatistics(Table statsHTable, GuidePostsKey key, long clientTimeStamp)
             throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(key.getColumnFamily());

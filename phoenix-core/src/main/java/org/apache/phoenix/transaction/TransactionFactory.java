@@ -19,7 +19,7 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
 public class TransactionFactory {
@@ -123,13 +123,13 @@ public class TransactionFactory {
         return ctx;
     }
 
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) {
+    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, Table htable) {
 
         PhoenixTransactionalTable table = null;
 
         switch(tp) {
         case Tephra:
-            table = new TephraTransactionTable(ctx, htable);
+            table = new TephraTransactionTable(ctx,htable);
             break;
         case Omid:
 //            table = new OmidTransactionContext(contex, connection, subTask);

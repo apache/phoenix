@@ -46,10 +46,10 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
@@ -577,7 +577,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testLocalIndexAutomaticRepair() throws Exception {
         if (isNamespaceMapped) { return; }
         PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
-        try (HTableInterface metaTable = conn.getQueryServices().getTable(TableName.META_TABLE_NAME.getName());
+        try (Table metaTable = conn.getQueryServices().getTable(TableName.META_TABLE_NAME.getName());
                 HBaseAdmin admin = conn.getQueryServices().getAdmin();) {
             Statement statement = conn.createStatement();
             final String tableName = "T_AUTO_MATIC_REPAIR";

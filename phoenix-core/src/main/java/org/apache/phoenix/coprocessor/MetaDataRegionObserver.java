@@ -160,8 +160,8 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                HTableInterface metaTable = null;
-                HTableInterface statsTable = null;
+                Table metaTable = null;
+                Table statsTable = null;
                 try {
                     ReadOnlyProps props=new ReadOnlyProps(env.getConfiguration().iterator());
                     Thread.sleep(1000);
@@ -411,7 +411,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 						List<Pair<PTable,Long>> pairs = entry.getValue();
                         List<PTable> indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(pairs.size());
 						try (
-                        HTableInterface metaTable = env.getTable(
+                        Table metaTable = env.getTable(
 								SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props))) {
 							long earliestDisableTimestamp = Long.MAX_VALUE;
                             long latestUpperBoundTimestamp = Long.MIN_VALUE;

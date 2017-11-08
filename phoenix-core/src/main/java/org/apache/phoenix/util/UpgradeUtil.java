@@ -74,6 +74,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -82,12 +83,12 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
@@ -208,8 +209,8 @@ public class UpgradeUtil {
     private static void deleteSequenceSnapshot(HBaseAdmin admin) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
         try {
-            admin.disableTable(tableName);;
-            admin.deleteTable(tableName);
+            admin.disableTable(TableName.valueOf(tableName));
+            admin.deleteTable(TableName.valueOf(tableName));
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -225,40 +226,40 @@ public class UpgradeUtil {
         scan.setRaw(true);
         scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
         ResultScanner scanner = null;
-        HTableInterface source = null;
-        HTableInterface target = null;
+        Table source = null;
+        Table target = null;
         try {
             source = conn.getQueryServices().getTable(sourceName);
             target = conn.getQueryServices().getTable(targetName);
             scanner = source.getScanner(scan);
             Result result;
              while ((result = scanner.next()) != null) {
-                for (KeyValue keyValue : result.raw()) {
-                    sizeBytes += keyValue.getLength();
-                    if (KeyValue.Type.codeToType(keyValue.getType()) == KeyValue.Type.Put) {
+                for (Cell keyValue : result.rawCells()) {
+                    sizeBytes += CellUtil.estimatedSerializedSizeOf(keyValue);
+                    if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Put) {
                         // Put new value
-                        Put put = new Put(keyValue.getRow());
+                        Put put = new Put(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                         put.add(keyValue);
                         mutations.add(put);
-                    } else if (KeyValue.Type.codeToType(keyValue.getType()) == KeyValue.Type.Delete){
+                    } else if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Delete){
                         // Copy delete marker using new key so that it continues
                         // to delete the key value preceding it that will be updated
                         // as well.
-                        Delete delete = new Delete(keyValue.getRow());
+                        Delete delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                         delete.addDeleteMarker(keyValue);
                         mutations.add(delete);
                     }
                 }
                 if (sizeBytes >= batchSizeBytes) {
                     logger.info("Committing bactch of temp rows");
-                    target.batch(mutations);
+                    target.batch(mutations, null);
                     mutations.clear();
                     sizeBytes = 0;
                 }
             }
             if (!mutations.isEmpty()) {
                 logger.info("Committing last bactch of temp rows");
-                target.batch(mutations);
+                target.batch(mutations, null);
             }
             logger.info("Successfully completed copy");
         } catch (SQLException e) {
@@ -293,11 +294,11 @@ public class UpgradeUtil {
                 return;
             }
             logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
-            HTableDescriptor desc = admin.getTableDescriptor(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
+            HTableDescriptor desc = admin.getTableDescriptor(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
             createSequenceSnapshot(admin, conn);
             snapshotCreated = true;
-            admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
-            admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+            admin.disableTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
+            admin.deleteTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
             byte[][] splitPoints = SaltingUtil.getSalteByteSplitPoints(nSaltBuckets);
             admin.createTable(desc, splitPoints);
             restoreSequenceSnapshot(admin, conn);
@@ -356,7 +357,7 @@ public class UpgradeUtil {
                             if(dataTableDesc.getFamily(Bytes.toBytes(localIndexCf))==null){
                                 HColumnDescriptor colDef =
                                         new HColumnDescriptor(localIndexCf);
-                                for(Entry<ImmutableBytesWritable, ImmutableBytesWritable>keyValue: cf.getValues().entrySet()){
+                                for(Entry<ImmutableBytesWritable, ImmutableBytesWritable> keyValue: cf.getValues().entrySet()){
                                     colDef.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
                                 }
                                 dataTableDesc.addFamily(colDef);
@@ -371,7 +372,7 @@ public class UpgradeUtil {
                             }
                         }
                         if(modifyTable) {
-                            admin.modifyTable(dataTableDesc.getName(), dataTableDesc);
+                            admin.modifyTable(dataTableDesc.getTableName(), dataTableDesc);
                         }
                     }
                     admin.disableTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
@@ -644,7 +645,7 @@ public class UpgradeUtil {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
 
         byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE);
-        HTableInterface sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             logger.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
             KeyValue saltKV = KeyValueUtil.newKeyValue(seqTableKey, 
@@ -697,7 +698,7 @@ public class UpgradeUtil {
                 Scan scan = new Scan();
                 scan.setRaw(true);
                 scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
-                HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
+                Table seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
                     logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
@@ -705,14 +706,14 @@ public class UpgradeUtil {
                     try {
                         Result result;
                         while ((result = scanner.next()) != null) {
-                            for (KeyValue keyValue : result.raw()) {
+                            for (Cell keyValue : result.rawCells()) {
                                 KeyValue newKeyValue = addSaltByte(keyValue, nSaltBuckets);
                                 if (newKeyValue != null) {
                                     sizeBytes += newKeyValue.getLength();
-                                    if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Put) {
+                                    if (KeyValue.Type.codeToType(newKeyValue.getTypeByte()) == KeyValue.Type.Put) {
                                         // Delete old value
-                                        byte[] buf = keyValue.getBuffer();
-                                        Delete delete = new Delete(keyValue.getRow());
+                                        byte[] buf = keyValue.getRowArray();
+                                        Delete delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                                         KeyValue deleteKeyValue = new KeyValue(buf, keyValue.getRowOffset(), keyValue.getRowLength(),
                                                 buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
                                                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
@@ -722,21 +723,21 @@ public class UpgradeUtil {
                                         mutations.add(delete);
                                         sizeBytes += deleteKeyValue.getLength();
                                         // Put new value
-                                        Put put = new Put(newKeyValue.getRow());
+                                        Put put = new Put(newKeyValue.getRowArray(), newKeyValue.getRowOffset(), newKeyValue.getRowLength());
                                         put.add(newKeyValue);
                                         mutations.add(put);
-                                    } else if (KeyValue.Type.codeToType(newKeyValue.getType()) == KeyValue.Type.Delete){
+                                    } else if (KeyValue.Type.codeToType(newKeyValue.getTypeByte()) == KeyValue.Type.Delete){
                                         // Copy delete marker using new key so that it continues
                                         // to delete the key value preceding it that will be updated
                                         // as well.
-                                        Delete delete = new Delete(newKeyValue.getRow());
+                                        Delete delete = new Delete(newKeyValue.getRowArray(), newKeyValue.getRowOffset(), newKeyValue.getRowLength());
                                         delete.addDeleteMarker(newKeyValue);
                                         mutations.add(delete);
                                     }
                                 }
                                 if (sizeBytes >= batchSizeBytes) {
                                     logger.info("Committing bactch of SYSTEM.SEQUENCE rows");
-                                    seqTable.batch(mutations);
+                                    seqTable.batch(mutations, null);
                                     mutations.clear();
                                     sizeBytes = 0;
                                     committed = true;
@@ -745,7 +746,7 @@ public class UpgradeUtil {
                         }
                         if (!mutations.isEmpty()) {
                             logger.info("Committing last bactch of SYSTEM.SEQUENCE rows");
-                            seqTable.batch(mutations);
+                            seqTable.batch(mutations, null);
                         }
                         preSplitSequenceTable(conn, nSaltBuckets);
                         logger.info("Successfully completed upgrade of SYSTEM.SEQUENCE");
@@ -803,8 +804,8 @@ public class UpgradeUtil {
     }
     
     @SuppressWarnings("deprecation")
-    private static KeyValue addSaltByte(KeyValue keyValue, int nSaltBuckets) {
-        byte[] buf = keyValue.getBuffer();
+    private static KeyValue addSaltByte(Cell keyValue, int nSaltBuckets) {
+        byte[] buf = keyValue.getRowArray();
         int length = keyValue.getRowLength();
         int offset = keyValue.getRowOffset();
         boolean isViewSeq = length > SEQ_PREFIX_BYTES.length && Bytes.compareTo(SEQ_PREFIX_BYTES, 0, SEQ_PREFIX_BYTES.length, buf, offset, SEQ_PREFIX_BYTES.length) == 0;
@@ -834,7 +835,7 @@ public class UpgradeUtil {
         return new KeyValue(newBuf, 0, newBuf.length,
                 buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
-                keyValue.getTimestamp(), KeyValue.Type.codeToType(keyValue.getType()),
+                keyValue.getTimestamp(), KeyValue.Type.codeToType(keyValue.getTypeByte()),
                 buf, keyValue.getValueOffset(), keyValue.getValueLength());
     }
     
@@ -1440,9 +1441,9 @@ public class UpgradeUtil {
                 String msg = "Taking snapshot of physical table " + physicalName + " prior to upgrade...";
                 System.out.println(msg);
                 logger.info(msg);
-                admin.disableTable(physicalName);
-                admin.snapshot(snapshotName, physicalName);
-                admin.enableTable(physicalName);
+                admin.disableTable(TableName.valueOf(physicalName));
+                admin.snapshot(snapshotName, TableName.valueOf(physicalName));
+                admin.enableTable(TableName.valueOf(physicalName));
                 restoreSnapshot = true;
             }
             String escapedTableName = SchemaUtil.getEscapedTableName(schemaName, tableName);
@@ -1515,9 +1516,9 @@ public class UpgradeUtil {
             boolean restored = false;
             try {
                 if (!success && restoreSnapshot) {
-                    admin.disableTable(physicalName);
+                    admin.disableTable(TableName.valueOf(physicalName));
                     admin.restoreSnapshot(snapshotName, false);
-                    admin.enableTable(physicalName);
+                    admin.enableTable(TableName.valueOf(physicalName));
                     String msg = "Restored snapshot of " + physicalName + " due to failure of upgrade";
                     System.out.println(msg);
                     logger.info(msg);
@@ -1664,7 +1665,7 @@ public class UpgradeUtil {
         tableMetadata.add(put);
     }
 
-    public static boolean truncateStats(HTableInterface metaTable, HTableInterface statsTable)
+    public static boolean truncateStats(Table metaTable, Table statsTable)
             throws IOException, InterruptedException {
         byte[] statsTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
                 PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
@@ -1693,10 +1694,10 @@ public class UpgradeUtil {
                 int count = 0;
                 while ((r = statsScanner.next()) != null) {
                     Delete delete = null;
-                    for (KeyValue keyValue : r.raw()) {
-                        if (KeyValue.Type.codeToType(keyValue.getType()) == KeyValue.Type.Put) {
+                    for (Cell keyValue : r.rawCells()) {
+                        if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Put) {
                             if (delete == null) {
-                                delete = new Delete(keyValue.getRow());
+                                delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                             }
                             KeyValue deleteKeyValue = new KeyValue(keyValue.getRowArray(), keyValue.getRowOffset(),
                                     keyValue.getRowLength(), keyValue.getFamilyArray(), keyValue.getFamilyOffset(),
@@ -1709,7 +1710,7 @@ public class UpgradeUtil {
                     if (delete != null) {
                         mutations.add(delete);
                         if (count > 10) {
-                            statsTable.batch(mutations);
+                            statsTable.batch(mutations, null);
                             mutations.clear();
                             count = 0;
                         }
@@ -1717,7 +1718,7 @@ public class UpgradeUtil {
                     }
                 }
                 if (!mutations.isEmpty()) {
-                    statsTable.batch(mutations);
+                    statsTable.batch(mutations, null);
                 }
                 return true;
             }
@@ -1725,7 +1726,7 @@ public class UpgradeUtil {
         return false;
     }
 
-    private static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String srcTableName,
+    private static void mapTableToNamespace(HBaseAdmin admin, Table metatable, String srcTableName,
             String destTableName, ReadOnlyProps props, Long ts, String phoenixTableName, PTableType pTableType,PName tenantId)
                     throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
                     SQLException {
@@ -1786,7 +1787,7 @@ public class UpgradeUtil {
      * Method to map existing phoenix table to a namespace. Should not be use if tables has views and indexes ,instead
      * use map table utility in psql.py
      */
-    public static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String tableName,
+    public static void mapTableToNamespace(HBaseAdmin admin, Table metatable, String tableName,
             ReadOnlyProps props, Long ts, PTableType pTableType, PName tenantId) throws SnapshotCreationException,
                     IllegalArgumentException, IOException, InterruptedException, SQLException {
         String destTablename = SchemaUtil
@@ -1803,7 +1804,7 @@ public class UpgradeUtil {
                 readOnlyProps)) { throw new IllegalArgumentException(
                         QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled!!"); }
         try (HBaseAdmin admin = conn.getQueryServices().getAdmin();
-                HTableInterface metatable = conn.getQueryServices()
+                Table metatable = conn.getQueryServices()
                         .getTable(SchemaUtil
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, readOnlyProps)
                                 .getName());) {

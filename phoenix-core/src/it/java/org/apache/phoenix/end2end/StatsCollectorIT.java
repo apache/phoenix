@@ -41,10 +41,10 @@ import java.util.Random;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -459,7 +459,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         Scan scan = new Scan();
         scan.setRaw(true);
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        try (HTableInterface htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
+        try (Table htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
             ResultScanner scanner = htable.getScanner(scan);
             Result result;
             while ((result = scanner.next())!=null) {
@@ -472,7 +472,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         scan = new Scan();
         scan.setRaw(true);
         phxConn = conn.unwrap(PhoenixConnection.class);
-        try (HTableInterface htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
+        try (Table htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
             ResultScanner scanner = htable.getScanner(scan);
             Result result;
             while ((result = scanner.next())!=null) {
@@ -709,7 +709,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("UPDATE STATISTICS " + tableName);
             ConnectionQueryServices queryServices =
                     conn.unwrap(PhoenixConnection.class).getQueryServices();
-            try (HTableInterface statsHTable =
+            try (Table statsHTable =
                     queryServices.getTable(
                         SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
                             queryServices.getProps()).getName())) {

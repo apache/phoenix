@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -59,7 +59,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     public Coprocessor getInstance() {
         return delegate.getInstance();
     }
-
     @Override
     public int getPriority() {
         return delegate.getPriority();
@@ -76,12 +75,12 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public HTableInterface getTable(TableName tableName) throws IOException {
+    public Table getTable(TableName tableName) throws IOException {
         return delegate.getTable(tableName);
     }
 
     @Override
-    public HTableInterface getTable(TableName tableName, ExecutorService service)
+    public Table getTable(TableName tableName, ExecutorService service)
             throws IOException {
         return delegate.getTable(tableName, service);
     }
@@ -102,13 +101,13 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public RegionServerServices getRegionServerServices() {
-        return delegate.getRegionServerServices();
+    public ConcurrentMap<String, Object> getSharedData() {
+        return delegate.getSharedData();
     }
 
     @Override
-    public ConcurrentMap<String, Object> getSharedData() {
-        return delegate.getSharedData();
+    public RegionServerServices getRegionServerServices() {
+        return delegate.getRegionServerServices();
     }
 
 }

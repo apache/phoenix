@@ -21,7 +21,7 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -128,7 +128,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
             String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
             conn1.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-            HTableInterface metaTable = conn2.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+            Table metaTable = conn2.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, 0, metaTable, PIndexState.DISABLE);
             conn2.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(1,2,3)");
             conn2.commit();
