@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
@@ -39,24 +39,24 @@ public class InterRegionServerIndexRpcControllerFactory extends RpcControllerFac
     }
 
     @Override
-    public PayloadCarryingRpcController newController() {
-        PayloadCarryingRpcController delegate = super.newController();
+    public HBaseRpcController newController() {
+        HBaseRpcController delegate = super.newController();
         return getController(delegate);
     }
 
     @Override
-    public PayloadCarryingRpcController newController(CellScanner cellScanner) {
-        PayloadCarryingRpcController delegate = super.newController(cellScanner);
+    public HBaseRpcController newController(CellScanner cellScanner) {
+        HBaseRpcController delegate = super.newController(cellScanner);
         return getController(delegate);
     }
 
     @Override
-    public PayloadCarryingRpcController newController(List<CellScannable> cellIterables) {
-        PayloadCarryingRpcController delegate = super.newController(cellIterables);
+    public HBaseRpcController newController(List<CellScannable> cellIterables) {
+        HBaseRpcController delegate = super.newController(cellIterables);
         return getController(delegate);
     }
 
-    private PayloadCarryingRpcController getController(PayloadCarryingRpcController delegate) {
+    private HBaseRpcController getController(HBaseRpcController delegate) {
         // construct a chain of controllers: metadata, index and standard controller
         IndexRpcController indexRpcController = new IndexRpcController(delegate, conf);
         return new MetadataRpcController(indexRpcController, conf);
