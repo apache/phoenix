@@ -536,7 +536,7 @@ public class IndexUtil {
                             environment.getRegion().getTableDesc().getTableName().getNameAsString()));
                 Table table = null;
                 try {
-                    table = environment.getTable(dataTable);
+                    table = environment.getConnection().getTable(dataTable);
                     joinResult = table.get(get);
                 } finally {
                     if (table != null) table.close();

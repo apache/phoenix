@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -165,9 +166,9 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                 try {
                     ReadOnlyProps props=new ReadOnlyProps(env.getConfiguration().iterator());
                     Thread.sleep(1000);
-                    metaTable = env.getTable(
+                    metaTable = env.getConnection().getTable(
                             SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props));
-                    statsTable = env.getTable(
+                    statsTable = env.getConnection().getTable(
                             SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, props));
                     if (UpgradeUtil.truncateStats(metaTable, statsTable)) {
                         LOG.info("Stats are successfully truncated for upgrade 4.7!!");
@@ -411,7 +412,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 						List<Pair<PTable,Long>> pairs = entry.getValue();
                         List<PTable> indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(pairs.size());
 						try (
-                        Table metaTable = env.getTable(
+                        Table metaTable = env.getConnection().getTable(
 								SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props))) {
 							long earliestDisableTimestamp = Long.MAX_VALUE;
                             long latestUpperBoundTimestamp = Long.MIN_VALUE;

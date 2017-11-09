@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -344,7 +345,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                 ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true, -1);
                 scanRanges.initializeScan(scan);
                 TableName tableName = env.getRegion().getRegionInfo().getTable();
-                Table htable = env.getTable(tableName);
+                Table htable = env.getConnection().getTable(tableName);
                 txTable = TransactionFactory.getTransactionFactory().getTransactionalTable(txnContext, htable);
                 // For rollback, we need to see all versions, including
                 // the last committed version as there may be multiple

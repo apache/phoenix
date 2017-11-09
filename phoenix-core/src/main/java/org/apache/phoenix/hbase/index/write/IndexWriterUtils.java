@@ -25,7 +25,6 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.CoprocessorHConnection;
@@ -85,7 +84,7 @@ public class IndexWriterUtils {
     // private ctor for utilites
   }
 
-    public static HTableFactory getDefaultDelegateHTableFactory(CoprocessorEnvironment env) {
+    public static HTableFactory getDefaultDelegateHTableFactory(RegionCoprocessorEnvironment env) {
         // create a simple delegate factory, setup the way we need
         Configuration conf = env.getConfiguration();
         // set the number of threads allowed per table.

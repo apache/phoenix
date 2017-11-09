@@ -185,7 +185,7 @@ public class ServerUtil {
     
     public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, TableName tableName) throws IOException {
         if (coprocessorScanWorks(env)) {
-            return env.getTable(tableName);
+            return env.getConnection().getTable(tableName);
         }
         return getTableFromSingletonPool(env, tableName);
     }

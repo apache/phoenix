@@ -223,8 +223,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration(), indexPhysicalTableName);
-        Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+        Table indexTable =
+                admin.getConnection().getTable(TableName.valueOf(indexPhysicalTableName));
+        Pair<byte[][], byte[][]> startEndKeys =
+                admin.getConnection().getRegionLocator(TableName.valueOf(indexPhysicalTableName))
+                        .getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
         for (int i = 0; i < startKeys.length; i++) {
@@ -423,8 +426,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(tableName));
-            Pair<byte[][], byte[][]> startEndKeys = table.getStartEndKeys();
+            Table table =
+                    admin.getConnection().getTable(TableName.valueOf(tableName));
+            Pair<byte[][], byte[][]> startEndKeys =
+                    admin.getConnection().getRegionLocator(TableName.valueOf(tableName))
+                            .getStartEndKeys();
             byte[][] startKeys = startEndKeys.getFirst();
             byte[][] endKeys = startEndKeys.getSecond();
             // No entry should be present in local index table after drop index.

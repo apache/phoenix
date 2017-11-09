@@ -176,7 +176,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
-                        table.batch(mutations);
+                        table.batch(mutations, null);
                     } catch (InterruptedException e) {
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();

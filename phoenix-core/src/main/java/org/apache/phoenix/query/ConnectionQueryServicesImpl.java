@@ -1269,7 +1269,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             boolean retried = false;
             while (true) {
                 if (retried) {
-                    connection.relocateRegion(SchemaUtil.getPhysicalName(tableName, this.getProps()), tableKey);
+                    ((ClusterConnection) connection).relocateRegion(
+                        SchemaUtil.getPhysicalName(tableName, this.getProps()), tableKey);
                 }
 
                 Table ht = this.getTable(SchemaUtil.getPhysicalName(tableName, this.getProps()).getName());
@@ -3691,7 +3692,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
-                resultObjects= hTable.batch(incrementBatch, null);
+                hTable.batch(incrementBatch, resultObjects);
             } catch (IOException e) {
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e) {
@@ -4247,7 +4248,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean reload =false;
         while (true) {
             try {
-                return connection.getRegionLocation(TableName.valueOf(tableName), row, reload);
+                return connection.getRegionLocator(TableName.valueOf(tableName)).getRegionLocation(row, reload);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 String fullName = Bytes.toString(tableName);
                 throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));

@@ -163,7 +163,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         }
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
-                        table.batch(mutations);
+                        table.batch(mutations, null);
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;
                     } catch (IOException e) {

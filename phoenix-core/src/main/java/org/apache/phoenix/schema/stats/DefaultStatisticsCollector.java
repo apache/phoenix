@@ -127,7 +127,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             Table htable = null;
             try {
                 // Next check for GUIDE_POST_WIDTH on table
-                htable = env.getTable(
+                htable = env.getConnection().getTable(
                     SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
                 Get get = new Get(ptableKey);
                 get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);

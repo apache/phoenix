@@ -22,13 +22,15 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Coprocessor;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
+import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 
 /**
  * Class to encapsulate {@link RegionCoprocessorEnvironment} for phoenix coprocessors. Often we
@@ -56,10 +58,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public Coprocessor getInstance() {
-        return delegate.getInstance();
-    }
-    @Override
     public int getPriority() {
         return delegate.getPriority();
     }
@@ -75,17 +73,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public Table getTable(TableName tableName) throws IOException {
-        return delegate.getTable(tableName);
-    }
-
-    @Override
-    public Table getTable(TableName tableName, ExecutorService service)
-            throws IOException {
-        return delegate.getTable(tableName, service);
-    }
-
-    @Override
     public ClassLoader getClassLoader() {
         return delegate.getClassLoader();
     }
@@ -96,7 +83,7 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public HRegionInfo getRegionInfo() {
+    public RegionInfo getRegionInfo() {
         return delegate.getRegionInfo();
     }
 
@@ -106,8 +93,38 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public RegionServerServices getRegionServerServices() {
-        return delegate.getRegionServerServices();
+    public RegionCoprocessor getInstance() {
+        return delegate.getInstance();
+    }
+
+    @Override
+    public void startup() throws IOException {
+        delegate.startup();
+    }
+
+    @Override
+    public void shutdown() {
+        delegate.shutdown();
+    }
+
+    @Override
+    public OnlineRegions getOnlineRegions() {
+        return delegate.getOnlineRegions();
+    }
+
+    @Override
+    public ServerName getServerName() {
+        return delegate.getServerName();
+    }
+
+    @Override
+    public Connection getConnection() {
+        return delegate.getConnection();
+    }
+
+    @Override
+    public MetricRegistry getMetricRegistryForRegionServer() {
+        return delegate.getMetricRegistryForRegionServer();
     }
 
 }

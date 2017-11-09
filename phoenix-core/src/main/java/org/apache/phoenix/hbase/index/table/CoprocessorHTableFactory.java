@@ -23,24 +23,25 @@ import java.util.concurrent.ExecutorService;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 public class CoprocessorHTableFactory implements HTableFactory {
 
-    private CoprocessorEnvironment e;
+    private RegionCoprocessorEnvironment e;
 
-    public CoprocessorHTableFactory(CoprocessorEnvironment e) {
+    public CoprocessorHTableFactory(RegionCoprocessorEnvironment e) {
         this.e = e;
     }
 
     @Override
     public Table getTable(ImmutableBytesPtr tablename) throws IOException {
-        return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+        return this.e.getConnection().getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
     }
     
     @Override
     public Table getTable(ImmutableBytesPtr tablename,ExecutorService pool) throws IOException {
-        return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
+        return this.e.getConnection().getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
     }
 
     @Override

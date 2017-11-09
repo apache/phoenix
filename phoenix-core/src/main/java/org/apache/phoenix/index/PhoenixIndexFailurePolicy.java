@@ -225,7 +225,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 minTimeStamp *= -1;
             }
             // Disable the index by using the updateIndexState method of MetaDataProtocol end point coprocessor.
-            try (Table systemTable = env.getTable(SchemaUtil
+            try (Table systemTable = env.getConnection().getTable(SchemaUtil
                     .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
                 MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
                         systemTable, newState);

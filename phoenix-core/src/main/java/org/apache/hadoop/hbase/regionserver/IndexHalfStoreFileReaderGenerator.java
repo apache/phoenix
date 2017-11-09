@@ -103,7 +103,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             Table metaTable = null;
             PhoenixConnection conn = null;
             try {
-                metaTable = connection.getTable(TableName.META_TABLE_NAME));
+                metaTable = connection.getTable(TableName.META_TABLE_NAME);
                 ResultScanner scanner = null;
                 Result result = null;
                 try {
