@@ -37,7 +37,8 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
@@ -208,19 +209,19 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
 	private void ensureTablesOnDifferentRegionServers(String tableName1, String tableName2) throws Exception  {
 		byte[] table1 = Bytes.toBytes(tableName1);
 		byte[] table2 = Bytes.toBytes(tableName2);
-		HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
+		Admin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
 		HBaseTestingUtility util = getUtility();
 		MiniHBaseCluster cluster = util.getHBaseCluster();
 		HMaster master = cluster.getMaster();
 		AssignmentManager am = master.getAssignmentManager();
    
 		// verify there is only a single region for data table
-		List<HRegionInfo> tableRegions = admin.getTableRegions(table1);
+		List<HRegionInfo> tableRegions = admin.getTableRegions(TableName.valueOf(table1));
 		assertEquals("Expected single region for " + table1, tableRegions.size(), 1);
 		HRegionInfo hri1 = tableRegions.get(0);
    
 		// verify there is only a single region for index table
-		tableRegions = admin.getTableRegions(table2);
+		tableRegions = admin.getTableRegions(TableName.valueOf(table2));
 		HRegionInfo hri2 = tableRegions.get(0);
 		assertEquals("Expected single region for " + table2, tableRegions.size(), 1);
    
@@ -251,9 +252,9 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
 		    }
 		}
    
-		hri1 = admin.getTableRegions(table1).get(0);
+		hri1 = admin.getTableRegions(TableName.valueOf(table1)).get(0);
 		serverName1 = am.getRegionStates().getRegionServerOfRegion(hri1);
-		hri2 = admin.getTableRegions(table2).get(0);
+		hri2 = admin.getTableRegions(TableName.valueOf(table2)).get(0);
 		serverName2 = am.getRegionStates().getRegionServerOfRegion(hri2);
 
 		// verify index and data tables are on different servers

@@ -38,9 +38,10 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -55,8 +56,8 @@ import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.hadoop.hbase.wal.WALSplitter;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
@@ -86,7 +87,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   public static final Log LOG = LogFactory.getLog(WALReplayWithIndexWritesAndCompressedWALIT.class);
   @Rule
-  public TableName table = new TableName();
+  public IndexTableName table = new IndexTableName();
   private String INDEX_TABLE_NAME = table.getTableNameString() + "_INDEX";
 
   final HBaseTestingUtility UTIL = new HBaseTestingUtility();
@@ -236,9 +237,9 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     assertEquals("Primary region wasn't updated from WAL replay!", 1, result.size());
 
     // cleanup the index table
-    HBaseAdmin admin = UTIL.getHBaseAdmin();
-    admin.disableTable(INDEX_TABLE_NAME);
-    admin.deleteTable(INDEX_TABLE_NAME);
+    Admin admin = UTIL.getHBaseAdmin();
+    admin.disableTable(TableName.valueOf(INDEX_TABLE_NAME));
+    admin.deleteTable(TableName.valueOf(INDEX_TABLE_NAME));
     admin.close();
   }
 

@@ -42,8 +42,8 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -59,7 +59,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -194,8 +193,8 @@ public class MutableIndexReplicationIT extends BaseTest {
         assertFalse(rs.next());
 
         // make sure the data tables are created on the remote cluster
-        HBaseAdmin admin = utility1.getHBaseAdmin();
-        HBaseAdmin admin2 = utility2.getHBaseAdmin();
+        Admin admin = utility1.getHBaseAdmin();
+        Admin admin2 = utility2.getHBaseAdmin();
 
         List<String> dataTables = new ArrayList<String>();
         dataTables.add(DATA_TABLE_FULL_NAME);
@@ -215,7 +214,7 @@ public class MutableIndexReplicationIT extends BaseTest {
             desc.addFamily(col);
             //disable/modify/enable table so it has replication enabled
             admin.disableTable(desc.getTableName());
-            admin.modifyTable(tableName, desc);
+            admin.modifyTable(TableName.valueOf(tableName), desc);
             admin.enableTable(desc.getTableName());
             LOG.info("Replication enabled on source table: "+tableName);
         }

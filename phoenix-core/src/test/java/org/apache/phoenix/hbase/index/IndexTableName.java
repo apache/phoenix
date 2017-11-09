@@ -24,7 +24,7 @@ import org.junit.runner.Description;
 /**
  * Returns a {@code byte[]} containing the name of the currently running test method.
  */
-public class TableName extends TestWatcher {
+public class IndexTableName extends TestWatcher {
   private String tableName;
 
   /**

@@ -39,9 +39,9 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -58,9 +58,9 @@ import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
@@ -90,7 +90,7 @@ public class TestWALRecoveryCaching {
   private static final long TIMEOUT = ONE_MIN;
 
   @Rule
-  public TableName testTable = new TableName();
+  public IndexTableName testTable = new IndexTableName();
 
   private String getIndexTableName() {
     return this.testTable.getTableNameString() + "_index";
@@ -161,7 +161,7 @@ public class TestWALRecoveryCaching {
     // start the cluster with 2 rs
     util.startMiniCluster(2);
 
-    HBaseAdmin admin = util.getHBaseAdmin();
+    Admin admin = util.getHBaseAdmin();
     // setup the index
     byte[] family = Bytes.toBytes("family");
     byte[] qual = Bytes.toBytes("qualifier");

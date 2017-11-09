@@ -47,7 +47,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -387,7 +387,7 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
                     selectQuery);
             } else {
-                HBaseAdmin admin = null;
+                Admin admin = null;
                 String snapshotName;
                 try {
                     admin = pConnection.getQueryServices().getAdmin();

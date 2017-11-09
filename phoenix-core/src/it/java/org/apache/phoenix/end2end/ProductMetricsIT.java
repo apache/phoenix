@@ -36,7 +36,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -1522,11 +1523,11 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        HBaseAdmin admin = null;
+        Admin admin = null;
         try {
             initTableValues(tablename, tenantId, getSplits(tenantId));
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            admin.flush(SchemaUtil.getTableNameAsBytes(PRODUCT_METRICS_SCHEMA_NAME,tablename));
+            admin.flush(TableName.valueOf(SchemaUtil.getTableNameAsBytes(PRODUCT_METRICS_SCHEMA_NAME,tablename)));
             String query = "SELECT SUM(TRANSACTIONS) FROM " + tablename + " WHERE FEATURE=?";
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, F1);

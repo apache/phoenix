@@ -115,7 +115,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1524,7 +1524,7 @@ public abstract class BaseTest {
      */
     private static void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
-        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
             HTableDescriptor[] tables = admin.listTables();
             for (HTableDescriptor table : tables) {
@@ -1538,7 +1538,7 @@ public abstract class BaseTest {
         }
     }
     
-    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName)
+    private static void disableAndDropTable(final Admin admin, final TableName tableName)
             throws Exception {
         Future<Void> future = null;
         boolean success = false;

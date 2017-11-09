@@ -27,17 +27,14 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.junit.Rule;
 import org.junit.Test;
-
-import org.apache.phoenix.hbase.index.TableName;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 
 public class TestThreadPoolManager {
 
   @Rule
-  public TableName name = new TableName();
+  public IndexTableName name = new IndexTableName();
 
   @Test
   public void testShutdownGetsNewThreadPool() throws Exception{

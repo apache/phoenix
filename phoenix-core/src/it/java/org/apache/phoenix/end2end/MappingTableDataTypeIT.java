@@ -37,7 +37,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -57,7 +57,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         
-        HBaseAdmin admin = conn.getQueryServices().getAdmin();
+        Admin admin = conn.getQueryServices().getAdmin();
         try {
             // Create table then get the single region for our new table.
             HTableDescriptor descriptor = new HTableDescriptor(tableName);
@@ -104,7 +104,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void insertData(final byte[] tableName, HBaseAdmin admin, Table t) throws IOException,
+    private void insertData(final byte[] tableName, Admin admin, Table t) throws IOException,
             InterruptedException {
         Put p = new Put(Bytes.toBytes("row"));
         p.addColumn(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));

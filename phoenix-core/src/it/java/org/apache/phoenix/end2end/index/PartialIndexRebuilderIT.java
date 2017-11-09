@@ -36,7 +36,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -1017,10 +1018,10 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             Configuration conf = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
             PTable table = metaCache.getTableRef(key).getTable();
             assertTrue(MetaDataUtil.tableRegionsOnline(conf, table));
-            try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                admin.disableTable(fullTableName);
+            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                admin.disableTable(TableName.valueOf(fullTableName));
                 assertFalse(MetaDataUtil.tableRegionsOnline(conf, table));
-                admin.enableTable(fullTableName);
+                admin.enableTable(TableName.valueOf(fullTableName));
             }
             assertTrue(MetaDataUtil.tableRegionsOnline(conf, table));
         }

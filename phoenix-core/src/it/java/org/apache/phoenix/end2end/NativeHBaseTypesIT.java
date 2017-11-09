@@ -35,9 +35,10 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Row;
@@ -72,7 +73,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         final byte[] tableBytes = tableName.getBytes();
         final byte[] familyName = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
         final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             HTableDescriptor descriptor = new HTableDescriptor(tableBytes);
             HColumnDescriptor columnDescriptor =  new HColumnDescriptor(familyName);

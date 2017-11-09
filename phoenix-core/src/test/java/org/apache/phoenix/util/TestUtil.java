@@ -56,8 +56,9 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -796,9 +797,9 @@ public class TestUtil {
                 mutationState.commit();
             }
         
-            HBaseAdmin hbaseAdmin = services.getAdmin();
-            hbaseAdmin.flush(tableName);
-            hbaseAdmin.majorCompact(tableName);
+            Admin hbaseAdmin = services.getAdmin();
+            hbaseAdmin.flush(TableName.valueOf(tableName));
+            hbaseAdmin.majorCompact(TableName.valueOf(tableName));
             hbaseAdmin.close();
         
             boolean compactionDone = false;
@@ -821,8 +822,8 @@ public class TestUtil {
                 // need to run compaction after the next txn snapshot has been written so that compaction can remove deleted rows
                 if (!compactionDone && table.isTransactional()) {
                     hbaseAdmin = services.getAdmin();
-                    hbaseAdmin.flush(tableName);
-                    hbaseAdmin.majorCompact(tableName);
+                    hbaseAdmin.flush(TableName.valueOf(tableName));
+                    hbaseAdmin.majorCompact(TableName.valueOf(tableName));
                     hbaseAdmin.close();
                 }
             }
@@ -972,9 +973,9 @@ public class TestUtil {
 		}
         final int retries = 10;
         int numTries = 10;
-        try (HBaseAdmin admin = services.getAdmin()) {
-            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+        try (Admin admin = services.getAdmin()) {
+            admin.modifyTable(TableName.valueOf(tableName), descriptor);
+            while (!admin.getTableDescriptor(TableName.valueOf(tableName)).equals(descriptor)
                     && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {
@@ -997,9 +998,9 @@ public class TestUtil {
         }
         final int retries = 10;
         int numTries = retries;
-        try (HBaseAdmin admin = services.getAdmin()) {
-            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+        try (Admin admin = services.getAdmin()) {
+            admin.modifyTable(TableName.valueOf(tableName), descriptor);
+            while (!admin.getTableDescriptor(TableName.valueOf(tableName)).equals(descriptor)
                     && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {

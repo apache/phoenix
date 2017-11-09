@@ -47,7 +47,8 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
@@ -707,11 +708,11 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             byte[] cfC = Bytes.toBytes("c");
             byte[][] familyNames = new byte[][] { cfB, cfC };
             byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-            HBaseAdmin admin = pconn.getQueryServices().getAdmin();
+            Admin admin = pconn.getQueryServices().getAdmin();
             try {
-                admin.disableTable(htableName);
-                admin.deleteTable(htableName);
-                admin.enableTable(htableName);
+                admin.disableTable(TableName.valueOf(htableName));
+                admin.deleteTable(TableName.valueOf(htableName));
+                admin.enableTable(TableName.valueOf(htableName));
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
 
@@ -725,7 +726,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             createMDTestTable(pconn, tableName,
                 "a." + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
 
-            descriptor = admin.getTableDescriptor(htableName);
+            descriptor = admin.getTableDescriptor(TableName.valueOf(htableName));
             assertEquals(3, descriptor.getColumnFamilies().length);
             HColumnDescriptor cdA = descriptor.getFamily(cfA);
             assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
@@ -786,10 +787,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             byte[] cfC = Bytes.toBytes("c");
             byte[][] familyNames = new byte[][] { cfB, cfC };
             byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-            try (HBaseAdmin admin = pconn.getQueryServices().getAdmin()) {
+            try (Admin admin = pconn.getQueryServices().getAdmin()) {
                 try {
-                    admin.disableTable(htableName);
-                    admin.deleteTable(htableName);
+                    admin.disableTable(TableName.valueOf(htableName));
+                    admin.deleteTable(TableName.valueOf(htableName));
                 } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 }
 
@@ -865,7 +866,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
             Table htable =
                     pconn.getQueryServices()
-                            .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+                            .getTable(TableName.valueOf(SchemaUtil.getTableNameAsBytes(schemaName, tableName)));
             Put put = new Put(Bytes.toBytes("0"));
             put.addColumn(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
             put.addColumn(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));

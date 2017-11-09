@@ -105,10 +105,10 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -921,7 +921,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         String getOperationName();
     }
 
-    private void pollForUpdatedTableDescriptor(final HBaseAdmin admin, final HTableDescriptor newTableDescriptor,
+    private void pollForUpdatedTableDescriptor(final Admin admin, final HTableDescriptor newTableDescriptor,
             final byte[] tableName) throws InterruptedException, TimeoutException {
         checkAndRetry(new RetriableOperation() {
 
@@ -932,7 +932,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             @Override
             public boolean checkForCompletion() throws TimeoutException, IOException {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(tableName);
+                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
                 return newTableDescriptor.equals(tableDesc);
             }
         });
@@ -993,7 +993,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     void ensureNamespaceCreated(String schemaName) throws SQLException {
         SQLException sqlE = null;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             NamespaceDescriptor namespaceDescriptor = null;
             try {
                 namespaceDescriptor = admin.getNamespaceDescriptor(schemaName);
@@ -1027,12 +1027,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         HTableDescriptor existingDesc = null;
         boolean isMetaTable = SchemaUtil.isMetaTable(physicalTableName);
         boolean tableExist = true;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
             try {
-                existingDesc = admin.getTableDescriptor(physicalTableName);
+                existingDesc = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 tableExist = false;
                 if (tableType == PTableType.VIEW) {
@@ -1138,13 +1138,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void modifyTable(byte[] tableName, HTableDescriptor newDesc, boolean shouldPoll) throws IOException,
     InterruptedException, TimeoutException, SQLException {
-        try (HBaseAdmin admin = getAdmin()) {
+        TableName tn = TableName.valueOf(tableName);
+        try (Admin admin = getAdmin()) {
             if (!allowOnlineTableSchemaUpdate()) {
-                admin.disableTable(tableName);
-                admin.modifyTable(tableName, newDesc);
-                admin.enableTable(tableName);
+                admin.disableTable(tn);
+                admin.modifyTable(tn, newDesc); // TODO: Update to TableDescriptor
+                admin.enableTable(tn);
             } else {
-                admin.modifyTable(tableName, newDesc);
+                admin.modifyTable(tn, newDesc); // TODO: Update to TableDescriptor
                 if (shouldPoll) {
                     pollForUpdatedTableDescriptor(admin, newDesc, tableName);
                 }
@@ -1323,7 +1324,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         boolean wasDeleted = false;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             try {
                 TableName physicalIndexTableName = TableName.valueOf(physicalIndexName);
                 HTableDescriptor desc = admin.getTableDescriptor(physicalIndexTableName);
@@ -1351,9 +1352,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private boolean ensureLocalIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         HTableDescriptor desc = null;
         boolean wasDeleted = false;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             try {
-                desc = admin.getTableDescriptor(physicalTableName);
+                desc = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
                 for (byte[] fam : desc.getFamiliesKeys()) {
                     this.tableStatsCache.invalidate(new GuidePostsKey(physicalTableName, fam));
                 }
@@ -1367,7 +1368,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                     for(String cf: columnFamiles) {
-                        admin.deleteColumn(physicalTableName, cf);
+                        admin.deleteColumnFamily(TableName.valueOf(physicalTableName), Bytes.toBytes(cf));
                     }
                     clearTableRegionCache(TableName.valueOf(physicalTableName));
                     wasDeleted = true;
@@ -1621,13 +1622,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
         SQLException sqlE = null;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             if (tableNamesToDelete != null){
                 for ( byte[] tableName : tableNamesToDelete ) {
                     try {
+                        TableName tn = TableName.valueOf(tableName);
                         HTableDescriptor htableDesc = this.getTableDescriptor(tableName);
-                        admin.disableTable(tableName);
-                        admin.deleteTable(tableName);
+                        admin.disableTable(tn);
+                        admin.deleteTable(tn);
                         tableStatsCache.invalidateAll(htableDesc);
                         clearTableRegionCache(TableName.valueOf(tableName));
                     } catch (TableNotFoundException ignore) {
@@ -1835,7 +1837,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void updateDescriptorForTx(PTable table, Map<String, Object> tableProps, HTableDescriptor tableDescriptor,
             String txValue, Set<HTableDescriptor> descriptorsToUpdate, Set<HTableDescriptor> origDescriptors) throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             setTransactional(tableDescriptor, table.getType(), txValue, tableProps);
             Map<String, Object> indexTableProps;
             if (txValue == null) {
@@ -1845,7 +1847,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 indexTableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.valueOf(txValue));
             }
             for (PTable index : table.getIndexes()) {
-                HTableDescriptor indexDescriptor = admin.getTableDescriptor(index.getPhysicalName().getBytes());
+                HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(index.getPhysicalName().getBytes()));
                 origDescriptors.add(indexDescriptor);
                 indexDescriptor = new HTableDescriptor(indexDescriptor);
                 descriptorsToUpdate.add(indexDescriptor);
@@ -1869,7 +1871,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 setTransactional(indexDescriptor, index.getType(), txValue, indexTableProps);
             }
             try {
-                HTableDescriptor indexDescriptor = admin.getTableDescriptor(MetaDataUtil.getViewIndexPhysicalName(physicalTableName));
+                HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(physicalTableName)));
                 origDescriptors.add(indexDescriptor);
                 indexDescriptor = new HTableDescriptor(indexDescriptor);
                 descriptorsToUpdate.add(indexDescriptor);
@@ -1879,7 +1881,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Ignore, as we may never have created a view index table
             }
             try {
-                HTableDescriptor indexDescriptor = admin.getTableDescriptor(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName));
+                HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName)));
                 origDescriptors.add(indexDescriptor);
                 indexDescriptor = new HTableDescriptor(indexDescriptor);
                 descriptorsToUpdate.add(indexDescriptor);
@@ -2411,12 +2413,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             openConnection();
                             hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
-                            try (HBaseAdmin admin = getAdmin()) {
+                            try (Admin admin = getAdmin()) {
                                 boolean mappedSystemCatalogExists = admin
                                         .tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true));
                                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
                                         ConnectionQueryServicesImpl.this.getProps())) {
-                                    if (admin.tableExists(SYSTEM_CATALOG_NAME_BYTES)) {
+                                    if (admin.tableExists(TableName.valueOf(SYSTEM_CATALOG_NAME_BYTES))) {
                                         //check if the server is already updated and have namespace config properly set. 
                                         checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
                                     }
@@ -2440,7 +2442,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     Long.toString(getSystemTableVersion()));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
-                            try (HBaseAdmin hBaseAdmin = getAdmin();
+                            try (Admin hBaseAdmin = getAdmin();
                                  PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
                                          scnProps, newEmptyMetaData())) {
                                 try {
@@ -2526,7 +2528,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    void createSysMutexTable(HBaseAdmin admin, ReadOnlyProps props) throws IOException, SQLException {
+    void createSysMutexTable(Admin admin, ReadOnlyProps props) throws IOException, SQLException {
         try {
             final TableName mutexTableName = SchemaUtil.getPhysicalTableName(
                 PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props);
@@ -2553,11 +2555,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    List<TableName> getSystemTableNames(HBaseAdmin admin) throws IOException {
-        return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+    List<TableName> getSystemTableNames(Admin admin) throws IOException {
+        return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*")); // TODO: replace to pattern
     }
 
-    private void createOtherSystemTables(PhoenixConnection metaConnection, HBaseAdmin hbaseAdmin) throws SQLException, IOException {
+    private void createOtherSystemTables(PhoenixConnection metaConnection, Admin hbaseAdmin) throws SQLException, IOException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
         } catch (TableAlreadyExistsException e) {
@@ -2628,7 +2630,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // We know that we always need to add the STORE_NULLS column for 4.3 release
                     columnsToAdd = addColumn(columnsToAdd, PhoenixDatabaseMetaData.STORE_NULLS
                             + " " + PBoolean.INSTANCE.getSqlTypeName());
-                    try (HBaseAdmin admin = getAdmin()) {
+                    try (Admin admin = getAdmin()) {
                         HTableDescriptor[] localIndexTables = admin
                                 .listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + ".*");
                         for (HTableDescriptor table : localIndexTables) {
@@ -3040,11 +3042,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void createSnapshot(String snapshotName, String tableName)
             throws SQLException {
-        HBaseAdmin admin = null;
+        Admin admin = null;
         SQLException sqlE = null;
         try {
             admin = getAdmin();
-            admin.snapshot(snapshotName, tableName);
+            admin.snapshot(snapshotName, TableName.valueOf(tableName));
             logger.info("Successfully created snapshot " + snapshotName + " for "
                     + tableName);
         } catch (Exception e) {
@@ -3075,12 +3077,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean tableDisabled = false;
         if (!success && snapshotName != null) {
             SQLException sqlE = null;
-            HBaseAdmin admin = null;
+            Admin admin = null;
             try {
                 logger.warn("Starting restore of " + tableName + " using snapshot "
                         + snapshotName + " because upgrade failed");
                 admin = getAdmin();
-                admin.disableTable(tableName);
+                admin.disableTable(TableName.valueOf(tableName));
                 tableDisabled = true;
                 admin.restoreSnapshot(snapshotName);
                 snapshotRestored = true;
@@ -3091,7 +3093,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } finally {
                 if (admin != null && tableDisabled) {
                     try {
-                        admin.enableTable(tableName);
+                        admin.enableTable(TableName.valueOf(tableName));
                         if (snapshotRestored) {
                             logger.warn("Successfully restored and enabled " + tableName + " using snapshot "
                                     + snapshotName);
@@ -3142,7 +3144,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
 
         Table metatable = null;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
              // SYSTEM namespace needs to be created via HBase API's because "CREATE SCHEMA" statement tries to write its metadata
              // in SYSTEM:CATALOG table. Without SYSTEM namespace, SYSTEM:CATALOG table cannot be created.
             try {
@@ -3183,7 +3185,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName();
             metatable = getTable(mappedSystemTable);
             if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)) {
-                if (!admin.tableExists(mappedSystemTable)) {
+                if (!admin.tableExists(TableName.valueOf(mappedSystemTable))) {
                     logger.info("Migrating SYSTEM.CATALOG table to SYSTEM namespace.");
                     // Actual migration of SYSCAT table
                     UpgradeUtil.mapTableToNamespace(admin, metatable,
@@ -3287,7 +3289,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private byte[] getSysMutexPhysicalTableNameBytes() throws IOException, SQLException {
         byte[] sysMutexPhysicalTableNameBytes = null;
-        try(HBaseAdmin admin = getAdmin()) {
+        try(Admin admin = getAdmin()) {
             if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
                 sysMutexPhysicalTableNameBytes = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES;
             } else if (admin.tableExists(TableName.valueOf(
@@ -3524,25 +3526,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void flushTable(byte[] tableName) throws SQLException {
-        HBaseAdmin admin = getAdmin();
+        Admin admin = getAdmin();
         try {
-            admin.flush(tableName);
+            admin.flush(TableName.valueOf(tableName));
         } catch (IOException e) {
             throw new PhoenixIOException(e);
-        } catch (InterruptedException e) {
-            // restore the interrupt status
-            Thread.currentThread().interrupt();
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
-            .buildException();
+//        } catch (InterruptedException e) {
+//            // restore the interrupt status
+//            Thread.currentThread().interrupt();
+//            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
+//            .buildException();
         } finally {
             Closeables.closeQuietly(admin);
         }
     }
 
     @Override
-    public HBaseAdmin getAdmin() throws SQLException {
+    public Admin getAdmin() throws SQLException {
         try {
-            return new HBaseAdmin(connection);
+            return connection.getAdmin();
         } catch (IOException e) {
             throw new PhoenixIOException(e);
         }
@@ -4366,7 +4368,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void ensureNamespaceDropped(String schemaName, long mutationTime) throws SQLException {
         SQLException sqlE = null;
-        try (HBaseAdmin admin = getAdmin()) {
+        try (Admin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);

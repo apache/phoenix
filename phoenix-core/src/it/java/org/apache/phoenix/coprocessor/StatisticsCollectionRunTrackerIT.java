@@ -30,8 +30,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
@@ -137,13 +136,13 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     }
 
     private HRegionInfo createTableAndGetRegion(String tableName) throws Exception {
-        byte[] tableNameBytes = Bytes.toBytes(tableName);
+        TableName tn = TableName.valueOf(tableName);
         String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR PRIMARY KEY, KV1 VARCHAR)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-            try (HBaseAdmin admin = phxConn.getQueryServices().getAdmin()) {
-                List<HRegionInfo> tableRegions = admin.getTableRegions(tableNameBytes);
+            try (Admin admin = phxConn.getQueryServices().getAdmin()) {
+                List<HRegionInfo> tableRegions = admin.getTableRegions(tn);
                 return tableRegions.get(0);
             }
         }
@@ -157,7 +156,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     
     private void runMajorCompaction(String tableName) throws Exception {
         try (PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
-            try (HBaseAdmin admin = conn.getQueryServices().getAdmin()) {
+            try (Admin admin = conn.getQueryServices().getAdmin()) {
                 TableName t = TableName.valueOf(tableName);
                 admin.flush(t);
                 admin.majorCompact(t);

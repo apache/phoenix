@@ -29,7 +29,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -61,7 +61,7 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
 
         String phoenixFullTableName = schemaName + "." + tableName;
         String hbaseFullTableName = schemaName + ":" + tableName;
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(namespace).build());
         admin.createTable(new HTableDescriptor(TableName.valueOf(namespace, tableName))
                 .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
@@ -106,8 +106,8 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(hbaseFullTableName, rs.getString(1));
-        admin.disableTable(phoenixFullTableName);
-        admin.deleteTable(phoenixFullTableName);
+        admin.disableTable(TableName.valueOf(phoenixFullTableName));
+        admin.deleteTable(TableName.valueOf(phoenixFullTableName));
         conn.createStatement().execute("DROP TABLE " + phoenixFullTableName);
         admin.close();
         conn.close();

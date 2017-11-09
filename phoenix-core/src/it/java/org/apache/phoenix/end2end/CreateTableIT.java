@@ -35,8 +35,9 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.GlobalPermissionOrBuilder;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -114,10 +115,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
         }
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        assertNotNull(admin.getTableDescriptor(Bytes.toBytes(tableName)));
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        assertNotNull(admin.getTableDescriptor(TableName.valueOf(tableName)));
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
@@ -136,8 +137,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
-            assertNotEquals(null, admin.getTableDescriptor(
-                SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName()));
+            assertNotEquals(null, admin.getTableDescriptor(TableName.valueOf(
+                SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName())));
         } finally {
             admin.close();
         }
@@ -185,9 +186,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
     }
@@ -238,9 +239,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
         assertEquals("B", columnFamilies[0].getNameAsString());
@@ -264,9 +265,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("0", columnFamilies[0].getNameAsString());
         assertEquals(86400, columnFamilies[0].getTimeToLive());
@@ -292,9 +293,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("0", columnFamilies[0].getNameAsString());
         assertEquals(DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
@@ -319,9 +320,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("B", columnFamilies[0].getNameAsString());
         assertEquals(0, columnFamilies[0].getScope());
@@ -344,9 +345,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
@@ -366,9 +367,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
@@ -385,9 +386,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+                admin.getTableDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
     }
 

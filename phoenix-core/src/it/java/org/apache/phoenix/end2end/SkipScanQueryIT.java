@@ -34,7 +34,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -529,7 +530,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             stmt.setString(3, "T0");
             stmt.executeUpdate();
             conn.commit();
-            try (HBaseAdmin admin =
+            try (Admin admin =
                     conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
                 /*
                  * The split key is 27 bytes instead of at least 30 bytes (CHAR(15) + CHAR(15)).
@@ -537,7 +538,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
                  * it ends up padding the split point bytes to 30.
                  */
                 byte[] smallSplitKey = Bytes.toBytes("00Do0000000a8w10D5o000002Rhv");
-                admin.split(Bytes.toBytes(tableName), smallSplitKey);
+                admin.split(TableName.valueOf(tableName), smallSplitKey);
             }
             ResultSet rs =
                     conn.createStatement().executeQuery("SELECT EXTENSION FROM " + tableName

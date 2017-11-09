@@ -38,7 +38,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -336,8 +336,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
         htable.put(put);
         
-        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        admin.disableTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
         try {
             // This will succeed initially in updating the HBase metadata, but then will fail when
             // the SYSTEM.CATALOG table is attempted to be updated, exercising the code to restore
@@ -347,7 +347,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
         } finally {
-            admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+            admin.enableTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
             admin.close();
         }
         
@@ -385,7 +385,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX.getErrorCode(), e.getErrorCode());
         }
 
-        HBaseAdmin admin = pconn.getQueryServices().getAdmin();
+        Admin admin = pconn.getQueryServices().getAdmin();
         HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(t2));
         desc.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
         admin.createTable(desc);

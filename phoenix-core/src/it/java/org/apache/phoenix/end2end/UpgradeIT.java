@@ -48,7 +48,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.curator.shaded.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
@@ -222,10 +223,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                 }
             }
 
-            HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            assertTrue(admin.tableExists(phoenixFullTableName));
-            assertTrue(admin.tableExists(schemaName + QueryConstants.NAME_SEPARATOR + indexName));
-            assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(phoenixFullTableName))));
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            assertTrue(admin.tableExists(TableName.valueOf(phoenixFullTableName)));
+            assertTrue(admin.tableExists(TableName.valueOf(schemaName + QueryConstants.NAME_SEPARATOR + indexName)));
+            assertTrue(admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(phoenixFullTableName)))));
             Properties props = new Properties();
             props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
             props.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.toString(false));
@@ -249,10 +250,9 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             admin = phxConn.getQueryServices().getAdmin();
             String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                     .getNameAsString();
-            assertTrue(admin.tableExists(hbaseTableName));
-            assertTrue(admin.tableExists(Bytes.toBytes(hbaseTableName)));
-            assertTrue(admin.tableExists(schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexName));
-            assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
+            assertTrue(admin.tableExists(TableName.valueOf(hbaseTableName)));
+            assertTrue(admin.tableExists(TableName.valueOf(schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexName)));
+            assertTrue(admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName)))));
             i = 0;
             // validate data
             for (String tableName : tableNames) {
@@ -631,7 +631,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                 (DriverManager.getConnection(getUrl())).unwrap(PhoenixConnection.class)) {
             try (Table htable =
                     conn.getQueryServices().getTable(
-                        Bytes.toBytes(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))) {
+                            Bytes.toBytes(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))) {
                 RowMutations mutations = new RowMutations(rowKey);
                 mutations.add(viewColumnDefinitionPut);
                 htable.mutateRow(mutations);

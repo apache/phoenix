@@ -26,7 +26,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -54,8 +55,8 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
-        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        assertFalse(admin.tableExists(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName)));
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        assertFalse(admin.tableExists(TableName.valueOf(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName)));
         admin.close();
         try {
             Table t = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));

@@ -47,8 +47,8 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.StubAbortable;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Rule;
@@ -60,7 +60,7 @@ import org.mockito.stubbing.Answer;
 public class TestIndexWriter {
   private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
   @Rule
-  public TableName testName = new TableName();
+  public IndexTableName testName = new IndexTableName();
   private final byte[] row = Bytes.toBytes("row");
 
   @Test

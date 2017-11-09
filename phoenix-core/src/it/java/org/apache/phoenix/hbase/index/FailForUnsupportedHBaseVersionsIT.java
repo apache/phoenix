@@ -30,7 +30,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -140,7 +140,7 @@ public class FailForUnsupportedHBaseVersionsIT {
             HRegionServer server = util.getMiniHBaseCluster().getRegionServer(0);
 
             // create the primary table
-            HBaseAdmin admin = util.getHBaseAdmin();
+            Admin admin = util.getHBaseAdmin();
             if (supported) {
                 admin.createTable(desc);
                 assertFalse("Hosting regeion server failed, even the HBase version (" + version

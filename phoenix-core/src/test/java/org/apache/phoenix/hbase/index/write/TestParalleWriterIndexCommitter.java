@@ -37,8 +37,8 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.StubAbortable;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Rule;
@@ -54,7 +54,7 @@ public class TestParalleWriterIndexCommitter {
 
   private static final Log LOG = LogFactory.getLog(TestParalleWriterIndexCommitter.class);
   @Rule
-  public TableName test = new TableName();
+  public IndexTableName test = new IndexTableName();
   private final byte[] row = Bytes.toBytes("row");
 
   @Test

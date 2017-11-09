@@ -45,7 +45,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -67,7 +67,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     public void testCreateTenantSpecificTable() throws Exception {
         // ensure we didn't create a physical HBase table for the tenant-specific table
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         assertEquals(0, admin.listTables(TENANT_TABLE_NAME).length);
     }
     

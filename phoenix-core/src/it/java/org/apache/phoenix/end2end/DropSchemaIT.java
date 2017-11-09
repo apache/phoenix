@@ -31,7 +31,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -77,7 +77,7 @@ public class DropSchemaIT extends BaseUniqueNamesOwnClusterIT {
         String normalizeSchemaIdentifier = SchemaUtil.normalizeIdentifier(schema);
         String ddl = "DROP SCHEMA " + schema;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             try {
                 conn.createStatement().execute(ddl);
                 fail();

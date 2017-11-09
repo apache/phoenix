@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
@@ -167,7 +168,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(schema).build());
         admin.createTable(new HTableDescriptor(fullTablename)
                 .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));

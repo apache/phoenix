@@ -35,7 +35,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -77,7 +77,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         Connection conn1 = getConnection(props);
 		String tableName = "TBL_" + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
-		HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+		Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
             createTableAndLoadData(conn1, tableName, indexName, strings, isReverse);
@@ -103,7 +103,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
             "CREATE " + (localIndex ? "LOCAL" : "")+" INDEX " + indexName + " ON " + tableName + "(v1"+(isReverse?" DESC":"")+") include (k3)");
     }
 
-    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, HBaseAdmin admin, boolean isReverse)
+    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, Admin admin, boolean isReverse)
             throws SQLException, IOException, InterruptedException {
         ResultSet rs;
 
@@ -130,10 +130,10 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         for(int i = 0; i <=1; i++) {
             Threads.sleep(10000);
             if(localIndex) {
-                admin.split(Bytes.toBytes(tableName),
+                admin.split(TableName.valueOf(tableName),
                     ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
             } else {
-                admin.split(Bytes.toBytes(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
+                admin.split(TableName.valueOf(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
             }
             Thread.sleep(100);
             regionsOfUserTable =

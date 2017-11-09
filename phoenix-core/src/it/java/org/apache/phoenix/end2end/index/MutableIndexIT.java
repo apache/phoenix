@@ -40,7 +40,7 @@ import jline.internal.Log;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -638,7 +638,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     public void testIndexHalfStoreFileReader() throws Exception {
         Connection conn1 = getConnection();
         ConnectionQueryServices connectionQueryServices = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES);
-		HBaseAdmin admin = connectionQueryServices.getAdmin();
+		Admin admin = connectionQueryServices.getAdmin();
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
         createBaseTable(conn1, tableName, "('e')");
@@ -699,7 +699,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
 
 
-    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, HBaseAdmin admin, boolean isReverse)
+    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, Admin admin, boolean isReverse)
             throws SQLException, IOException, InterruptedException {
         ResultSet rs;
 
@@ -726,10 +726,10 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         for(int i = 0; i <=1; i++) {
             Threads.sleep(10000);
             if(localIndex) {
-                admin.split(Bytes.toBytes(tableName),
+                admin.split(TableName.valueOf(tableName),
                     ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
             } else {
-                admin.split(Bytes.toBytes(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
+                admin.split(TableName.valueOf(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
             }
             Thread.sleep(100);
             regionsOfUserTable =

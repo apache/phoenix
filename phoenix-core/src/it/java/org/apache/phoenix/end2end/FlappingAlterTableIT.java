@@ -26,8 +26,8 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -58,8 +58,8 @@ public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute(ddl);
         ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
         conn1.createStatement().execute(ddl);
-        try (HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes(dataTableFullName)).getColumnFamilies();
+        try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
             assertEquals(2, columnFamilies.length);
             assertEquals("0", columnFamilies[0].getNameAsString());
             assertEquals(HColumnDescriptor.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
@@ -82,8 +82,8 @@ public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute(ddl);
         ddl = "ALTER TABLE " + dataTableFullName + " ADD CF.STRING VARCHAR";
         conn1.createStatement().execute(ddl);
-        try (HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HTableDescriptor tableDesc = admin.getTableDescriptor(Bytes.toBytes(dataTableFullName));
+        try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
             HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
             assertEquals(2, columnFamilies.length);
             assertEquals("0", columnFamilies[0].getNameAsString());

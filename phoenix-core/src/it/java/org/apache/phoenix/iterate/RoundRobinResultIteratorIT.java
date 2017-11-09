@@ -38,7 +38,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -77,11 +78,11 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         int nRegions = services.getAllTableRegions(tableNameBytes).size();
         int nRegionsBeforeSplit = nRegions;
-        HBaseAdmin admin = services.getAdmin();
+        Admin admin = services.getAdmin();
         try {
             // Split is an async operation. So hoping 10 seconds is long enough time.
             // If the test tends to flap, then you might want to increase the wait time
-            admin.split(tableName);
+            admin.split(TableName.valueOf(tableName));
             CountDownLatch latch = new CountDownLatch(1);
             int nTries = 0;
             long waitTimeMillis = 2000;
@@ -257,9 +258,9 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         }
         conn.commit();
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HBaseAdmin admin = services.getAdmin();
+        Admin admin = services.getAdmin();
         try {
-            admin.flush(tableName);
+            admin.flush(TableName.valueOf(tableName));
         } finally {
             admin.close();
         }

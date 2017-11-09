@@ -26,7 +26,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -45,7 +45,7 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String ddl = "CREATE SCHEMA " + schemaName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             conn.createStatement().execute(ddl);
             assertNotNull(admin.getNamespaceDescriptor(schemaName));
         }

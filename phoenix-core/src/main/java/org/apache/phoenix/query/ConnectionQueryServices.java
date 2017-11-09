@@ -27,7 +27,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -92,7 +92,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public void init(String url, Properties props) throws SQLException;
 
     public int getLowestClusterHBaseVersion();
-    public HBaseAdmin getAdmin() throws SQLException;
+    public Admin getAdmin() throws SQLException;
 
     void clearTableRegionCache(TableName name) throws SQLException;
 

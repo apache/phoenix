@@ -44,7 +44,8 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -216,7 +217,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         byte[][] familyNames = new byte[][] { cfB, cfC };
         String table = generateUniqueName();
         byte[] htableName = SchemaUtil.getTableNameAsBytes("", table);
-        HBaseAdmin admin = pconn.getQueryServices().getAdmin();
+        Admin admin = pconn.getQueryServices().getAdmin();
 
         @SuppressWarnings("deprecation")
         HTableDescriptor descriptor = new HTableDescriptor(htableName);
@@ -298,8 +299,8 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         } finally {
             if (htable != null) htable.close();
-            admin.disableTable(htableName);
-            admin.deleteTable(htableName);
+            admin.disableTable(TableName.valueOf(htableName));
+            admin.deleteTable(TableName.valueOf(htableName));
             admin.close();
         }
     }

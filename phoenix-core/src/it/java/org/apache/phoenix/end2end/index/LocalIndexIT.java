@@ -45,8 +45,9 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -175,9 +176,9 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HTableDescriptor htd = admin
-                .getTableDescriptor(Bytes.toBytes(indexPhysicalTableName));
+                .getTableDescriptor(TableName.valueOf(indexPhysicalTableName));
         assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
         try(org.apache.hadoop.hbase.client.Connection c = ConnectionFactory.createConnection(admin.getConfiguration())) {
             try (RegionLocator userTable= c.getRegionLocator(SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
@@ -226,7 +227,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         Table indexTable =
                 admin.getConnection().getTable(TableName.valueOf(indexPhysicalTableName));
         Pair<byte[][], byte[][]> startEndKeys =
@@ -271,7 +272,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
             assertTrue(rs.next());
             
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getTableRegions(physicalTableName).size();
             
             String query = "SELECT t_id, k1, k2, k3, V1 FROM " + tableName +" where v1='a'";
@@ -429,7 +430,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             conn1.commit();
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             Table table =
                     admin.getConnection().getTable(TableName.valueOf(tableName));
             Pair<byte[][], byte[][]> startEndKeys =
@@ -590,7 +591,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         if (isNamespaceMapped) { return; }
         PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
         try (Table metaTable = conn.getQueryServices().getTable(TableName.META_TABLE_NAME.getName());
-                HBaseAdmin admin = conn.getQueryServices().getAdmin();) {
+                Admin admin = conn.getQueryServices().getAdmin();) {
             Statement statement = conn.createStatement();
             final String tableName = "T_AUTO_MATIC_REPAIR";
             String indexName = "IDX_T_AUTO_MATIC_REPAIR";
@@ -607,10 +608,10 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertTrue(rs.next());
             assertEquals(2000, rs.getLong(1));
             List<HRegionInfo> tableRegions = admin.getTableRegions(TableName.valueOf(tableName));
-            admin.disableTable(tableName);
+            admin.disableTable(TableName.valueOf(tableName));
             copyLocalIndexHFiles(config, tableRegions.get(0), tableRegions.get(1), false);
             copyLocalIndexHFiles(config, tableRegions.get(3), tableRegions.get(0), false);
-            admin.enableTable(tableName);
+            admin.enableTable(TableName.valueOf(tableName));
 
             int count=getCount(conn, tableName, "L#0");
             assertTrue(count > 4000);

@@ -131,7 +131,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -2885,8 +2885,8 @@ public class MetaDataClient {
                                     .getViewIndexPhysicalName(table.getPhysicalName().getBytes());
                             if (!dropMetaData) {
                                 // we need to drop rows only when actually view index exists
-                                try (HBaseAdmin admin = connection.getQueryServices().getAdmin()) {
-                                    hasViewIndexTable = admin.tableExists(viewIndexPhysicalName);
+                                try (Admin admin = connection.getQueryServices().getAdmin()) {
+                                    hasViewIndexTable = admin.tableExists(org.apache.hadoop.hbase.TableName.valueOf(viewIndexPhysicalName));
                                 } catch (IOException e1) {
                                     // absorbing as it is not critical check
                                 }

@@ -34,7 +34,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Table;
@@ -68,7 +68,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
         tableName = generateUniqueName();
         try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices services = pconn.getQueryServices();
-            try (HBaseAdmin admin = services.getAdmin()) {
+            try (Admin admin = services.getAdmin()) {
                 HTableDescriptor htd = new HTableDescriptor(TableName.valueOf(tableName));
                 htd.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
                 htd.addFamily(new HColumnDescriptor(FAMILY_NAME_A));

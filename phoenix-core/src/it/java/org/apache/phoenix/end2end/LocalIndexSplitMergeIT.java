@@ -32,7 +32,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
@@ -111,7 +111,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
 
-            HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             for (int i = 1; i < 5; i++) {
                 admin.split(physicalTableName, ByteUtil.concat(Bytes.toBytes(strings[3 * i])));
                 List<HRegionInfo> regionsOfUserTable =
@@ -212,7 +212,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
 
-            HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             List<HRegionInfo> regionsOfUserTable =
                     MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
                         admin.getConnection(), physicalTableName, false);

@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedHLogReader;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
@@ -72,11 +72,11 @@ public class TestIndexManagementUtil {
 
   /**
    * Create the specified index table with the necessary columns
-   * @param admin {@link HBaseAdmin} to use when creating the table
+   * @param admin {@link Admin} to use when creating the table
    * @param indexTable name of the index table.
    * @throws IOException
    */
-  public static void createIndexTable(HBaseAdmin admin, String indexTable) throws IOException {
+  public static void createIndexTable(Admin admin, String indexTable) throws IOException {
     createIndexTable(admin, new HTableDescriptor(indexTable));
   }
 
@@ -84,7 +84,7 @@ public class TestIndexManagementUtil {
    * @param admin to create the table
    * @param index descriptor to update before creating table
    */
-  public static void createIndexTable(HBaseAdmin admin, HTableDescriptor index) throws IOException {
+  public static void createIndexTable(Admin admin, HTableDescriptor index) throws IOException {
     HColumnDescriptor col =
         new HColumnDescriptor(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY);
     // ensure that we can 'see past' delete markers when doing scans

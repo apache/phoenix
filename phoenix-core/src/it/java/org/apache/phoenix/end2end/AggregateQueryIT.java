@@ -37,9 +37,9 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -83,7 +83,7 @@ public class AggregateQueryIT extends BaseQueryIT {
         String query = "SELECT a_string, b_string, count(1) FROM " + tableName + " WHERE organization_id=? and entity_id<=? GROUP BY a_string,b_string";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        HBaseAdmin admin = null;
+        Admin admin = null;
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -103,7 +103,7 @@ public class AggregateQueryIT extends BaseQueryIT {
             assertEquals(1, rs.getLong(3));
             assertFalse(rs.next());
             
-            byte[] tableNameBytes = Bytes.toBytes(tableName);
+            TableName tn =TableName.valueOf(tableName);
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableNameBytes);
             Configuration configuration = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
@@ -111,7 +111,7 @@ public class AggregateQueryIT extends BaseQueryIT {
             ((ClusterConnection)hbaseConn).clearRegionCache(TableName.valueOf(tableName));
             RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
             int nRegions = regionLocator.getAllRegionLocations().size();
-            admin.split(tableNameBytes, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A3")));
+            admin.split(tn, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A3")));
             int retryCount = 0;
             do {
                 Thread.sleep(2000);

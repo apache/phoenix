@@ -80,9 +80,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -188,7 +188,7 @@ public class UpgradeUtil {
         return Bytes.toBytes("_BAK_" + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
     }
     
-    private static void createSequenceSnapshot(HBaseAdmin admin, PhoenixConnection conn) throws SQLException {
+    private static void createSequenceSnapshot(Admin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
         HColumnDescriptor columnDesc = new HColumnDescriptor(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES);
         HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(tableName));
@@ -201,16 +201,16 @@ public class UpgradeUtil {
         }
     }
     
-    private static void restoreSequenceSnapshot(HBaseAdmin admin, PhoenixConnection conn) throws SQLException {
+    private static void restoreSequenceSnapshot(Admin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
         copyTable(conn, tableName, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
     }
     
-    private static void deleteSequenceSnapshot(HBaseAdmin admin) throws SQLException {
-        byte[] tableName = getSequenceSnapshotName();
+    private static void deleteSequenceSnapshot(Admin admin) throws SQLException {
+        TableName tableName = TableName.valueOf(getSequenceSnapshotName());
         try {
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
+            admin.disableTable(tableName);
+            admin.deleteTable(tableName);
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -286,7 +286,7 @@ public class UpgradeUtil {
     }
     
     private static void preSplitSequenceTable(PhoenixConnection conn, int nSaltBuckets) throws SQLException {
-        HBaseAdmin admin = conn.getQueryServices().getAdmin();
+        Admin admin = conn.getQueryServices().getAdmin();
         boolean snapshotCreated = false;
         boolean success = false;
         try {
@@ -338,7 +338,7 @@ public class UpgradeUtil {
         PhoenixConnection toReturn = null;
         globalConnection = new PhoenixConnection(metaConnection, metaConnection.getQueryServices(), props);
         SQLException sqlEx = null;
-        try (HBaseAdmin admin = globalConnection.getQueryServices().getAdmin()) {
+        try (Admin admin = globalConnection.getQueryServices().getAdmin()) {
             ResultSet rs = globalConnection.createStatement().executeQuery("SELECT TABLE_SCHEM, TABLE_NAME, DATA_TABLE_NAME, TENANT_ID, MULTI_TENANT, SALT_BUCKETS FROM SYSTEM.CATALOG  "
                     + "      WHERE COLUMN_NAME IS NULL"
                     + "           AND COLUMN_FAMILY IS NULL"
@@ -499,7 +499,7 @@ public class UpgradeUtil {
         try {
             globalConnection = new PhoenixConnection(connParam, connParam.getQueryServices(), props);
             String tenantId = null;
-            try (HBaseAdmin admin = globalConnection.getQueryServices().getAdmin()) {
+            try (Admin admin = globalConnection.getQueryServices().getAdmin()) {
                 String fetchViewIndexes = "SELECT " + TENANT_ID + ", " + TABLE_SCHEM + ", " + TABLE_NAME + 
                         ", " + DATA_TABLE_NAME + " FROM " + SYSTEM_CATALOG_NAME + " WHERE " + VIEW_INDEX_ID
                         + " IS NOT NULL";
@@ -1428,10 +1428,10 @@ public class UpgradeUtil {
     }
 
     private static void upgradeDescVarLengthRowKeys(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String schemaName, String tableName, boolean isTable, boolean bypassUpgrade) throws SQLException {
-        String physicalName = SchemaUtil.getTableName(schemaName, tableName);
+        TableName physicalName = TableName.valueOf(SchemaUtil.getTableName(schemaName, tableName));
         long currentTime = System.currentTimeMillis();
         String snapshotName = physicalName + "_" + currentTime;
-        HBaseAdmin admin = null;
+        Admin admin = null;
         if (isTable && !bypassUpgrade) {
             admin = globalConn.getQueryServices().getAdmin();
         }
@@ -1442,9 +1442,9 @@ public class UpgradeUtil {
                 String msg = "Taking snapshot of physical table " + physicalName + " prior to upgrade...";
                 System.out.println(msg);
                 logger.info(msg);
-                admin.disableTable(TableName.valueOf(physicalName));
-                admin.snapshot(snapshotName, TableName.valueOf(physicalName));
-                admin.enableTable(TableName.valueOf(physicalName));
+                admin.disableTable(physicalName);
+                admin.snapshot(snapshotName, physicalName);
+                admin.enableTable(physicalName);
                 restoreSnapshot = true;
             }
             String escapedTableName = SchemaUtil.getEscapedTableName(schemaName, tableName);
@@ -1517,9 +1517,9 @@ public class UpgradeUtil {
             boolean restored = false;
             try {
                 if (!success && restoreSnapshot) {
-                    admin.disableTable(TableName.valueOf(physicalName));
+                    admin.disableTable(physicalName);
                     admin.restoreSnapshot(snapshotName, false);
-                    admin.enableTable(TableName.valueOf(physicalName));
+                    admin.enableTable(physicalName);
                     String msg = "Restored snapshot of " + physicalName + " due to failure of upgrade";
                     System.out.println(msg);
                     logger.info(msg);
@@ -1727,11 +1727,10 @@ public class UpgradeUtil {
         return false;
     }
 
-    private static void mapTableToNamespace(HBaseAdmin admin, Table metatable, String srcTableName,
+    private static void mapTableToNamespace(Admin admin, Table metatable, String srcTableName,
             String destTableName, ReadOnlyProps props, Long ts, String phoenixTableName, PTableType pTableType,PName tenantId)
                     throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
                     SQLException {
-        srcTableName = SchemaUtil.normalizeIdentifier(srcTableName);
         if (!SchemaUtil.isNamespaceMappingEnabled(pTableType,
                 props)) { throw new IllegalArgumentException(SchemaUtil.isSystemTable(srcTableName.getBytes())
                         ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
@@ -1761,23 +1760,25 @@ public class UpgradeUtil {
         }
     }
 
-    public static void mapTableToNamespace(HBaseAdmin admin, String srcTableName, String destTableName, PTableType pTableType) throws IOException {
-        boolean srcTableExists=admin.tableExists(srcTableName);
+    public static void mapTableToNamespace(Admin admin, String srcTableName, String destTableName, PTableType pTableType) throws IOException {
+        TableName srcTable = TableName.valueOf(SchemaUtil.normalizeIdentifier(srcTableName));
+        TableName dstTable = TableName.valueOf(destTableName);
+        boolean srcTableExists=admin.tableExists(srcTable);
         // we need to move physical table in actual namespace for TABLE and Index
         if (srcTableExists && (PTableType.TABLE.equals(pTableType)
                 || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
-            boolean destTableExists=admin.tableExists(destTableName);
+            boolean destTableExists=admin.tableExists(dstTable);
             if (!destTableExists) {
                 String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
                 logger.info("Disabling table " + srcTableName + " ..");
-                admin.disableTable(srcTableName);
+                admin.disableTable(srcTable);
                 logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
-                admin.snapshot(snapshotName, srcTableName);
+                admin.snapshot(snapshotName, srcTable);
                 logger.info(
                         String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
-                admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
+                admin.cloneSnapshot(snapshotName, dstTable);
                 logger.info(String.format("deleting old table %s..", srcTableName));
-                admin.deleteTable(srcTableName);
+                admin.deleteTable(srcTable);
                 logger.info(String.format("deleting snapshot %s..", snapshotName));
                 admin.deleteSnapshot(snapshotName);
             }
@@ -1788,7 +1789,7 @@ public class UpgradeUtil {
      * Method to map existing phoenix table to a namespace. Should not be use if tables has views and indexes ,instead
      * use map table utility in psql.py
      */
-    public static void mapTableToNamespace(HBaseAdmin admin, Table metatable, String tableName,
+    public static void mapTableToNamespace(Admin admin, Table metatable, String tableName,
             ReadOnlyProps props, Long ts, PTableType pTableType, PName tenantId) throws SnapshotCreationException,
                     IllegalArgumentException, IOException, InterruptedException, SQLException {
         String destTablename = SchemaUtil
@@ -1804,7 +1805,7 @@ public class UpgradeUtil {
         if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                 readOnlyProps)) { throw new IllegalArgumentException(
                         QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled!!"); }
-        try (HBaseAdmin admin = conn.getQueryServices().getAdmin();
+        try (Admin admin = conn.getQueryServices().getAdmin();
                 Table metatable = conn.getQueryServices()
                         .getTable(SchemaUtil
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, readOnlyProps)

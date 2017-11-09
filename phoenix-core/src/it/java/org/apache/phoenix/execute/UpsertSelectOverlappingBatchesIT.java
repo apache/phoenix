@@ -43,7 +43,7 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -205,7 +205,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
 
             // keep trying to split the region
             final HBaseTestingUtility utility = getUtility();
-            final HBaseAdmin admin = utility.getHBaseAdmin();
+            final Admin admin = utility.getHBaseAdmin();
             final TableName dataTN = TableName.valueOf(dataTable);
             assertEquals(1, utility.getHBaseCluster().getRegions(dataTN).size());
             utility.waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
@@ -260,7 +260,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
             final HBaseTestingUtility utility = getUtility();
             // try to close the region while UPSERT SELECTs are happening,
             final HRegionServer dataRs = utility.getHBaseCluster().getRegionServer(0);
-            final HBaseAdmin admin = utility.getHBaseAdmin();
+            final Admin admin = utility.getHBaseAdmin();
             final HRegionInfo dataRegion =
                     admin.getTableRegions(TableName.valueOf(dataTable)).get(0);
             logger.info("Closing data table region");

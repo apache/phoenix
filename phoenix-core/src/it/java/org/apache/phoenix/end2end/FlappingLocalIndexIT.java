@@ -31,7 +31,7 @@ import java.util.concurrent.CountDownLatch;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -151,7 +151,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
             assertTrue(rs.next());
             
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getTableRegions(physicalTableName).size();
             
             String query = "SELECT * FROM " + tableName +" where v1 like 'a%'";
@@ -285,7 +285,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
         Table indexTable = hbaseConn.getTable(TableName.valueOf(indexPhysicalTableName));
         Pair<byte[][], byte[][]> startEndKeys = hbaseConn.getRegionLocator(TableName.valueOf(indexPhysicalTableName)).getStartEndKeys();
@@ -330,7 +330,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
         conn1.commit();
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HTableDescriptor tableDescriptor = admin.getTableDescriptor(physicalTableName);
         tableDescriptor.addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
             QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null);

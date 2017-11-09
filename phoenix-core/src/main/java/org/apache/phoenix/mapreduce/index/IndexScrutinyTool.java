@@ -38,7 +38,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.Text;
@@ -285,7 +285,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
                     selectQuery);
             } else { // TODO check if using a snapshot works
-                HBaseAdmin admin = null;
+                Admin admin = null;
                 String snapshotName;
                 try {
                     final PhoenixConnection pConnection =
