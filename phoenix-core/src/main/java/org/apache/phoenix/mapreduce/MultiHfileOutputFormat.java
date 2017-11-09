@@ -40,7 +40,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.compress.Compression;
@@ -650,6 +652,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
      * @param tablesToBeLoaded
      * @throws IOException
      */
+    @SuppressWarnings("deprecation")
     public static void configureIncrementalLoad(Job job, List<TargetTableRef> tablesToBeLoaded) throws IOException {
         
         Configuration conf = job.getConfiguration();
@@ -662,13 +665,16 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         Set<TableRowkeyPair> tablesStartKeys = Sets.newTreeSet();
         for(TargetTableRef table : tablesToBeLoaded) {
            final String tableName = table.getPhysicalName();
-           try(HTable htable = new HTable(conf,tableName);){
-               Set<TableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable.getRegionLocator());
+           try(Connection hbaseConn = ConnectionFactory.createConnection(conf);){
+                Set<TableRowkeyPair> startKeys =
+                        getRegionStartKeys(tableName,
+                            hbaseConn.getRegionLocator(TableName.valueOf(tableName)));
                tablesStartKeys.addAll(startKeys);
-               String compressionConfig = configureCompression(htable.getTableDescriptor());
-               String bloomTypeConfig = configureBloomType(htable.getTableDescriptor());
-               String blockSizeConfig = configureBlockSize(htable.getTableDescriptor());
-               String blockEncodingConfig = configureDataBlockEncoding(htable.getTableDescriptor());
+               HTableDescriptor tableDescriptor = hbaseConn.getTable(TableName.valueOf(tableName)).getTableDescriptor();
+               String compressionConfig = configureCompression(tableDescriptor);
+               String bloomTypeConfig = configureBloomType(tableDescriptor);
+               String blockSizeConfig = configureBlockSize(tableDescriptor);
+               String blockEncodingConfig = configureDataBlockEncoding(tableDescriptor);
                Map<String,String> tableConfigs = Maps.newHashMap();
                if(StringUtils.isNotBlank(compressionConfig)) {
                    tableConfigs.put(COMPRESSION_FAMILIES_CONF_KEY, compressionConfig);

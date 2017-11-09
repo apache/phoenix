@@ -32,10 +32,10 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -286,8 +286,9 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration(),Bytes.toBytes(indexPhysicalTableName));
-        Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+        org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
+        Table indexTable = hbaseConn.getTable(TableName.valueOf(indexPhysicalTableName));
+        Pair<byte[][], byte[][]> startEndKeys = hbaseConn.getRegionLocator(TableName.valueOf(indexPhysicalTableName)).getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
         for (int i = 0; i < startKeys.length; i++) {

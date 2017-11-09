@@ -44,8 +44,9 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -174,11 +175,12 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         HTableDescriptor htd = admin
                 .getTableDescriptor(Bytes.toBytes(indexPhysicalTableName));
         assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
-        try (HTable userTable = new HTable(admin.getConfiguration(),
-                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
-            try (HTable indexTable = new HTable(admin.getConfiguration(), Bytes.toBytes(indexPhysicalTableName))) {
-                assertArrayEquals("Both user table and index table should have same split keys.",
-                        userTable.getStartKeys(), indexTable.getStartKeys());
+        try(org.apache.hadoop.hbase.client.Connection c = ConnectionFactory.createConnection(admin.getConfiguration())) {
+            try (RegionLocator userTable= c.getRegionLocator(SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
+                try (RegionLocator indxTable = c.getRegionLocator(TableName.valueOf(indexPhysicalTableName))) {
+                    assertArrayEquals("Both user table and index table should have same split keys.",
+                        userTable.getStartKeys(), indxTable.getStartKeys());
+                }
             }
         }
     }

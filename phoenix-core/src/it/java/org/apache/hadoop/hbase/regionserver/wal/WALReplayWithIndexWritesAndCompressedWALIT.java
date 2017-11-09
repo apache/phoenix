@@ -38,13 +38,14 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
@@ -223,9 +224,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
     // initialize the region - this should replay the WALEdits from the WAL
     region1.initialize();
+    org.apache.hadoop.hbase.client.Connection hbaseConn =
+            ConnectionFactory.createConnection(UTIL.getConfiguration());
 
     // now check to ensure that we wrote to the index table
-    HTable index = new HTable(UTIL.getConfiguration(), INDEX_TABLE_NAME);
+    Table index = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(INDEX_TABLE_NAME));
     int indexSize = getKeyValueCount(index);
     assertEquals("Index wasn't propertly updated from WAL replay!", 1, indexSize);
     Get g = new Get(rowkey);
@@ -290,7 +293,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   }
 
   @SuppressWarnings("deprecation")
-private int getKeyValueCount(HTable table) throws IOException {
+private int getKeyValueCount(Table table) throws IOException {
     Scan scan = new Scan();
     scan.setMaxVersions(Integer.MAX_VALUE - 1);
 

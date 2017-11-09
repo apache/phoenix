@@ -32,10 +32,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -143,14 +145,15 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
         // verify that the timestamp of the keyvalues matches the ROW_TIMESTAMP column value
         Scan scan = new Scan();
         byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(true).getFirst();
-        HTable hTable = new HTable(getUtility().getConfiguration(), tableName);
+        org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(getUtility().getConfiguration());
+        Table hTable = hbaseConn.getTable(TableName.valueOf(tableName));
         ResultScanner resultScanner = hTable.getScanner(scan);
         for (Result result : resultScanner) {
             long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
             assertEquals(rowTimestampDate.getTime(), timeStamp);
         }
         if (!mutable) {
-            hTable = new HTable(getUtility().getConfiguration(), indexName);
+            hTable = hbaseConn.getTable(TableName.valueOf(indexName));
              resultScanner = hTable.getScanner(scan);
             for (Result result : resultScanner) {
                 long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
@@ -253,14 +256,15 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
             // verify that the timestamp of the keyvalues matches the ROW_TIMESTAMP column value
             Scan scan = new Scan();
             byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(true).getFirst();
-            HTable hTable = new HTable(getUtility().getConfiguration(), tableName);
+            org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(getUtility().getConfiguration());
+            Table hTable = hbaseConn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = hTable.getScanner(scan);
             for (Result result : resultScanner) {
                 long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
                 assertEquals(rowTimestampDate.getTime(), timeStamp);
             }
             if (!mutable) {
-                hTable = new HTable(getUtility().getConfiguration(), indexName);
+                hTable = hbaseConn.getTable(TableName.valueOf(indexName));
                  resultScanner = hTable.getScanner(scan);
                 for (Result result : resultScanner) {
                     long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();

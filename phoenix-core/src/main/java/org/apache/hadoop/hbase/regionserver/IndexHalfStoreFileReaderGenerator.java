@@ -36,10 +36,11 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -98,10 +99,11 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             }
             if(scvf != null) scan.setFilter(scvf);
             byte[] regionStartKeyInHFile = null;
-            HTable metaTable = null;
+            Connection connection = ctx.getEnvironment().getConnection();
+            Table metaTable = null;
             PhoenixConnection conn = null;
             try {
-                metaTable = new HTable(ctx.getEnvironment().getConfiguration(), TableName.META_TABLE_NAME);
+                metaTable = connection.getTable(TableName.META_TABLE_NAME));
                 ResultScanner scanner = null;
                 Result result = null;
                 try {

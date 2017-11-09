@@ -35,8 +35,13 @@ import java.sql.ResultSet;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.ByteUtil;
@@ -100,17 +105,20 @@ public class AggregateQueryIT extends BaseQueryIT {
             
             byte[] tableNameBytes = Bytes.toBytes(tableName);
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableNameBytes);
-            htable.clearRegionCache();
-            int nRegions = htable.getRegionLocations().size();
+            Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableNameBytes);
+            Configuration configuration = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
+            org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(configuration);
+            ((ClusterConnection)hbaseConn).clearRegionCache(TableName.valueOf(tableName));
+            RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
+            int nRegions = regionLocator.getAllRegionLocations().size();
             admin.split(tableNameBytes, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A3")));
             int retryCount = 0;
             do {
                 Thread.sleep(2000);
                 retryCount++;
                 //htable.clearRegionCache();
-            } while (retryCount < 10 && htable.getRegionLocations().size() == nRegions);
-            assertNotEquals(nRegions, htable.getRegionLocations().size());
+            } while (retryCount < 10 && regionLocator.getAllRegionLocations().size() == nRegions);
+            assertNotEquals(nRegions, regionLocator.getAllRegionLocations().size());
             
             statement.setString(1, tenantId);
             rs = statement.executeQuery();

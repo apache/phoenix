@@ -39,13 +39,15 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -192,9 +194,9 @@ public class TestWALRecoveryCaching {
     // load some data into the table
     Put p = new Put(Bytes.toBytes("row"));
     p.addColumn(family, qual, Bytes.toBytes("value"));
-    HTable primary = new HTable(conf, testTable.getTableName());
+    Connection hbaseConn = ConnectionFactory.createConnection(conf);
+    Table primary = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(testTable.getTableName()));
     primary.put(p);
-    primary.flushCommits();
 
     // turn on the recovery latch
     allowIndexTableToRecover = new CountDownLatch(1);
@@ -236,7 +238,6 @@ public class TestWALRecoveryCaching {
     Put p2 = new Put(p.getRow());
     p2.addColumn(nonIndexedFamily, Bytes.toBytes("Not indexed"), Bytes.toBytes("non-indexed value"));
     primary.put(p2);
-    primary.flushCommits();
 
     // make sure that we actually failed the write once (within a 5 minute window)
     assertTrue("Didn't find an error writing to index table within timeout!",
@@ -245,7 +246,7 @@ public class TestWALRecoveryCaching {
     // scan the index to make sure it has the one entry, (that had to be replayed from the WAL,
     // since we hard killed the server)
     Scan s = new Scan();
-    HTable index = new HTable(conf, getIndexTableName());
+    Table index = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(getIndexTableName()));
     ResultScanner scanner = index.getScanner(s);
     int count = 0;
     for (Result r : scanner) {

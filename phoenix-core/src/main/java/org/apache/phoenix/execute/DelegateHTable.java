@@ -20,6 +20,7 @@ package org.apache.phoenix.execute;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -293,5 +294,30 @@ public class DelegateHTable implements Table {
     @Override
     public void setWriteRpcTimeout(int writeRpcTimeout) {
         delegate.setWriteRpcTimeout(writeRpcTimeout);
+    }
+
+    @Override
+    public boolean[] exists(List<Get> gets) throws IOException {
+        return delegate.existsAll(gets);
+    }
+
+    @Override
+    public long getRpcTimeout(TimeUnit unit) {
+        return delegate.getRpcTimeout();
+    }
+
+    @Override
+    public long getReadRpcTimeout(TimeUnit unit) {
+        return delegate.getReadRpcTimeout(unit);
+    }
+
+    @Override
+    public long getWriteRpcTimeout(TimeUnit unit) {
+        return delegate.getWriteRpcTimeout(unit);
+    }
+
+    @Override
+    public long getOperationTimeout(TimeUnit unit) {
+        return delegate.getOperationTimeout(unit);
     }
 }

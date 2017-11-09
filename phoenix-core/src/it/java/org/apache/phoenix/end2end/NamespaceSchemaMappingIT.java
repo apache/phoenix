@@ -30,8 +30,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -71,14 +71,14 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         Put put = new Put(PVarchar.INSTANCE.toBytes(phoenixFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-        HTable phoenixSchematable = new HTable(admin.getConfiguration(), phoenixFullTableName);
+        Table phoenixSchematable = admin.getConnection().getTable(TableName.valueOf(phoenixFullTableName));
         phoenixSchematable.put(put);
         phoenixSchematable.close();
         put = new Put(PVarchar.INSTANCE.toBytes(hbaseFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
         phoenixSchematable.close();
-        HTable namespaceMappedtable = new HTable(admin.getConfiguration(), hbaseFullTableName);
+        Table namespaceMappedtable = admin.getConnection().getTable(TableName.valueOf(hbaseFullTableName));
         namespaceMappedtable.put(put);
         namespaceMappedtable.close();
         Properties props = new Properties();
@@ -92,7 +92,7 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(phoenixFullTableName, rs.getString(1));
 
-        HTable metatable = new HTable(admin.getConfiguration(),
+        Table metatable = admin.getConnection().getTable(
                 SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
                         (conn.unwrap(PhoenixConnection.class).getQueryServices().getProps())));
         Put p = new Put(SchemaUtil.getTableKey(null, schemaName, tableName));

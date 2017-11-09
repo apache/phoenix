@@ -117,27 +117,27 @@ public interface PhoenixTransactionalTable extends Table {
     public void delete(List<Delete> deletes) throws IOException;
 
     /**
-     * Delegates to {@link HTable#setAutoFlush(boolean autoFlush)}
+     * Delegates to {@link Table#setAutoFlush(boolean autoFlush)}
      */
     public void setAutoFlush(boolean autoFlush);
 
     /**
-     * Delegates to {@link HTable#isAutoFlush()}
+     * Delegates to {@link Table#isAutoFlush()}
      */
     public boolean isAutoFlush();
 
     /**
-     * Delegates to see HTable.getWriteBufferSize()
+     * Delegates to see Table.getWriteBufferSize()
      */
     public long getWriteBufferSize();
 
     /**
-     * Delegates to see HTable.setWriteBufferSize()
+     * Delegates to see Table.setWriteBufferSize()
      */
     public void setWriteBufferSize(long writeBufferSize) throws IOException;
 
     /**
-     * Delegates to see HTable.flushCommits()
+     * Delegates to see Table.flushCommits()
      */
     public void flushCommits() throws IOException;
 

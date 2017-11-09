@@ -48,11 +48,10 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
@@ -479,7 +478,8 @@ public class IndexTool extends Configured implements Tool {
     @Override
     public int run(String[] args) throws Exception {
         Connection connection = null;
-        HTable htable = null;
+        Table htable = null;
+        RegionLocator regionLocator = null;
         try {
             CommandLine cmdLine = null;
             try {
@@ -508,11 +508,14 @@ public class IndexTool extends Configured implements Tool {
                 }
                 pindexTable = PhoenixRuntime.getTable(connection, schemaName != null && !schemaName.isEmpty()
                         ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : indexTable);
-                htable = (HTable)connection.unwrap(PhoenixConnection.class).getQueryServices()
+                htable = connection.unwrap(PhoenixConnection.class).getQueryServices()
                         .getTable(pindexTable.getPhysicalName().getBytes());
+                regionLocator =
+                        ConnectionFactory.createConnection(configuration).getRegionLocator(
+                            TableName.valueOf(pindexTable.getPhysicalName().getBytes()));
                 if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
                     isLocalIndexBuild = true;
-                    splitKeysBeforeJob = htable.getRegionLocator().getStartKeys();
+                    splitKeysBeforeJob = regionLocator.getStartKeys();
                 }
             }
             
@@ -539,11 +542,12 @@ public class IndexTool extends Configured implements Tool {
             if (result) {
                 if (!useDirectApi && indexTable != null) {
                     if (isLocalIndexBuild) {
-                        validateSplitForLocalIndex(splitKeysBeforeJob, htable);
+                        validateSplitForLocalIndex(splitKeysBeforeJob, regionLocator);
                     }
                     LOG.info("Loading HFiles from {}", outputPath);
                     LoadIncrementalHFiles loader = new LoadIncrementalHFiles(configuration);
-                    loader.doBulkLoad(outputPath, htable);
+                    loader.doBulkLoad(outputPath, connection.unwrap(PhoenixConnection.class)
+                            .getQueryServices().getAdmin(), htable, regionLocator);
                     htable.close();
                     // Without direct API, we need to update the index state to ACTIVE from client.
                     IndexToolUtil.updateIndexState(connection, qDataTable, indexTable, PIndexState.ACTIVE);
@@ -566,6 +570,9 @@ public class IndexTool extends Configured implements Tool {
                 if (htable != null) {
                     htable.close();
                 }
+                if(regionLocator != null) {
+                    regionLocator.close();
+                }
             } catch (SQLException sqle) {
                 LOG.error("Failed to close connection ", sqle.getMessage());
                 throw new RuntimeException("Failed to close connection");
@@ -575,9 +582,9 @@ public class IndexTool extends Configured implements Tool {
 
     
 
-    private boolean validateSplitForLocalIndex(byte[][] splitKeysBeforeJob, HTable htable) throws Exception {
+    private boolean validateSplitForLocalIndex(byte[][] splitKeysBeforeJob, RegionLocator regionLocator) throws Exception {
         if (splitKeysBeforeJob != null
-                && !IndexUtil.matchingSplitKeys(splitKeysBeforeJob, htable.getRegionLocator().getStartKeys())) {
+                && !IndexUtil.matchingSplitKeys(splitKeysBeforeJob, regionLocator.getStartKeys())) {
             String errMsg = "The index to build is local index and the split keys are not matching"
                     + " before and after running the job. Please rerun the job otherwise"
                     + " there may be inconsistencies between actual data and index data";

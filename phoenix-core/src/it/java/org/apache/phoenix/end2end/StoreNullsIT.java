@@ -33,10 +33,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
@@ -133,8 +135,9 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         rs1.next();
         assertNull(rs1.getString(1));
         rs1.next();
-        
-        HTable htable = new HTable(getUtility().getConfiguration(), dataTableName);
+        Table htable =
+                ConnectionFactory.createConnection(getUtility().getConfiguration()).getTable(
+                    TableName.valueOf(dataTableName));
         Scan s = new Scan();
         s.setRaw(true);
         ResultScanner scanner = htable.getScanner(s);

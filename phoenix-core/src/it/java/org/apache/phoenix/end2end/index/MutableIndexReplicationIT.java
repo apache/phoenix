@@ -42,11 +42,12 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
@@ -245,7 +246,8 @@ public class MutableIndexReplicationIT extends BaseTest {
         // lookup tables. For right now, we just go through an HTable
         LOG.info("Looking up tables in replication target");
         TableName[] tables = admin2.listTableNames();
-        HTable remoteTable = new HTable(utility2.getConfiguration(), tables[0]);
+        org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(utility2.getConfiguration());
+        Table remoteTable = hbaseConn.getTable(tables[0]);
         for (int i = 0; i < REPLICATION_RETRIES; i++) {
             if (i >= REPLICATION_RETRIES - 1) {
                 fail("Waited too much time for put replication on table " + remoteTable
@@ -261,7 +263,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         remoteTable.close();
     }
 
-    private boolean ensureAnyRows(HTable remoteTable) throws IOException {
+    private boolean ensureAnyRows(Table remoteTable) throws IOException {
         Scan scan = new Scan();
         scan.setRaw(true);
         ResultScanner scanner = remoteTable.getScanner(scan);

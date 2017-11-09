@@ -28,10 +28,10 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -63,9 +63,9 @@ public class IndexTestingUtils {
    * @throws IOException
    */
   @SuppressWarnings("javadoc")
-  public static void verifyIndexTableAtTimestamp(HTable index1, List<KeyValue> expected,
+  public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected,
       long start, long end, byte[] startKey, byte[] endKey) throws IOException {
-    LOG.debug("Scanning " + Bytes.toString(index1.getTableName()) + " between times (" + start
+    LOG.debug("Scanning " + index1.getName().getNameAsString() + " between times (" + start
         + ", " + end + "] and keys: [" + Bytes.toString(startKey) + ", " + Bytes.toString(endKey)
         + "].");
     Scan s = new Scan(startKey, endKey);
@@ -82,12 +82,12 @@ public class IndexTestingUtils {
     assertEquals("Didn't get the expected kvs from the index table!", expected, received);
   }
 
-  public static void verifyIndexTableAtTimestamp(HTable index1, List<KeyValue> expected, long ts,
+  public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected, long ts,
       byte[] startKey) throws IOException {
     IndexTestingUtils.verifyIndexTableAtTimestamp(index1, expected, ts, startKey, HConstants.EMPTY_END_ROW);
   }
 
-  public static void verifyIndexTableAtTimestamp(HTable index1, List<KeyValue> expected, long start,
+  public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected, long start,
       byte[] startKey, byte[] endKey) throws IOException {
     verifyIndexTableAtTimestamp(index1, expected, start, start + 1, startKey, endKey);
   }

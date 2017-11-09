@@ -35,10 +35,10 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -198,7 +198,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 scan.setRaw(true);
                 scan.setStartRow(key);
                 scan.setStopRow(key);
-                HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+                Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
                 ResultScanner results = table.getScanner(scan);
                 Result result = results.next();
                 assertNotNull(result);
@@ -209,7 +209,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 // key value for v2 should have been deleted from the global index table
                 scan = new Scan();
                 scan.setRaw(true);
-                table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
+                table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
@@ -220,7 +220,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 scan = new Scan();
                 scan.setRaw(true);
                 scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-                table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+                table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
@@ -248,7 +248,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         byte[] key = Bytes.toBytes("a");
         scan.setStartRow(key);
         scan.setStopRow(key);
-        HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+        Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
         ResultScanner results = table.getScanner(scan);
         Result result = results.next();
         assertNotNull(result);
@@ -268,7 +268,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         // key value for v2 should exist in the global index table
         scan = new Scan();
         scan.setRaw(true);
-        table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
+        table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
         results = table.getScanner(scan);
         result = results.next();
         assertNotNull(result);
@@ -288,7 +288,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         scan = new Scan();
         scan.setRaw(true);
         scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-        table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+        table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
         results = table.getScanner(scan);
         result = results.next();
         assertNotNull(result);
@@ -379,7 +379,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             // there should be a single row belonging to localIndexTableName2 
             Scan scan = new Scan();
             scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(localIndexTablePhysicalName.getBytes());
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(localIndexTablePhysicalName.getBytes());
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);
@@ -502,7 +502,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             
             // scan the physical table and verify there is a single row for the second local index
             Scan scan = new Scan();
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);

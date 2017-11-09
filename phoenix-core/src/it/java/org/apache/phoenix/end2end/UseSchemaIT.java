@@ -30,9 +30,11 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -172,7 +174,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         Put put = new Put(PVarchar.INSTANCE.toBytes(fullTablename));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-        HTable phoenixSchematable = new HTable(admin.getConfiguration(), fullTablename);
+        Table phoenixSchematable = admin.getConnection().getTable(TableName.valueOf(fullTablename));
         phoenixSchematable.put(put);
         phoenixSchematable.close();
         conn.createStatement().execute("CREATE VIEW " + tableName + " (tablename VARCHAR PRIMARY KEY)");

@@ -41,7 +41,11 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -289,13 +293,15 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         job.setOutputValueClass(KeyValue.class);
         job.setReducerClass(FormatToKeyValueReducer.class);
         byte[][] splitKeysBeforeJob = null;
-        HTable table = null;
+        org.apache.hadoop.hbase.client.Connection hbaseConn =
+                ConnectionFactory.createConnection(job.getConfiguration());
+        RegionLocator regionLocator = null;
         if(hasLocalIndexes) {
             try{
-                table = new HTable(job.getConfiguration(), qualifiedTableName);
-                splitKeysBeforeJob = table.getRegionLocator().getStartKeys();
+                regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(qualifiedTableName));
+                splitKeysBeforeJob = regionLocator.getStartKeys();
             } finally {
-                if(table != null )table.close();
+                if(regionLocator != null )regionLocator.close();
             }
         }
         MultiHfileOutputFormat.configureIncrementalLoad(job, tablesToBeLoaded);
@@ -315,8 +321,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         if (success) {
             if (hasLocalIndexes) {
                 try {
-                    table = new HTable(job.getConfiguration(), qualifiedTableName);
-                    if(!IndexUtil.matchingSplitKeys(splitKeysBeforeJob, table.getRegionLocator().getStartKeys())) {
+                    regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(qualifiedTableName));
+                    if(!IndexUtil.matchingSplitKeys(splitKeysBeforeJob, regionLocator.getStartKeys())) {
                         LOG.error("The table "
                                 + qualifiedTableName
                                 + " has local indexes and there is split key mismatch before and"
@@ -325,7 +331,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                         return -1;
                     }
                 } finally {
-                    if (table != null) table.close();
+                    if (regionLocator != null) regionLocator.close();
                 }
             }
             LOG.info("Loading HFiles from {}", outputPath);
@@ -350,9 +356,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
             String tableName = table.getPhysicalName();
             Path tableOutputPath = CsvBulkImportUtil.getOutputPath(outputPath, tableName);
-            HTable htable = new HTable(conf,tableName);
+            org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(conf);
+            Table htable = hbaseConn.getTable(TableName.valueOf(tableName));
             LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
-            loader.doBulkLoad(tableOutputPath, htable);
+            loader.doBulkLoad(tableOutputPath, hbaseConn.getAdmin(), htable, hbaseConn.getRegionLocator(TableName.valueOf(tableName)));
             LOG.info("Incremental load complete for table=" + tableName);
         }
     }
