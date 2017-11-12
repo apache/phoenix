@@ -16,6 +16,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -43,7 +44,8 @@ import com.google.common.collect.Maps;
  * limitations under the License.
  */
 public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
-    private final TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
+    private final TableName catalogTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+    private final TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);
 
     /*
       The tree structure is as follows: Where ParentTable is the Base Table
@@ -77,7 +79,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         System.err.println(rightChildTable);
 
         TableViewFinderResult childViews = new TableViewFinderResult();
-        ViewFinder.findAllRelatives(getTable(catalogTable), HConstants.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
+        ViewFinder.findAllRelatives(getTable(linkTable), HConstants.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
             table.getTableName().getBytes(), PTable.LinkType.CHILD_TABLE, childViews);
         assertEquals(3, childViews.getResults().size());
 

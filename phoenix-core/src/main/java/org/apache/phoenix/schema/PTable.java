@@ -150,12 +150,13 @@ public interface PTable extends PMetaDataEntity {
         PARENT_TABLE((byte)3),
         /**
          * Link from a parent table to its child view
+         * (these are stored in SYSTEM.CHILD_LINK for scalability)
          */
         CHILD_TABLE((byte)4),
         /**
-         * Link for an dropped column
+         * Link for an excluded (dropped) column
          */
-        DROPPED_COLUMN((byte)5),
+        EXCLUDED_COLUMN((byte)5),
         /**
          * Link from an index on a view to its parent table
          */

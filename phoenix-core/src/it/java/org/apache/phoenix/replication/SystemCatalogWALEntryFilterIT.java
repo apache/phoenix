@@ -69,9 +69,12 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   private static final String DROP_TENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + TENANT_VIEW_NAME;
   private static final String DROP_NONTENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + NONTENANT_VIEW_NAME;
   private static PTable catalogTable;
+  private static PTable childLinkTable;
   private static WALKey walKey = null;
   private static TableName systemCatalogTableName =
       TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+  private static TableName systemChildLinkTableName =
+	      TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
 
 
   @BeforeClass
@@ -85,6 +88,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
       ensureTableCreated(getUrl(), TestUtil.ENTITY_HISTORY_TABLE_NAME);
       connection.createStatement().execute(CREATE_TENANT_VIEW_SQL);
       catalogTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+      childLinkTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
       walKey = new WALKey(REGION, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME), 0, 0, uuid);
     };
     Assert.assertNotNull(catalogTable);
@@ -127,15 +131,15 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     Get nonTenantViewGet = getTenantViewGet(catalogTable,
         DEFAULT_TENANT_BYTES, NONTENANT_VIEW_NAME);
 
-    Get tenantLinkGet = getParentChildLinkGet(catalogTable, TENANT_BYTES, TENANT_VIEW_NAME);
-    Get nonTenantLinkGet = getParentChildLinkGet(catalogTable,
+    Get tenantLinkGet = getParentChildLinkGet(childLinkTable, TENANT_BYTES, TENANT_VIEW_NAME);
+    Get nonTenantLinkGet = getParentChildLinkGet(childLinkTable,
         DEFAULT_TENANT_BYTES, NONTENANT_VIEW_NAME);
 
     WAL.Entry nonTenantViewEntry = getEntry(systemCatalogTableName, nonTenantViewGet);
     WAL.Entry tenantViewEntry = getEntry(systemCatalogTableName, tenantViewGet);
 
-    WAL.Entry nonTenantLinkEntry = getEntry(systemCatalogTableName, nonTenantLinkGet);
-    WAL.Entry tenantLinkEntry = getEntry(systemCatalogTableName, tenantLinkGet);
+    WAL.Entry nonTenantLinkEntry = getEntry(systemChildLinkTableName, nonTenantLinkGet);
+    WAL.Entry tenantLinkEntry = getEntry(systemChildLinkTableName, tenantLinkGet);
 
     //verify that the tenant view WAL.Entry passes the filter and the non-tenant view does not
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
@@ -191,8 +195,8 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     return new Get(key.copyBytes());
   }
 
-  public Get getParentChildLinkGet(PTable catalogTable, byte[] tenantBytes, String viewName) {
-    /* For parent-child link, the system.catalog key becomes
+  public Get getParentChildLinkGet(PTable linkTable, byte[] tenantBytes, String viewName) {
+    /* For parent-child link, the system.child_link key becomes
       1. Parent tenant id
       2. Parent Schema
       3. Parent Table name
@@ -206,7 +210,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     tenantKeyParts[3] = tenantBytes;
     tenantKeyParts[4] = Bytes.toBytes(SchemaUtil.getTableName(SCHEMA_NAME.toUpperCase(), viewName.toUpperCase()));
     ImmutableBytesWritable key = new ImmutableBytesWritable();
-    catalogTable.newKey(key, tenantKeyParts);
+    linkTable.newKey(key, tenantKeyParts);
     //the backing byte array of key might have extra space at the end.
     // need to just slice "the good parts" which we do by calling copyBytes
     return new Get(key.copyBytes());

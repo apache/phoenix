@@ -42,7 +42,8 @@ class OrphanCleaner {
         }
         for (int i = listOBytes.size() - 1; i >= 0; i--) {
             List<Delete> deletes = traverseUpAndDelete(hTable, listOBytes.get(i));
-            // add the linking row as well if needed
+            // TODO ask rahul if this delete is required
+            // add the linking row as well if needed 
             deletes.add(new Delete(listOBytes.get(i)));
             hTable.delete(deletes);
         }

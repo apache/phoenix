@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 
@@ -734,13 +735,6 @@ public class MetaDataUtil {
         return null;
     }
 
-    public static boolean isLinkingRow(Mutation tableMutation) {
-        byte[][] array = new byte[5][];
-        getVarChars(tableMutation.getRow(), array);
-        return array[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX] != null && Bytes
-            .equals(array[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX], HConstants.EMPTY_BYTE_ARRAY);
-    }
-
     public static boolean isLocalIndex(String physicalName) {
         if (physicalName.contains(LOCAL_INDEX_TABLE_PREFIX)) { return true; }
         return false;
@@ -800,4 +794,25 @@ public class MetaDataUtil {
         byte[] physicalTableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(view.getPhysicalName().getString()));
         return SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, physicalTableSchemaName, physicalTableName);
     }
+    
+	public static List<Mutation> removeChildLinks(List<Mutation> catalogMutations) {
+		List<Mutation> childLinks = Lists.newArrayList();
+		Iterator<Mutation> iter = catalogMutations.iterator();
+		while (iter.hasNext()) {
+			Mutation m = iter.next();
+			for (KeyValue kv : m.getFamilyMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES)) {
+				// remove mutations of link type LinkType.CHILD_TABLE
+				if ((Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
+						PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
+						PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0)
+						&& ((Bytes.compareTo(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength(),
+								LinkType.CHILD_TABLE.getSerializedValueAsByteArray(), 0,
+								LinkType.CHILD_TABLE.getSerializedValueAsByteArray().length) == 0))) {
+					childLinks.add(m);
+					iter.remove();
+				}
+			}
+		}
+		return childLinks;
+	}
 }

@@ -792,7 +792,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
 
 			// PK2 should be in both views
 			sql = "SELECT PK2 FROM " + view1;
-			viewConn2.createStatement().execute(sql);
+			viewConn.createStatement().execute(sql);
 			sql = "SELECT PK2 FROM " + view2;
 			viewConn2.createStatement().execute(sql);
 

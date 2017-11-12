@@ -60,9 +60,9 @@ class ViewFinder {
                 HConstants.LATEST_TIMESTAMP);
         }
 
-    static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
+    static void findAllRelatives(Table systemTable, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, TableViewFinderResult result) throws IOException {
-        findAllRelatives(systemCatalog, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
+        findAllRelatives(systemTable, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
     }
 
     static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
@@ -77,7 +77,7 @@ class ViewFinder {
 
     static TableViewFinderResult findRelatedViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, long timestamp) throws IOException {
-        if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.DROPPED_COLUMN) {
+        if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
             throw new IllegalArgumentException("findAllRelatives does not support link type "+linkType);
         }
         Scan scan = new Scan();

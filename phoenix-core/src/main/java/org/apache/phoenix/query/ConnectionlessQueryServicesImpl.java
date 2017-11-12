@@ -321,6 +321,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
+                
+                try {
+                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
+                 } catch (NewerTableAlreadyExistsException ignore) {
+                 }
             } catch (SQLException e) {
                 sqlE = e;
             } finally {

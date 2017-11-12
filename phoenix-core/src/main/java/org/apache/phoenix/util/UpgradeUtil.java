@@ -1146,6 +1146,35 @@ public class UpgradeUtil {
         }
     }
     
+    /**
+     * Move child links form SYSTEM.CATALOG to SYSTEM.CHILD_LINK
+     * @param oldMetaConnection caller should take care of closing the passed connection appropriately
+     * @throws SQLException
+     */
+    public static void moveChildLinks(PhoenixConnection oldMetaConnection) throws SQLException {
+        PhoenixConnection metaConnection = null;
+        try {
+            // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+            metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
+            logger.info("Upgrading metadata to add parent to child links for views");
+            metaConnection.commit();
+            String createChildLink = "UPSERT INTO SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE)" +
+                                        "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE" + 
+                                        "FROM SYSTEM.CATALOG " + 
+                                        "WHERE LINK_TYPE = 4";
+            metaConnection.createStatement().execute(createChildLink);
+            metaConnection.commit();
+            String deleteChildLink = "DELETE FROM SYSTEM.CATALOG WHERE LINK_TYPE = 4 ";
+            metaConnection.createStatement().execute(deleteChildLink);
+            metaConnection.commit();
+            metaConnection.getQueryServices().clearCache();
+        } finally {
+            if (metaConnection != null) {
+                metaConnection.close();
+            }
+        }
+    }
+    
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
     	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
         try (PhoenixConnection queryConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);

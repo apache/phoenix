@@ -35,7 +35,7 @@ import java.util.List;
  * during cluster upgrades. However, tenant-owned data such as tenant-owned views need to
  * be copied. This WALEntryFilter will only allow tenant-owned rows in SYSTEM.CATALOG to
  * be replicated. Data from all other tables is automatically passed. It will also copy
- * child links in SYSTEM.CATALOG that are globally-owned but point to tenant-owned views.
+ * child links in SYSTEM.CHILD_LINK that are globally-owned but point to tenant-owned views.
  *
  */
 public class SystemCatalogWALEntryFilter implements WALEntryFilter {
@@ -43,9 +43,10 @@ public class SystemCatalogWALEntryFilter implements WALEntryFilter {
   @Override
   public WAL.Entry filter(WAL.Entry entry) {
 
-    //if the WAL.Entry's table isn't System.Catalog, it auto-passes this filter
+    //if the WAL.Entry's table isn't System.Catalog or System.Child_Link, it auto-passes this filter
     //TODO: when Phoenix drops support for pre-1.3 versions of HBase, redo as a WALCellFilter
-    if (!SchemaUtil.isMetaTable(entry.getKey().getTablename().getName())){
+    byte[] tableName = entry.getKey().getTablename().getName();
+	if (!SchemaUtil.isMetaTable(tableName) && !SchemaUtil.isChildLinkTable(tableName)){
       return entry;
     }
 

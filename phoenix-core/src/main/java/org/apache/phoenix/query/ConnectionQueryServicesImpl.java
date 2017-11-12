@@ -2564,6 +2564,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_FUNCTION_METADATA);
         } catch (TableAlreadyExistsException ignore) {}
+        try {
+            metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
+        } catch (TableAlreadyExistsException e) {}
 
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
@@ -2822,7 +2825,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + PBoolean.INSTANCE.getSqlTypeName());
                     addParentToChildLinks(metaConnection);
                 }
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0) {
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_13_0) {
                     metaConnection = addColumnsIfNotExists(
                         metaConnection,
                         PhoenixDatabaseMetaData.SYSTEM_CATALOG,
@@ -2915,6 +2918,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             try {
                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
+            try {
+                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
             ConnectionQueryServicesImpl.this.upgradeRequired.set(false);
             success = true;
