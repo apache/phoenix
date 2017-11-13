@@ -19,6 +19,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
+import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
@@ -47,7 +48,7 @@ import com.google.common.collect.Sets;
 
 class ViewFinder {
 
-	// The PHYSICAL_TABLE link from view to the base table overwrites the PARENT_TABLE link 
+	// The PHYSICAL_TABLE link from view to the base table overwrites the PARENT_TABLE link (when namespace mapping is disabled)
     static TableViewFinderResult findBaseTable(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table)
         throws IOException {
         return findRelatedViews(systemCatalog, tenantId, schema, table, PTable.LinkType.PHYSICAL_TABLE,
@@ -81,7 +82,7 @@ class ViewFinder {
             throw new IllegalArgumentException("findAllRelatives does not support link type "+linkType);
         }
         Scan scan = new Scan();
-        byte[] startRow = SchemaUtil.getTableKey(tenantId, schema, table);
+        byte[] startRow = ByteUtil.concat(SchemaUtil.getTableKey(tenantId, schema, table), SEPARATOR_BYTE_ARRAY);
         byte[] stopRow = ByteUtil.nextKey(startRow);
         scan.setStartRow(startRow);
         scan.setStopRow(stopRow);

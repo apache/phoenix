@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -300,6 +301,16 @@ public class MetaDataUtil {
         }
         return null;
     }
+
+    public static boolean isNameSpaceMapped(List<Mutation> tableMetaData, KeyValueBuilder builder,
+            ImmutableBytesWritable value) {
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
+            PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES, builder, value)) {
+            return (boolean)PBoolean.INSTANCE.toObject(ByteUtil.copyKeyBytesIfNecessary(value));
+        }
+        return false;
+    }
+
     
     public static ViewType getViewType(List<Mutation> tableMetaData, KeyValueBuilder builder,
     	      ImmutableBytesWritable value) {
@@ -815,4 +826,11 @@ public class MetaDataUtil {
 		}
 		return childLinks;
 	}
+
+	public static IndexType getIndexType(List<Mutation> tableMetaData, KeyValueBuilder builder,
+            ImmutableBytesWritable value) {
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.INDEX_TYPE_BYTES, builder,
+                value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
+        return null;
+    }
 }

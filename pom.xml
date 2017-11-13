@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.13.0-SNAPSHOT</version>
+  <version>4.14.0-HBase-1.3-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -926,6 +926,11 @@
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>${stream.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.salesforce.i18n</groupId>
+        <artifactId>i18n-util</artifactId>
+        <version>1.0.1</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
