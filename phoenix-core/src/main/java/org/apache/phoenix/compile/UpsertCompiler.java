@@ -162,7 +162,8 @@ public class UpsertCompiler {
                             .getRegionInfo().getEndKey().length] : region.getRegionInfo()
                             .getStartKey();
             if (regionPrefix.length != 0) {
-                ptr.set(ScanRanges.prefixKey(ptr.get(), 0, regionPrefix, regionPrefix.length));
+                ptr.set(ScanRanges.prefixKey(ptr.get(), 0, ptr.getLength(), regionPrefix,
+                    regionPrefix.length));
             }
         } 
         mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
