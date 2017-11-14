@@ -1111,6 +1111,7 @@ public class UpgradeUtil {
                                         "       4 AS LINK_TYPE " + 
                                         "FROM SYSTEM.CATALOG(PARENT_TENANT_ID VARCHAR)" + 
                                         "WHERE LINK_TYPE = 2 " +
+                                        "AND TABLE_TYPE IS NULL " +
                                         "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) NOT IN (   " +
                                         "       SELECT TENANT_ID, " +
                                         "              TABLE_SCHEM, " +

@@ -39,12 +39,14 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.curator.shaded.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
@@ -67,6 +69,7 @@ import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -837,4 +840,74 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl());
     }
     
+    @Test
+    public void testAddParentChildLinks() throws Exception {
+        String schema = "S_" + generateUniqueName();
+        String table1 = "T_" + generateUniqueName();
+        String table2 = "T_" + generateUniqueName();
+        String tableName = SchemaUtil.getTableName(schema, table1);
+        String multiTenantTableName = SchemaUtil.getTableName(schema, table2);
+        String viewName1 = "VIEW_" + generateUniqueName();
+        String viewIndexName1 = "VIDX_" + generateUniqueName();
+        String viewName2 = "VIEW_" + generateUniqueName();
+        String viewIndexName2 = "VIDX_" + generateUniqueName();
+        try (Connection conn = getConnection(false, null);
+                Connection tenantConn = getConnection(true, "tenant1");
+                Connection metaConn = getConnection(false, null)) {
+            // create a non multi-tenant and multi-tenant table
+            conn.createStatement()
+                    .execute("CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                            + " TENANT_ID CHAR(15) NOT NULL, " + " PK1 integer NOT NULL, "
+                            + "PK2 bigint NOT NULL, " + "V1 VARCHAR, " + "V2 VARCHAR "
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (TENANT_ID, PK1, PK2))");
+            conn.createStatement()
+                    .execute("CREATE TABLE IF NOT EXISTS " + multiTenantTableName + " ("
+                            + " TENANT_ID CHAR(15) NOT NULL, " + " PK1 integer NOT NULL, "
+                            + "PK2 bigint NOT NULL, " + "V1 VARCHAR, " + "V2 VARCHAR "
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (TENANT_ID, PK1, PK2)"
+                            + " ) MULTI_TENANT= true");
+            // create tenant and global view
+            conn.createStatement().execute(
+                "CREATE VIEW " + viewName1 + " (col VARCHAR) AS SELECT * FROM " + tableName);
+            tenantConn.createStatement().execute("CREATE VIEW " + viewName2
+                    + "(col VARCHAR) AS SELECT * FROM " + multiTenantTableName);
+            // create index on the above views
+            conn.createStatement()
+                    .execute("create index " + viewIndexName1 + "  on " + viewName1 + "(col)");
+            tenantConn.createStatement()
+                    .execute("create index " + viewIndexName2 + " on " + viewName2 + "(col)");
+
+            // query all parent -> child links
+            Set<String> expectedChildLinkSet = getChildLinks(conn);
+
+            // delete all the child links
+            conn.createStatement().execute("DELETE FROM SYSTEM.CATALOG WHERE LINK_TYPE = "
+                    + LinkType.CHILD_TABLE.getSerializedValue());
+
+            // re-create them by running the upgrade code
+            PhoenixConnection phxMetaConn = metaConn.unwrap(PhoenixConnection.class);
+            phxMetaConn.setRunningUpgrade(true);
+            UpgradeUtil.addParentToChildLinks(phxMetaConn);
+            Set<String> actualChildLinkSet = getChildLinks(conn);
+
+            assertEquals("Unexpected child links", expectedChildLinkSet, actualChildLinkSet);
+        }
+    }
+
+    private Set<String> getChildLinks(Connection conn) throws SQLException {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG WHERE LINK_TYPE = "
+                            + LinkType.CHILD_TABLE.getSerializedValue());
+        Set<String> childLinkSet = Sets.newHashSet();
+        while (rs.next()) {
+            String key =
+                    rs.getString("TENANT_ID") + " " + rs.getString("TABLE_SCHEM") + " "
+                            + rs.getString("TABLE_NAME") + " " + rs.getString("COLUMN_NAME") + " "
+                            + rs.getString("COLUMN_FAMILY");
+            childLinkSet.add(key);
+        }
+        return childLinkSet;
+    }
+
 }
