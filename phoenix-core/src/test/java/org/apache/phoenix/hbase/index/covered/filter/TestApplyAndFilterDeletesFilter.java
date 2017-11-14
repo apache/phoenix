@@ -25,7 +25,9 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -90,8 +92,7 @@ public class TestApplyAndFilterDeletesFilter {
     byte[] laterFamily = Bytes.toBytes("zfamily");
     filter = new ApplyAndFilterDeletesFilter(asSet(laterFamily));
     assertEquals(ReturnCode.SKIP, filter.filterKeyValue(kv));
-    @SuppressWarnings("deprecation")
-    KeyValue expected = KeyValue.createFirstOnRow(kv.getRow(), laterFamily, new byte[0]);
+    KeyValue expected = KeyValueUtil.createFirstOnRow(CellUtil.cloneRow(kv), laterFamily, new byte[0]);
     assertEquals("Didn't get a hint from a family delete", ReturnCode.SEEK_NEXT_USING_HINT,
       filter.filterKeyValue(next));
     assertEquals("Didn't get correct next key with a next family", expected,

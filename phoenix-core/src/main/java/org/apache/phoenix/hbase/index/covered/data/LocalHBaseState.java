@@ -20,7 +20,7 @@ package org.apache.phoenix.hbase.index.covered.data;
 import java.io.IOException;
 import java.util.Collection;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -40,7 +40,7 @@ public interface LocalHBaseState {
    * @return the full state of the given row. Includes all current versions (even if they are not
    *         usually visible to the client (unless they are also doing a raw scan)). Never returns a
    *         <tt>null</tt> {@link Result} - instead, when there is not data for the row, returns a
-   *         {@link Result} with no stored {@link KeyValue}s.
+   *         {@link Result} with no stored {@link Cell}s.
    * @throws IOException if there is an issue reading the row
    */
   public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean ignoreNewerMutations)

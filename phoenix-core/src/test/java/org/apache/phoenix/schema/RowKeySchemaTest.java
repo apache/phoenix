@@ -28,7 +28,7 @@ import java.sql.PreparedStatement;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -67,9 +67,9 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
             stmt.setObject(i+1, values[i]);
         }
         stmt.execute();
-            Iterator<Pair<byte[],List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-        List<KeyValue> dataKeyValues = iterator.next().getSecond();
-        KeyValue keyValue = dataKeyValues.get(0);
+            Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        List<Cell> dataKeyValues = iterator.next().getSecond();
+        Cell keyValue = dataKeyValues.get(0);
         
         List<SortOrder> sortOrders = Lists.newArrayListWithExpectedSize(table.getPKColumns().size());
         for (PColumn col : table.getPKColumns()) {

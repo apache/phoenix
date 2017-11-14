@@ -17,6 +17,7 @@ import java.util.Map.Entry;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -172,8 +173,11 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
             }
             // there is a next value - we only care about the current value, so we can just snag that
             Cell next = kvs.next();
-            if (ref.matchesFamily(next.getFamily()) && ref.matchesQualifier(next.getQualifier())) {
-                byte[] v = next.getValue();
+            if (ref.matchesFamily(next.getFamilyArray(), next.getFamilyOffset(),
+                next.getFamilyLength())
+                    && ref.matchesQualifier(next.getQualifierArray(), next.getQualifierOffset(),
+                        next.getQualifierLength())) {
+                byte[] v = CellUtil.cloneValue(next);
                 totalValueLength += v.length;
                 entries.add(new ColumnEntry(v, ref));
             } else {
@@ -188,20 +192,20 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
             }
             // matches all columns, so we need to iterate until we hit the next column with the same
             // family as the current key
-            byte[] lastQual = next.getQualifier();
+            byte[] lastQual = CellUtil.cloneQualifier(next);
             byte[] nextQual = null;
             while ((next = kvs.next()) != null) {
                 // different family, done with this column
-                if (!ref.matchesFamily(next.getFamily())) {
+                if (!ref.matchesFamily(next.getFamilyArray(), next.getFamilyOffset(), next.getFamilyLength())) {
                     break;
                 }
-                nextQual = next.getQualifier();
+                nextQual = CellUtil.cloneQualifier(next);
                 // we are still on the same qualifier - skip it, since we already added a column for it
                 if (Arrays.equals(lastQual, nextQual)) {
                     continue;
                 }
                 // this must match the qualifier since its an all-qualifiers specifier, so we add it
-                byte[] v = next.getValue();
+                byte[] v = CellUtil.cloneValue(next);
                 totalValueLength += v.length;
                 entries.add(new ColumnEntry(v, ref));
                 // update the last qualifier to check against
@@ -285,7 +289,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
      *            expected value--column pair
      * @return a keyvalues that the index contains for a given row at a timestamp with the given value -- column pairs.
      */
-    public static List<KeyValue> getIndexKeyValueForTesting(byte[] pk, long timestamp,
+    public static List<Cell> getIndexKeyValueForTesting(byte[] pk, long timestamp,
             List<Pair<byte[], CoveredColumn>> values) {
 
         int length = 0;
@@ -299,8 +303,8 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
         byte[] rowKey = CoveredColumnIndexCodec.composeRowKey(pk, length, expected);
         Put p = new Put(rowKey, timestamp);
         CoveredColumnIndexCodec.addColumnsToPut(p, expected);
-        List<KeyValue> kvs = new ArrayList<KeyValue>();
-        for (Entry<byte[], List<KeyValue>> entry : p.getFamilyMap().entrySet()) {
+        List<Cell> kvs = new ArrayList<Cell>();
+        for (Entry<byte[], List<Cell>> entry : p.getFamilyCellMap().entrySet()) {
             kvs.addAll(entry.getValue());
         }
 

@@ -33,9 +33,9 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
@@ -95,9 +95,9 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
             ResultScanner results = t.getScanner(scan);
             Result result = results.next();
             assertNotNull("Expected single row", result);
-            List<KeyValue> kvs = result.getColumn(Bytes.toBytes("cf2"), Bytes.toBytes("q2"));
+            List<Cell> kvs = result.getColumnCells(Bytes.toBytes("cf2"), Bytes.toBytes("q2"));
             assertEquals("Expected single value ", 1, kvs.size());
-            assertEquals("Column Value", "value2", Bytes.toString(kvs.get(0).getValue()));
+            assertEquals("Column Value", "value2", Bytes.toString(kvs.get(0).getValueArray(), kvs.get(0).getValueOffset(), kvs.get(0).getValueLength()));
             assertNull("Expected single row", results.next());
         } finally {
             admin.close();

@@ -29,7 +29,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 
@@ -166,7 +166,7 @@ public class RowKeyOrderedAggregateResultIterator extends LookAheadResultIterato
                 current = previous;
             } else {
                 byte[] value = aggregators.toBytes(rowAggregators);
-                current = new SingleKeyValueTuple(KeyValueUtil.newKeyValue(previousKey, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
+                current = new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(previousKey, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
             }
         }
         if (current == null) {

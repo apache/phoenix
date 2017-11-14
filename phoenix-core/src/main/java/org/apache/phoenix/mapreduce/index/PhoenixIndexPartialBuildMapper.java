@@ -125,7 +125,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
                         del.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES, BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES);
                         mutations.add(del);
                     }
-                    del.addDeleteMarker(cell);
+                    del.add(cell);
                 }
             }
             // Write Mutation Batch

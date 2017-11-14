@@ -61,7 +61,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PIntegerArray;
 import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -159,7 +159,7 @@ public class UnnestArrayPlanTest {
         for (Object[] array : arrays) {
             PhoenixArray pArray = new PhoenixArray(baseType, array);
             byte[] bytes = arrayType.toBytes(pArray);            
-            tuples.add(new SingleKeyValueTuple(KeyValueUtil.newKeyValue(bytes, 0, bytes.length, bytes, 0, 0, bytes, 0, 0, 0, bytes, 0, 0)));
+            tuples.add(new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(bytes, 0, bytes.length, bytes, 0, 0, bytes, 0, 0, 0, bytes, 0, 0)));
         }
         
         return tuples;

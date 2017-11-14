@@ -20,7 +20,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
@@ -51,7 +50,7 @@ public class LocalTableState implements TableState {
     private Mutation update;
     private Set<ColumnTracker> trackedColumns = new HashSet<ColumnTracker>();
     private ScannerBuilder scannerBuilder;
-    private List<KeyValue> kvs = new ArrayList<KeyValue>();
+    private List<Cell> kvs = new ArrayList<Cell>();
     private List<? extends IndexedColumnGroup> hints;
     private CoveredColumns columnSet;
 
@@ -64,24 +63,24 @@ public class LocalTableState implements TableState {
         this.columnSet = new CoveredColumns();
     }
 
-    public void addPendingUpdates(KeyValue... kvs) {
+    public void addPendingUpdates(Cell... kvs) {
         if (kvs == null) return;
         addPendingUpdates(Arrays.asList(kvs));
     }
 
-    public void addPendingUpdates(List<KeyValue> kvs) {
+    public void addPendingUpdates(List<Cell> kvs) {
         if (kvs == null) return;
         setPendingUpdates(kvs);
         addUpdate(kvs);
     }
 
-    private void addUpdate(List<KeyValue> list) {
+    private void addUpdate(List<Cell> list) {
         addUpdate(list, true);
     }
 
-    private void addUpdate(List<KeyValue> list, boolean overwrite) {
+    private void addUpdate(List<Cell> list, boolean overwrite) {
         if (list == null) return;
-        for (KeyValue kv : list) {
+        for (Cell kv : list) {
             this.memstore.add(kv, overwrite);
         }
     }
@@ -90,18 +89,8 @@ public class LocalTableState implements TableState {
         if (list == null) return;
         // Avoid a copy of the Cell into a KeyValue if it's already a KeyValue
         for (Cell c : list) {
-            this.memstore.add(maybeCopyCell(c), overwrite);
+            this.memstore.add(c, overwrite);
         }
-    }
-
-    private KeyValue maybeCopyCell(Cell c) {
-        // Same as KeyValueUtil, but HBase has deprecated this method. Avoid depending on something
-        // that will likely be removed at some point in time.
-        if (c == null) return null;
-        if (c instanceof KeyValue) {
-            return (KeyValue) c;
-        }
-        return KeyValueUtil.copyToNewKeyValue(c);
     }
 
     @Override
@@ -240,7 +229,7 @@ public class LocalTableState implements TableState {
     }
 
     @Override
-    public Collection<KeyValue> getPendingUpdate() {
+    public Collection<Cell> getPendingUpdate() {
         return this.kvs;
     }
 
@@ -251,7 +240,7 @@ public class LocalTableState implements TableState {
      * @param update
      *            pending {@link KeyValue}s
      */
-    public void setPendingUpdates(Collection<KeyValue> update) {
+    public void setPendingUpdates(Collection<Cell> update) {
         this.kvs.clear();
         this.kvs.addAll(update);
     }

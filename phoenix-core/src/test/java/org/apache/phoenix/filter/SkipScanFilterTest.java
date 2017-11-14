@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
@@ -608,13 +609,13 @@ public class SkipScanFilterTest extends TestCase {
 
         @SuppressWarnings("deprecation")
         @Override public void examine(SkipScanFilter skipper) throws IOException {
-            KeyValue kv = KeyValue.createFirstOnRow(rowkey);
+            KeyValue kv = KeyValueUtil.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
 
             assertEquals(ReturnCode.SEEK_NEXT_USING_HINT, skipper.filterKeyValue(kv));
-            assertEquals(KeyValue.createFirstOnRow(hint), skipper.getNextCellHint(kv));
+            assertEquals(KeyValueUtil.createFirstOnRow(hint), skipper.getNextCellHint(kv));
         }
 
         @Override public String toString() {
@@ -634,7 +635,7 @@ public class SkipScanFilterTest extends TestCase {
         
         @SuppressWarnings("deprecation")
         @Override public void examine(SkipScanFilter skipper) throws IOException {
-            KeyValue kv = KeyValue.createFirstOnRow(rowkey);
+            KeyValue kv = KeyValueUtil.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
@@ -657,7 +658,7 @@ public class SkipScanFilterTest extends TestCase {
         }
 
         @Override public void examine(SkipScanFilter skipper) throws IOException {
-            KeyValue kv = KeyValue.createFirstOnRow(rowkey);
+            KeyValue kv = KeyValueUtil.createFirstOnRow(rowkey);
             skipper.reset();
             assertEquals(ReturnCode.NEXT_ROW,skipper.filterKeyValue(kv));
             skipper.reset();

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 
 import java.util.List;
@@ -43,6 +44,6 @@ public interface ImportPreUpsertKeyValueProcessor {
      * @param keyValues list of KeyValues that are to be written to an HFile
      * @return the list that will actually be written
      */
-    List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues);
+    List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues);
 
 }

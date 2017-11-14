@@ -53,7 +53,6 @@ import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -358,8 +357,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     @Deprecated
-    public static List<KeyValue> getUncommittedData(Connection conn) throws SQLException {
-        Iterator<Pair<byte[],List<KeyValue>>> iterator = getUncommittedDataIterator(conn);
+    public static List<Cell> getUncommittedData(Connection conn) throws SQLException {
+        Iterator<Pair<byte[],List<Cell>>> iterator = getUncommittedDataIterator(conn);
         if (iterator.hasNext()) {
             return iterator.next().getSecond();
         }
@@ -373,7 +372,7 @@ public class PhoenixRuntime {
      * @return the list of HBase mutations for uncommitted data
      * @throws SQLException
      */
-    public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn) throws SQLException {
+    public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn) throws SQLException {
         return getUncommittedDataIterator(conn, false);
     }
 
@@ -384,10 +383,10 @@ public class PhoenixRuntime {
      * @return the list of HBase mutations for uncommitted data
      * @throws SQLException
      */
-    public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
+    public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
         final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes);
-        return new Iterator<Pair<byte[],List<KeyValue>>>() {
+        return new Iterator<Pair<byte[],List<Cell>>>() {
 
             @Override
             public boolean hasNext() {
@@ -395,18 +394,18 @@ public class PhoenixRuntime {
             }
 
             @Override
-            public Pair<byte[], List<KeyValue>> next() {
+            public Pair<byte[], List<Cell>> next() {
                 Pair<byte[],List<Mutation>> pair = iterator.next();
-                List<KeyValue> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
+                List<Cell> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
                 for (Mutation mutation : pair.getSecond()) {
                     for (List<Cell> keyValueList : mutation.getFamilyCellMap().values()) {
                         for (Cell keyValue : keyValueList) {
-                            keyValues.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(keyValue));
+                            keyValues.add(PhoenixKeyValueUtil.maybeCopyCell(keyValue));
                         }
                     }
                 }
                 Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
-                return new Pair<byte[], List<KeyValue>>(pair.getFirst(),keyValues);
+                return new Pair<byte[], List<Cell>>(pair.getFirst(),keyValues);
             }
 
             @Override

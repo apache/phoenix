@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Tuple that can be used to represent a list of cells. It is imperative that the list of cells
@@ -59,7 +59,7 @@ public class MultiKeyValueTuple extends BaseTuple {
 
     @Override
     public Cell getValue(byte[] family, byte[] qualifier) {
-        return KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, values, family, qualifier);
+        return PhoenixKeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, values, family, qualifier);
     }
 
     @Override

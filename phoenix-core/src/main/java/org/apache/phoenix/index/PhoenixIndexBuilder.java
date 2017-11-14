@@ -30,8 +30,8 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -221,7 +221,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                 // ordered correctly). We only need the list sorted if the expressions are going to be
                 // executed, not when the outer loop is exited. Hence we do it here, at the top of the loop.
                 if (flattenedCells != null) {
-                    Collections.sort(flattenedCells,KeyValue.COMPARATOR);
+                    Collections.sort(flattenedCells,CellComparatorImpl.COMPARATOR);
                 }
                 PRow row = table.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
                 int adjust = table.getBucketNum() == null ? 1 : 2;
@@ -272,7 +272,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                     transferAttributes(inc, delete);
                     mutations.add(delete);
                 }
-                delete.addDeleteMarker(cell);
+                delete.add(cell);
             }
         }
         return mutations;

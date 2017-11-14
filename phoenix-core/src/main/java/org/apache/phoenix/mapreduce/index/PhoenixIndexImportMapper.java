@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -37,6 +38,7 @@ import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,18 +102,18 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
            indxWritable.write(this.pStatement);
            this.pStatement.execute();
             
-           final Iterator<Pair<byte[], List<KeyValue>>> uncommittedDataIterator = PhoenixRuntime.getUncommittedDataIterator(connection, true);
+           final Iterator<Pair<byte[], List<Cell>>> uncommittedDataIterator = PhoenixRuntime.getUncommittedDataIterator(connection, true);
            while (uncommittedDataIterator.hasNext()) {
-                Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
+                Pair<byte[], List<Cell>> kvPair = uncommittedDataIterator.next();
                 if (Bytes.compareTo(Bytes.toBytes(indexTableName), kvPair.getFirst()) != 0) {
                     // skip edits for other tables
                     continue;
                 }
-                List<KeyValue> keyValueList = kvPair.getSecond();
+                List<Cell> keyValueList = kvPair.getSecond();
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
-                for (KeyValue kv : keyValueList) {
+                for (Cell kv : keyValueList) {
                     outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
-                    context.write(outputKey, kv);
+                    context.write(outputKey, PhoenixKeyValueUtil.maybeCopyCell(kv));
                 }
                 context.getCounter(PhoenixJobCounters.OUTPUT_RECORDS).increment(1);
             }

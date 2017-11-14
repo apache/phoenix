@@ -19,6 +19,7 @@ package org.apache.phoenix.hbase.index.covered.update;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -139,7 +140,7 @@ public class ColumnReference implements Comparable<ColumnReference> {
     }
 
     public KeyValue getFirstKeyValueForRow(byte[] row) {
-        return KeyValue.createFirstOnRow(row, getFamily(), getQualifier() == ALL_QUALIFIERS ? null
+        return KeyValueUtil.createFirstOnRow(row, getFamily(), getQualifier() == ALL_QUALIFIERS ? null
                 : getQualifier());
     }
 

@@ -32,15 +32,16 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.codec.Codec;
 import org.apache.hadoop.hbase.io.util.LRUDictionary;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -130,7 +131,7 @@ public class ReadWriteKeyValuesWithCodecTest {
   private void addMutation(WALEdit edit, Mutation m, byte[] family) {
     List<Cell> kvs = m.getFamilyCellMap().get(FAMILY);
     for (Cell kv : kvs) {
-      edit.add(KeyValueUtil.ensureKeyValue(kv));
+      edit.add(PhoenixKeyValueUtil.maybeCopyCell(kv));
     }
   }
 

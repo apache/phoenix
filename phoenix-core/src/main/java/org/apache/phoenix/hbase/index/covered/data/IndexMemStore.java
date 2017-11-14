@@ -17,16 +17,15 @@
  */
 package org.apache.phoenix.hbase.index.covered.data;
 
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.SortedSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.KVComparator;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.IndexKeyValueSkipListSet;
 import org.apache.hadoop.hbase.regionserver.MemStore;
@@ -34,6 +33,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Like the HBase {@link MemStore}, but without all that extra work around maintaining snapshots and
@@ -76,27 +76,10 @@ public class IndexMemStore implements KeyValueStore {
 
   private static final Log LOG = LogFactory.getLog(IndexMemStore.class);
   private IndexKeyValueSkipListSet kvset;
-  private Comparator<KeyValue> comparator;
-
-  /**
-   * Compare two {@link KeyValue}s based only on their row keys. Similar to the standard
-   * {@link KeyValue#COMPARATOR}, but doesn't take into consideration the memstore timestamps. We
-   * instead manage which KeyValue to retain based on how its loaded here
-   */
-  public static final Comparator<KeyValue> COMPARATOR = new Comparator<KeyValue>() {
-
-    private final KVComparator rawcomparator = new KVComparator();
-
-    @Override
-    public int compare(final KeyValue left, final KeyValue right) {
-      return rawcomparator.compareFlatKey(left.getRowArray(), left.getOffset() + KeyValue.ROW_OFFSET,
-        left.getKeyLength(), right.getRowArray(), right.getOffset() + KeyValue.ROW_OFFSET,
-        right.getKeyLength());
-    }
-  };
+  private CellComparator comparator;
 
   public IndexMemStore() {
-    this(COMPARATOR);
+    this(CellComparatorImpl.COMPARATOR);
   }
 
   /**
@@ -106,13 +89,13 @@ public class IndexMemStore implements KeyValueStore {
    * Exposed for subclassing/testing.
    * @param comparator to use
    */
-  IndexMemStore(Comparator<KeyValue> comparator) {
+  IndexMemStore(CellComparator comparator) {
     this.comparator = comparator;
     this.kvset = IndexKeyValueSkipListSet.create(comparator);
   }
 
   @Override
-  public void add(KeyValue kv, boolean overwrite) {
+  public void add(Cell kv, boolean overwrite) {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Inserting: " + toString(kv));
     }
@@ -131,19 +114,19 @@ public class IndexMemStore implements KeyValueStore {
 
   private void dump() {
     LOG.trace("Current kv state:\n");
-    for (KeyValue kv : this.kvset) {
+    for (Cell kv : this.kvset) {
       LOG.trace("KV: " + toString(kv));
     }
     LOG.trace("========== END MemStore Dump ==================\n");
   }
 
-  private String toString(KeyValue kv) {
+  private String toString(Cell kv) {
     return kv.toString() + "/value=" + 
         Bytes.toStringBinary(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
   }
 
   @Override
-  public void rollback(KeyValue kv) {
+  public void rollback(Cell kv) {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Rolling back: " + toString(kv));
     }
@@ -169,13 +152,13 @@ public class IndexMemStore implements KeyValueStore {
   // set, rather than a primary and a secondary set of KeyValues.
   protected class MemStoreScanner implements ReseekableScanner {
     // Next row information for the set
-    private KeyValue nextRow = null;
+    private Cell nextRow = null;
 
     // last iterated KVs for kvset and snapshot (to restore iterator state after reseek)
-    private KeyValue kvsetItRow = null;
+    private Cell kvsetItRow = null;
 
     // iterator based scanning.
-    private Iterator<KeyValue> kvsetIt;
+    private Iterator<Cell> kvsetIt;
 
     // The kvset at the time of creating this scanner
     volatile IndexKeyValueSkipListSet kvsetAtCreation;
@@ -185,12 +168,12 @@ public class IndexMemStore implements KeyValueStore {
       kvsetAtCreation = kvset;
     }
 
-    private KeyValue getNext(Iterator<KeyValue> it) {
+    private Cell getNext(Iterator<Cell> it) {
       // in the original implementation we cared about the current thread's readpoint from MVCC.
       // However, we don't need to worry here because everything the index can see, is also visible
       // to the client (or is the pending primary table update, so it will be once the index is
       // written, so it might as well be).
-      KeyValue v = null;
+      Cell v = null;
       try {
         while (it.hasNext()) {
           v = it.next();
@@ -220,7 +203,7 @@ public class IndexMemStore implements KeyValueStore {
 
       // kvset and snapshot will never be null.
       // if tailSet can't find anything, SortedSet is empty (not null).
-      kvsetIt = kvsetAtCreation.tailSet(KeyValueUtil.ensureKeyValue(key)).iterator();
+      kvsetIt = kvsetAtCreation.tailSet(PhoenixKeyValueUtil.maybeCopyCell(key)).iterator();
       kvsetItRow = null;
 
       return seekInSubLists();
@@ -250,7 +233,7 @@ public class IndexMemStore implements KeyValueStore {
        * Unfortunately the Java API does not offer a method to get it. So we remember the last keys
        * we iterated to and restore the reseeked set to at least that point.
        */
-      kvsetIt = kvsetAtCreation.tailSet(getHighest(KeyValueUtil.ensureKeyValue(key), kvsetItRow)).iterator();
+      kvsetIt = kvsetAtCreation.tailSet(getHighest(PhoenixKeyValueUtil.maybeCopyCell(key), kvsetItRow)).iterator();
       return seekInSubLists();
     }
 
@@ -258,7 +241,7 @@ public class IndexMemStore implements KeyValueStore {
      * Returns the higher of the two key values, or null if they are both null. This uses
      * comparator.compare() to compare the KeyValue using the memstore comparator.
      */
-    private KeyValue getHighest(KeyValue first, KeyValue second) {
+    private Cell getHighest(Cell first, Cell second) {
       if (first == null && second == null) {
         return null;
       }

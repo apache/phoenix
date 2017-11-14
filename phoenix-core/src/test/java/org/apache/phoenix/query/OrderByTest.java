@@ -26,7 +26,8 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.SortOrder;
@@ -42,12 +43,12 @@ public class OrderByTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("UPSERT INTO t VALUES ('a')");
         conn.createStatement().execute("UPSERT INTO t VALUES ('ab')");
 
-        Iterator<Pair<byte[],List<KeyValue>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-        List<KeyValue> kvs = dataIterator.next().getSecond();
-        Collections.sort(kvs, KeyValue.COMPARATOR);
-        KeyValue first = kvs.get(0);
+        Iterator<Pair<byte[],List<Cell>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        List<Cell> kvs = dataIterator.next().getSecond();
+        Collections.sort(kvs, CellComparatorImpl.COMPARATOR);
+        Cell first = kvs.get(0);
         assertEquals("ab", Bytes.toString(SortOrder.invert(first.getRowArray(), first.getRowOffset(), first.getRowLength()-1)));
-        KeyValue second = kvs.get(1);
+        Cell second = kvs.get(1);
         assertEquals("a", Bytes.toString(SortOrder.invert(second.getRowArray(), second.getRowOffset(), second.getRowLength()-1)));
     }
 
@@ -58,12 +59,12 @@ public class OrderByTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("UPSERT INTO t VALUES ('a')");
         conn.createStatement().execute("UPSERT INTO t VALUES ('ab')");
 
-        Iterator<Pair<byte[],List<KeyValue>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-        List<KeyValue> kvs = dataIterator.next().getSecond();
-        Collections.sort(kvs, KeyValue.COMPARATOR);
-        KeyValue first = kvs.get(0);
+        Iterator<Pair<byte[],List<Cell>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        List<Cell> kvs = dataIterator.next().getSecond();
+        Collections.sort(kvs, CellComparatorImpl.COMPARATOR);
+        Cell first = kvs.get(0);
         assertEquals("ab", Bytes.toString(SortOrder.invert(first.getRowArray(), first.getRowOffset(), first.getRowLength()-1)));
-        KeyValue second = kvs.get(1);
+        Cell second = kvs.get(1);
         assertEquals("a", Bytes.toString(SortOrder.invert(second.getRowArray(), second.getRowOffset(), second.getRowLength()-1)));
     }
 
@@ -74,12 +75,12 @@ public class OrderByTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("UPSERT INTO t VALUES ('a','x')");
         conn.createStatement().execute("UPSERT INTO t VALUES ('ab', 'x')");
 
-        Iterator<Pair<byte[],List<KeyValue>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-        List<KeyValue> kvs = dataIterator.next().getSecond();
-        Collections.sort(kvs, KeyValue.COMPARATOR);
-        KeyValue first = kvs.get(0);
+        Iterator<Pair<byte[],List<Cell>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        List<Cell> kvs = dataIterator.next().getSecond();
+        Collections.sort(kvs, CellComparatorImpl.COMPARATOR);
+        Cell first = kvs.get(0);
         assertEquals("ab", Bytes.toString(SortOrder.invert(first.getRowArray(), first.getRowOffset(), 2)));
-        KeyValue second = kvs.get(1);
+        Cell second = kvs.get(1);
         assertEquals("a", Bytes.toString(SortOrder.invert(second.getRowArray(), second.getRowOffset(), 1)));
     }
 
@@ -89,11 +90,11 @@ public class OrderByTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k TIMESTAMP PRIMARY KEY DESC)");
         conn.createStatement().execute("UPSERT INTO t VALUES ('2016-01-04 13:11:51.631')");
 
-        Iterator<Pair<byte[], List<KeyValue>>> dataIterator = PhoenixRuntime
+        Iterator<Pair<byte[], List<Cell>>> dataIterator = PhoenixRuntime
             .getUncommittedDataIterator(conn);
-        List<KeyValue> kvs = dataIterator.next().getSecond();
-        Collections.sort(kvs, KeyValue.COMPARATOR);
-        KeyValue first = kvs.get(0);
+        List<Cell> kvs = dataIterator.next().getSecond();
+        Collections.sort(kvs, CellComparatorImpl.COMPARATOR);
+        Cell first = kvs.get(0);
         long millisDeserialized = PDate.INSTANCE.getCodec().decodeLong(first.getRowArray(),
             first.getRowOffset(), SortOrder.DESC);
         assertEquals(1451913111631L, millisDeserialized);

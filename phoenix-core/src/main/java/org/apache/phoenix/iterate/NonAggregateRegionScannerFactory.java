@@ -245,11 +245,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     try {
       Tuple tuple = iterator.next();
       if (tuple == null && !isLastScan) {
-        List<KeyValue> kvList = new ArrayList<KeyValue>(1);
+        List<Cell> kvList = new ArrayList<Cell>(1);
         KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
             QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
         kvList.add(kv);
-        Result r = new Result(kvList);
+        Result r = Result.create(kvList);
         firstTuple = new ResultTuple(r);
       } else {
         firstTuple = tuple;

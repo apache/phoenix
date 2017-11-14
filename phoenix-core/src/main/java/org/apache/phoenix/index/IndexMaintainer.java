@@ -1136,10 +1136,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * since we can build the corresponding index row key.
      */
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ImmutableBytesWritable dataRowKeyPtr, long ts) throws IOException {
-        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<KeyValue>emptyList(), ts, null, null);
+        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<Cell>emptyList(), ts, null, null);
     }
     
-    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<KeyValue> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         // Delete the entire row if any of the indexed columns changed
         DeleteType deleteType = null;
@@ -1169,7 +1169,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Delete columns for missing key values
         for (Cell kv : pendingUpdates) {
             if (kv.getTypeByte() != KeyValue.Type.Put.getCode()) {
-                ColumnReference ref = new ColumnReference(kv.getFamily(), kv.getQualifier());
+                ColumnReference ref =
+                        new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(),
+                                kv.getFamilyLength(), kv.getQualifierArray(),
+                                kv.getQualifierOffset(), kv.getQualifierLength());
                 if (dataTableColRefs.contains(ref)) {
                     if (delete == null) {
                         delete = new Delete(indexRowKey);                    

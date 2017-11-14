@@ -172,31 +172,31 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                 return;
             }
             upsertExecutor.execute(ImmutableList.<RECORD>of(record));
-            Map<Integer, List<KeyValue>> map = new HashMap<>();
-            Iterator<Pair<byte[], List<KeyValue>>> uncommittedDataIterator
+            Map<Integer, List<Cell>> map = new HashMap<>();
+            Iterator<Pair<byte[], List<Cell>>> uncommittedDataIterator
                     = PhoenixRuntime.getUncommittedDataIterator(conn, true);
             while (uncommittedDataIterator.hasNext()) {
-                Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
-                List<KeyValue> keyValueList = kvPair.getSecond();
+                Pair<byte[], List<Cell>> kvPair = uncommittedDataIterator.next();
+                List<Cell> keyValueList = kvPair.getSecond();
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
                 byte[] first = kvPair.getFirst();
                 // Create a list of KV for each table
                 for (int i = 0; i < tableNames.size(); i++) {
                     if (Bytes.compareTo(Bytes.toBytes(tableNames.get(i)), first) == 0) {
                         if (!map.containsKey(i)) {
-                            map.put(i, new ArrayList<KeyValue>());
+                            map.put(i, new ArrayList<Cell>());
                         }
-                        List<KeyValue> list = map.get(i);
-                        for (KeyValue kv : keyValueList) {
+                        List<Cell> list = map.get(i);
+                        for (Cell kv : keyValueList) {
                             list.add(kv);
                         }
                         break;
                     }
                 }
             }
-            for (Map.Entry<Integer, List<KeyValue>> rowEntry : map.entrySet()) {
+            for (Map.Entry<Integer, List<Cell>> rowEntry : map.entrySet()) {
                 int tableIndex = rowEntry.getKey();
-                List<KeyValue> lkv = rowEntry.getValue();
+                List<Cell> lkv = rowEntry.getValue();
                 // All KV values combines to a single byte array
                 writeAggregatedRow(context, tableNames.get(tableIndex), lkv);
             }
@@ -281,13 +281,13 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
      * @throws InterruptedException
      */
 
-    private void writeAggregatedRow(Context context, String tableName, List<KeyValue> lkv)
+    private void writeAggregatedRow(Context context, String tableName, List<Cell> lkv)
             throws IOException, InterruptedException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream(1024);
         DataOutputStream outputStream = new DataOutputStream(bos);
         ImmutableBytesWritable outputKey =null;
         if (!lkv.isEmpty()) {
-            for (KeyValue cell : lkv) {
+            for (Cell cell : lkv) {
                 if (outputKey == null || Bytes.compareTo(outputKey.get(), outputKey.getOffset(),
                         outputKey.getLength(), cell.getRowArray(), cell.getRowOffset(), cell
                                 .getRowLength()) != 0) {
@@ -413,7 +413,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             ImportPreUpsertKeyValueProcessor {
 
         @Override
-        public List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues) {
+        public List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues) {
             return keyValues;
         }
     }

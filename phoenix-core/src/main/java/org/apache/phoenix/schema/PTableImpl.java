@@ -1034,7 +1034,6 @@ public class PTableImpl implements PTable {
             }
         }
 
-        @SuppressWarnings("deprecation")
         @Override
         public void delete() {
             newMutations();

@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -133,8 +134,7 @@ public class IndexTestUtil {
                 for (Map.Entry<byte[],List<Cell>> entry : dataMutation.getFamilyCellMap().entrySet()) {
                     PColumnFamily family = dataTable.getColumnFamily(entry.getKey());
                     for (Cell kv : entry.getValue()) {
-                        @SuppressWarnings("deprecation")
-                        byte[] cq = kv.getQualifier();
+                        byte[] cq = CellUtil.cloneQualifier(kv);
                         byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(dataTable).getFirst();
                         if (Bytes.compareTo(emptyKVQualifier, cq) != 0) {
                             try {

@@ -27,7 +27,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.junit.Test;
 
@@ -94,7 +94,7 @@ public class CsvBulkImportUtilTest {
     public static class MockProcessor implements ImportPreUpsertKeyValueProcessor {
 
         @Override
-        public List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues) {
+        public List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues) {
             throw new UnsupportedOperationException("Not yet implemented");
         }
     }

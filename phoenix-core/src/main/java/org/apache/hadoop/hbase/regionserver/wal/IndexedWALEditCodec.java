@@ -30,13 +30,13 @@ import java.io.OutputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.codec.BaseDecoder;
 import org.apache.hadoop.hbase.codec.BaseEncoder;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 
 /**
@@ -215,7 +215,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
       checkFlushed();
 
       // use the standard encoding mechanism
-      KeyValueCodec.write(this.dataOutput, KeyValueUtil.ensureKeyValue(cell));
+      KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
     }
   }
 
@@ -255,7 +255,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
         this.compressedKvEncoder.write(cell);
       }
       else{
-        KeyValueCodec.write(this.dataOutput, KeyValueUtil.ensureKeyValue(cell));
+        KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
       }
     }
   }

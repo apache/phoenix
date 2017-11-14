@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
@@ -84,7 +84,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
         this.top = Reference.isTopFileRegion(r.getFileRegion());
-        this.splitRow = CellUtil.cloneRow(KeyValue.createKeyValueFromKey(splitkey));
+        this.splitRow = CellUtil.cloneRow(KeyValueUtil.createKeyValueFromKey(splitkey));
         this.indexMaintainers = indexMaintainers;
         this.viewConstants = viewConstants;
         this.regionInfo = regionInfo;

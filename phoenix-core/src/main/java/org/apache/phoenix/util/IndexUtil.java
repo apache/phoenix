@@ -285,7 +285,7 @@ public class IndexUtil {
                     regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
                     regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
                 }
-                Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
+                Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<Cell>emptyList(), ts, regionStartKey, regionEndkey);
                 delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY));
                 indexMutations.add(delete);
             }
@@ -558,8 +558,8 @@ public class IndexUtil {
             byte[] value =
                     tupleProjector.getSchema().toBytes(joinTuple, tupleProjector.getExpressions(),
                         tupleProjector.getValueBitSet(), ptr);
-            KeyValue keyValue =
-                    KeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
+            Cell keyValue =
+                    PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
             result.add(keyValue);
         }
@@ -657,31 +657,6 @@ public class IndexUtil {
                 @Override
                 public int getTagsLength() {
                     return cell.getTagsLength();
-                }
-
-                @Override
-                public long getMvccVersion() {
-                    return cell.getMvccVersion();
-                }
-
-                @Override
-                public byte[] getValue() {
-                    return cell.getValue();
-                }
-
-                @Override
-                public byte[] getFamily() {
-                    return cell.getFamily();
-                }
-
-                @Override
-                public byte[] getQualifier() {
-                    return cell.getQualifier();
-                }
-
-                @Override
-                public byte[] getRow() {
-                    return cell.getRow();
                 }
             };
             itr.set(newCell);

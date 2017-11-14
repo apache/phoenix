@@ -26,12 +26,14 @@ import java.sql.PreparedStatement;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
@@ -63,9 +65,9 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
             stmt.setObject(i+1, values[i]);
         }
         stmt.execute();
-            Iterator<Pair<byte[],List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-        List<KeyValue> dataKeyValues = iterator.next().getSecond();
-        KeyValue keyValue = dataKeyValues.get(0);
+            Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        List<Cell> dataKeyValues = iterator.next().getSecond();
+        KeyValue keyValue = PhoenixKeyValueUtil.maybeCopyCell(dataKeyValues.get(0));
         
         List<PColumn> pkColumns = table.getPKColumns();
         RowKeyValueAccessor accessor = new RowKeyValueAccessor(pkColumns, 3);

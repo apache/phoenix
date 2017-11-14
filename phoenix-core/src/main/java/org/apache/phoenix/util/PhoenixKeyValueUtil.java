@@ -25,9 +25,12 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilder.DataType;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -48,45 +51,39 @@ import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
  * 
  * @since 0.1
  */
-public class KeyValueUtil {
-    private KeyValueUtil() {
+public class PhoenixKeyValueUtil {
+    private PhoenixKeyValueUtil() {
     }
 
-    public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
-        return new KeyValue(key, 0, key.length,
-                cf, 0, cf.length,
-                cq, 0, cq.length,
-                ts, Type.Put,
-                value, valueOffset, valueLength);
+    public static Cell newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY).setRow(key).setFamily(cf)
+                .setQualifier(cq).setTimestamp(ts).setType(DataType.Put)
+                .setValue(value, valueOffset, valueLength).build();
     }
 
-    public static KeyValue newKeyValue(ImmutableBytesWritable key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
-        return new KeyValue(key.get(), key.getOffset(), key.getLength(),
-                cf, 0, cf.length,
-                cq, 0, cq.length,
-                ts, Type.Put,
-                value, valueOffset, valueLength);
+    public static Cell newKeyValue(ImmutableBytesWritable key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(key.get(), key.getOffset(), key.getLength()).setFamily(cf).setQualifier(cq)
+                .setTimestamp(ts).setType(DataType.Put).setValue(value, valueOffset, valueLength)
+                .build();
     }
 
-    public static KeyValue newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
-        return new KeyValue(key, keyOffset, keyLength,
-                cf, 0, cf.length,
-                cq, 0, cq.length,
-                ts, Type.Put,
-                value, valueOffset, valueLength);
+    public static Cell newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(key, keyOffset, keyLength).setFamily(cf).setQualifier(cq).setTimestamp(ts)
+                .setType(DataType.Put).setValue(value, valueOffset, valueLength).build();
     }
     
-    public static KeyValue newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, 
+    public static Cell newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, 
         int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength, long ts, byte[] value, 
         int valueOffset, int valueLength) {
-        return new KeyValue(key, keyOffset, keyLength,
-                cf, cfOffset, cfLength,
-                cq, cqOffset, cqLength,
-                ts, Type.Put,
-                value, valueOffset, valueLength);
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(key, keyOffset, keyLength).setFamily(cf, cfOffset, cfLength)
+                .setQualifier(cq, cqOffset, cqLength).setTimestamp(ts)
+                .setValue(value, valueOffset, valueLength).build();
     }
     
-	public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
+	public static Cell newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
 		return newKeyValue(key, cf, cq, ts, value, 0, value.length);
 	}
 
@@ -101,7 +98,7 @@ public class KeyValueUtil {
         if (kvs.size() == 0) {
         	return null;
         }
-        assert CellUtil.matchingRow(kvs.get(0), kvs.get(kvs.size()-1));
+        assert CellUtil.matchingRows(kvs.get(0), kvs.get(kvs.size()-1));
 
         Comparator<Cell> comp = new SearchComparator(kvBuilder, family, qualifier);
         int pos = Collections.binarySearch(kvs, null, comp);
@@ -124,7 +121,7 @@ public class KeyValueUtil {
         if (kvs.length == 0) {
             return null;
         }
-        assert CellUtil.matchingRow(kvs[0], kvs[kvs.length-1]);
+        assert CellUtil.matchingRows(kvs[0], kvs[kvs.length-1]);
 
         Comparator<Cell> comp = new SearchComparator(kvBuilder, family, qualifier);
         int pos = Arrays.binarySearch(kvs, null, comp);
@@ -234,5 +231,15 @@ public class KeyValueUtil {
             }
         }
         return size;
+    }
+
+    public static KeyValue maybeCopyCell(Cell c) {
+        // Same as KeyValueUtil, but HBase has deprecated this method. Avoid depending on something
+        // that will likely be removed at some point in time.
+        if (c == null) return null;
+        if (c instanceof KeyValue) {
+            return (KeyValue) c;
+        }
+        return KeyValueUtil.copyToNewKeyValue(c);
     }
 }

@@ -40,6 +40,7 @@ import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -99,7 +100,7 @@ public class LocalTableStateTest {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -145,7 +146,7 @@ public class LocalTableStateTest {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -182,7 +183,7 @@ public class LocalTableStateTest {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -224,7 +225,7 @@ public class LocalTableStateTest {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(env, state, m);
     // add the kvs from the mutation
-    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
+    KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(m.get(fam, qual).get(0));
     kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 

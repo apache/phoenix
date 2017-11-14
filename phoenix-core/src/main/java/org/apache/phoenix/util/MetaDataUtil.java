@@ -254,7 +254,7 @@ public class MetaDataUtil {
         List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
             for (Cell cell : kvs) {
-                KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
+                KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(cell);
                 if (builder.compareQualifier(kv, key, 0, key.length) ==0) {
                     builder.getValueAsPtr(kv, ptr);
                     return true;

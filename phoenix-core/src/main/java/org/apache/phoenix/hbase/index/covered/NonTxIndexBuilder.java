@@ -85,8 +85,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
         long ts = m.getFamilyCellMap().values().iterator().next().iterator().next().getTimestamp();
         Batch batch = new Batch(ts);
         for (List<Cell> family : m.getFamilyCellMap().values()) {
-            List<KeyValue> kvs = KeyValueUtil.ensureKeyValues(family);
-            for (KeyValue kv : kvs) {
+            for (Cell kv : family) {
                 batch.add(kv);
                 if(ts != kv.getTimestamp()) {
                     throw new IllegalStateException("Time stamps must match for all cells in a batch");
@@ -256,7 +255,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
     }
 
     @Override
-    public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(Collection<KeyValue> filtered, IndexMetaData indexMetaData)
+    public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(Collection<Cell> filtered, IndexMetaData indexMetaData)
             throws IOException {
         // TODO Implement IndexBuilder.getIndexUpdateForFilteredRows
         return null;

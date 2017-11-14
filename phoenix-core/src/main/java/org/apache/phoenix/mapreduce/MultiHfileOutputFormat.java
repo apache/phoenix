@@ -72,6 +72,7 @@ import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -144,7 +145,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             @Override
             public void write(TableRowkeyPair row, V cell)
                     throws IOException {
-                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                KeyValue kv = KeyValueUtil.maybeCopyCell(cell);
                 // null input == user explicitly wants to flush
                 if (row == null && kv == null) {
                     rollWriters();

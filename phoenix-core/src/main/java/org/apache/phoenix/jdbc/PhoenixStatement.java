@@ -171,7 +171,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -587,20 +587,20 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             for (String planStep : planSteps) {
                 byte[] row = PVarchar.INSTANCE.toBytes(planStep);
                 List<Cell> cells = Lists.newArrayListWithCapacity(3);
-                cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 if (estimatedBytesToScan != null) {
-                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
+                    cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimatedBytesToScan)));
                 }
                 if (estimatedRowsToScan != null) {
-                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
+                    cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimatedRowsToScan)));
                 }
                 if (estimateInfoTimestamp != null) {
-                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
+                    cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
                 }

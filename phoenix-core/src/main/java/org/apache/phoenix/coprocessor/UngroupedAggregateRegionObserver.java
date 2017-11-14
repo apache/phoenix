@@ -131,7 +131,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -332,7 +332,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         public boolean add(Mutation e) {
             boolean r = super.add(e);
             if (r) {
-                this.byteSize += KeyValueUtil.calculateMutationDiskSize(e);
+                this.byteSize += PhoenixKeyValueUtil.calculateMutationDiskSize(e);
             }
             return r;
         }
@@ -797,12 +797,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
 
         final boolean hadAny = hasAny;
-        KeyValue keyValue = null;
+        Cell keyValue = null;
         if (hadAny) {
             byte[] value = aggregators.toBytes(rowAggregators);
-            keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
+            keyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         }
-        final KeyValue aggKeyValue = keyValue;
+        final Cell aggKeyValue = keyValue;
 
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             private boolean done = !hadAny;
@@ -1096,7 +1096,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             region.closeRegionOperation();
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
-        final KeyValue aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+        final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
                 SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
 
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
@@ -1154,8 +1154,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     + region.getRegionInfo().getRegionNameAsString());
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
-        final KeyValue aggKeyValue =
-                KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+        final Cell aggKeyValue =
+                PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             @Override

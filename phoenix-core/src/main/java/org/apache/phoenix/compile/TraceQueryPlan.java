@@ -25,9 +25,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -64,6 +62,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SizedUtil;
 
 public class TraceQueryPlan implements QueryPlan {
@@ -167,9 +166,11 @@ public class TraceQueryPlan implements QueryPlan {
                 expression.evaluate(null, ptr);
                 byte[] rowKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 Cell cell =
-                        CellUtil.createCell(rowKey, HConstants.EMPTY_BYTE_ARRAY,
-                            HConstants.EMPTY_BYTE_ARRAY, EnvironmentEdgeManager.currentTimeMillis(),
-                            Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
+                        PhoenixKeyValueUtil
+                                .newKeyValue(rowKey, HConstants.EMPTY_BYTE_ARRAY,
+                                    HConstants.EMPTY_BYTE_ARRAY,
+                                    EnvironmentEdgeManager.currentTimeMillis(),
+                                    HConstants.EMPTY_BYTE_ARRAY);
                 List<Cell> cells = new ArrayList<Cell>(1);
                 cells.add(cell);
                 return new ResultTuple(Result.create(cells));

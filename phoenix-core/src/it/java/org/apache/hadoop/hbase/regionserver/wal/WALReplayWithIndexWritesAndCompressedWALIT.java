@@ -300,7 +300,7 @@ private int getKeyValueCount(Table table) throws IOException {
     ResultScanner results = table.getScanner(scan);
     int count = 0;
     for (Result res : results) {
-      count += res.list().size();
+      count += res.listCells().size();
       LOG.debug(count + ") " + res);
     }
     results.close();

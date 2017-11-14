@@ -29,6 +29,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Get;
@@ -311,12 +312,11 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             incrementRow = true;
         }
         for (Cell cell : results) {
-            KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
-            maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
+            maxTimeStamp = Math.max(maxTimeStamp, cell.getTimestamp());
             Pair<Long, GuidePostsInfoBuilder> gps;
             if (cachedGuidePosts == null) {
-                ImmutableBytesPtr cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(),
-                        kv.getFamilyLength());
+                ImmutableBytesPtr cfKey = new ImmutableBytesPtr(cell.getFamilyArray(), cell.getFamilyOffset(),
+                        cell.getFamilyLength());
                 gps = guidePostsInfoWriterMap.get(cfKey);
                 if (gps == null) {
                     gps = new Pair<Long, GuidePostsInfoBuilder>(0l,
@@ -334,7 +334,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     incrementRow = false;
                 }
             }
-            int kvLength = kv.getLength();
+            int kvLength = CellUtil.estimatedSerializedSizeOf(cell);
             long byteCount = gps.getFirst() + kvLength;
             gps.setFirst(byteCount);
             if (byteCount >= guidePostDepth) {

@@ -90,7 +90,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionalTable;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
@@ -355,7 +355,7 @@ public class MutationState implements SQLCloseable {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED).build()
                     .buildException();
         }
-        long estimatedSize = KeyValueUtil.getEstimatedRowSize(mutations);
+        long estimatedSize = PhoenixKeyValueUtil.getEstimatedRowSize(mutations);
         if (estimatedSize > maxSizeBytes) {
             resetState();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED)
@@ -746,7 +746,7 @@ public class MutationState implements SQLCloseable {
         long byteSize = 0;
         if (GlobalClientMetrics.isMetricsEnabled()) {
             for (Mutation mutation : mutations) {
-                byteSize += KeyValueUtil.calculateMutationDiskSize(mutation);
+                byteSize += PhoenixKeyValueUtil.calculateMutationDiskSize(mutation);
             }
         }
         GLOBAL_MUTATION_BYTES.update(byteSize);
@@ -891,7 +891,6 @@ public class MutationState implements SQLCloseable {
 
     }
     
-    @SuppressWarnings("deprecation")
     private void send(Iterator<TableRef> tableRefIterator) throws SQLException {
         int i = 0;
         long[] serverTimeStamps = null;
@@ -1085,7 +1084,7 @@ public class MutationState implements SQLCloseable {
         List<Mutation> currentList = Lists.newArrayList();
         long currentBatchSizeBytes = 0L;
         for (Mutation mutation : allMutationList) {
-            long mutationSizeBytes = KeyValueUtil.calculateMutationDiskSize(mutation);
+            long mutationSizeBytes = PhoenixKeyValueUtil.calculateMutationDiskSize(mutation);
             if (currentList.size() == batchSize || currentBatchSizeBytes + mutationSizeBytes > batchSizeBytes) {
                 if (currentList.size() > 0) {
                     mutationBatchList.add(currentList);

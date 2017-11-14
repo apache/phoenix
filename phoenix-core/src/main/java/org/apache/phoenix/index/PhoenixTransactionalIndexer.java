@@ -87,6 +87,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.PhoenixTransactionalTable;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -517,7 +518,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         private final long currentTimestamp;
         private final RegionCoprocessorEnvironment env;
         private final Map<String, byte[]> attributes;
-        private final List<KeyValue> pendingUpdates;
+        private final List<Cell> pendingUpdates;
         private final Set<ColumnReference> indexedColumns;
         private final Map<ColumnReference, ImmutableBytesWritable> valueMap;
         
@@ -533,8 +534,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
             try {
                 CellScanner scanner = mutation.cellScanner();
                 while (scanner.advance()) {
-                    Cell cell = scanner.current();
-                    pendingUpdates.add(KeyValueUtil.ensureKeyValue(cell));
+                    pendingUpdates.add(scanner.current());
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e); // Impossible
@@ -604,7 +604,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         }
         
         @Override
-        public Collection<KeyValue> getPendingUpdate() {
+        public Collection<Cell> getPendingUpdate() {
             return pendingUpdates;
         }
 

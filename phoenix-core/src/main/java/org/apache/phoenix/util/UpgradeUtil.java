@@ -648,7 +648,7 @@ public class UpgradeUtil {
         Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             logger.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
-            KeyValue saltKV = KeyValueUtil.newKeyValue(seqTableKey, 
+            Cell saltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
                     PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -667,7 +667,7 @@ public class UpgradeUtil {
                 // This is needed as a fix for https://issues.apache.org/jira/browse/PHOENIX-1401 
                 if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0) {
                     byte[] oldSeqNum = PLong.INSTANCE.toBytes(oldTable.getSequenceNumber());
-                    KeyValue seqNumKV = KeyValueUtil.newKeyValue(seqTableKey, 
+                    Cell seqNumKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -761,7 +761,7 @@ public class UpgradeUtil {
                             if (!success) {
                                 if (!committed) { // Try to recover by setting salting back to off, as we haven't successfully committed anything
                                     // Don't use Delete here as we'd never be able to change it again at this timestamp.
-                                    KeyValue unsaltKV = KeyValueUtil.newKeyValue(seqTableKey, 
+                                    Cell unsaltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
                                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                             PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -1675,7 +1675,7 @@ public class UpgradeUtil {
         if (!columnCells.isEmpty() && (timestamp = columnCells.get(0)
                 .getTimestamp()) < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
 
-            KeyValue upgradeKV = KeyValueUtil.newKeyValue(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            Cell upgradeKV = PhoenixKeyValueUtil.newKeyValue(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     UPGRADE_TO_4_7_COLUMN_NAME, timestamp, PBoolean.INSTANCE.toBytes(true));
             Put upgradePut = new Put(statsTableKey);
             upgradePut.add(upgradeKV);

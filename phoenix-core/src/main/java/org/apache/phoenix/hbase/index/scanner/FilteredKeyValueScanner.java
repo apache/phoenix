@@ -22,10 +22,10 @@ import java.io.IOException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Combine a simplified version of the logic in the ScanQueryMatcher and the KeyValueScanner. We can get away with this
@@ -94,7 +94,7 @@ public class FilteredKeyValueScanner implements ReseekableScanner {
                 break;
             // use a seek hint to find out where we should go
             case SEEK_NEXT_USING_HINT:
-                delegate.seek(KeyValueUtil.ensureKeyValue(filter.getNextCellHint(peeked)));
+                delegate.seek(PhoenixKeyValueUtil.maybeCopyCell(filter.getNextCellHint(peeked)));
             }
         }
     }

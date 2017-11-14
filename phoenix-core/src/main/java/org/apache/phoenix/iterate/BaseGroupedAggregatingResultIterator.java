@@ -24,12 +24,12 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * 
@@ -57,7 +57,7 @@ public abstract class BaseGroupedAggregatingResultIterator implements
     }
     
     protected abstract ImmutableBytesWritable getGroupingKey(Tuple tuple, ImmutableBytesWritable ptr) throws SQLException;
-    protected abstract Tuple wrapKeyValueAsResult(KeyValue keyValue) throws SQLException;
+    protected abstract Tuple wrapKeyValueAsResult(Cell keyValue) throws SQLException;
 
     @Override
     public Tuple next() throws SQLException {
@@ -80,7 +80,7 @@ public abstract class BaseGroupedAggregatingResultIterator implements
         }
         
         byte[] value = aggregators.toBytes(rowAggregators);
-        Tuple tuple = wrapKeyValueAsResult(KeyValueUtil.newKeyValue(currentKey, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
+        Tuple tuple = wrapKeyValueAsResult(PhoenixKeyValueUtil.newKeyValue(currentKey, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
         currentKey.set(nextKey.get(), nextKey.getOffset(), nextKey.getLength());
         return tuple;
     }

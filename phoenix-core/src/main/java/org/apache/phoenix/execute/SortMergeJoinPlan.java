@@ -33,7 +33,6 @@ import java.util.Queue;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -67,6 +66,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -688,14 +688,14 @@ public class SortMergeJoinPlan implements QueryPlan {
 
             @Override
             protected int sizeOf(Tuple e) {
-                KeyValue kv = KeyValueUtil.ensureKeyValue(e.getValue(0));
+                KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
                 return Bytes.SIZEOF_INT * 2 + kv.getLength();
             }
 
             @SuppressWarnings("deprecation")
             @Override
             protected void writeToBuffer(MappedByteBuffer buffer, Tuple e) {
-                KeyValue kv = KeyValueUtil.ensureKeyValue(e.getValue(0));
+                KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
                 buffer.putInt(kv.getLength() + Bytes.SIZEOF_INT);
                 buffer.putInt(kv.getLength());
                 buffer.put(kv.getBuffer(), kv.getOffset(), kv.getLength());

@@ -149,14 +149,14 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
         Table hTable = hbaseConn.getTable(TableName.valueOf(tableName));
         ResultScanner resultScanner = hTable.getScanner(scan);
         for (Result result : resultScanner) {
-            long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
+            long timeStamp = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
             assertEquals(rowTimestampDate.getTime(), timeStamp);
         }
         if (!mutable) {
             hTable = hbaseConn.getTable(TableName.valueOf(indexName));
              resultScanner = hTable.getScanner(scan);
             for (Result result : resultScanner) {
-                long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
+                long timeStamp = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
                 assertEquals(rowTimestampDate.getTime(), timeStamp);
             }
         }
@@ -260,14 +260,14 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
             Table hTable = hbaseConn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = hTable.getScanner(scan);
             for (Result result : resultScanner) {
-                long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
+                long timeStamp = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
                 assertEquals(rowTimestampDate.getTime(), timeStamp);
             }
             if (!mutable) {
                 hTable = hbaseConn.getTable(TableName.valueOf(indexName));
                  resultScanner = hTable.getScanner(scan);
                 for (Result result : resultScanner) {
-                    long timeStamp = result.getColumnLatest(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
+                    long timeStamp = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
                     assertEquals(rowTimestampDate.getTime(), timeStamp);
                 }
             }

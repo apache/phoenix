@@ -23,7 +23,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
@@ -84,5 +84,5 @@ public interface TableState {
    * Can be used to help the codec to determine which columns it should attempt to index.
    * @return the keyvalues in the pending update to the table.
    */
-  Collection<KeyValue> getPendingUpdate();
+  Collection<Cell> getPendingUpdate();
 }

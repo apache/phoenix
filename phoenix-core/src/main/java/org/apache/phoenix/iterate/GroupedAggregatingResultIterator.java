@@ -19,7 +19,7 @@ package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
@@ -58,7 +58,7 @@ public class GroupedAggregatingResultIterator extends BaseGroupedAggregatingResu
     }
 
     @Override
-    protected Tuple wrapKeyValueAsResult(KeyValue keyValue) throws SQLException {
+    protected Tuple wrapKeyValueAsResult(Cell keyValue) throws SQLException {
         return new SingleKeyValueTuple(keyValue);
     }
 

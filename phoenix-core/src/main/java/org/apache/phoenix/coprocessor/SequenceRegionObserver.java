@@ -52,7 +52,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -84,7 +84,7 @@ public class SequenceRegionObserver implements RegionObserver {
         byte[] errorCodeBuf = new byte[PInteger.INSTANCE.getByteSize()];
         PInteger.INSTANCE.getCodec().encodeInt(errorCode, errorCodeBuf, 0);
         return  Result.create(Collections.singletonList(
-                (Cell)KeyValueUtil.newKeyValue(row, 
+                PhoenixKeyValueUtil.newKeyValue(row, 
                         PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
                         QueryConstants.EMPTY_COLUMN_BYTES, timestamp, errorCodeBuf)));
     }
@@ -139,9 +139,9 @@ public class SequenceRegionObserver implements RegionObserver {
                 }
                 
                  
-                KeyValue currentValueKV = Sequence.getCurrentValueKV(result);
-                KeyValue incrementByKV = Sequence.getIncrementByKV(result);
-                KeyValue cacheSizeKV = Sequence.getCacheSizeKV(result);
+                Cell currentValueKV = Sequence.getCurrentValueKV(result);
+                Cell incrementByKV = Sequence.getIncrementByKV(result);
+                Cell cacheSizeKV = Sequence.getCacheSizeKV(result);
                 
                 long currentValue = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
                 long incrementBy = PLong.INSTANCE.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
@@ -161,15 +161,15 @@ public class SequenceRegionObserver implements RegionObserver {
                 	currentValue += incrementBy * cacheSize;
                     // Hold timestamp constant for sequences, so that clients always only see the latest value
                     // regardless of when they connect.
-                    KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
+                    Cell newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
                     put.add(newCurrentValueKV);
                     Sequence.replaceCurrentValueKV(cells, newCurrentValueKV);
                 }
                 else {
-	                KeyValue cycleKV = Sequence.getCycleKV(result);
-	                KeyValue limitReachedKV = Sequence.getLimitReachedKV(result);
-	                KeyValue minValueKV = Sequence.getMinValueKV(result);
-	                KeyValue maxValueKV = Sequence.getMaxValueKV(result);
+	                Cell cycleKV = Sequence.getCycleKV(result);
+	                Cell limitReachedKV = Sequence.getLimitReachedKV(result);
+	                Cell minValueKV = Sequence.getMinValueKV(result);
+	                Cell maxValueKV = Sequence.getMaxValueKV(result);
 	                
 	                boolean increasingSeq = incrementBy > 0 ? true : false;
 	                
@@ -179,7 +179,7 @@ public class SequenceRegionObserver implements RegionObserver {
 	                boolean limitReached;
 	                if (limitReachedKV == null) {
 	                	limitReached = false;
-	                	KeyValue newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
+	                	Cell newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
 	                	put.add(newLimitReachedKV);
 	                	Sequence.replaceLimitReachedKV(cells, newLimitReachedKV);
 	                }
@@ -190,7 +190,7 @@ public class SequenceRegionObserver implements RegionObserver {
 	                long minValue;
 	                if (minValueKV == null) {
 	                    minValue = Long.MIN_VALUE;
-	                    KeyValue newMinValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, minValue, timestamp);
+	                    Cell newMinValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, minValue, timestamp);
 	                    put.add(newMinValueKV);
 	                    Sequence.replaceMinValueKV(cells, newMinValueKV);
 	                }
@@ -201,7 +201,7 @@ public class SequenceRegionObserver implements RegionObserver {
 	                long maxValue;
 	                if (maxValueKV == null) {
 	                    maxValue = Long.MAX_VALUE;
-	                    KeyValue newMaxValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, maxValue, timestamp);
+	                    Cell newMaxValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, maxValue, timestamp);
 	                    put.add(newMaxValueKV);
 	                    Sequence.replaceMaxValueKV(cells, newMaxValueKV);
 	                }
@@ -212,7 +212,7 @@ public class SequenceRegionObserver implements RegionObserver {
 	                boolean cycle;
 	                if (cycleKV == null) {
 	                    cycle = false;
-	                    KeyValue newCycleKV = createKeyValue(row, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, cycle, timestamp);
+	                    Cell newCycleKV = createKeyValue(row, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, cycle, timestamp);
 	                    put.add(newCycleKV);
 	                    Sequence.replaceCycleValueKV(cells, newCycleKV);
 	                }
@@ -260,11 +260,11 @@ public class SequenceRegionObserver implements RegionObserver {
                     // update currentValue
 					currentValue += incrementBy * (SequenceUtil.isBulkAllocation(numSlotsToAllocate) ? numSlotsToAllocate : cacheSize);
 					// update the currentValue of the Result row
-					KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
+					Cell newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
 		            Sequence.replaceCurrentValueKV(cells, newCurrentValueKV);
 		            put.add(newCurrentValueKV);
 					// set the LIMIT_REACHED column to true, so that no new values can be used
-					KeyValue newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
+					Cell newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
 		            put.add(newLimitReachedKV);
                 }
                 // update the KeyValues on the server
@@ -293,10 +293,10 @@ public class SequenceRegionObserver implements RegionObserver {
 	 *            column qualifier of KeyValue
 	 * @return return the KeyValue that was created
 	 */
-	KeyValue createKeyValue(byte[] key, byte[] cqBytes, long value, long timestamp) {
+	Cell createKeyValue(byte[] key, byte[] cqBytes, long value, long timestamp) {
 		byte[] valueBuffer = new byte[PLong.INSTANCE.getByteSize()];
-    PLong.INSTANCE.getCodec().encodeLong(value, valueBuffer, 0);
-		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
+		PLong.INSTANCE.getCodec().encodeLong(value, valueBuffer, 0);
+		return PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
 	}
     
 	/**
@@ -308,9 +308,9 @@ public class SequenceRegionObserver implements RegionObserver {
 	 *            column qualifier of KeyValue
 	 * @return return the KeyValue that was created
 	 */
-	private KeyValue createKeyValue(byte[] key, byte[] cqBytes, boolean value, long timestamp) throws IOException {
+	private Cell createKeyValue(byte[] key, byte[] cqBytes, boolean value, long timestamp) throws IOException {
 		// create new key value for put
-		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, cqBytes, 
+		return PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, cqBytes, 
 				timestamp, value ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
 	}
 
@@ -397,7 +397,7 @@ public class SequenceRegionObserver implements RegionObserver {
                     // Timestamp should match exactly, or we may have the wrong sequence
                     if (expectedValue != value || currentValueKV.getTimestamp() != clientTimestamp) {
                         return Result.create(Collections.singletonList(
-                          (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
+                          (Cell)PhoenixKeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
                             QueryConstants.EMPTY_COLUMN_BYTES, currentValueKV.getTimestamp(), ByteUtil.EMPTY_BYTE_ARRAY)));
                     }
                     m = new Put(row, currentValueKV.getTimestamp());
@@ -425,7 +425,7 @@ public class SequenceRegionObserver implements RegionObserver {
                 // the client cares about is the timestamp, which is the timestamp of
                 // when the mutation was actually performed (useful in the case of .
                 return Result.create(Collections.singletonList(
-                  (Cell)KeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
+                  (Cell)PhoenixKeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }

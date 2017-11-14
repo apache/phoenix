@@ -20,8 +20,10 @@ package org.apache.phoenix.hbase.index.covered.data;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
 import org.junit.Test;
@@ -36,7 +38,7 @@ public class TestIndexMemStore {
 
   @Test
   public void testCorrectOverwritting() throws Exception {
-    IndexMemStore store = new IndexMemStore(IndexMemStore.COMPARATOR);
+    IndexMemStore store = new IndexMemStore(CellComparatorImpl.COMPARATOR);
     long ts = 10;
     KeyValue kv = new KeyValue(row, family, qual, ts, Type.Put, val);
     kv.setSequenceId(2);
@@ -46,7 +48,7 @@ public class TestIndexMemStore {
     // adding the exact same kv shouldn't change anything stored if not overwritting
     store.add(kv2, false);
     ReseekableScanner scanner = store.getScanner();
-    KeyValue first = KeyValue.createFirstOnRow(row);
+    KeyValue first = KeyValueUtil.createFirstOnRow(row);
     scanner.seek(first);
     assertTrue("Overwrote kv when specifically not!", kv == scanner.next());
     scanner.close();
@@ -80,7 +82,7 @@ public class TestIndexMemStore {
 
     // null qualifiers should always sort before the non-null cases
     ReseekableScanner scanner = store.getScanner();
-    KeyValue first = KeyValue.createFirstOnRow(row);
+    KeyValue first = KeyValueUtil.createFirstOnRow(row);
     assertTrue("Didn't have any data in the scanner", scanner.seek(first));
     assertTrue("Didn't get delete family first (no qualifier == sort first)", df == scanner.next());
     assertTrue("Didn't get point delete before corresponding put", d == scanner.next());

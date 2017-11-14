@@ -128,7 +128,10 @@ public class IndexManagementUtil {
         boolean matches = false;
         outer: for (KeyValue kv : update) {
             for (ColumnReference ref : columns) {
-                if (ref.matchesFamily(kv.getFamily()) && ref.matchesQualifier(kv.getQualifier())) {
+                if (ref.matchesFamily(kv.getFamilyArray(), kv.getFamilyOffset(),
+                    kv.getFamilyLength())
+                        && ref.matchesQualifier(kv.getQualifierArray(), kv.getQualifierOffset(),
+                            kv.getQualifierLength())) {
                     matches = true;
                     // if a single column matches a single kv, we need to build a whole scanner
                     break outer;
@@ -150,7 +153,10 @@ public class IndexManagementUtil {
         boolean matches = false;
         outer: for (ColumnReference ref : columns) {
             for (KeyValue kv : update) {
-                if (ref.matchesFamily(kv.getFamily()) && ref.matchesQualifier(kv.getQualifier())) {
+                if (ref.matchesFamily(kv.getFamilyArray(), kv.getFamilyOffset(),
+                    kv.getFamilyLength())
+                        && ref.matchesQualifier(kv.getQualifierArray(), kv.getQualifierOffset(),
+                            kv.getQualifierLength())) {
                     matches = true;
                     // if a single column matches a single kv, we need to build a whole scanner
                     break outer;

@@ -25,7 +25,7 @@ import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
@@ -35,7 +35,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Factory class used to instantiate an iterator to handle mutations made during a parallel scan.
@@ -66,7 +66,7 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
         final MutationState finalState = state;
         
         byte[] value = PLong.INSTANCE.toBytes(totalRowCount);
-        KeyValue keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
+        Cell keyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
         final Tuple tuple = new SingleKeyValueTuple(keyValue);
         return new PeekingResultIterator() {
             private boolean done = false;

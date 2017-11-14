@@ -39,7 +39,6 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -71,7 +70,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SizedUtil;
@@ -297,7 +296,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             long estSize = sizeOfUnorderedGroupByMap(aggregateMap.size(), aggregators.getEstimatedByteSize());
             chunk.resize(estSize);
 
-            final List<KeyValue> aggResults = new ArrayList<KeyValue>(aggregateMap.size());
+            final List<Cell> aggResults = new ArrayList<Cell>(aggregateMap.size());
 
             final Iterator<Map.Entry<ImmutableBytesPtr, Aggregator[]>> cacheIter =
                     aggregateMap.entrySet().iterator();
@@ -314,8 +313,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             + " with aggregators " + Arrays.asList(rowAggregators).toString()
                             + " value = " + Bytes.toStringBinary(value), customAnnotations));
                 }
-                KeyValue keyValue =
-                        KeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(),
+                Cell keyValue =
+                        PhoenixKeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(),
                             SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0,
                             value.length);
                 aggResults.add(keyValue);
@@ -522,8 +521,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
                 if (currentKey != null) {
                     byte[] value = aggregators.toBytes(rowAggregators);
-                    KeyValue keyValue =
-                            KeyValueUtil.newKeyValue(currentKey.get(), currentKey.getOffset(),
+                    Cell keyValue =
+                            PhoenixKeyValueUtil.newKeyValue(currentKey.get(), currentKey.getOffset(),
                                 currentKey.getLength(), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
                                 AGG_TIMESTAMP, value, 0, value.length);
                     results.add(keyValue);

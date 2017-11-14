@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * 
@@ -55,10 +55,9 @@ public class ResultTuple extends BaseTuple {
     }
 
     @Override
-    public KeyValue getValue(byte[] family, byte[] qualifier) {
-        Cell cell = KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, 
+    public Cell getValue(byte[] family, byte[] qualifier) {
+        return PhoenixKeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, 
           result.rawCells(), family, qualifier);
-        return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
     }
 
     @Override
@@ -91,14 +90,13 @@ public class ResultTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(int index) {
-        return  org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(
-          result.rawCells()[index]);
+        return  PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[index]);
     }
 
     @Override
     public boolean getValue(byte[] family, byte[] qualifier,
             ImmutableBytesWritable ptr) {
-        KeyValue kv = getValue(family, qualifier);
+        Cell kv = getValue(family, qualifier);
         if (kv == null)
             return false;
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());

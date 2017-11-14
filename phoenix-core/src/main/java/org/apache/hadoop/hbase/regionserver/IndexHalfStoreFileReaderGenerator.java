@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
@@ -119,7 +120,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                                 region.getRegionInfo().getRegionName());
                     if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
                     byte[] splitRow =
-                            CellUtil.cloneRow(KeyValue.createKeyValueFromKey(r.getSplitKey()));
+                            CellUtil.cloneRow(KeyValueUtil.createKeyValueFromKey(r.getSplitKey()));
                     // We need not change any thing in first region data because first region start key
                     // is equal to merged region start key. So returning same reader.
                     if (Bytes.compareTo(mergeRegions.getFirst().getStartKey(), splitRow) == 0) {
@@ -138,7 +139,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                         childRegion = mergeRegions.getSecond();
                         regionStartKeyInHFile = mergeRegions.getSecond().getStartKey();
                     }
-                    splitKey = KeyValue.createFirstOnRow(region.getRegionInfo().getStartKey().length == 0 ?
+                    splitKey = KeyValueUtil.createFirstOnRow(region.getRegionInfo().getStartKey().length == 0 ?
                         new byte[region.getRegionInfo().getEndKey().length] :
                             region.getRegionInfo().getStartKey()).getKey();
                 } else {

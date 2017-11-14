@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
@@ -72,11 +73,11 @@ public class IndexTestingUtils {
     // s.setRaw(true);
     s.setMaxVersions();
     s.setTimeRange(start, end);
-    List<KeyValue> received = new ArrayList<KeyValue>();
+    List<Cell> received = new ArrayList<Cell>();
     ResultScanner scanner = index1.getScanner(s);
     for (Result r : scanner) {
-      received.addAll(r.list());
-      LOG.debug("Received: " + r.list());
+      received.addAll(r.listCells());
+      LOG.debug("Received: " + r.listCells());
     }
     scanner.close();
     assertEquals("Didn't get the expected kvs from the index table!", expected, received);

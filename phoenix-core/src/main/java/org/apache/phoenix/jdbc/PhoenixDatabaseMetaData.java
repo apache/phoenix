@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
@@ -66,7 +67,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -615,7 +616,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 List<Cell> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
                 newCells.addAll(cells);
                 newCells.add(kv);
-                Collections.sort(newCells, KeyValue.COMPARATOR);
+                Collections.sort(newCells, CellComparatorImpl.COMPARATOR);
                 tuple = new ResultTuple(Result.create(newCells));
             }
             return tuple;
@@ -1051,7 +1052,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 PTableType.TABLE.getValue().getBytes(),
                 PTableType.VIEW.getValue().getBytes());
         for (byte[] tableType : tableTypes) {
-            TABLE_TYPE_TUPLES.add(new SingleKeyValueTuple(KeyValueUtil.newKeyValue(tableType, TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY)));
+            TABLE_TYPE_TUPLES.add(new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(tableType, TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY)));
         }
     }
     

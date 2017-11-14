@@ -203,7 +203,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 Result result = results.next();
                 assertNotNull(result);
                 
-                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dataCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dataCq).get(0).getTypeByte());
                 assertNull(results.next());
                 
                 // key value for v2 should have been deleted from the global index table
@@ -213,7 +213,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
-                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, globalIndexCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(),  result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, globalIndexCq).get(0).getTypeByte());
                 assertNull(results.next());
                 
                 // key value for v2 should have been deleted from the local index table
@@ -225,7 +225,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 result = results.next();
                 assertNotNull(result);
                 assertEquals("data table col"
-                        + "umn value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumn(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES, localIndexCq).get(0).getTypeByte());
+                        + "umn value should have been deleted", KeyValue.Type.DeleteColumn.getCode(),  result.getColumnCells(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES, localIndexCq).get(0).getTypeByte());
                 assertNull(results.next()); 
             }
             else {

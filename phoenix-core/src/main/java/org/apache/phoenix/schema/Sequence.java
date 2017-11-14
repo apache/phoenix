@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Append;
@@ -53,7 +54,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Lists;
@@ -66,14 +67,14 @@ public class Sequence {
     public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // create empty Sequence key values used while created a sequence row
-    private static final KeyValue CURRENT_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, CURRENT_VALUE_BYTES);
-    private static final KeyValue INCREMENT_BY_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, INCREMENT_BY_BYTES);
-    private static final KeyValue CACHE_SIZE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, CACHE_SIZE_BYTES);
-    private static final KeyValue MIN_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, MIN_VALUE_BYTES);
-    private static final KeyValue MAX_VALUE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, MAX_VALUE_BYTES);
-    private static final KeyValue CYCLE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, CYCLE_FLAG_BYTES);
-    private static final KeyValue LIMIT_REACHED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, LIMIT_REACHED_FLAG_BYTES);
-    private static final List<KeyValue> SEQUENCE_KV_COLUMNS = Arrays.<KeyValue>asList(
+    private static final Cell CURRENT_VALUE_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, CURRENT_VALUE_BYTES);
+    private static final Cell INCREMENT_BY_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, INCREMENT_BY_BYTES);
+    private static final Cell CACHE_SIZE_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, CACHE_SIZE_BYTES);
+    private static final Cell MIN_VALUE_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, MIN_VALUE_BYTES);
+    private static final Cell MAX_VALUE_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, MAX_VALUE_BYTES);
+    private static final Cell CYCLE_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, CYCLE_FLAG_BYTES);
+    private static final Cell LIMIT_REACHED_KV = org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, SYSTEM_SEQUENCE_FAMILY_BYTES, LIMIT_REACHED_FLAG_BYTES);
+    private static final List<Cell> SEQUENCE_KV_COLUMNS = Arrays.<Cell>asList(
             CURRENT_VALUE_KV,
             INCREMENT_BY_KV,
             CACHE_SIZE_KV,
@@ -84,7 +85,7 @@ public class Sequence {
             LIMIT_REACHED_KV
             );
     static {
-        Collections.sort(SEQUENCE_KV_COLUMNS, KeyValue.COMPARATOR);
+        Collections.sort(SEQUENCE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
     }
     // Pre-compute index of sequence key values to prevent binary search
     private static final int CURRENT_VALUE_INDEX = SEQUENCE_KV_COLUMNS.indexOf(CURRENT_VALUE_KV);
@@ -301,8 +302,8 @@ public class Sequence {
         append.setAttribute(SequenceRegionObserver.CURRENT_VALUE_ATTRIB, PLong.INSTANCE.toBytes(value.nextValue));
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         familyMap.put(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(
-        		(Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, value.timestamp, PLong.INSTANCE.toBytes(value.currentValue)),
-        		(Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, value.timestamp, PBoolean.INSTANCE.toBytes(value.limitReached))
+        		(Cell)PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, value.timestamp, PLong.INSTANCE.toBytes(value.currentValue)),
+        		(Cell)PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, value.timestamp, PBoolean.INSTANCE.toBytes(value.limitReached))
                 ));
         return append;
     }
@@ -363,7 +364,7 @@ public class Sequence {
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
         }
-        for (KeyValue kv : SEQUENCE_KV_COLUMNS) {
+        for (Cell kv : SEQUENCE_KV_COLUMNS) {
             try {
                 // Store the timestamp on the cell as well as HBase 1.2 seems to not
                 // be serializing over the time range (see HBASE-15698).
@@ -388,64 +389,63 @@ public class Sequence {
      * @param cellIndex index of the KeyValue to be returned (if the sequence row is from a previous version
      * @return KeyValue
      */
-    private static KeyValue getKeyValue(Result r, KeyValue kv, int cellIndex) {
+    private static Cell getKeyValue(Result r, Cell kv, int cellIndex) {
         Cell[] cells = r.rawCells();
         // if the sequence row is from a previous version then MIN_VALUE, MAX_VALUE, CYCLE and LIMIT_REACHED key values are not present,
         // the sequence row has only three columns (INCREMENT_BY, CACHE_SIZE and CURRENT_VALUE) and the order of the cells 
         // in the array returned by rawCells() is not what what we expect so use getColumnLatestCell() to get the cell we want
-        Cell cell = cells.length == NUM_SEQUENCE_KEY_VALUES ? cells[cellIndex] :
+        return cells.length == NUM_SEQUENCE_KEY_VALUES ? cells[cellIndex] :
         	r.getColumnLatestCell(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength());
-        return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
     }
     
-    private static KeyValue getKeyValue(Result r, KeyValue kv) {
+    private static Cell getKeyValue(Result r, Cell kv) {
         return getKeyValue(r, kv, SEQUENCE_KV_COLUMNS.indexOf(kv));
     }
     
-    public static KeyValue getCurrentValueKV(Result r) {
+    public static Cell getCurrentValueKV(Result r) {
         return getKeyValue(r, CURRENT_VALUE_KV, CURRENT_VALUE_INDEX);
     }
     
-    public static KeyValue getIncrementByKV(Result r) {
+    public static Cell getIncrementByKV(Result r) {
         return getKeyValue(r, INCREMENT_BY_KV, INCREMENT_BY_INDEX);
     }
     
-    public static KeyValue getCacheSizeKV(Result r) {
+    public static Cell getCacheSizeKV(Result r) {
         return getKeyValue(r, CACHE_SIZE_KV, CACHE_SIZE_INDEX);
     }
     
-    public static KeyValue getMinValueKV(Result r) {
+    public static Cell getMinValueKV(Result r) {
         return getKeyValue(r, MIN_VALUE_KV, MIN_VALUE_INDEX);
     }
     
-    public static KeyValue getMaxValueKV(Result r) {
+    public static Cell getMaxValueKV(Result r) {
         return getKeyValue(r, MAX_VALUE_KV, MAX_VALUE_INDEX);
     }
     
-    public static KeyValue getCycleKV(Result r) {
+    public static Cell getCycleKV(Result r) {
         return getKeyValue(r, CYCLE_KV, CYCLE_INDEX);
     }
 
-    public static KeyValue getLimitReachedKV(Result r) {
+    public static Cell getLimitReachedKV(Result r) {
         return getKeyValue(r, LIMIT_REACHED_KV, LIMIT_REACHED_INDEX);
     }
     
-    public static void replaceCurrentValueKV(List<Cell> kvs, KeyValue currentValueKV) {
+    public static void replaceCurrentValueKV(List<Cell> kvs, Cell currentValueKV) {
         kvs.set(CURRENT_VALUE_INDEX, currentValueKV);
     }
     
-    public static void replaceMinValueKV(List<Cell> kvs, KeyValue minValueKV) {
+    public static void replaceMinValueKV(List<Cell> kvs, Cell minValueKV) {
         kvs.set(MIN_VALUE_INDEX, minValueKV);
     }
 
-    public static void replaceMaxValueKV(List<Cell> kvs, KeyValue maxValueKV) {
+    public static void replaceMaxValueKV(List<Cell> kvs, Cell maxValueKV) {
         kvs.set(MAX_VALUE_INDEX, maxValueKV);
     }
 
-    public static void replaceCycleValueKV(List<Cell> kvs, KeyValue cycleValueKV) {
+    public static void replaceCycleValueKV(List<Cell> kvs, Cell cycleValueKV) {
         kvs.set(CYCLE_INDEX, cycleValueKV);
     }
-    public static void replaceLimitReachedKV(List<Cell> kvs, KeyValue limitReachedKV) {
+    public static void replaceLimitReachedKV(List<Cell> kvs, Cell limitReachedKV) {
         kvs.set(LIMIT_REACHED_INDEX, limitReachedKV);
     }
     
@@ -459,7 +459,7 @@ public class Sequence {
             return Lists.newArrayList(r.rawCells());
         // else we need to handle missing MIN_VALUE, MAX_VALUE, CYCLE and LIMIT_REACHED KeyValues
         List<Cell> cellList = Lists.newArrayListWithCapacity(NUM_SEQUENCE_KEY_VALUES);
-        for (KeyValue kv : SEQUENCE_KV_COLUMNS) {
+        for (Cell kv : SEQUENCE_KV_COLUMNS) {
             cellList.add(getKeyValue(r,kv));
         }
         return cellList;
@@ -502,12 +502,12 @@ public class Sequence {
         }
         
         public SequenceValue(Result r, ValueOp op, long numToAllocate) {
-            KeyValue currentValueKV = getCurrentValueKV(r);
-            KeyValue incrementByKV = getIncrementByKV(r);
-            KeyValue cacheSizeKV = getCacheSizeKV(r);
-            KeyValue minValueKV = getMinValueKV(r);
-            KeyValue maxValueKV = getMaxValueKV(r);
-            KeyValue cycleKV = getCycleKV(r);
+            Cell currentValueKV = getCurrentValueKV(r);
+            Cell incrementByKV = getIncrementByKV(r);
+            Cell cacheSizeKV = getCacheSizeKV(r);
+            Cell minValueKV = getMinValueKV(r);
+            Cell maxValueKV = getMaxValueKV(r);
+            Cell cycleKV = getCycleKV(r);
             this.timestamp = currentValueKV.getTimestamp();
             this.nextValue = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
             this.incrementBy = PLong.INSTANCE.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
@@ -563,15 +563,15 @@ public class Sequence {
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         byte[] startWithBuf = PLong.INSTANCE.toBytes(startWith);
         familyMap.put(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, timestamp, startWithBuf),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.START_WITH_BYTES, timestamp, startWithBuf),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.INCREMENT_BY_BYTES, timestamp, PLong.INSTANCE.toBytes(incrementBy)),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CACHE_SIZE_BYTES, timestamp, PLong.INSTANCE.toBytes(cacheSize)),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, timestamp, PLong.INSTANCE.toBytes(minValue)),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, timestamp, PLong.INSTANCE.toBytes(maxValue)),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, timestamp, PBoolean.INSTANCE.toBytes(cycle)),
-                KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, timestamp, PDataType.FALSE_BYTES)
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, timestamp, startWithBuf),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.START_WITH_BYTES, timestamp, startWithBuf),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.INCREMENT_BY_BYTES, timestamp, PLong.INSTANCE.toBytes(incrementBy)),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CACHE_SIZE_BYTES, timestamp, PLong.INSTANCE.toBytes(cacheSize)),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, timestamp, PLong.INSTANCE.toBytes(minValue)),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, timestamp, PLong.INSTANCE.toBytes(maxValue)),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, timestamp, PBoolean.INSTANCE.toBytes(cycle)),
+                PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, timestamp, PDataType.FALSE_BYTES)
                 ));
         return append;
     }
@@ -601,7 +601,7 @@ public class Sequence {
         }
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         familyMap.put(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(
-                (Cell)KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY)));
+                (Cell)PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timestamp, ByteUtil.EMPTY_BYTE_ARRAY)));
         return append;
     }
 

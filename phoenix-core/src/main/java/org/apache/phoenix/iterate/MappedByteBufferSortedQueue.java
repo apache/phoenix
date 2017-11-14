@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
+
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -30,6 +31,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ResultUtil;
 
 import com.google.common.collect.MinMaxPriorityQueue;
@@ -82,7 +84,6 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
             return sizeof(e.sortKeys) + sizeof(toKeyValues(e));
         }
 
-        @SuppressWarnings("deprecation")
         @Override
         protected void writeToBuffer(MappedByteBuffer buffer, ResultEntry e) {
             int totalLen = 0;
@@ -140,7 +141,7 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
             int size = result.size();
             List<KeyValue> kvs = new ArrayList<KeyValue>(size);
             for (int i = 0; i < size; i++) {
-                kvs.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i)));
+                kvs.add(PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i)));
             }
             return kvs;
         }

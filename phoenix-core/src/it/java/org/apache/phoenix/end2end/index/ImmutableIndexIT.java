@@ -39,8 +39,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -247,7 +247,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private void assertIndexMutations(Connection conn) throws SQLException {
-        Iterator<Pair<byte[], List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        Iterator<Pair<byte[], List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
         assertTrue(iterator.hasNext());
         iterator.next();
         assertEquals(!localIndex, iterator.hasNext());
