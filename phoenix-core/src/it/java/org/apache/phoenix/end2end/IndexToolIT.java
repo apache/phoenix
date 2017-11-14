@@ -209,6 +209,46 @@ public class IndexToolIT extends BaseTest {
         }
     }
 
+    @Test
+    public void testSaltedVariableLengthPK() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        try (Connection conn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            String dataDDL =
+                    "CREATE TABLE " + dataTableFullName + "(\n"
+                            + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
+                            + "\"info\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"info\".CAP_DATE VARCHAR NULL,\n" + "\"info\".ORG_ID BIGINT NULL,\n"
+                            + "\"info\".ORG_NAME VARCHAR(255) NULL\n" + ") SALT_BUCKETS=3";
+            conn.createStatement().execute(dataDDL);
+
+            String upsert =
+                    "UPSERT INTO " + dataTableFullName
+                            + "(ID,CAR_NUM,CAP_DATE,ORG_ID,ORG_NAME) VALUES('1','car1','2016-01-01 00:00:00',11,'orgname1')";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+
+            String indexDDL =
+                    String.format(
+                        "CREATE %s INDEX %s on %s (\"info\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                        (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
+            conn.createStatement().execute(indexDDL);
+
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+
+            ResultSet rs =
+                    conn.createStatement().executeQuery(
+                        "SELECT ORG_ID,CAP_DATE,CAR_NUM,ORG_NAME FROM " + dataTableFullName
+                                + " WHERE CAR_NUM='car1' AND CAP_DATE>='2016-01-01' AND CAP_DATE<='2016-05-02' LIMIT 10");
+            assertTrue(rs.next());
+            int orgId = rs.getInt(1);
+            assertEquals(11, orgId);
+        }
+    }
+
     public static void assertExplainPlan(boolean localIndex, String actualExplainPlan,
             String dataTableFullName, String indexTableFullName) {
         String expectedExplainPlan;
