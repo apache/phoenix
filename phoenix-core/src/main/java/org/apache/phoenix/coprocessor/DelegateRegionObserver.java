@@ -74,25 +74,31 @@ public class DelegateRegionObserver implements RegionObserver {
 
 
     @Override
-    public void preFlush(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
-        delegate.preFlush(c);
+    public void preFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
+        delegate.preFlush(c, tracker);
+        ;
     }
 
     @Override
-    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            InternalScanner scanner) throws IOException {
-        return delegate.preFlush(c, store, scanner);
+    public InternalScanner preFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            Store store, InternalScanner scanner, org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker)
+            throws IOException {
+        return delegate.preFlush(c, store, scanner, tracker);
     }
 
     @Override
-    public void postFlush(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
-        delegate.postFlush(c);
+    public void postFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
+        delegate.postFlush(c, tracker);
     }
+    
 
     @Override
-    public void postFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            StoreFile resultFile) throws IOException {
-        delegate.postFlush(c, store, resultFile);
+    public void postFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            Store store, StoreFile resultFile, org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker)
+            throws IOException {
+        delegate.postFlush(c, store, resultFile, tracker);
     }
 
     
@@ -232,9 +238,9 @@ public class DelegateRegionObserver implements RegionObserver {
     }
 
     @Override
-    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
-            RegionScanner s) throws IOException {
-        return delegate.preScannerOpen(c, scan, s);
+    public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            Scan scan) throws IOException {
+        delegate.preScannerOpen(c, scan);
     }
 
     @Override

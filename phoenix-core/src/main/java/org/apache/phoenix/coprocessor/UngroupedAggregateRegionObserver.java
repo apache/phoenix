@@ -47,20 +47,21 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -304,18 +305,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s)
-            throws IOException {
-        s = super.preScannerOpen(e, scan, s);
+    public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            Scan scan) throws IOException {
+    
         if (ScanUtil.isAnalyzeTable(scan)) {
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
-            scan.setStartRow(HConstants.EMPTY_START_ROW);
-            scan.setStopRow(HConstants.EMPTY_END_ROW);
+            scan.withStartRow(HConstants.EMPTY_START_ROW);
+            scan.withStopRow(HConstants.EMPTY_END_ROW);
             scan.setFilter(null);
         }
-        return s;
     }
 
    public static class MutationList extends ArrayList<Mutation> {
@@ -831,7 +831,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     private void checkForLocalIndexColumnFamilies(Region region,
             List<IndexMaintainer> indexMaintainers) throws IOException {
-        HTableDescriptor tableDesc = region.getTableDesc();
+        TableDescriptor tableDesc = region.getTableDescriptor();
         String schemaName =
                 tableDesc.getTableName().getNamespaceAsString()
                         .equals(NamespaceDescriptor.DEFAULT_NAMESPACE_NAME_STR) ? SchemaUtil
@@ -843,7 +843,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             if(coveredColumns.isEmpty()) {
                 byte[] localIndexCf = indexMaintainer.getEmptyKeyValueFamily().get();
                 // When covered columns empty we store index data in default column family so check for it.
-                if (tableDesc.getFamily(localIndexCf) == null) {
+                if (tableDesc.getColumnFamily(localIndexCf) == null) {
                     ServerUtil.throwIOException("Column Family Not Found",
                         new ColumnFamilyNotFoundException(schemaName, tableName, Bytes
                                 .toString(localIndexCf)));
@@ -851,7 +851,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             for (ColumnReference reference : coveredColumns) {
                 byte[] cf = IndexUtil.getLocalIndexColumnFamily(reference.getFamily());
-                HColumnDescriptor family = region.getTableDesc().getFamily(cf);
+                ColumnFamilyDescriptor family = region.getTableDescriptor().getColumnFamily(cf);
                 if (family == null) {
                     ServerUtil.throwIOException("Column Family Not Found",
                         new ColumnFamilyNotFoundException(schemaName, tableName, Bytes.toString(cf)));
@@ -882,7 +882,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         //if we're writing to the same table, but the PK can change, that means that some
         //mutations might be in our current region, and others in a different one.
         if (areMutationsInSameTable && isPKChanging) {
-            HRegionInfo regionInfo = region.getRegionInfo();
+            RegionInfo regionInfo = region.getRegionInfo();
             for (Mutation mutation : mutations){
                 if (regionInfo.containsRow(mutation.getRow())){
                     localRegionMutations.add(mutation);
@@ -898,8 +898,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     private boolean areMutationsInSameTable(Table targetHTable, Region region) {
-        return (targetHTable == null || Bytes.compareTo(targetHTable.getName(),
-                region.getTableDesc().getTableName().getName()) == 0);
+        return (targetHTable == null || Bytes.compareTo(targetHTable.getName().getName(),
+                region.getTableDescriptor().getTableName().getName()) == 0);
     }
 
     @Override
@@ -1101,7 +1101,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             @Override
-            public HRegionInfo getRegionInfo() {
+            public RegionInfo getRegionInfo() {
                 return region.getRegionInfo();
             }
 
@@ -1159,7 +1159,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             @Override
-            public HRegionInfo getRegionInfo() {
+            public RegionInfo getRegionInfo() {
                 return region.getRegionInfo();
             }
 
@@ -1325,6 +1325,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
+    
+    /*
+     * TODO: use waitForFlushes PHOENIX-4352
+     */
     @Override
     public void preSplit(ObserverContext<RegionCoprocessorEnvironment> c, byte[] splitRow)
             throws IOException {

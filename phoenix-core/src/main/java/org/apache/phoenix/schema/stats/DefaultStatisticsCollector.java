@@ -135,7 +135,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 guidepostWidth = PLong.INSTANCE.getCodec().decodeInt(guidePostWidthBytes, 0, SortOrder.getDefault());
             }
             this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
-                env.getRegion().getTableDesc());
+                env.getRegion().getTableDescriptor());
         } else {
             long guidepostWidth = -1;
             Table htable = null;
@@ -203,7 +203,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     config.getLong(
                         QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
-                    env.getRegion().getTableDesc());
+                    env.getRegion().getTableDescriptor());
             }
         }
     }
@@ -353,7 +353,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
         if (logger.isDebugEnabled()) {
             logger.debug("Compaction scanner created for stats");
         }
-        ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
+        ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getColumnFamilyDescriptor().getName());
         // Potentially perform a cross region server get in order to use the correct guide posts
         // width for the table being compacted.
         init();

@@ -26,7 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
@@ -38,10 +38,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  */
 public class StatisticsCollectionRunTracker {
     private static volatile StatisticsCollectionRunTracker INSTANCE;
-    private final Set<HRegionInfo> updateStatsRegions = Collections
-            .newSetFromMap(new ConcurrentHashMap<HRegionInfo, Boolean>());
-    private final Set<HRegionInfo> compactingRegions = Collections
-            .newSetFromMap(new ConcurrentHashMap<HRegionInfo, Boolean>());
+    private final Set<RegionInfo> updateStatsRegions = Collections
+            .newSetFromMap(new ConcurrentHashMap<RegionInfo, Boolean>());
+    private final Set<RegionInfo> compactingRegions = Collections
+            .newSetFromMap(new ConcurrentHashMap<RegionInfo, Boolean>());
     private final ExecutorService executor;
     
     // Constants added for testing purposes
@@ -77,7 +77,7 @@ public class StatisticsCollectionRunTracker {
      * @return true if the region wasn't already marked for stats collection via compaction, false
      *         otherwise.
      */
-    public boolean addCompactingRegion(HRegionInfo regionInfo) {
+    public boolean addCompactingRegion(RegionInfo regionInfo) {
         return compactingRegions.add(regionInfo);
     }
 
@@ -86,7 +86,7 @@ public class StatisticsCollectionRunTracker {
      *            major compaction.
      * @return true if the region was marked for stats collection via compaction, false otherwise.
      */
-    public boolean removeCompactingRegion(HRegionInfo regionInfo) {
+    public boolean removeCompactingRegion(RegionInfo regionInfo) {
         return compactingRegions.remove(regionInfo);
     }
 
@@ -95,7 +95,7 @@ public class StatisticsCollectionRunTracker {
      * @return true if stats are being collected for the region via major compaction, false
      *         otherwise.
      */
-    public boolean areStatsBeingCollectedOnCompaction(HRegionInfo regionInfo) {
+    public boolean areStatsBeingCollectedOnCompaction(RegionInfo regionInfo) {
         return compactingRegions.contains(regionInfo);
     }
 
@@ -103,7 +103,7 @@ public class StatisticsCollectionRunTracker {
      * @param regionInfo for the region to run UPDATE STATISTICS command on.
      * @return true if UPDATE STATISTICS wasn't already running on the region, false otherwise.
      */
-    public boolean addUpdateStatsCommandRegion(HRegionInfo regionInfo) {
+    public boolean addUpdateStatsCommandRegion(RegionInfo regionInfo) {
         return updateStatsRegions.add(regionInfo);
     }
 
@@ -111,7 +111,7 @@ public class StatisticsCollectionRunTracker {
      * @param regionInfo for the region to mark as not running UPDATE STATISTICS command on.
      * @return true if UPDATE STATISTICS was running on the region, false otherwise.
      */
-    public boolean removeUpdateStatsCommandRegion(HRegionInfo regionInfo) {
+    public boolean removeUpdateStatsCommandRegion(RegionInfo regionInfo) {
         return updateStatsRegions.remove(regionInfo);
     }
 

@@ -1728,7 +1728,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Table hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
         try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
-            region.getTableDesc().getTableName())) {
+            region.getTableDescriptor().getTableName())) {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<ViewInfo> viewInfoList = Lists.newArrayList();
@@ -1777,7 +1777,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Table hTable = env.getTable(systemCatalogTableName);
         // These deprecated calls work around the issue
         try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
-            region.getTableDesc().getTableName())) {
+            region.getTableDescriptor().getTableName())) {
             boolean allViewsInCurrentRegion = true;
             int numOfChildViews = 0;
             List<ViewInfo> viewInfoList = Lists.newArrayList();

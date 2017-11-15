@@ -24,12 +24,12 @@ import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -190,7 +190,7 @@ public class StatisticsUtil {
         return current == null ? GuidePostsInfo.NO_GUIDEPOST : guidePostsInfoBuilder.isEmpty() ? emptyGuidePost : guidePostsInfoBuilder.build();
     }
 
-    public static long getGuidePostDepth(int guidepostPerRegion, long guidepostWidth, HTableDescriptor tableDesc) {
+    public static long getGuidePostDepth(int guidepostPerRegion, long guidepostWidth, TableDescriptor tableDesc) {
         if (guidepostPerRegion > 0) {
             long maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
             if (tableDesc != null) {

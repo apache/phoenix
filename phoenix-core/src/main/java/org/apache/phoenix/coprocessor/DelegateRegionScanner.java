@@ -82,11 +82,6 @@ public class DelegateRegionScanner implements RegionScanner {
         return delegate.getBatch();
     }
 
-    @Override
-    public void shipped() throws IOException {
-        delegate.shipped();
-        
-    }
 
     @Override
     public RegionInfo getRegionInfo() {
