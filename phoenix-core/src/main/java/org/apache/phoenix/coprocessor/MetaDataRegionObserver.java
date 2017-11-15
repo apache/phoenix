@@ -20,7 +20,6 @@ package org.apache.phoenix.coprocessor;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,7 +50,6 @@ import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -165,18 +163,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                             SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props));
                     statsTable = env.getTable(
                             SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, props));
-                    final HTableInterface mTable=metaTable;
-                    final HTableInterface sTable=statsTable;
-                    User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-                        @Override
-                        public Void run() throws Exception {
-                            if (UpgradeUtil.truncateStats(mTable, sTable)) {
-                                LOG.info("Stats are successfully truncated for upgrade 4.7!!");
-                            }
-                            return null;
-                        }
-                    });
-
+                    if (UpgradeUtil.truncateStats(metaTable, statsTable)) {
+                        LOG.info("Stats are successfully truncated for upgrade 4.7!!");
+                    }
                 } catch (Exception exception) {
                     LOG.warn("Exception while truncate stats..,"
                             + " please check and delete stats manually inorder to get proper result with old client!!");

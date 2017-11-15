@@ -59,7 +59,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
@@ -227,16 +226,6 @@ public class MetaDataUtil {
         }
         return null;
     }
-
-    public static boolean isNameSpaceMapped(List<Mutation> tableMetaData, KeyValueBuilder builder,
-            ImmutableBytesWritable value) {
-        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
-            PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES, builder, value)) {
-            return (boolean)PBoolean.INSTANCE.toObject(ByteUtil.copyKeyBytesIfNecessary(value));
-        }
-        return false;
-    }
-
     
     public static long getParentSequenceNumber(List<Mutation> tableMetaData) {
         return getSequenceNumber(getParentTableHeaderRow(tableMetaData));
@@ -679,12 +668,5 @@ public class MetaDataUtil {
         byte[] physicalTableSchemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(view.getPhysicalName().getString()));
         byte[] physicalTableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(view.getPhysicalName().getString()));
         return SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, physicalTableSchemaName, physicalTableName);
-    }
-    
-    public static IndexType getIndexType(List<Mutation> tableMetaData, KeyValueBuilder builder,
-            ImmutableBytesWritable value) {
-        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.INDEX_TYPE_BYTES, builder,
-                value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
-        return null;
     }
 }

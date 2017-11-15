@@ -868,8 +868,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             }
-            if ((SchemaUtil.isStatsTable(tableName) || SchemaUtil.isMetaTable(tableName))
-                    && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
+            if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
                         null, priority, null);
             }
@@ -2489,8 +2488,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final TableName mutexTableName = TableName.valueOf(
                 PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
             List<TableName> systemTables = getSystemTableNames(admin);
-            if (systemTables.contains(mutexTableName) || admin.tableExists( TableName.valueOf(
-                PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME))) {
+            if (systemTables.contains(mutexTableName)) {
                 logger.debug("System mutex table already appears to exist, not creating it");
                 return;
             }
@@ -2507,15 +2505,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 put.add(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
                 sysMutexTable.put(put);
             }
-        } catch (TableExistsException | AccessDeniedException e) {
+        } catch (TableExistsException e) {
             // Ignore
-        }catch(PhoenixIOException e){
-            if(e.getCause()!=null && e.getCause() instanceof AccessDeniedException)
-            {
-                //Ignore
-            }else{
-                throw e;
-            }
         }
     }
 
