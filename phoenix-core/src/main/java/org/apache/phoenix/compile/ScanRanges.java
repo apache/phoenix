@@ -207,18 +207,13 @@ public class ScanRanges {
     }
     
     public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
-        return prefixKey(key, keyOffset, key.length, prefixKey, prefixKeyOffset);
-    }
-
-    public static byte[] prefixKey(byte[] key, int keyOffset, int keyLength, byte[] prefixKey,
-            int prefixKeyOffset) {
-        if (keyLength > 0) {
-            byte[] newKey = new byte[keyLength + prefixKeyOffset];
+        if (key.length > 0) {
+            byte[] newKey = new byte[key.length + prefixKeyOffset];
             int totalKeyOffset = keyOffset + prefixKeyOffset;
             if (prefixKey.length >= totalKeyOffset) { // otherwise it's null padded
                 System.arraycopy(prefixKey, 0, newKey, 0, totalKeyOffset);
             }
-            System.arraycopy(key, keyOffset, newKey, totalKeyOffset, keyLength - keyOffset);
+            System.arraycopy(key, keyOffset, newKey, totalKeyOffset, key.length - keyOffset);
             return newKey;
         } 
         return key;
