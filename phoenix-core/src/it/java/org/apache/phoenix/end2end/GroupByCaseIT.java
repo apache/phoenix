@@ -972,8 +972,6 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (5,1)");
             conn.commit();
 
-            TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(intTableName)));
-
             sql="select count(*) from "+intTableName;
             ResultSet rs=conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
