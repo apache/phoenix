@@ -620,6 +620,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-mapreduce</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-hadoop-compat</artifactId>
         <version>${hbase.version}</version>
         <type>test-jar</type>
