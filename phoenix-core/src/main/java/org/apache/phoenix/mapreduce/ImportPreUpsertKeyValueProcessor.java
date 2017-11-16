@@ -17,10 +17,9 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
-
 import java.util.List;
+
+import org.apache.hadoop.hbase.Cell;
 
 /**
  * A listener hook to process KeyValues that are being written to HFiles for bulk import.

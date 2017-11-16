@@ -29,9 +29,9 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.mapreduce.KeyValueSortReducer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -55,7 +55,6 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Reducer class for the bulkload jobs.
- * Performs similar functionality to {@link KeyValueSortReducer}
  */
 public class FormatToKeyValueReducer
         extends Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue> {
@@ -139,7 +138,7 @@ public class FormatToKeyValueReducer
     protected void reduce(TableRowkeyPair key, Iterable<ImmutableBytesWritable> values,
                           Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue>.Context context)
             throws IOException, InterruptedException {
-        TreeSet<KeyValue> map = new TreeSet<KeyValue>(KeyValue.COMPARATOR);
+        TreeSet<KeyValue> map = new TreeSet<KeyValue>(CellComparatorImpl.COMPARATOR);
         for (ImmutableBytesWritable aggregatedArray : values) {
             DataInputStream input = new DataInputStream(new ByteArrayInputStream(aggregatedArray.get()));
             while (input.available() != 0) {

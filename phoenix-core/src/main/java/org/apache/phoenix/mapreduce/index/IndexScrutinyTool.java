@@ -26,11 +26,11 @@ import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -157,7 +157,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
 
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -302,7 +302,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
                 FSUtils.setRootDir(configuration, rootDir);
-                Path restoreDir = new Path(FSUtils.getRootDir(configuration), "restore-dir");
 
                 // set input for map reduce job using hbase snapshots
                 //PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,

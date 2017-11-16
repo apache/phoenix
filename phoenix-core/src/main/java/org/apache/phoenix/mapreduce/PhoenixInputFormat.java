@@ -33,8 +33,8 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.mapreduce.RegionSizeCalculator;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.RegionSizeCalculator;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -114,7 +114,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
             // Get the region size
             long regionSize = sizeCalculator.getRegionSize(
-                    location.getRegionInfo().getRegionName()
+                    location.getRegion().getRegionName()
             );
 
             // Generate splits based off statistics, or just region splits?

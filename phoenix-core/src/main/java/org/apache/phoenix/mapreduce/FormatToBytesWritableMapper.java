@@ -33,7 +33,6 @@ import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -151,7 +150,6 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     protected void map(LongWritable key, Text value, Context context) throws IOException,
             InterruptedException {
