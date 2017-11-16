@@ -189,46 +189,41 @@ public class PhoenixKeyValueUtil {
      * @return estimated row size
      */
     public static long
-            getEstimatedRowSize(Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> mutations) {
+            getEstimatedRowSize(TableRef tableRef, Map<ImmutableBytesPtr, RowMutationState> mutations) {
         long size = 0;
-        // iterate over tables
-        for (Entry<TableRef, Map<ImmutableBytesPtr, RowMutationState>> tableEntry : mutations
-                .entrySet()) {
-            PTable table = tableEntry.getKey().getTable();
-            // iterate over rows
-            for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : tableEntry.getValue()
-                    .entrySet()) {
-                int rowLength = rowEntry.getKey().getLength();
-                Map<PColumn, byte[]> colValueMap = rowEntry.getValue().getColumnValues();
-                switch (table.getImmutableStorageScheme()) {
-                case ONE_CELL_PER_COLUMN:
-                    // iterate over columns
-                    for (Entry<PColumn, byte[]> colValueEntry : colValueMap.entrySet()) {
-                        PColumn pColumn = colValueEntry.getKey();
-                        size +=
-                                KeyValue.getKeyValueDataStructureSize(rowLength,
-                                    pColumn.getFamilyName().getBytes().length,
-                                    pColumn.getColumnQualifierBytes().length,
-                                    colValueEntry.getValue().length);
-                    }
-                    break;
-                case SINGLE_CELL_ARRAY_WITH_OFFSETS:
-                    // we store all the column values in a single key value that contains all the
-                    // column values followed by an offset array
+        PTable table = tableRef.getTable();
+        // iterate over rows
+        for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : mutations.entrySet()) {
+            int rowLength = rowEntry.getKey().getLength();
+            Map<PColumn, byte[]> colValueMap = rowEntry.getValue().getColumnValues();
+            switch (table.getImmutableStorageScheme()) {
+            case ONE_CELL_PER_COLUMN:
+                // iterate over columns
+                for (Entry<PColumn, byte[]> colValueEntry : colValueMap.entrySet()) {
+                    PColumn pColumn = colValueEntry.getKey();
                     size +=
-                            PArrayDataTypeEncoder.getEstimatedByteSize(table, rowLength,
-                                colValueMap);
-                    break;
+                            KeyValue.getKeyValueDataStructureSize(rowLength,
+                                pColumn.getFamilyName().getBytes().length,
+                                pColumn.getColumnQualifierBytes().length,
+                                colValueEntry.getValue().length);
                 }
-                // count the empty key value
-                Pair<byte[], byte[]> emptyKeyValueInfo =
-                        EncodedColumnsUtil.getEmptyKeyValueInfo(table);
+                break;
+            case SINGLE_CELL_ARRAY_WITH_OFFSETS:
+                // we store all the column values in a single key value that contains all the
+                // column values followed by an offset array
                 size +=
-                        KeyValue.getKeyValueDataStructureSize(rowLength,
-                            SchemaUtil.getEmptyColumnFamilyPtr(table).getLength(),
-                            emptyKeyValueInfo.getFirst().length,
-                            emptyKeyValueInfo.getSecond().length);
+                        PArrayDataTypeEncoder.getEstimatedByteSize(table, rowLength,
+                            colValueMap);
+                break;
             }
+            // count the empty key value
+            Pair<byte[], byte[]> emptyKeyValueInfo =
+                    EncodedColumnsUtil.getEmptyKeyValueInfo(table);
+            size +=
+                    KeyValue.getKeyValueDataStructureSize(rowLength,
+                        SchemaUtil.getEmptyColumnFamilyPtr(table).getLength(),
+                        emptyKeyValueInfo.getFirst().length,
+                        emptyKeyValueInfo.getSecond().length);
         }
         return size;
     }

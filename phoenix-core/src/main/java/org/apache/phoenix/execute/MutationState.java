@@ -128,6 +128,7 @@ public class MutationState implements SQLCloseable {
 
     private long sizeOffset;
     private int numRows = 0;
+    private long estimatedSize = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     private boolean isExternalTxContext = false;
     private Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> txMutations = Collections.emptyMap();
@@ -194,6 +195,7 @@ public class MutationState implements SQLCloseable {
             this.mutations.put(table, mutations);
         }
         this.numRows = mutations.size();
+        this.estimatedSize = KeyValueUtil.getEstimatedRowSize(table, mutations);
         throwIfTooBig();
     }
 
@@ -355,7 +357,6 @@ public class MutationState implements SQLCloseable {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED).build()
                     .buildException();
         }
-        long estimatedSize = PhoenixKeyValueUtil.getEstimatedRowSize(mutations);
         if (estimatedSize > maxSizeBytes) {
             resetState();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED)
@@ -434,7 +435,12 @@ public class MutationState implements SQLCloseable {
         phoenixTransactionContext.join(newMutationState.getPhoenixTransactionContext());
 
         this.sizeOffset += newMutationState.sizeOffset;
+        int oldNumRows = this.numRows;
         joinMutationState(newMutationState.mutations, this.mutations);
+        // here we increment the estimated size by the fraction of new rows we added from the newMutationState 
+        if (newMutationState.numRows>0) {
+            this.estimatedSize += ((double)(this.numRows-oldNumRows)/newMutationState.numRows) * newMutationState.estimatedSize;
+        }
         if (!newMutationState.txMutations.isEmpty()) {
             if (txMutations.isEmpty()) {
                 txMutations = Maps.newHashMapWithExpectedSize(mutations.size());
@@ -968,6 +974,8 @@ public class MutationState implements SQLCloseable {
                 long mutationCommitTime = 0;
                 long numFailedMutations = 0;;
                 long startTime = 0;
+                long startNumRows = numRows;
+                long startEstimatedSize = estimatedSize;
                 do {
                     TableRef origTableRef = tableInfo.getOrigTableRef();
                     PTable table = origTableRef.getTable();
@@ -1005,8 +1013,8 @@ public class MutationState implements SQLCloseable {
                             // TODO need to get the the results of batch and fail if any exceptions.
                             hTable.batch(mutationBatch, null);
                             batchCount++;
+                            if (logger.isDebugEnabled()) logger.debug("Sent batch of " + mutationBatch.size() + " for " + Bytes.toString(htableName));
                         }
-                        if (logger.isDebugEnabled()) logger.debug("Sent batch of " + numMutations + " for " + Bytes.toString(htableName));
                         child.stop();
                         child.stop();
                         shouldRetry = false;
@@ -1016,6 +1024,8 @@ public class MutationState implements SQLCloseable {
                         
                         if (tableInfo.isDataTable()) {
                             numRows -= numMutations;
+                            // decrement estimated size by the fraction of rows we sent to hbase
+                            estimatedSize -= ((double)numMutations/startNumRows)*startEstimatedSize;
                         }
                         // Remove batches as we process them
                         mutations.remove(origTableRef);
@@ -1181,6 +1191,7 @@ public class MutationState implements SQLCloseable {
 
     private void resetState() {
         numRows = 0;
+        estimatedSize = 0;
         this.mutations.clear();
         resetTransactionalState();
     }
