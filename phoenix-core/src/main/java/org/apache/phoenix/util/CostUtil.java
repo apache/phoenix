@@ -17,11 +17,16 @@
  */
 package org.apache.phoenix.util;
 
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.optimize.Cost;
+import org.apache.phoenix.query.QueryServices;
 
 /**
- * Utilities for computing costs
+ * Utilities for computing costs.
  *
+ * Some of the methods here should eventually be replaced by a metadata framework which
+ * estimates output metrics for each QueryPlan or operation, e.g. row count, byte count,
+ * etc.
  */
 public class CostUtil {
 
@@ -35,13 +40,13 @@ public class CostUtil {
     /**
      * Estimate the number of output bytes of an aggregate.
      * @param byteCount the number of input bytes
-     * @param isGrouping if this is a grouping aggregate
+     * @param groupBy the compiled GroupBy object
      * @param aggregatorsSize the byte size of aggregators
      * @return the output byte count
      */
     public static double estimateAggregateOutputBytes(
-            double byteCount, boolean isGrouping, int aggregatorsSize) {
-        if (!isGrouping) {
+            double byteCount, GroupBy groupBy, int aggregatorsSize) {
+        if (groupBy.isUngroupedAggregate()) {
             return aggregatorsSize;
         }
         return byteCount * GROUPING_FACTOR;
@@ -50,15 +55,14 @@ public class CostUtil {
     /**
      * Estimate the cost of an aggregate.
      * @param byteCount the number of input bytes
-     * @param isGrouping if this is a grouping aggregate
+     * @param groupBy the compiled GroupBy object
      * @param aggregatorsSize the byte size of aggregators
      * @param parallelLevel number of parallel workers or threads
      * @return the cost
      */
     public static Cost estimateAggregateCost(
-            double byteCount, boolean isGrouping, int aggregatorsSize, int parallelLevel) {
-        double outputBytes = estimateAggregateOutputBytes(
-                byteCount, isGrouping, aggregatorsSize);
+            double byteCount, GroupBy groupBy, int aggregatorsSize, int parallelLevel) {
+        double outputBytes = estimateAggregateOutputBytes(byteCount, groupBy, aggregatorsSize);
         return new Cost(0, 0, outputBytes * IO_COST_MULTIPLIER / parallelLevel);
     }
 
@@ -70,5 +74,16 @@ public class CostUtil {
      */
     public static Cost estimateOrderByCost(double byteCount, int parallelLevel) {
         return new Cost(0, 0, byteCount * IO_COST_MULTIPLIER / parallelLevel);
+    }
+
+    /**
+     * Estimate the parallel level of an operation
+     * @param runningOnServer if the operation will be running on server side
+     * @param services the QueryServices object
+     * @return the parallel level
+     */
+    public static int estimateParallelLevel(boolean runningOnServer, QueryServices services) {
+        // TODO currently return constants for simplicity, should derive from cluster config.
+        return runningOnServer ? 10 : 1;
     }
 }

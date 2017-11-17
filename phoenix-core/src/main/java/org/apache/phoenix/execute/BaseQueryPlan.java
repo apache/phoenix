@@ -63,6 +63,8 @@ import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -501,9 +503,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
             return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + getTableRef().getTable().getName().getString()));
         }
 
-        // Initialize dummy iterator to get the stats.
-        ResultIterator iterator = iterator();
-        iterator.close();
+        // If cost-based optimizer is enabled, we need to initialize a dummy iterator to
+        // get the stats for computing costs.
+        boolean costBased =
+                context.getConnection().getQueryServices().getConfiguration().getBoolean(
+                        QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
+        if (costBased) {
+            ResultIterator iterator = iterator();
+            iterator.close();
+        }
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
         ExplainPlan exp = plan instanceof BaseQueryPlan ? new ExplainPlan(getPlanSteps(plan.iterator())) : plan.getExplainPlan();

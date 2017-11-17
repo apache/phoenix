@@ -198,8 +198,10 @@ public class ScanPlan extends BaseQueryPlan {
         }
 
         Cost cost = new Cost(0, 0, byteCount);
+        int parallelLevel = CostUtil.estimateParallelLevel(
+                true, context.getConnection().getQueryServices());
         if (!orderBy.getOrderByExpressions().isEmpty()) {
-            Cost orderByCost = CostUtil.estimateOrderByCost(byteCount, 10);
+            Cost orderByCost = CostUtil.estimateOrderByCost(byteCount, parallelLevel);
             cost = cost.plus(orderByCost);
         }
         return cost;

@@ -301,7 +301,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
         Cost cost = new Cost(0, 0, byteCount);
         Cost lhsCost = delegate.getCost();
         if (keyRangeExpressions != null) {
-            lhsCost = lhsCost.multiplyBy(0.01);
+            // The selectivity of the dynamic rowkey filter.
+            // TODO replace the constant with an estimate value.
+            double selectivity = 0.01;
+            lhsCost = lhsCost.multiplyBy(selectivity);
         }
         Cost rhsCost = Cost.ZERO;
         for (SubPlan subPlan : subPlans) {

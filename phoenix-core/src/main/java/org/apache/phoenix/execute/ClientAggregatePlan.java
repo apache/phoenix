@@ -95,12 +95,13 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             return Cost.ZERO;
         }
 
-        int parallelLevel = 1;
+        int parallelLevel = CostUtil.estimateParallelLevel(
+                false, context.getConnection().getQueryServices());
         Cost cost = CostUtil.estimateAggregateCost(byteCount,
-                !groupBy.isUngroupedAggregate(), clientAggregators.getEstimatedByteSize(), parallelLevel);
+                groupBy, clientAggregators.getEstimatedByteSize(), parallelLevel);
         if (!orderBy.getOrderByExpressions().isEmpty()) {
             double outputBytes = CostUtil.estimateAggregateOutputBytes(
-                    byteCount, !groupBy.isUngroupedAggregate(), clientAggregators.getEstimatedByteSize());
+                    byteCount, groupBy, clientAggregators.getEstimatedByteSize());
             Cost orderByCost = CostUtil.estimateOrderByCost(outputBytes, parallelLevel);
             cost = cost.plus(orderByCost);
         }

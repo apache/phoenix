@@ -122,12 +122,13 @@ public class AggregatePlan extends BaseQueryPlan {
             return Cost.ZERO;
         }
 
-        int parallelLevel = 10;
+        int parallelLevel = CostUtil.estimateParallelLevel(
+                true, context.getConnection().getQueryServices());
         Cost cost = CostUtil.estimateAggregateCost(byteCount,
-                !groupBy.isUngroupedAggregate(), aggregators.getEstimatedByteSize(), parallelLevel);
+                groupBy, aggregators.getEstimatedByteSize(), parallelLevel);
         if (!orderBy.getOrderByExpressions().isEmpty()) {
             double outputBytes = CostUtil.estimateAggregateOutputBytes(
-                    byteCount, !groupBy.isUngroupedAggregate(), aggregators.getEstimatedByteSize());
+                    byteCount, groupBy, aggregators.getEstimatedByteSize());
             Cost orderByCost = CostUtil.estimateOrderByCost(outputBytes, parallelLevel);
             cost = cost.plus(orderByCost);
         }
