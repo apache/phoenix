@@ -477,7 +477,7 @@ revoke_permission_node returns [RevokeStatement ret]
 
 // Parse a create view statement.
 create_view_node returns [CreateTableStatement ret]
-    :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name
+    :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name 
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)?
         ( AS SELECT ASTERISK
           FROM bt=from_table_name

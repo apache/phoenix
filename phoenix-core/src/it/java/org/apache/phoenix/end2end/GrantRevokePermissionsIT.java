@@ -16,38 +16,12 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.Set;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -57,6 +31,8 @@ import org.junit.experimental.categories.Category;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class GrantRevokePermissionsIT extends BasePermissionsIT {
+
+    private static final Log LOG = LogFactory.getLog(GrantRevokePermissionsIT.class);
 
     private static final String SCHEMA_NAME = "GRANTSCHEMA";
     private static final String TABLE_NAME =
@@ -119,12 +95,9 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         // However it will fail for other read queries
         // Thus this test grants and revokes for 2 users, so that both functionality can be tested.
         grantSystemTableAccess(superUser1, regularUser1, regularUser2);
-        readACLTable();
         verifyAllowed(getConnectionAction(), regularUser1);
         revokeSystemTableAccess(superUser1, regularUser2);
-        readACLTable();
         verifyDenied(getConnectionAction(), AccessDeniedException.class, regularUser2);
-        readACLTable();
     }
 
     /**
@@ -139,27 +112,18 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
 
         // Grant System Table access to all users, else they can't create a Phoenix connection
         grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
-        readACLTable();
 
-        System.out.println("Part 1");
         verifyAllowed(grantPermissions("A", regularUser1), superUser1);
-        readACLTable();
 
-        System.out.println("Part 2");
         verifyAllowed(readTableWithoutVerification(PhoenixDatabaseMetaData.SYSTEM_CATALOG), regularUser1);
         verifyAllowed(grantPermissions("A", regularUser2), regularUser1);
-        readACLTable();
 
-        System.out.println("Part 3");
         verifyAllowed(revokePermissions(regularUser1), superUser1);
         verifyDenied(grantPermissions("A", regularUser3), AccessDeniedException.class, regularUser1);
-        readACLTable();
 
         // Don't grant ADMIN perms to unprivilegedUser, thus unprivilegedUser is unable to control other permissions.
-        System.out.println("Part 4");
         verifyAllowed(getConnectionAction(), unprivilegedUser);
         verifyDenied(grantPermissions("ARX", regularUser4), AccessDeniedException.class, unprivilegedUser);
-        readACLTable();
     }
 
     /**
@@ -173,9 +137,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
 
         grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
         getHBaseTables();
-        readACLTable();
 
-        System.out.println("Part 1");
         // Create new schema and grant CREATE permissions to a user
         if(isNamespaceMapped) {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
@@ -183,9 +145,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         } else {
             verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
         }
-        readACLTable();
 
-        System.out.println("Part 2");
         // Create new table. Create indexes and views on top of it. Verify the contents by querying it
         verifyAllowed(createTable(FULL_TABLE_NAME), regularUser1);
         verifyAllowed(readTable(FULL_TABLE_NAME), regularUser1);
@@ -193,9 +153,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         verifyAllowed(createIndex(IDX2_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
         verifyAllowed(createLocalIndex(LOCAL_IDX1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
         verifyAllowed(createView(VIEW1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
-        readACLTable();
 
-        System.out.println("Part 3");
         // RegularUser2 doesn't have any permissions. It can get a PhoenixConnection
         // However it cannot query table, indexes or views without READ perms
         verifyAllowed(getConnectionAction(), regularUser2);
@@ -203,9 +161,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         verifyDenied(readTable(FULL_TABLE_NAME, IDX1_TABLE_NAME), AccessDeniedException.class, regularUser2);
         verifyDenied(readTable(VIEW1_TABLE_NAME), AccessDeniedException.class, regularUser2);
         verifyDenied(readTableWithoutVerification(SCHEMA_NAME + "." + IDX1_TABLE_NAME), AccessDeniedException.class, regularUser2);
-        readACLTable();
 
-        System.out.println("Part 4");
         // Grant READ permissions to RegularUser2 on the table
         // Permissions should propagate automatically to relevant physical tables such as global index and view index.
         verifyAllowed(grantPermissions("R", regularUser2, FULL_TABLE_NAME, false), regularUser1);
@@ -221,9 +177,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         verifyAllowed(readTable(FULL_TABLE_NAME, LOCAL_IDX1_TABLE_NAME), regularUser2);
         verifyAllowed(readTableWithoutVerification(SCHEMA_NAME + "." + IDX1_TABLE_NAME), regularUser2);
         verifyAllowed(readTable(VIEW1_TABLE_NAME), regularUser2);
-        readACLTable();
 
-        System.out.println("Part 5");
         // Revoke READ permissions to RegularUser2 on the table
         // Permissions should propagate automatically to relevant physical tables such as global index and view index.
         verifyAllowed(revokePermissions(regularUser2, FULL_TABLE_NAME, false), regularUser1);
@@ -246,47 +200,15 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         // Grant SYSTEM table access to GROUP_SYSTEM_ACCESS and regularUser1
         verifyAllowed(grantPermissions("RX", GROUP_SYSTEM_ACCESS, PHOENIX_SYSTEM_TABLES_IDENTIFIERS, false), superUser1);
         grantSystemTableAccess(superUser1, regularUser1);
-        readACLTable();
 
         verifyAllowed(grantPermissions("AR", GROUP_SYSTEM_ACCESS, FULL_TABLE_NAME, false), superUser1);
-        readACLTable();
         verifyAllowed(readTable(FULL_TABLE_NAME), groupUser);
-        readACLTable();
 
         verifyDenied(readTable(FULL_TABLE_NAME), AccessDeniedException.class, regularUser1);
         verifyAllowed(grantPermissions("R", regularUser1, FULL_TABLE_NAME, false), groupUser);
         verifyAllowed(readTable(FULL_TABLE_NAME), regularUser1);
-        readACLTable();
 
         verifyAllowed(revokePermissions(GROUP_SYSTEM_ACCESS, FULL_TABLE_NAME, false), superUser1);
         verifyDenied(readTable(FULL_TABLE_NAME), AccessDeniedException.class, groupUser);
-        readACLTable();
     }
-
-    int count = 0;
-    private void readACLTable() throws SQLException, IOException {
-        System.out.println("Reading hbase:acl count: " + (count++));
-        try (Connection conn = getConnection()) {
-            String tableName = "hbase:acl";
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
-            Scan scan = new Scan();
-            ResultScanner results = table.getScanner(scan);
-            Result result = results.next();
-            while(result != null) {
-                System.out.println("TableName = " + Bytes.toString(result.getRow()));
-                NavigableMap<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> map = result.getMap();
-                for(Map.Entry<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> entry : map.entrySet()) {
-                    for(Map.Entry<byte[], NavigableMap<Long, byte[]>> entry1 : entry.getValue().entrySet()) {
-                        System.out.println("entry1.getKey() = " + Bytes.toString(entry1.getKey()));
-                        for(Map.Entry<Long, byte[]> entry2 : entry1.getValue().entrySet()) {
-                            System.out.println("entry2.getValue() = " + Bytes.toString(entry2.getValue()));
-                        }
-                    }
-                }
-                result = results.next();
-            }
-        }
-    }
-
-
 }

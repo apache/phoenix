@@ -25,7 +25,6 @@ public class GrantStatement implements BindableStatement {
         name = SchemaUtil.normalizeLiteral(ugNode);
         name = this.isGroupName ? AuthUtil.toGroupEntry(name) : name;
 
-        System.out.println("[GRANT] User/Group: " + name + ((isSchemaName) ? (" Schema: " + this.schemaName) : (this.tableName != null) ? (" Table: " + (this.tableName.toString())) : "") + " Perms: " + permission.toString());
     }
 
     public Permission.Action[] getPermsList() {

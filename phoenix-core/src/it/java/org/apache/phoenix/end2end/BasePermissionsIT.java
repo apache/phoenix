@@ -1,7 +1,24 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to you under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.end2end;
 
 import com.google.common.base.Throwables;
-import com.google.common.collect.Iterables;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -11,16 +28,12 @@ import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
-import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.junit.After;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -33,7 +46,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -50,6 +62,9 @@ import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class BasePermissionsIT extends BaseTest {
+
+    private static final Log LOG = LogFactory.getLog(BasePermissionsIT.class);
+
     static String SUPERUSER;
 
     static HBaseTestingUtility testUtil;
@@ -67,6 +82,8 @@ public class BasePermissionsIT extends BaseTest {
 
     // Create Multiple users so that we can use Hadoop UGI to run tasks as various users
     // Permissions can be granted or revoke by superusers and admins only
+    // DON'T USE HADOOP UserGroupInformation class to create testing users since HBase misses some of its functionality
+    // Instead use org.apache.hadoop.hbase.security.User class for testing purposes.
 
     // Super User has all the access
     User superUser1 = null;
@@ -133,7 +150,7 @@ public class BasePermissionsIT extends BaseTest {
         regularUser3 = User.createUserForTesting(configuration, "regularUser3", new String[0]);
         regularUser4 = User.createUserForTesting(configuration, "regularUser4", new String[0]);
 
-        groupUser = User.createUserForTesting(testUtil.getConfiguration(), "groupUser", new String[]{GROUP_SYSTEM_ACCESS});
+        groupUser = User.createUserForTesting(testUtil.getConfiguration(), "groupUser", new String[] {GROUP_SYSTEM_ACCESS});
 
         unprivilegedUser = User.createUserForTesting(configuration, "unprivilegedUser", new String[0]);
     }
@@ -197,7 +214,7 @@ public class BasePermissionsIT extends BaseTest {
     }
 
     // Utility functions to revoke permissions with HBase API
-    void revokeAll() throws IOException, Throwable {
+    void revokeAll() throws Throwable {
         AccessControlClient.revoke(getUtility().getConnection(), AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), Permission.Action.values() );
         AccessControlClient.revoke(getUtility().getConnection(), regularUser1.getShortName(), Permission.Action.values() );
         AccessControlClient.revoke(getUtility().getConnection(), unprivilegedUser.getShortName(), Permission.Action.values() );
@@ -219,20 +236,22 @@ public class BasePermissionsIT extends BaseTest {
 
     static Set<String> getHBaseTables() throws IOException {
         Set<String> tables = new HashSet<>();
-        System.out.print("Tables in HBase: ");
         for (TableName tn : testUtil.getHBaseAdmin().listTableNames()) {
             tables.add(tn.getNameAsString());
-            System.out.print(tn.getNameAsString() + " ");
         }
-        System.out.println();
         return tables;
     }
 
-    AccessTestAction grantPermissions(final String actions, final Object ug, final String tableOrSchemaList, final boolean isSchema) throws SQLException {
+    // UG Object
+    // 1. Instance of String --> represents GROUP name
+    // 2. Instance of User --> represents HBase user
+    AccessTestAction grantPermissions(final String actions, final Object ug,
+                                      final String tableOrSchemaList, final boolean isSchema) throws SQLException {
         return grantPermissions(actions, ug, Collections.singleton(tableOrSchemaList), isSchema);
     }
 
-    AccessTestAction grantPermissions(final String actions, final Object ug, final Set<String> tableOrSchemaList, final boolean isSchema) throws SQLException {
+    AccessTestAction grantPermissions(final String actions, final Object ug,
+                                      final Set<String> tableOrSchemaList, final boolean isSchema) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -240,7 +259,7 @@ public class BasePermissionsIT extends BaseTest {
                     for(String tableOrSchema : tableOrSchemaList) {
                         String grantStmtSQL = "GRANT '" + actions + "' ON " + (isSchema ? " SCHEMA " : " TABLE ") + tableOrSchema + " TO "
                                 + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                        System.out.println("grantStmtSQL: " + grantStmtSQL);
+                        LOG.info("Grant Permissions SQL: " + grantStmtSQL);
                         assertFalse(stmt.execute(grantStmtSQL));
                     }
                 }
@@ -255,7 +274,7 @@ public class BasePermissionsIT extends BaseTest {
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     String grantStmtSQL = "GRANT '" + actions + "' TO " + " '" + user.getShortName() + "'";
-                    System.out.println("grantStmtSQL: " + grantStmtSQL);
+                    LOG.info("Grant Permissions SQL: " + grantStmtSQL);
                     assertFalse(stmt.execute(grantStmtSQL));
                 }
                 return null;
@@ -263,11 +282,13 @@ public class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction revokePermissions(final Object ug, final String tableOrSchemaList, final boolean isSchema) throws SQLException {
+    AccessTestAction revokePermissions(final Object ug,
+                                       final String tableOrSchemaList, final boolean isSchema) throws SQLException {
         return revokePermissions(ug, Collections.singleton(tableOrSchemaList), isSchema);
     }
 
-    AccessTestAction revokePermissions(final Object ug, final Set<String> tableOrSchemaList, final boolean isSchema) throws SQLException {
+    AccessTestAction revokePermissions(final Object ug,
+                                       final Set<String> tableOrSchemaList, final boolean isSchema) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -275,7 +296,7 @@ public class BasePermissionsIT extends BaseTest {
                     for(String tableOrSchema : tableOrSchemaList) {
                         String revokeStmtSQL = "REVOKE ON " + (isSchema ? " SCHEMA " : " TABLE ") + tableOrSchema + " FROM "
                                 + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                        System.out.println("revokeStmtSQL: " + revokeStmtSQL);
+                        LOG.info("Revoke Permissions SQL: " + revokeStmtSQL);
                         assertFalse(stmt.execute(revokeStmtSQL));
                     }
                 }
@@ -289,8 +310,9 @@ public class BasePermissionsIT extends BaseTest {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
-                    String revokeStmtSQL = "REVOKE FROM " + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                    System.out.println("revokeStmtSQL: " + revokeStmtSQL);
+                    String revokeStmtSQL = "REVOKE FROM " +
+                            ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
+                    LOG.info("Revoke Permissions SQL: " + revokeStmtSQL);
                     assertFalse(stmt.execute(revokeStmtSQL));
                 }
                 return null;
@@ -298,12 +320,13 @@ public class BasePermissionsIT extends BaseTest {
         };
     }
 
+    // Attempts to get a Phoenix Connection
+    // New connections could create SYSTEM tables if appropriate perms are granted
     AccessTestAction getConnectionAction() throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection();) {
-                    System.out.println("Got Connection: " + conn.toString());
                 }
                 return null;
             }
@@ -372,6 +395,10 @@ public class BasePermissionsIT extends BaseTest {
 
     }
 
+    // Attempts to read given table without verifying data
+    // AccessDeniedException is only triggered when ResultSet#next() method is called
+    // The first call triggers HBase Scan object
+    // The Statement#executeQuery() method returns an iterator and doesn't interact with HBase API at all
     AccessTestAction readTableWithoutVerification(final String tableName) throws SQLException {
         return new AccessTestAction() {
             @Override
@@ -397,7 +424,6 @@ public class BasePermissionsIT extends BaseTest {
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
                     String readTableSQL = "SELECT "+(indexName!=null?"/*+ INDEX("+tableName+" "+indexName+")*/":"")+" pk, data,val FROM " + tableName +" where data>='0'";
-                    System.out.println("readTableSQL = " + readTableSQL);
                     ResultSet rs = stmt.executeQuery(readTableSQL);
                     assertNotNull(rs);
                     int i = 0;
@@ -575,8 +601,12 @@ public class BasePermissionsIT extends BaseTest {
             } catch (UndeclaredThrowableException ute) {
                 Throwable ex = ute.getUndeclaredThrowable();
 
+                // HBase AccessDeniedException(ADE) is handled in different ways in different parts of code
+                // 1. Wrap HBase ADE in PhoenixIOException (Mostly for create, delete statements)
+                // 2. Wrap HBase ADE in ExecutionException (Mostly for scans)
+                // 3. Directly throwing HBase ADE or custom msg with HBase ADE
+                // Thus we iterate over the chain of throwables and find ADE
                 for(Throwable throwable : Throwables.getCausalChain(ex)) {
-                    System.out.println("Verify Throwable: " + throwable.getClass() + " " + throwable.getMessage());
                     if(exception.equals(throwable.getClass())) {
                         if(throwable instanceof AccessDeniedException) {
                             validateAccessDeniedException((AccessDeniedException) throwable);
@@ -596,77 +626,6 @@ public class BasePermissionsIT extends BaseTest {
             fail("Expected exception was not thrown for user '" + user.getShortName() + "'");
         }
     }
-
-
-//    /** This fails only in case of ADE or empty list for any of the users. */
-//    void verifyAllowed(AccessTestAction action, UserGroupInformation... users) throws Exception {
-//        if(users.length == 0) {
-//            throw new Exception("Action needs at least one user to run");
-//        }
-//        for (UserGroupInformation user : users) {
-//            verifyAllowed(user, action);
-//        }
-//    }
-//
-//    /** This passes only if desired exception is caught for all users. */
-//    <T> void verifyDenied(AccessTestAction action, Class<T> exception, UserGroupInformation... users) throws Exception {
-//        if(users.length == 0) {
-//            throw new Exception("Action needs at least one user to run");
-//        }
-//        for (UserGroupInformation user : users) {
-//            verifyDenied(user, exception, action);
-//        }
-//    }
-
-//    /** This fails only in case of ADE or empty list for any of the actions. */
-//    void verifyAllowed(UserGroupInformation user, TableDDLPermissionsIT.AccessTestAction... actions) throws Exception {
-//        for (TableDDLPermissionsIT.AccessTestAction action : actions) {
-//            try {
-//                Object obj = user.doAs(action);
-//                if (obj != null && obj instanceof List<?>) {
-//                    List<?> results = (List<?>) obj;
-//                    if (results != null && results.isEmpty()) {
-//                        fail("Empty non null results from action for user '" + user.getShortName() + "'");
-//                    }
-//                }
-//            } catch (AccessDeniedException ade) {
-//                fail("Expected action to pass for user '" + user.getShortName() + "' but was denied");
-//            }
-//        }
-//    }
-
-//    /** This passes only if desired exception is caught for all users. */
-//    <T> void verifyDenied(UserGroupInformation user, Class<T> exception, TableDDLPermissionsIT.AccessTestAction... actions) throws Exception {
-//        for (TableDDLPermissionsIT.AccessTestAction action : actions) {
-//            try {
-//                user.doAs(action);
-//                fail("Expected exception was not thrown for user '" + user.getShortName() + "'");
-//            } catch (IOException e) {
-//                fail("Expected exception was not thrown for user '" + user.getShortName() + "'");
-//            } catch (UndeclaredThrowableException ute) {
-//                Throwable ex = ute.getUndeclaredThrowable();
-//
-//                for(Throwable throwable : Throwables.getCausalChain(ex)) {
-//                    System.out.println("Verify Throwable: " + throwable.getClass() + " " + throwable.getMessage());
-//                    if(exception.equals(throwable.getClass())) {
-//                        if(throwable instanceof AccessDeniedException) {
-//                            validateAccessDeniedException((AccessDeniedException) throwable);
-//                        }
-//                        return;
-//                    }
-//                }
-//
-//            } catch(RuntimeException ex) {
-//                // This can occur while accessing tabledescriptors from client by the unprivileged user
-//                if (ex.getCause() instanceof AccessDeniedException) {
-//                    // expected result
-//                    validateAccessDeniedException((AccessDeniedException) ex.getCause());
-//                    return;
-//                }
-//            }
-//            fail("Expected exception was not thrown for user '" + user.getShortName() + "'");
-//        }
-//    }
 
     void validateAccessDeniedException(AccessDeniedException ade) {
         String msg = ade.getMessage();

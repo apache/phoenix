@@ -29,7 +29,6 @@ public class RevokeStatement implements BindableStatement {
         name = SchemaUtil.normalizeLiteral(ugNode);
         name = this.isGroupName ? AuthUtil.toGroupEntry(name) : name;
 
-        System.out.println("[REVOKE] User/Group: " + name + ((isSchemaName) ? (" Schema: " + this.schemaName) : (this.tableName != null) ? (" Table: " + (this.tableName.toString())) : ""));
     }
 
     public String getSchemaName() {

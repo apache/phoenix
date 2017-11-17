@@ -2459,7 +2459,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
                                         // Pass
                                         logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
-                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
+                                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
                                         success = true;
                                     } else if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), NamespaceNotFoundException.class))) {
                                         // This exception is only possible if SYSTEM namespace mapping is enabled and SYSTEM namespace is missing
@@ -2481,9 +2481,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         metaConnection.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "
                                                 + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
                                     } catch (NewerSchemaAlreadyExistsException e) {
-                                        // Older clients might
-                                        // Ignore
-
+                                        // Older clients with appropriate perms may try getting a new connection
+                                        // This results in NewerSchemaAlreadyExistsException, so we can safely ignore it here
                                     }
                                 }
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
