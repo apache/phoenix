@@ -97,6 +97,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,8 +196,12 @@ public class MutationState implements SQLCloseable {
             this.mutations.put(table, mutations);
         }
         this.numRows = mutations.size();
-        this.estimatedSize = KeyValueUtil.getEstimatedRowSize(table, mutations);
+        this.estimatedSize = KeyValueUtil.getEstimatedRowMutationSize(this.mutations);
         throwIfTooBig();
+    }
+    
+    public long getEstimatedSize() {
+        return estimatedSize;
     }
 
     public long getMaxSize() {
@@ -437,9 +442,16 @@ public class MutationState implements SQLCloseable {
         this.sizeOffset += newMutationState.sizeOffset;
         int oldNumRows = this.numRows;
         joinMutationState(newMutationState.mutations, this.mutations);
-        // here we increment the estimated size by the fraction of new rows we added from the newMutationState 
         if (newMutationState.numRows>0) {
-            this.estimatedSize += ((double)(this.numRows-oldNumRows)/newMutationState.numRows) * newMutationState.estimatedSize;
+            // if we added all the rows from newMutationState we can just increment the
+            // estimatedSize by newMutationState.estimatedSize
+            if (newMutationState.numRows == this.numRows-oldNumRows) {
+                this.estimatedSize +=  newMutationState.estimatedSize;
+            }
+            // we merged the two mutation states so we need to recalculate the size
+            else {
+                this.estimatedSize = KeyValueUtil.getEstimatedRowMutationSize(this.mutations);
+            }
         }
         if (!newMutationState.txMutations.isEmpty()) {
             if (txMutations.isEmpty()) {
@@ -974,8 +986,6 @@ public class MutationState implements SQLCloseable {
                 long mutationCommitTime = 0;
                 long numFailedMutations = 0;;
                 long startTime = 0;
-                long startNumRows = numRows;
-                long startEstimatedSize = estimatedSize;
                 do {
                     TableRef origTableRef = tableInfo.getOrigTableRef();
                     PTable table = origTableRef.getTable();
@@ -1022,13 +1032,13 @@ public class MutationState implements SQLCloseable {
                         GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
                         numFailedMutations = 0;
                         
-                        if (tableInfo.isDataTable()) {
-                            numRows -= numMutations;
-                            // decrement estimated size by the fraction of rows we sent to hbase
-                            estimatedSize -= ((double)numMutations/startNumRows)*startEstimatedSize;
-                        }
                         // Remove batches as we process them
                         mutations.remove(origTableRef);
+                        if (tableInfo.isDataTable()) {
+                            numRows -= numMutations;
+                            // recalculate the estimated size
+                            estimatedSize = KeyValueUtil.getEstimatedRowMutationSize(mutations);
+                        }
                     } catch (Exception e) {
                     	mutationCommitTime = System.currentTimeMillis() - startTime;
                         serverTimestamp = ServerUtil.parseServerTimestamp(e);
@@ -1427,8 +1437,9 @@ public class MutationState implements SQLCloseable {
         private int[] statementIndexes;
         @Nonnull private final RowTimestampColInfo rowTsColInfo;
         private byte[] onDupKeyBytes;
+        private long colValuesSize;
         
-        public RowMutationState(@Nonnull Map<PColumn,byte[]> columnValues, int statementIndex, @Nonnull RowTimestampColInfo rowTsColInfo,
+        public RowMutationState(@Nonnull Map<PColumn,byte[]> columnValues, long colValuesSize, int statementIndex, @Nonnull RowTimestampColInfo rowTsColInfo,
                 byte[] onDupKeyBytes) {
             checkNotNull(columnValues);
             checkNotNull(rowTsColInfo);
@@ -1436,6 +1447,12 @@ public class MutationState implements SQLCloseable {
             this.statementIndexes = new int[] {statementIndex};
             this.rowTsColInfo = rowTsColInfo;
             this.onDupKeyBytes = onDupKeyBytes;
+            this.colValuesSize = colValuesSize;
+        }
+
+        public long calculateEstimatedSize() {
+            return colValuesSize + statementIndexes.length * SizedUtil.INT_SIZE + SizedUtil.LONG_SIZE
+                    + (onDupKeyBytes != null ? onDupKeyBytes.length : 0);
         }
 
         byte[] getOnDupKeyBytes() {
@@ -1454,7 +1471,16 @@ public class MutationState implements SQLCloseable {
             // If we already have a row and the new row has an ON DUPLICATE KEY clause
             // ignore the new values (as that's what the server will do).
             if (newRow.onDupKeyBytes == null) {
-                getColumnValues().putAll(newRow.getColumnValues());
+                // increment the column value size by the new row column value size
+                colValuesSize+=newRow.colValuesSize;
+                for (Map.Entry<PColumn,byte[]> entry : newRow.columnValues.entrySet()) {
+                    PColumn col = entry.getKey();
+                    byte[] oldValue = columnValues.put(col, entry.getValue());
+                    if (oldValue!=null) {
+                        // decrement column value size by the size of all column values that were replaced
+                        colValuesSize-=(col.getEstimatedSize() + oldValue.length);
+                    }
+                }
             }
             // Concatenate ON DUPLICATE KEY bytes to allow multiple
             // increments of the same row in the same commit batch.
@@ -1466,7 +1492,7 @@ public class MutationState implements SQLCloseable {
         RowTimestampColInfo getRowTimestampColInfo() {
             return rowTsColInfo;
         }
-       
+
     }
     
     public ReadMetricQueue getReadMetricQueue() {
