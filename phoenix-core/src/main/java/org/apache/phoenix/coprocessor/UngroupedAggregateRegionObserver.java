@@ -1325,7 +1325,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    
     /*
      * TODO: use waitForFlushes PHOENIX-4352
      */

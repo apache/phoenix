@@ -19,39 +19,38 @@ package org.apache.hadoop.hbase.regionserver;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
+import org.apache.hadoop.hbase.io.HalfStoreFileReader;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
-import org.apache.hadoop.hbase.regionserver.StoreFile.Reader;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -70,53 +69,50 @@ import org.apache.phoenix.util.RepairUtil;
 
 import com.google.common.collect.Lists;
 
-public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
+public class IndexHalfStoreFileReaderGenerator implements RegionObserver {
     
     private static final String LOCAL_INDEX_AUTOMATIC_REPAIR = "local.index.automatic.repair";
     public static final Log LOG = LogFactory.getLog(IndexHalfStoreFileReaderGenerator.class);
 
+    
     @Override
-    public Reader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,
+    public StoreFileReader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,
             FileSystem fs, Path p, FSDataInputStreamWrapper in, long size, CacheConfig cacheConf,
-            Reference r, Reader reader) throws IOException {
-        TableName tableName = ctx.getEnvironment().getRegion().getTableDesc().getTableName();
+            Reference r, StoreFileReader reader) throws IOException {
+        TableName tableName = ctx.getEnvironment().getRegion().getTableDescriptor().getTableName();
         Region region = ctx.getEnvironment().getRegion();
-        HRegionInfo childRegion = region.getRegionInfo();
+        RegionInfo childRegion = region.getRegionInfo();
         byte[] splitKey = null;
+        
         if (reader == null && r != null) {
             if(!p.toString().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                return super.preStoreFileReaderOpen(ctx, fs, p, in, size, cacheConf, r, reader);
+                return reader;
             }
-            Scan scan = MetaTableAccessor.getScanForTableName(tableName);
-            SingleColumnValueFilter scvf = null;
-            if (Reference.isTopFileRegion(r.getFileRegion())) {
-                scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                        HConstants.SPLITB_QUALIFIER, CompareOp.EQUAL, region.getRegionInfo().toByteArray());
-                scvf.setFilterIfMissing(true);
-            } else {
-                scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                        HConstants.SPLITA_QUALIFIER, CompareOp.EQUAL, region.getRegionInfo().toByteArray());
-                scvf.setFilterIfMissing(true);
-            }
-            if(scvf != null) scan.setFilter(scvf);
-            byte[] regionStartKeyInHFile = null;
-            Connection connection = ctx.getEnvironment().getConnection();
-            Table metaTable = null;
             PhoenixConnection conn = null;
-            try {
-                metaTable = connection.getTable(TableName.META_TABLE_NAME);
-                ResultScanner scanner = null;
+            Table metaTable = null;
+            byte[] regionStartKeyInHFile = null;
+            try (Connection hbaseConn =
+                    ConnectionFactory.createConnection(ctx.getEnvironment().getConfiguration())) {
+                Scan scan = MetaTableAccessor.getScanForTableName(hbaseConn, tableName);
+                SingleColumnValueFilter scvf = null;
+                if (Reference.isTopFileRegion(r.getFileRegion())) {
+                    scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
+                        HConstants.SPLITB_QUALIFIER, CompareOperator.EQUAL, ((HRegionInfo)region.getRegionInfo()).toByteArray());
+                    scvf.setFilterIfMissing(true);
+                } else {
+                    scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
+                        HConstants.SPLITA_QUALIFIER, CompareOperator.EQUAL, ((HRegionInfo)region.getRegionInfo()).toByteArray());
+                    scvf.setFilterIfMissing(true);
+                }
+                if(scvf != null) scan.setFilter(scvf);
+                metaTable = hbaseConn.getTable(TableName.META_TABLE_NAME);
                 Result result = null;
-                try {
-                    scanner = metaTable.getScanner(scan);
+                try (ResultScanner scanner = metaTable.getScanner(scan)) {
                     result = scanner.next();
-                } finally {
-                    if(scanner != null) scanner.close();
                 }
                 if (result == null || result.isEmpty()) {
-                    Pair<HRegionInfo, HRegionInfo> mergeRegions =
-                            MetaTableAccessor.getRegionsFromMergeQualifier(ctx.getEnvironment()
-                                    .getRegionServerServices().getConnection(),
+                    Pair<RegionInfo, RegionInfo> mergeRegions =
+                            MetaTableAccessor.getRegionsFromMergeQualifier(ctx.getEnvironment().getConnection(),
                                 region.getRegionInfo().getRegionName());
                     if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
                     byte[] splitRow =
@@ -143,7 +139,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                         new byte[region.getRegionInfo().getEndKey().length] :
                             region.getRegionInfo().getStartKey()).getKey();
                 } else {
-                    HRegionInfo parentRegion = HRegionInfo.getHRegionInfo(result);
+                    RegionInfo parentRegion = MetaTableAccessor.getRegionInfo(result);
                     regionStartKeyInHFile =
                             parentRegion.getStartKey().length == 0 ? new byte[parentRegion
                                     .getEndKey().length] : parentRegion.getStartKey();
@@ -154,7 +150,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             try {
                 conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
-                PTable dataTable = IndexUtil.getPDataTable(conn, ctx.getEnvironment().getRegion().getTableDesc());
+                PTable dataTable =
+                        IndexUtil.getPDataTable(conn, ctx.getEnvironment().getRegion()
+                                .getTableDescriptor());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -170,7 +168,8 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 byte[][] viewConstants = getViewConstants(dataTable);
                 return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
                         .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
-                        childRegion, regionStartKeyInHFile, splitKey);
+                        childRegion, regionStartKeyInHFile, splitKey,
+                        childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID);
             } catch (ClassNotFoundException e) {
                 throw new IOException(e);
             } catch (SQLException e) {
@@ -188,19 +187,12 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         return reader;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
-            Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
-            long earliestPutTs, InternalScanner s, CompactionRequest request) throws IOException {
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            InternalScanner s, ScanType scanType, CompactionLifeCycleTracker tracker,
+            CompactionRequest request) throws IOException {
+
         if (!IndexUtil.isLocalIndexStore(store)) { return s; }
-        Scan scan = null;
-        if (s!=null) {
-        	scan = ((StoreScanner)s).scan;
-        } else  {
-        	scan = new Scan();
-        	scan.setMaxVersions(store.getFamily().getMaxVersions());
-        }
         if (!store.hasReferences()) {
             InternalScanner repairScanner = null;
             if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
@@ -218,20 +210,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 return s;
             }
         }
-        List<StoreFileScanner> newScanners = new ArrayList<StoreFileScanner>(scanners.size());
-        boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
-        for(KeyValueScanner scanner: scanners) {
-            Reader reader = ((StoreFileScanner) scanner).getReader();
-            if (reader instanceof IndexHalfStoreFileReader) {
-                newScanners.add(new LocalIndexStoreFileScanner(reader, reader.getScanner(
-                    scan.getCacheBlocks(), scanUsePread, false), true, reader.getHFileReader()
-                        .hasMVCCInfo(), store.getSmallestReadPoint()));
-            } else {
-                newScanners.add(((StoreFileScanner) scanner));
-            }
-        }
-        return new StoreScanner(store, store.getScanInfo(), scan, newScanners,
-            scanType, store.getSmallestReadPoint(), earliestPutTs);
+        return s;
     }
 
     private byte[][] getViewConstants(PTable dataTable) {
@@ -278,16 +257,16 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     private InternalScanner getRepairScanner(RegionCoprocessorEnvironment env, Store store) throws IOException {
         //List<KeyValueScanner> scannersForStoreFiles = Lists.newArrayListWithExpectedSize(store.getStorefilesCount());
         Scan scan = new Scan();
-        scan.setMaxVersions(store.getFamily().getMaxVersions());
+        scan.readVersions(store.getColumnFamilyDescriptor().getMaxVersions());
         for (Store s : env.getRegion().getStores()) {
             if (!IndexUtil.isLocalIndexStore(s)) {
-                scan.addFamily(s.getFamily().getName());
+                scan.addFamily(s.getColumnFamilyDescriptor().getName());
             }
         }
         try {
             PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())
                     .unwrap(PhoenixConnection.class);
-            PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDesc());
+            PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDescriptor());
             final List<IndexMaintainer> maintainers = Lists
                     .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
             for (PTable index : dataPTable.getIndexes()) {
@@ -296,86 +275,12 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
             }
             return new DataTableLocalIndexRegionScanner(env.getRegion().getScanner(scan), env.getRegion(),
-                    maintainers, store.getFamily().getName(),env.getConfiguration());
+                    maintainers, store.getColumnFamilyDescriptor().getName(),env.getConfiguration());
             
 
         } catch (ClassNotFoundException | SQLException e) {
             throw new IOException(e);
 
         }
-    }
-    
-    @Override
-    public KeyValueScanner preStoreScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-        final Store store, final Scan scan, final NavigableSet<byte[]> targetCols,
-        final KeyValueScanner s) throws IOException {
-        if (store.getFamily().getNameAsString()
-                .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
-                && store.hasReferences()) {
-            final long readPt = c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel
-                    ());
-            if (!scan.isReversed()) {
-                return new StoreScanner(store, store.getScanInfo(), scan,
-                        targetCols, readPt) {
-
-                    @Override
-                    protected List<KeyValueScanner> getScannersNoCompaction() throws IOException {
-                        if (store.hasReferences()) {
-                            return getLocalIndexScanners(c, store, scan, readPt);
-                        } else {
-                            return super.getScannersNoCompaction();
-                        }
-                    }
-                };
-            } else {
-                return new ReversedStoreScanner(store, store.getScanInfo(), scan,
-                        targetCols, readPt) {
-                    @Override
-                    protected List<KeyValueScanner> getScannersNoCompaction() throws IOException {
-                        if (store.hasReferences()) {
-                            return getLocalIndexScanners(c, store, scan, readPt);
-                        } else {
-                            return super.getScannersNoCompaction();
-                        }
-                    }
-                };
-            }
-        }
-        return s;
-    }
-
-    private List<KeyValueScanner> getLocalIndexScanners(final
-                                                ObserverContext<RegionCoprocessorEnvironment> c,
-                          final Store store, final Scan scan, final long readPt) throws IOException {
-
-        boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
-        Collection<StoreFile> storeFiles = store.getStorefiles();
-        List<StoreFile> nonReferenceStoreFiles = new ArrayList<>(store.getStorefiles().size());
-        List<StoreFile> referenceStoreFiles = new ArrayList<>(store.getStorefiles().size
-                ());
-        final List<KeyValueScanner> keyValueScanners = new ArrayList<>(store
-                .getStorefiles().size() + 1);
-        for (StoreFile storeFile : storeFiles) {
-            if (storeFile.isReference()) {
-                referenceStoreFiles.add(storeFile);
-            } else {
-                nonReferenceStoreFiles.add(storeFile);
-            }
-        }
-        final List<StoreFileScanner> scanners = StoreFileScanner.getScannersForStoreFiles(nonReferenceStoreFiles, scan.getCacheBlocks(), scanUsePread, readPt);
-        keyValueScanners.addAll(scanners);
-        for (StoreFile sf : referenceStoreFiles) {
-            if (sf.getReader() instanceof IndexHalfStoreFileReader) {
-                keyValueScanners.add(new LocalIndexStoreFileScanner(sf.getReader(), sf.getReader()
-                        .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
-            } else {
-                keyValueScanners.add(new StoreFileScanner(sf.getReader(), sf.getReader()
-                        .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
-            }
-        }
-        keyValueScanners.addAll(((HStore) store).memstore.getScanners(readPt));
-        return keyValueScanners;
     }
 }

@@ -19,6 +19,7 @@ package org.apache.hadoop.hbase.regionserver;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -26,6 +27,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
@@ -47,7 +49,7 @@ import org.apache.phoenix.index.IndexMaintainer;
  * This file is not splitable. Calls to {@link #midkey()} return null.
  */
 
-public class IndexHalfStoreFileReader extends StoreFile.Reader {
+public class IndexHalfStoreFileReader extends StoreFileReader {
     private final boolean top;
     // This is the key we split around. Its the first possible entry on a row:
     // i.e. empty column and a timestamp of LATEST_TIMESTAMP.
@@ -56,7 +58,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     private final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers;
     private final byte[][] viewConstants;
     private final int offset;
-    private final HRegionInfo regionInfo;
+    private final RegionInfo regionInfo;
     private final byte[] regionStartKeyInHFile;
 
     /**
@@ -78,9 +80,10 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
             final FSDataInputStreamWrapper in, long size, final Reference r,
             final Configuration conf,
             final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers,
-            final byte[][] viewConstants, final HRegionInfo regionInfo,
-            byte[] regionStartKeyInHFile, byte[] splitKey) throws IOException {
-        super(fs, p, in, size, cacheConf, conf);
+            final byte[][] viewConstants, final RegionInfo regionInfo,
+            byte[] regionStartKeyInHFile, byte[] splitKey, boolean primaryReplicaStoreFile) throws IOException {
+        super(fs, p, in, size, cacheConf, primaryReplicaStoreFile, new AtomicInteger(0), false,
+                conf);
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
         this.top = Reference.isTopFileRegion(r.getFileRegion());
@@ -104,7 +107,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
         return indexMaintainers;
     }
 
-    public HRegionInfo getRegionInfo() {
+    public RegionInfo getRegionInfo() {
         return regionInfo;
     }
 
@@ -122,5 +125,13 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
 
     public boolean isTop() {
         return top;
+    }
+    
+    @Override
+    public StoreFileScanner getStoreFileScanner(boolean cacheBlocks, boolean pread,
+            boolean isCompaction, long readPt, long scannerOrder,
+            boolean canOptimizeForNonNullColumn) {
+        return new LocalIndexStoreFileScanner(this, cacheBlocks, pread, isCompaction, readPt,
+                scannerOrder, canOptimizeForNonNullColumn);
     }
 }

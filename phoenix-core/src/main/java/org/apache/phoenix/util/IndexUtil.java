@@ -39,7 +39,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -50,6 +49,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -541,7 +541,7 @@ public class IndexUtil {
             } else {
                 TableName dataTable =
                         TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
-                            environment.getRegion().getTableDesc().getTableName().getNameAsString()));
+                            environment.getRegion().getTableDescriptor().getTableName().getNameAsString()));
                 Table table = null;
                 try {
                     table = environment.getConnection().getTable(dataTable);
@@ -749,10 +749,10 @@ public class IndexUtil {
     }
 
     public static boolean isLocalIndexStore(Store store) {
-        return store.getFamily().getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
+        return store.getColumnFamilyDescriptor().getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
     }
     
-    public static PTable getPDataTable(Connection conn, HTableDescriptor tableDesc) throws SQLException {
+    public static PTable getPDataTable(Connection conn, TableDescriptor tableDesc) throws SQLException {
         String dataTableName = Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
         String physicalTableName = tableDesc.getTableName().getNameAsString();
         PTable pDataTable = null;

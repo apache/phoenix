@@ -19,10 +19,10 @@
 package org.apache.hadoop.hbase.regionserver;
 
 
+import java.util.List;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-
-import java.util.List;
 
 /**
  * @ScannerContext has all methods package visible. To properly update the context progress for our scanners we
@@ -31,7 +31,8 @@ import java.util.List;
 public class ScannerContextUtil {
     public static void incrementSizeProgress(ScannerContext sc, List<Cell> cells) {
         for (Cell cell : cells) {
-            sc.incrementSizeProgress(CellUtil.estimatedHeapSizeOfWithoutTags(cell));
+            sc.incrementSizeProgress(CellUtil.estimatedSerializedSizeOf(cell),
+                    CellUtil.estimatedHeapSizeOf(cell));
         }
     }
 
