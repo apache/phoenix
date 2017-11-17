@@ -119,6 +119,7 @@ import org.apache.phoenix.parse.ExecuteUpgradeStatement;
 import org.apache.phoenix.parse.ExplainStatement;
 import org.apache.phoenix.parse.FetchStatement;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.GrantStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.LimitNode;
@@ -133,6 +134,7 @@ import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
+import org.apache.phoenix.parse.RevokeStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
@@ -212,8 +214,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         QUERY("queried", false),
         DELETE("deleted", true),
         UPSERT("upserted", true),
-        UPGRADE("upgrade", true);
-        
+        UPGRADE("upgrade", true),
+        ADMIN("admin", true);
+
         private final String toString;
         private final boolean isMutation;
         Operation(String toString, boolean isMutation) {
@@ -1153,6 +1156,59 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableGrantStatement extends GrantStatement implements CompilableStatement {
+
+        public ExecutableGrantStatement(LiteralParseNode perms, boolean isSchemaName, TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup) {
+            super(perms, isSchemaName, tableName, schemaName, isGroupName, userOrGroup);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("GRANT PERMISSION"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.grantPermission(ExecutableGrantStatement.this);
+                }
+            };
+        }
+    }
+
+    private static class ExecutableRevokeStatement extends RevokeStatement implements CompilableStatement {
+
+        public ExecutableRevokeStatement(LiteralParseNode perms, boolean isSchemaName, TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup) {
+            super(perms, isSchemaName, tableName, schemaName, isGroupName, userOrGroup);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("REVOKE PERMISSION"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.revokePermission(ExecutableRevokeStatement.this);
+                }
+            };
+        }
+    }
+
+
     private static class ExecutableDropIndexStatement extends DropIndexStatement implements CompilableStatement {
 
         public ExecutableDropIndexStatement(NamedNode indexName, TableName tableName, boolean ifExists) {
@@ -1557,6 +1613,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public ExecuteUpgradeStatement executeUpgrade() {
             return new ExecutableExecuteUpgradeStatement();
+        }
+
+        @Override
+        public GrantStatement grantStatement(LiteralParseNode perms, boolean isSchemaName, TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup) {
+            return new ExecutableGrantStatement(perms, isSchemaName, tableName, schemaName, isGroupName, userOrGroup);
+        }
+
+        @Override
+        public RevokeStatement revokeStatement(LiteralParseNode perms, boolean isSchemaName, TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup) {
+            return new ExecutableRevokeStatement(perms, isSchemaName, tableName, schemaName, isGroupName, userOrGroup);
         }
     }
     

@@ -114,8 +114,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         Configuration conf = env.getConfiguration();
         this.accessCheckEnabled = conf.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
-        this.isAutomaticGrantEnabled=conf.getBoolean(QueryServices.PHOENIX_AUTOMATIC_GRANT_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_AUTOMATIC_GRANT_ENABLED);
         if (!this.accessCheckEnabled) {
             LOG.warn("PhoenixAccessController has been loaded with authorization checks disabled.");
         }
@@ -229,17 +227,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     + dependentTable);
             return;
         }
-        if (isAutomaticGrantEnabled) {
-            Set<Action> unionSet = new HashSet<Action>();
-            unionSet.addAll(requireAccess);
-            unionSet.addAll(accessExists);
-            AUDITLOG.info(request + ": Automatically granting access to index table during creation of view:"
-                    + requestTable + authString(userName, dependentTable, requireAccess));
-            grantPermissions(userName, dependentTable.getName(), unionSet.toArray(new Action[0]));
-        } else {
-            throw new AccessDeniedException(
-                    "Insufficient permissions for users of dependent table" + authString(userName, dependentTable, requireAccess));
-        }
+        Set<Action> unionSet = new HashSet<Action>();
+        unionSet.addAll(requireAccess);
+        unionSet.addAll(accessExists);
+        AUDITLOG.info(request + ": Automatically granting access to index table during creation of view:"
+                + requestTable + authString(userName, dependentTable, requireAccess));
+        grantPermissions(userName, dependentTable.getName(), unionSet.toArray(new Action[0]));
     }
     
     private void grantPermissions(final String toUser, final byte[] table, final Action... actions) throws IOException {

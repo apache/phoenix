@@ -864,7 +864,7 @@ public class ParseNodeFactory {
             OffsetNode offset, int bindCount, boolean isAggregate) {
         if (statements.size() == 1) return select(statements.get(0), orderBy, limit, offset, bindCount, isAggregate);        
 
-        // Get a list of adjusted aliases from a non-wildcard sub-select if any. 
+        // Get a list of adjusted aliases from a non-wildcard sub-select if any.
         // We do not check the number of select nodes among all sub-selects, as 
         // it will be done later at compile stage. Empty or different aliases 
         // are ignored, since they cannot be referred by outer queries.
@@ -925,4 +925,13 @@ public class ParseNodeFactory {
     public UseSchemaStatement useSchema(String schemaName) {
         return new UseSchemaStatement(schemaName);
     }
+
+    public GrantStatement grantStatement(LiteralParseNode perms, boolean isSchemaName, TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup) {
+        return new GrantStatement(perms, isSchemaName, tableName, schemaName, isGroupName, userOrGroup);
+    }
+
+    public RevokeStatement revokeStatement(LiteralParseNode perms, boolean isSchemaName, TableName tableName, String schemaName, boolean isGroupName, LiteralParseNode userOrGroup) {
+        return new RevokeStatement(perms, isSchemaName, tableName, schemaName, isGroupName, userOrGroup);
+    }
+
 }

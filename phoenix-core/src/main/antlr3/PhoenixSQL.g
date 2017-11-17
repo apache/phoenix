@@ -118,6 +118,7 @@ tokens
     UNION='union';
     FUNCTION='function';
     AS='as';
+    TO='to';
     TEMPORARY='temporary';
     RETURNS='returns';
     USING='using';
@@ -144,6 +145,8 @@ tokens
     DUPLICATE = 'duplicate';
     IGNORE = 'ignore';
     IMMUTABLE = 'immutable';
+    GRANT = 'grant';
+    REVOKE = 'revoke';
 }
 
 
@@ -430,6 +433,8 @@ oneStatement returns [BindableStatement ret]
     |   s=delete_jar_node
     |   s=alter_session_node
     |	s=create_sequence_node
+    |   s=grant_permission_node
+    |   s=revoke_permission_node
     |	s=drop_sequence_node
     |	s=drop_schema_node
     |	s=use_schema_node
@@ -458,9 +463,21 @@ create_schema_node returns [CreateSchemaStatement ret]
         {ret = factory.createSchema(s, ex!=null); }
     ;
 
+// Parse a grant permission statement
+grant_permission_node returns [GrantStatement ret]
+    :   GRANT p=literal (ON ((TABLE)? table=table_name | s=SCHEMA schema=identifier))? TO (g=GROUP)? ug=literal
+        { ret = factory.grantStatement(p, s!=null, table, schema, g!=null, ug); }
+    ;
+
+// Parse a revoke permission statement
+revoke_permission_node returns [RevokeStatement ret]
+    :   REVOKE (p=literal)? (ON ((TABLE)? table=table_name | s=SCHEMA schema=identifier))? FROM (g=GROUP)? ug=literal
+        { ret = factory.revokeStatement(p, s!=null, table, schema, g!=null, ug); }
+    ;
+
 // Parse a create view statement.
 create_view_node returns [CreateTableStatement ret]
-    :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name 
+    :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)?
         ( AS SELECT ASTERISK
           FROM bt=from_table_name
@@ -1160,7 +1177,6 @@ SL_COMMENT2: '--';
 BIND_NAME
     : COLON (DIGIT)+
     ;
-
 
 NAME
     :    LETTER (FIELDCHAR)*
