@@ -135,6 +135,9 @@
                   <include>org.apache.thrift:libthrift</include>
                   <include>com.clearspring.analytics:stream</include>
                   <include>com.salesforce.i18n:i18n-util</include>
+                  <include>com.ibm.icu:icu4j</include>
+                  <include>com.ibm.icu:icu4j-charset</include>
+                  <include>com.ibm.icu:icu4j-localespi</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>
