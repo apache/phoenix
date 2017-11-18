@@ -32,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.text.DecimalFormatSymbols;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.ByteUtil;
@@ -43,6 +44,8 @@ import org.junit.Test;
 public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
     private String sharedTable1;
     private String sharedTable2;
+
+    private String DEFAULT_CURRENCY_SYMBOL = DecimalFormatSymbols.getInstance().getCurrencySymbol();
 
     @Before
     public void init() {
@@ -583,7 +586,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "pk INTEGER PRIMARY KEY,"
                 + "c1 INTEGER DEFAULT 1 + 9,"
                 + "c2 DOUBLE DEFAULT SQRT(91506.25),"
-                + "c3 DECIMAL DEFAULT TO_NUMBER('$123.33', '\u00A4###.##'),"
+                + "c3 DECIMAL DEFAULT TO_NUMBER('" + DEFAULT_CURRENCY_SYMBOL + "123.33', '\u00A4###.##'),"
                 + "c4 VARCHAR DEFAULT 'AB' || 'CD',"
                 + "c5 CHAR(5) DEFAULT 'E' || 'F',"
                 + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05'))"
@@ -599,7 +602,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "pk INTEGER NOT NULL,"
                 + "c1 INTEGER NOT NULL DEFAULT 1 + 9,"
                 + "c2 DOUBLE NOT NULL DEFAULT SQRT(91506.25),"
-                + "c3 DECIMAL NOT NULL DEFAULT TO_NUMBER('$123.33', '\u00A4###.##'),"
+                + "c3 DECIMAL NOT NULL DEFAULT TO_NUMBER('" + DEFAULT_CURRENCY_SYMBOL + "123.33', '\u00A4###.##'),"
                 + "c4 VARCHAR NOT NULL DEFAULT 'AB' || 'CD',"
                 + "c5 CHAR(5) NOT NULL DEFAULT 'E' || 'F',"
                 + "c6 INTEGER NOT NULL DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05')),"
@@ -1045,7 +1048,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "pk INTEGER PRIMARY KEY,"
                 + "c1 INTEGER DEFAULT 1 + 9,"
                 + "c2 DOUBLE DEFAULT SQRT(91506.25),"
-                + "c3 DECIMAL DEFAULT TO_NUMBER('$123.33', '\u00A4###.##'),"
+                + "c3 DECIMAL DEFAULT TO_NUMBER('" + DEFAULT_CURRENCY_SYMBOL + "123.33', '\u00A4###.##'),"
                 + "c4 VARCHAR DEFAULT 'AB' || 'CD',"
                 + "c5 CHAR(5) DEFAULT 'E' || 'F',"
                 + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05'))"
