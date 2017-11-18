@@ -478,6 +478,7 @@
     <dependency>
       <groupId>com.salesforce.i18n</groupId>
       <artifactId>i18n-util</artifactId>
+      <version>${i18n-util.version}</version>
     </dependency>
   </dependencies>
 </project>

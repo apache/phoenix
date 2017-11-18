@@ -105,6 +105,7 @@
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
+    <i18n-util.version>1.0.1</i18n-util.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
@@ -935,7 +936,7 @@
       <dependency>
         <groupId>com.salesforce.i18n</groupId>
         <artifactId>i18n-util</artifactId>
-        <version>1.0.1</version>
+        <version>${i18n-util.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
