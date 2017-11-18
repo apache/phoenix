@@ -67,10 +67,12 @@ public class QueryOptimizer {
 
     private final QueryServices services;
     private final boolean useIndexes;
+    private final boolean costBased;
 
     public QueryOptimizer(QueryServices services) {
         this.services = services;
         this.useIndexes = this.services.getProps().getBoolean(QueryServices.USE_INDEXES_ATTRIB, QueryServicesOptions.DEFAULT_USE_INDEXES);
+        this.costBased = this.services.getProps().getBoolean(QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
     }
 
     public QueryPlan optimize(PhoenixStatement statement, QueryPlan dataPlan) throws SQLException {
@@ -91,11 +93,10 @@ public class QueryOptimizer {
     }
     
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        boolean costBased =
-                statement.getConnection().getQueryServices().getConfiguration().getBoolean(
-                        QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
-        List<QueryPlan> plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, !costBased);
-        if (!costBased || plans.size() == 1) {
+        // Set stopAtBestPlan = true, so that when there is one definite best plan, e.g.,
+        // dataPlan being a point lookup, or a hinted plan, we will return that plan.
+        List<QueryPlan> plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, true);
+        if (!this.costBased || plans.size() == 1) {
             return plans.get(0);
         }
 
@@ -448,7 +449,7 @@ public class QueryOptimizer {
         });
 
         // Add all the remaining plans to the list for cost-based decision.
-        if (!stopAtBestPlan) {
+        if (this.costBased) {
             for (QueryPlan plan : stillCandidates) {
                 if (!bestCandidates.contains(plan)) {
                     bestCandidates.add(plan);
@@ -456,7 +457,7 @@ public class QueryOptimizer {
             }
         }
 
-        return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
+        return !this.costBased && stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
     }
 
     

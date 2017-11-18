@@ -63,7 +63,8 @@ public class CostUtil {
     public static Cost estimateAggregateCost(
             double byteCount, GroupBy groupBy, int aggregatorsSize, int parallelLevel) {
         double outputBytes = estimateAggregateOutputBytes(byteCount, groupBy, aggregatorsSize);
-        return new Cost(0, 0, outputBytes * IO_COST_MULTIPLIER / parallelLevel);
+        double orderedFactor = groupBy.isOrderPreserving() ? 0.2 : 1.0;
+        return new Cost(0, 0, outputBytes * orderedFactor * IO_COST_MULTIPLIER / parallelLevel);
     }
 
     /**
