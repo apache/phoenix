@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -188,10 +189,10 @@ public class KeyValueUtil {
      * @return estimated row size
      */
     public static long
-            getEstimatedRowMutationSize(Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> tableMutationMap) {
+            getEstimatedRowMutationSize(Map<TableRef, MultiRowMutationState> tableMutationMap) {
         long size = 0;
         // iterate over table
-        for (Entry<TableRef, Map<ImmutableBytesPtr, RowMutationState>> tableEntry : tableMutationMap.entrySet()) {
+        for (Entry<TableRef, MultiRowMutationState> tableEntry : tableMutationMap.entrySet()) {
             // iterate over rows
             for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : tableEntry.getValue().entrySet()) {
                 size += calculateRowMutationSize(rowEntry);
