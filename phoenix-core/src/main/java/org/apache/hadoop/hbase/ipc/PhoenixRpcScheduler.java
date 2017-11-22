@@ -82,7 +82,7 @@ public class PhoenixRpcScheduler extends RpcScheduler {
     @Override
     public boolean dispatch(CallRunner callTask) throws InterruptedException, IOException {
         ServerCall call = callTask.getCall();
-        int priority = call.header.getPriority();
+        int priority = call.getHeader().getPriority();
         if (indexPriority == priority) {
             return indexCallExecutor.dispatch(callTask);
         } else if (metadataPriority == priority) {
@@ -90,6 +90,11 @@ public class PhoenixRpcScheduler extends RpcScheduler {
         } else {
             return delegate.dispatch(callTask);
         }
+    }
+
+    @Override
+    public CallQueueInfo getCallQueueInfo() {
+        return delegate.getCallQueueInfo();
     }
 
     @Override

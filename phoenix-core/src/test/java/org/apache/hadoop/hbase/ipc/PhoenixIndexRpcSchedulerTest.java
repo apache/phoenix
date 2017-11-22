@@ -17,18 +17,23 @@
  */
 package org.apache.hadoop.hbase.ipc;
 
+import static org.apache.hadoop.hbase.ipc.TestProtobufRpcServiceImpl.SERVICE;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.when;
 
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ipc.RpcScheduler.Context;
-import org.apache.hadoop.hbase.ipc.RpcServer.Connection;
-import org.apache.hadoop.hbase.protobuf.generated.RPCProtos.RequestHeader;
+import org.apache.hadoop.hbase.ipc.RpcServer.BlockingServiceAndInterface;
+import org.apache.hadoop.hbase.shaded.com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.RPCProtos.RequestHeader;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -41,12 +46,28 @@ public class PhoenixIndexRpcSchedulerTest {
     private static final Configuration conf = HBaseConfiguration.create();
     private static final InetSocketAddress isa = new InetSocketAddress("localhost", 0);
 
+    
+    private class AbortServer implements Abortable {
+      private boolean aborted = false;
+
+      @Override
+      public void abort(String why, Throwable e) {
+        aborted = true;
+      }
+
+      @Override
+      public boolean isAborted() {
+        return aborted;
+      }
+    }
+
     @Test
     public void testIndexPriorityWritesToIndexHandler() throws Exception {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
-
-        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250);
-        BalancedQueueRpcExecutor executor = new BalancedQueueRpcExecutor("test-queue", 1, 1, 1);
+        PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
+        Abortable abortable = new AbortServer();
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250,qosFunction,abortable);
+        BalancedQueueRpcExecutor executor = new BalancedQueueRpcExecutor("test-queue", 1, 1,qosFunction,conf,abortable);
         scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 200);
         List<BlockingQueue<CallRunner>> queues = executor.getQueues();
@@ -55,7 +76,7 @@ public class PhoenixIndexRpcSchedulerTest {
         queue.poll(20, TimeUnit.SECONDS);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110,qosFunction,abortable);
         scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 101);
         queue.poll(20, TimeUnit.SECONDS);
@@ -72,13 +93,15 @@ public class PhoenixIndexRpcSchedulerTest {
      */
     @Test
     public void testDelegateWhenOutsideRange() throws Exception {
+        PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
+        Abortable abortable = new AbortServer();
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
-        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250,qosFunction,abortable);
         dispatchCallWithPriority(scheduler, 100);
         dispatchCallWithPriority(scheduler, 251);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110,qosFunction,abortable);
         dispatchCallWithPriority(scheduler, 200);
         dispatchCallWithPriority(scheduler, 111);
 
@@ -88,12 +111,13 @@ public class PhoenixIndexRpcSchedulerTest {
     }
 
     private void dispatchCallWithPriority(RpcScheduler scheduler, int priority) throws Exception {
-        Connection connection = Mockito.mock(Connection.class);
         CallRunner task = Mockito.mock(CallRunner.class);
         RequestHeader header = RequestHeader.newBuilder().setPriority(priority).build();
-        RpcServer server = new RpcServer(null, "test-rpcserver", null, isa, conf, scheduler);
-        RpcServer.Call call =
-                server.new Call(0, null, null, header, null, null, connection, null, 10, null, null, 0);
+        RpcServer server = RpcServerFactory.createRpcServer(null, "test-rpcserver", Lists.newArrayList(new BlockingServiceAndInterface(
+                SERVICE, null)), isa, conf, scheduler);
+        ServerCall call = Mockito.mock(ServerCall.class);
+        when(call.getHeader()).thenReturn(header);
+        when(call.getRequestUser()).thenReturn(Optional.empty());
         Mockito.when(task.getCall()).thenReturn(call);
 
         scheduler.dispatch(task);
