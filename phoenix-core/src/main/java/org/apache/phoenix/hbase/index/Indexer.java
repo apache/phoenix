@@ -202,7 +202,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
-        String serverName = env.getRegionServerServices().getServerName().getServerName();
+        String serverName = env.getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
           // make sure the right version <-> combinations are allowed.
           String errormsg = Indexer.validateVersion(env.getHBaseVersion(), env.getConfiguration());
@@ -395,7 +395,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           
       Durability defaultDurability = Durability.SYNC_WAL;
       if(c.getEnvironment().getRegion() != null) {
-          defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
+          defaultDurability = c.getEnvironment().getRegion().getTableDescriptor().getDurability();
           defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
                   Durability.SYNC_WAL : defaultDurability;
       }
@@ -531,7 +531,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           metricSource.updateIndexPrepareTime(duration);
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
-          byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
+          byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
           Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
           while(indexUpdatesItr.hasNext()) {
@@ -682,7 +682,6 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
     Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
     
     if (this.disabled) {
-        super.postOpen(c);
         return;
     }
 
@@ -717,10 +716,12 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   }
 
   @Override
-  public void preWALRestore(ObserverContext<RegionCoprocessorEnvironment> env, HRegionInfo info,
-      HLogKey logKey, WALEdit logEdit) throws IOException {
+    public void preWALRestore(
+            org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+            org.apache.hadoop.hbase.client.RegionInfo info, org.apache.hadoop.hbase.wal.WALKey logKey, WALEdit logEdit)
+            throws IOException {
+  
       if (this.disabled) {
-          super.preWALRestore(env, info, logKey, logEdit);
           return;
       }
 

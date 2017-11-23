@@ -52,8 +52,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -105,7 +105,6 @@ public class SequenceRegionObserver implements RegionObserver {
         RegionCoprocessorEnvironment env = e.getEnvironment();
         // We need to set this to prevent region.increment from being called
         e.bypass();
-        e.complete();
         Region region = env.getRegion();
         byte[] row = increment.getRow();
         List<RowLock> locks = Lists.newArrayList();
@@ -363,7 +362,6 @@ public class SequenceRegionObserver implements RegionObserver {
         RegionCoprocessorEnvironment env = e.getEnvironment();
         // We need to set this to prevent region.append from being called
         e.bypass();
-        e.complete();
         Region region = env.getRegion();
         byte[] row = append.getRow();
         List<RowLock> locks = Lists.newArrayList();
@@ -397,7 +395,7 @@ public class SequenceRegionObserver implements RegionObserver {
                     // Timestamp should match exactly, or we may have the wrong sequence
                     if (expectedValue != value || currentValueKV.getTimestamp() != clientTimestamp) {
                         return Result.create(Collections.singletonList(
-                          (Cell)PhoenixKeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
+                          PhoenixKeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, 
                             QueryConstants.EMPTY_COLUMN_BYTES, currentValueKV.getTimestamp(), ByteUtil.EMPTY_BYTE_ARRAY)));
                     }
                     m = new Put(row, currentValueKV.getTimestamp());
@@ -425,7 +423,7 @@ public class SequenceRegionObserver implements RegionObserver {
                 // the client cares about is the timestamp, which is the timestamp of
                 // when the mutation was actually performed (useful in the case of .
                 return Result.create(Collections.singletonList(
-                  (Cell)PhoenixKeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
+                  PhoenixKeyValueUtil.newKeyValue(row, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, serverTimestamp, SUCCESS_VALUE)));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }

@@ -27,7 +27,6 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.hbase.index.CapturingAbortable;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
@@ -74,7 +73,6 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 
     private TaskRunner pool;
     private HTableFactory factory;
-    private CapturingAbortable abortable;
     private Stoppable stopped;
     private RegionCoprocessorEnvironment env;
     private KeyValueBuilder kvBuilder;
@@ -95,7 +93,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 ThreadPoolManager.getExecutor(
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
-                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent, env);
+                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), parent, env);
         this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
@@ -104,11 +102,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
      * <p>
      * Exposed for TESTING
      */
-    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop,
+    void setup(HTableFactory factory, ExecutorService pool, Stoppable stop,
             RegionCoprocessorEnvironment env) {
         this.pool = new WaitForCompletionTaskRunner(pool);
         this.factory = factory;
-        this.abortable = new CapturingAbortable(abortable);
         this.stopped = stop;
     }
 
@@ -192,8 +189,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 }
 
                 private void throwFailureIfDone() throws SingleIndexWriteFailureException {
-                    if (stopped.isStopped() || abortable.isAborted() || Thread.currentThread().isInterrupted()) { throw new SingleIndexWriteFailureException(
-                            "Pool closed, not attempting to write to the index!", null); }
+                    if (stopped.isStopped() || env.getConnection() == null || env.getConnection().isClosed()
+                            || env.getConnection().isAborted()
+                            || Thread.currentThread().isInterrupted()) { throw new SingleIndexWriteFailureException(
+                                    "Pool closed, not attempting to write to the index!", null); }
 
                 }
             });

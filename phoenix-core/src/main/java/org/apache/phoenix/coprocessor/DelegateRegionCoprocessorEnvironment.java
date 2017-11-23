@@ -17,13 +17,10 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.IOException;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
@@ -98,16 +95,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public void startup() throws IOException {
-        delegate.startup();
-    }
-
-    @Override
-    public void shutdown() {
-        delegate.shutdown();
-    }
-
-    @Override
     public OnlineRegions getOnlineRegions() {
         return delegate.getOnlineRegions();
     }
@@ -126,5 +113,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     public MetricRegistry getMetricRegistryForRegionServer() {
         return delegate.getMetricRegistryForRegionServer();
     }
-
+   
+    
 }

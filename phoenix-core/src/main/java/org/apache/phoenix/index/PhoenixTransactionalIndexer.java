@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
@@ -87,7 +86,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.PhoenixTransactionalTable;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -129,7 +127,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)e;
-        String serverName = env.getRegionServerServices().getServerName().getServerName();
+        String serverName = env.getServerName().getServerName();
         codec = new PhoenixIndexCodec();
         codec.initialize(env);
         // Clone the config since it is shared
@@ -192,7 +190,6 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
 
         Mutation m = miniBatchOp.getOperation(0);
         if (!codec.isEnabled(m)) {
-            super.preBatchMutate(c, miniBatchOp);
             return;
         }
 

@@ -68,12 +68,6 @@ public class DelegateRegionObserver implements RegionObserver {
     }
 
     @Override
-    public void postLogReplay(ObserverContext<RegionCoprocessorEnvironment> c) {
-        delegate.postLogReplay(c);
-    }
-
-
-    @Override
     public void preFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
             org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
         delegate.preFlush(c, tracker);

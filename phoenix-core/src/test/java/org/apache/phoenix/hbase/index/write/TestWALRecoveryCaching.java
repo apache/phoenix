@@ -48,16 +48,14 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
+import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -103,11 +101,13 @@ public class TestWALRecoveryCaching {
   // -----------------------------------------------------------------------------------------------
   private static CountDownLatch allowIndexTableToRecover;
 
-  public static class IndexTableBlockingReplayObserver extends BaseRegionObserver {
+  public static class IndexTableBlockingReplayObserver implements RegionObserver {
 
     @Override
-    public void preWALRestore(ObserverContext<RegionCoprocessorEnvironment> env, HRegionInfo info,
-        HLogKey logKey, WALEdit logEdit) throws IOException {
+        public void preWALRestore(
+                org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+                org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
+                org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
       try {
         LOG.debug("Restoring logs for index table");
         if (allowIndexTableToRecover != null) {

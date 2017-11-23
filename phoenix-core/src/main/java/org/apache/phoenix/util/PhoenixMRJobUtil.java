@@ -35,7 +35,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ZooKeeperConnectionException;
-import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.ActiveRMInfoProto;
@@ -84,11 +84,11 @@ public class PhoenixMRJobUtil {
     public static String getActiveResourceManagerHost(Configuration config, String zkQuorum)
             throws IOException, InterruptedException, JSONException, KeeperException,
             InvalidProtocolBufferException, ZooKeeperConnectionException {
-        ZooKeeperWatcher zkw = null;
+        ZKWatcher zkw = null;
         ZooKeeper zk = null;
         String activeRMHost = null;
         try {
-            zkw = new ZooKeeperWatcher(config, "get-active-yarnmanager", null);
+            zkw = new ZKWatcher(config, "get-active-yarnmanager", null);
             zk = new ZooKeeper(zkQuorum, 30000, zkw, false);
 
             List<String> children = zk.getChildren(YARN_LEADER_ELECTION, zkw);

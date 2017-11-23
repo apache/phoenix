@@ -132,8 +132,8 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -1321,23 +1321,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 stream.close();
             } catch (IOException e) {
                 throw new RuntimeException(e);
-            }
-        }
-    }
-
-    /*
-     * TODO: use waitForFlushes PHOENIX-4352
-     */
-    @Override
-    public void preSplit(ObserverContext<RegionCoprocessorEnvironment> c, byte[] splitRow)
-            throws IOException {
-        // Don't allow splitting if operations need read and write to same region are going on in the
-        // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
-        synchronized (lock) {
-            isRegionClosingOrSplitting = true;
-            if (scansReferenceCount > 0) {
-                throw new IOException("Operations like local index building/delete/upsert select"
-                        + " might be going on so not allowing to split.");
             }
         }
     }

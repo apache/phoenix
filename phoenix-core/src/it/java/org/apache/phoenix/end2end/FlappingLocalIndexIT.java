@@ -36,11 +36,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.index.BaseLocalIndexIT;
 import org.apache.phoenix.query.QueryConstants;
@@ -347,14 +344,13 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         assertEquals(4, rs.getInt(1));
     }
 
-    public static class DeleyOpenRegionObserver extends BaseRegionObserver {
+    public static class DeleyOpenRegionObserver implements RegionObserver {
         public static volatile boolean DELAY_OPEN = false;
         private int retryCount = 0;
         private CountDownLatch latch = new CountDownLatch(1);
         @Override
-        public void
-                preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
-                        throws IOException {
+        public void preClose(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+                boolean abortRequested) throws IOException {
             if(DELAY_OPEN) {
                 try {
                     latch.await();
@@ -362,17 +358,15 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                     throw new DoNotRetryIOException(e1);
                 }
             }
-            super.preClose(c, abortRequested);
         }
 
         @Override
-        public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e,
-                Scan scan, RegionScanner s) throws IOException {
-            if(DELAY_OPEN && retryCount == 1) {
+        public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+                Scan scan) throws IOException {
+            if (DELAY_OPEN && retryCount == 1) {
                 latch.countDown();
             }
             retryCount++;
-            return super.preScannerOpen(e, scan, s);
         }
     }
 }

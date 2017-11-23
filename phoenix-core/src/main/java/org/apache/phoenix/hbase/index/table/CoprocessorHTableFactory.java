@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.table;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;

@@ -25,7 +25,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -66,10 +66,10 @@ public class IndexBuildManager implements Stoppable {
       return builder;
     } catch (InstantiationException e1) {
       throw new IOException("Couldn't instantiate index builder:" + builderClass
-          + ", disabling indexing on table " + e.getRegion().getTableDesc().getNameAsString());
+          + ", disabling indexing on table " + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
     } catch (IllegalAccessException e1) {
       throw new IOException("Couldn't instantiate index builder:" + builderClass
-          + ", disabling indexing on table " + e.getRegion().getTableDesc().getNameAsString());
+          + ", disabling indexing on table " + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
     }
   }
 
@@ -90,7 +90,7 @@ public class IndexBuildManager implements Stoppable {
   }
 
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<KeyValue> filtered, IndexMetaData indexMetaData) throws IOException {
+      Collection<Cell> filtered, IndexMetaData indexMetaData) throws IOException {
     // this is run async, so we can take our time here
     return delegate.getIndexUpdateForFilteredRows(filtered, indexMetaData);
   }
