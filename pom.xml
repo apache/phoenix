@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.13.0-HBase-1.2</version>
+  <version>4.13.0-cdh5.11.2</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -37,9 +37,33 @@
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
     <module>phoenix-load-balancer</module>
+    <module>phoenix-parcel</module>
   </modules>
 
   <repositories>
+    <repository>
+      <id>cdh.repo</id>
+      <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <name>Cloudera Repositories</name>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>cdh.snapshots.repo</id>
+      <url>https://repository.cloudera.com/artifactory/libs-snapshot-local</url>
+      <name>Cloudera Snapshots Repository</name>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+    </repository>
+    <repository>
+      <id>cloudbees netty</id>
+      <url>http://repository-netty.forge.cloudbees.com/snapshot/</url>
+    </repository>
     <repository>
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
@@ -47,9 +71,9 @@
   </repositories>
 
   <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>14</version>
+    <groupId>com.cloudera.cdh</groupId>
+    <artifactId>cdh-root</artifactId>
+    <version>5.11.2</version>
   </parent>
 
   <scm>
@@ -66,18 +90,21 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.2.5</hbase.version>
-    <hadoop-two.version>2.7.1</hadoop-two.version>
+    <hbase.version>${cdh.hbase.version}</hbase.version>
+    <hadoop-two.version>${cdh.hadoop.version}</hadoop-two.version>
 
     <!-- Dependency versions -->
+    <phoenix.release.version>4.13.1</phoenix.release.version>
+    <cdh.version.number>5.11.2</cdh.version.number>
+    <cdh.version>cdh${cdh.version.number}</cdh.version>
     <commons-cli.version>1.2</commons-cli.version>
-    <hive.version>1.2.1</hive.version>
-    <hadoop.version>2.7.1</hadoop.version>
-    <pig.version>0.13.0</pig.version>
-    <jackson.version>1.9.2</jackson.version>
+    <hive.version>${cdh.hive.version}</hive.version>
+    <hadoop.version>${cdh.hadoop.version}</hadoop.version>
+    <pig.version>${cdh.pig.version}</pig.version>
+    <jackson.version>${cdh.jackson.version}</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
-    <slf4j.version>1.6.4</slf4j.version>
+    <slf4j.version>${cdh.slf4j.version}</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <commons-configuration.version>1.6</commons-configuration.version>
     <commons-io.version>2.1</commons-io.version>
@@ -86,26 +113,27 @@
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.2.0</sqlline.version>
     <guava.version>13.0.1</guava.version>
-    <flume.version>1.4.0</flume.version>
+    <flume.version>1.6.0-${cdh.version}</flume.version>
     <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
     <snappy.version>0.3</snappy.version>
     <commons-codec.version>1.7</commons-codec.version>
-    <htrace.version>3.1.0-incubating</htrace.version>
-    <collections.version>3.2.2</collections.version>
+    <htrace.version>3.2.0-incubating</htrace.version>
+    <commons-collections.version>3.2.2</commons-collections.version>
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.10.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.13.0-incubating</tephra.version>
-    <spark.version>2.0.2</spark.version>
-    <scala.version>2.11.8</scala.version>
-    <scala.binary.version>2.11</scala.binary.version>
+    <spark.version>${cdh.spark.version}</spark.version>
+    <scala.version>2.10.4</scala.version>
+    <scala.binary.version>2.10</scala.binary.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.1</i18n-util.version>
+
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
@@ -113,8 +141,8 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.20</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.20</maven-failsafe-plugin.version>
+    <maven-surefire-plugin.version>2.20.1</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.20.1</maven-failsafe-plugin.version>
 
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
@@ -128,7 +156,7 @@
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-   <curator.version>2.12.0</curator.version>
+    <curator.version>2.12.0</curator.version>
 
   </properties>
 
@@ -144,7 +172,7 @@
             <target>1.7</target>
           </configuration>
         </plugin>
-        <!--This plugin's configuration is used to store Eclipse m2e settings 
+        <!--This plugin's configuration is used to store Eclipse m2e settings
           only. It has no influence on the Maven build itself. -->
         <plugin>
           <groupId>org.eclipse.m2e</groupId>
@@ -271,7 +299,7 @@
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2898)
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2835)
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
-		<!--enableAssertions>false</enableAssertions-->
+                <!--enableAssertions>false</enableAssertions-->
                 <argLine>-Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
@@ -301,22 +329,22 @@
                 <goal>verify</goal>
               </goals>
             </execution>
-	    <execution>
+            <execution>
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-                 <shutdown>kill</shutdown>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>false</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+                <shutdown>kill</shutdown>
               </configuration>
               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
               </goals>
             </execution>
           </executions>
@@ -713,7 +741,6 @@
         <groupId>org.apache.pig</groupId>
         <artifactId>pig</artifactId>
         <version>${pig.version}</version>
-        <classifier>h2</classifier>
         <exclusions>
           <exclusion>
             <groupId>org.xerial.snappy</groupId>
@@ -777,7 +804,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-1.1</artifactId>
+        <artifactId>tephra-hbase-compat-1.2-cdh</artifactId>
         <version>${tephra.version}</version>
       </dependency>
 
@@ -901,7 +928,7 @@
       <dependency>
         <groupId>commons-collections</groupId>
         <artifactId>commons-collections</artifactId>
-        <version>${collections.version}</version>
+        <version>${commons-collections.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -970,14 +997,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-    <profile>
-      <id>spark16</id>
-      <properties>
-        <spark.version>1.6.1</spark.version>
-        <scala.version>2.10.4</scala.version>
-        <scala.binary.version>2.10</scala.binary.version>
-      </properties>
     </profile>
   </profiles>
 </project>

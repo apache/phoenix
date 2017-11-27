@@ -63,11 +63,12 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         String hbaseFullTableName = schemaName + ":" + tableName;
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(namespace).build());
-        admin.createTable(new HTableDescriptor(TableName.valueOf(namespace, tableName))
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
-        admin.createTable(new HTableDescriptor(TableName.valueOf(phoenixFullTableName))
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
-
+        HTableDescriptor htd1 = new HTableDescriptor(TableName.valueOf(namespace, tableName));
+        htd1.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+        admin.createTable(htd1);
+        HTableDescriptor htd2 = new HTableDescriptor(TableName.valueOf(phoenixFullTableName));
+        htd2.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+        admin.createTable(htd2);
         Put put = new Put(PVarchar.INSTANCE.toBytes(phoenixFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);

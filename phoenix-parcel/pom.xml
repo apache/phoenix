@@ -1,0 +1,252 @@
+<?xml version='1.0'?>
+<!--
+
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+
+-->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix</artifactId>
+    <version>4.13.0-cdh5.11.2</version>
+  </parent>
+  <artifactId>phoenix-parcel</artifactId>
+  <name>Phoenix Parcels for CDH</name>
+  <description>Assemble Phoenix artifacts for CDH</description>
+  <packaging>pom</packaging>
+
+  <properties>
+    <source.skip>true</source.skip>
+    <top.dir>${project.basedir}/..</top.dir>
+    <maven.test.skip>true</maven.test.skip>
+    <phoenix.version>${phoenix.release.version}</phoenix.version>
+    <parcel.patch.count>0</parcel.patch.count>
+    <parcel.release>0.${parcel.patch.count}</parcel.release>
+    <parcel.folder>APACHE_PHOENIX-${phoenix.version}-${cdh.version}.p${parcel.release}</parcel.folder>
+    <parcel.file>${parcel.folder}.parcel</parcel.file>
+    <parcel.version>${phoenix.version}-${cdh.version}.p${parcel.release}</parcel.version>
+    <parcel.base.version>${phoenix.version}</parcel.base.version>
+    <parcel.full.version>${phoenix.version}-${cdh.version}.p${parcel.release}</parcel.full.version>
+    <parcel.package.version>${phoenix.version}+${cdh.version}+${parcel.patch.count}</parcel.package.version>
+    <parcel.component.version>${phoenix.version}-${cdh.version}</parcel.component.version>
+    <parcel.component.release>${cdh.version}.p${parcel.release}</parcel.component.release>
+    <parcel.depends>CDH (= ${cdh.version.number})</parcel.depends>
+  </properties>
+
+  <build>
+
+    <plugins>
+      <!-- No jars created for this module -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>default-jar</id>
+            <phase>none</phase>
+            <goals/>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-parcel</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <finalName>${parcel.file}</finalName>
+              <attach>false</attach>
+              <tarLongFileMode>gnu</tarLongFileMode>
+              <appendAssemblyId>false</appendAssemblyId>
+              <descriptors>
+                <descriptor>src/build/parcel.xml</descriptor>
+              </descriptors>
+              <tarLongFileMode>posix</tarLongFileMode>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.coderplus.maven.plugins</groupId>
+        <artifactId>copy-rename-maven-plugin</artifactId>
+        <version>1.0.1</version>
+        <executions>
+          <execution>
+            <id>copy-file-el6</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-el6.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-el5</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-el5.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-el7</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-el7.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-sles11</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-sles11.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-sles12</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-sles12.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-precise</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-precise.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-jessie</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-jessie.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-trusty</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-trusty.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-wheezy</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-wheezy.parcel</destinationFile>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-file-xenial</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
+              <destinationFile>${project.build.directory}/${parcel.folder}-xenial.parcel</destinationFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>make-manifest</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <executable>python</executable>
+          <workingDirectory>${project.build.directory}</workingDirectory>
+          <arguments>
+            <argument>${project.basedir}/src/build/manifest/make_manifest.py</argument>
+            <argument>${project.build.directory}</argument>
+          </arguments>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <!-- Depend on all other internal projects -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-flume</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-pig</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-spark</artifactId>
+    </dependency>
+  </dependencies>
+</project>

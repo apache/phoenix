@@ -25,7 +25,7 @@ import org.apache.curator.CuratorZookeeperClient;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.curator.TestingServer;
+import org.apache.curator.test.TestingServer;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.phoenix.loadbalancer.service.LoadBalancer;
 import org.apache.phoenix.loadbalancer.service.LoadBalanceZookeeperConf;

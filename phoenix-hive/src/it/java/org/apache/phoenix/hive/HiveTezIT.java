@@ -23,6 +23,7 @@ import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 import org.junit.Ignore;
 
+@Ignore("Tez is not supported in CDH")
 @Category(NeedsOwnMiniClusterTest.class)
 public class HiveTezIT extends HivePhoenixStoreIT {
 

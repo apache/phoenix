@@ -429,7 +429,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         // create a simple metrics record
         long traceid = 987654;
-        Span span = createNewSpan(traceid, Span.ROOT_SPAN_ID, 10, "root", 12, 13, "Some process", "test annotation for a span");
+        Span span = createNewSpan(traceid, TracingUtils.ROOT_SPAN_ID, 10, "root", 12, 13, "Some process", "test annotation for a span");
 
         Tracer.getInstance().deliver(span);
         assertTrue("Updates not written in table", latch.await(60, TimeUnit.SECONDS));
@@ -457,7 +457,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         List<Span> spans = new ArrayList<Span>();
 
         Span span =
-                createNewSpan(traceid, Span.ROOT_SPAN_ID, 7777, "root", 10, 30,
+                createNewSpan(traceid, TracingUtils.ROOT_SPAN_ID, 7777, "root", 10, 30,
                         "root process", "root-span tag");
         spans.add(span);
 
@@ -512,8 +512,9 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             SpanInfo spanInfo = spanIter.next();
             LOG.info("Checking span:\n" + spanInfo);
 
-            long parentId = span.getParentId();
-            if(parentId == Span.ROOT_SPAN_ID) {
+            long parentId = span.getParents().length > 0 ? span.getParents()[0] : TracingUtils.ROOT_SPAN_ID;
+
+            if(parentId == TracingUtils.ROOT_SPAN_ID) {
                 assertNull("Got a parent, but it was a root span!", spanInfo.parent);
             } else {
                 assertEquals("Got an unexpected parent span id", parentId, spanInfo.parent.id);
@@ -523,9 +524,9 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             assertEquals("Got an unexpected end time", span.getStopTimeMillis(), spanInfo.end);
 
             int annotationCount = 0;
-            for(Map.Entry<byte[], byte[]> entry : span.getKVAnnotations().entrySet()) {
+            for(Map.Entry<String, String> entry : span.getKVAnnotations().entrySet()) {
                 int count = annotationCount++;
-                assertEquals("Didn't get expected annotation", count + " - " + Bytes.toString(entry.getValue()),
+                assertEquals("Didn't get expected annotation", count + " - " + entry.getValue(),
                         spanInfo.annotations.get(count));
             }
             assertEquals("Didn't get expected number of annotations", annotationCount,

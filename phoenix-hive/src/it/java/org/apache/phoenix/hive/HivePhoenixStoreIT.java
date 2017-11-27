@@ -203,6 +203,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
      *
      * @throws Exception
      */
+    @Ignore
     @Test
     public void testJoinNoColumnMaps() throws Exception {
         String testName = "testJoin";
@@ -253,6 +254,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
      *
      * @throws Exception
      */
+    @Ignore
     @Test
     public void testJoinColumnMaps() throws Exception {
         String testName = "testJoin";

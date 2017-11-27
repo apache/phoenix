@@ -84,12 +84,11 @@ public class NullSpan implements Span {
   }
 
   @Override
-  public long getParentId() {
-    return 0;
+  public void addKVAnnotation(byte[] key, byte[] value) {
   }
 
   @Override
-  public void addKVAnnotation(byte[] key, byte[] value) {
+  public void addKVAnnotation(String key, String value) {
   }
 
   @Override
@@ -97,7 +96,7 @@ public class NullSpan implements Span {
   }
 
   @Override
-  public Map<byte[], byte[]> getKVAnnotations() {
+  public Map<String, String> getKVAnnotations() {
     return Collections.emptyMap();
   }
 
@@ -109,6 +108,19 @@ public class NullSpan implements Span {
   @Override
   public String getProcessId() {
     return null;
+  }
+
+  @Override
+  public void setProcessId(String id) {
+  }
+
+  @Override
+  public long[] getParents() {
+    return new long[0];
+  }
+
+  @Override
+  public void setParents(long[] parents) {
   }
 
   @Override

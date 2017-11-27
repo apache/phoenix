@@ -167,8 +167,9 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(schema).build());
-        admin.createTable(new HTableDescriptor(fullTablename)
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
+        HTableDescriptor htd = new HTableDescriptor(fullTablename);
+        htd.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+        admin.createTable(htd);
         Put put = new Put(PVarchar.INSTANCE.toBytes(fullTablename));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);

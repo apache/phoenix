@@ -77,6 +77,12 @@ public class TraceSpanReceiverTest {
 
   private Span getSpan(){
     // Spans with Trace Id as 0 will be rejected (See PHOENIX-3767 for details)
-    return new MilliSpan("test span", 1, 1 , 2, "pid");
+    return new MilliSpan.Builder()
+            .description("test span")
+            .traceId(1L)
+            .parents(new long[]{1})
+            .spanId(2L)
+            .processId("pid")
+            .build();
   }
 }

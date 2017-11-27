@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.13.0-HBase-1.2</version>
+    <version>4.13.0-cdh5.11.2</version>
   </parent>
   <artifactId>phoenix-client</artifactId>
   <name>Phoenix Client</name>
@@ -129,6 +129,8 @@
                 <excludes>
                   <exclude>org.apache.phoenix:phoenix-client</exclude>
                   <exclude>xom:xom</exclude>
+                  <exclude>log4j:log4j</exclude>
+                  <exclude>org.slf4j:slf4j-log4j12</exclude>
                 </excludes>
               </artifactSet>
               <filters>

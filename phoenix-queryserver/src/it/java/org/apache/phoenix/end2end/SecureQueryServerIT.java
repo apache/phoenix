@@ -172,7 +172,7 @@ public class SecureQueryServerIT {
         ensureIsEmptyDirectory(KEYTAB_DIR);
         KEYTAB = new File(KEYTAB_DIR, "test.keytab");
         // Start a MiniKDC
-        KDC = UTIL.setupMiniKdc(KEYTAB);
+        KDC = new KdcUtil().setupMiniKdc(KEYTAB);
         // Create a service principal and spnego principal in one keytab
         // NB. Due to some apparent limitations between HDFS and HBase in the same JVM, trying to
         //     use separate identies for HBase and HDFS results in a GSS initiate error. The quick

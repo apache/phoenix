@@ -44,12 +44,14 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.After;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 /**
  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
  */
+@Ignore("This test is flaky, disabled waiting for PHOENIX-4389")
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemTablePermissionsIT {
     private static String SUPERUSER;

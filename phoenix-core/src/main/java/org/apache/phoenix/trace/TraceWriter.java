@@ -175,7 +175,7 @@ public class TraceWriter {
             values.add(span.getSpanId());
 
             keys.add(PARENT.traceName);
-            values.add(span.getParentId());
+            values.add( (span.getParents().length > 0 ? span.getParents()[0] : TracingUtils.ROOT_SPAN_ID ));
 
             keys.add(START.traceName);
             values.add(span.getStartTimeMillis());
@@ -196,8 +196,8 @@ public class TraceWriter {
             // add the annotations. We assume they are serialized as strings and integers, but that
             // can
             // change in the future
-            Map<byte[], byte[]> annotations = span.getKVAnnotations();
-            for (Map.Entry<byte[], byte[]> annotation : annotations.entrySet()) {
+            Map<String, String> annotations = span.getKVAnnotations();
+            for (Map.Entry<String, String> annotation : annotations.entrySet()) {
                 Pair<String, String> val =
                         TracingUtils.readAnnotation(annotation.getKey(), annotation.getValue());
                 addDynamicEntry(keys, values, variableValues, ANNOTATION_FAMILY, val.getFirst(),

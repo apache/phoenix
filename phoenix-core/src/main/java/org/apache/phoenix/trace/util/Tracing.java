@@ -36,6 +36,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.TraceSpanReceiver;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.Span;
@@ -174,8 +175,10 @@ public class Tracing {
     }
 
     public static String getSpanName(Span span) {
-        return Tracing.TRACE_METRIC_PREFIX + span.getTraceId() + SEPARATOR + span.getParentId()
-                + SEPARATOR + span.getSpanId();
+      long[] parents = span.getParents();
+      return Tracing.TRACE_METRIC_PREFIX + span.getTraceId() + SEPARATOR +
+          (parents.length > 0 ? parents[0] : TracingUtils.ROOT_SPAN_ID ) + SEPARATOR +
+          span.getSpanId();
     }
 
     public static Span child(Span s, String d) {

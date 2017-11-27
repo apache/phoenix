@@ -18,7 +18,7 @@ package org.apache.phoenix.hbase.index.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.metrics2.MetricHistogram;
-import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 
 /**
  * Implementation for tracking Phoenix Indexer metrics.
@@ -26,19 +26,19 @@ import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsIndexerSource {
 
     private final MetricHistogram indexPrepareTimeHisto;
-    private final MutableCounterLong slowIndexPrepareCalls;
+    private final MutableFastCounter slowIndexPrepareCalls;
     private final MetricHistogram indexWriteTimeHisto;
-    private final MutableCounterLong slowIndexWriteCalls;
+    private final MutableFastCounter slowIndexWriteCalls;
     private final MetricHistogram preWALRestoreTimeHisto;
-    private final MutableCounterLong slowPreWALRestoreCalls;
+    private final MutableFastCounter slowPreWALRestoreCalls;
     private final MetricHistogram postPutTimeHisto;
-    private final MutableCounterLong slowPostPutCalls;
+    private final MutableFastCounter slowPostPutCalls;
     private final MetricHistogram postDeleteTimeHisto;
-    private final MutableCounterLong slowPostDeleteCalls;
+    private final MutableFastCounter slowPostDeleteCalls;
     private final MetricHistogram postOpenTimeHisto;
-    private final MutableCounterLong slowPostOpenCalls;
+    private final MutableFastCounter slowPostOpenCalls;
     private final MetricHistogram duplicateKeyTimeHisto;
-    private final MutableCounterLong slowDuplicateKeyCalls;
+    private final MutableFastCounter slowDuplicateKeyCalls;
 
     public MetricsIndexerSourceImpl() {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
