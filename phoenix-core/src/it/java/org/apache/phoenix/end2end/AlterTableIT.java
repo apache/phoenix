@@ -1081,7 +1081,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 			} catch (SQLException e) {
 				assertEquals(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED.getErrorCode(), e.getErrorCode());
 			}
-			// altering a table to be transactional  should fail if transactions are disabled
+			// altering a table to be transactional should fail if transactions are disabled
 			conn.createStatement().execute("CREATE TABLE " + dataTableFullName + "(k INTEGER PRIMARY KEY, v VARCHAR)");
 			try {
 				conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET TRANSACTIONAL=true");

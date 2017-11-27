@@ -32,6 +32,7 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -392,7 +393,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+    public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata,
+            String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties,
+            PTable table) throws SQLException {
+        return updateIndexState(tableMetadata,parentTableName);
+    }
+
+    @Override
+    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
         return null;
     }
 

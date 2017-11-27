@@ -136,7 +136,13 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException {
         return getDelegate().updateIndexState(tableMetadata, parentTableName);
     }
-    
+
+    @Override public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata,
+            String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties,
+            PTable table) throws SQLException {
+        return getDelegate().updateIndexState(tableMetadata, parentTableName, stmtProperties,table);
+    }
+
     @Override
     public void init(String url, Properties props) throws SQLException {
         getDelegate().init(url, props);

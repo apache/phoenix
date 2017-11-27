@@ -128,13 +128,16 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -229,6 +232,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -2981,6 +2985,21 @@ public class MetaDataClient {
         return mutationCode;
     }
 
+    private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, MetaPropertiesEvaluated metaPropertiesEvaluated)
+            throws SQLException {
+        return incrementTableSeqNum(table, expectedType, columnCountDelta,
+                metaPropertiesEvaluated.getIsTransactional(),
+                metaPropertiesEvaluated.getUpdateCacheFrequency(),
+                metaPropertiesEvaluated.getIsImmutableRows(),
+                metaPropertiesEvaluated.getDisableWAL(),
+                metaPropertiesEvaluated.getMultiTenant(),
+                metaPropertiesEvaluated.getStoreNulls(),
+                metaPropertiesEvaluated.getGuidePostWidth(),
+                metaPropertiesEvaluated.getAppendOnlySchema(),
+                metaPropertiesEvaluated.getImmutableStorageScheme(),
+                metaPropertiesEvaluated.getUseStatsForParallelization());
+    }
+
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional, Long updateCacheFrequency) throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L, null, null, null);
     }
@@ -3112,18 +3131,7 @@ public class MetaDataClient {
             PName tenantId = connection.getTenantId();
             String schemaName = table.getSchemaName().getString();
             String tableName = table.getTableName().getString();
-            Boolean isImmutableRowsProp = null;
-            Boolean multiTenantProp = null;
-            Boolean disableWALProp = null;
-            Boolean storeNullsProp = null;
-            Boolean isTransactionalProp = null;
-            Long updateCacheFrequencyProp = null;
-            Boolean appendOnlySchemaProp = null;
-            Long guidePostWidth = -1L;
-            ImmutableStorageScheme immutableStorageSchemeProp = null;
-            Boolean useStatsForParallelizationProp = null;
 
-            Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             List<ColumnDef> columnDefs = null;
             if (table.isAppendOnlySchema()) {
                 // only make the rpc if we are adding new columns
@@ -3159,48 +3167,14 @@ public class MetaDataClient {
             else {
                 columnDefs = origColumnDefs == null ? Collections.<ColumnDef>emptyList() : origColumnDefs;
             }
-            for (String family : stmtProperties.keySet()) {
-                List<Pair<String, Object>> origPropsList = stmtProperties.get(family);
-                List<Pair<String, Object>> propsList = Lists.newArrayListWithExpectedSize(origPropsList.size());
-                for (Pair<String, Object> prop : origPropsList) {
-                    String propName = prop.getFirst();
-                    if (TableProperty.isPhoenixTableProperty(propName)) {
-                        TableProperty tableProp = TableProperty.valueOf(propName);
-                        tableProp.validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
-                        Object value = tableProp.getValue(prop.getSecond());
-                        if (propName.equals(PTable.IS_IMMUTABLE_ROWS_PROP_NAME)) {
-                            isImmutableRowsProp = (Boolean)value;
-                        } else if (propName.equals(PhoenixDatabaseMetaData.MULTI_TENANT)) {
-                            multiTenantProp = (Boolean)value;
-                        } else if (propName.equals(DISABLE_WAL)) {
-                            disableWALProp = (Boolean)value;
-                        } else if (propName.equals(STORE_NULLS)) {
-                            storeNullsProp = (Boolean)value;
-                        } else if (propName.equals(TRANSACTIONAL)) {
-                            isTransactionalProp = (Boolean)value;
-                        } else if (propName.equals(UPDATE_CACHE_FREQUENCY)) {
-                            updateCacheFrequencyProp = (Long)value;
-                        } else if (propName.equals(GUIDE_POSTS_WIDTH)) {
-                            guidePostWidth = (Long)value;
-                        } else if (propName.equals(APPEND_ONLY_SCHEMA)) {
-                            appendOnlySchemaProp = (Boolean) value;
-                        } else if (propName.equalsIgnoreCase(IMMUTABLE_STORAGE_SCHEME)) {
-                            immutableStorageSchemeProp = (ImmutableStorageScheme)value;
-                        } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
-                            useStatsForParallelizationProp = (Boolean)value;
-                        }
-                    }
-                    // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
-                    if (!removeTableProps || (!TableProperty.isPhoenixTableProperty(propName) && !MetaDataUtil.isHTableProperty(propName))) {
-                        propsList.add(prop);
-                    }
-                }
-                properties.put(family, propsList);
-            }
+
             boolean retried = false;
             boolean changingPhoenixTableProperty = false;
-            boolean nonTxToTx = false;
+            MetaProperties metaProperties = new MetaProperties();
             while (true) {
+                Map<String, List<Pair<String, Object>>> properties=new HashMap<>(stmtProperties.size());;
+                metaProperties = loadStmtProperties(stmtProperties,properties,table,removeTableProps);
+
                 ColumnResolver resolver = FromCompiler.getResolver(namedTableNode, connection);
                 table = resolver.getTables().get(0).getTable();
                 int nIndexes = table.getIndexes().size();
@@ -3227,109 +3201,12 @@ public class MetaDataClient {
                     .setColumnName(lastPK.getName().getString()).build().buildException();
                 }
 
-                Boolean isImmutableRows = null;
-                if (isImmutableRowsProp != null) {
-                    if (isImmutableRowsProp.booleanValue() != table.isImmutableRows()) {
-                    	if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
-                    		throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_IMMUTABLE_ROWS_PROPERTY)
-                    		.setSchemaName(schemaName).setTableName(tableName).build().buildException();
-                    	}
-                        isImmutableRows = isImmutableRowsProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-                boolean willBeImmutableRows = Boolean.TRUE.equals(isImmutableRows) || (isImmutableRows == null && table.isImmutableRows());
-                Boolean multiTenant = null;
-                if (multiTenantProp != null) {
-                    if (multiTenantProp.booleanValue() != table.isMultiTenant()) {
-                        multiTenant = multiTenantProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-                Boolean disableWAL = null;
-                if (disableWALProp != null) {
-                    if (disableWALProp.booleanValue() != table.isWALDisabled()) {
-                        disableWAL = disableWALProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-                Long updateCacheFrequency = null;
-                if (updateCacheFrequencyProp != null) {
-                    if (updateCacheFrequencyProp.longValue() != table.getUpdateCacheFrequency()) {
-                        updateCacheFrequency = updateCacheFrequencyProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-                Boolean appendOnlySchema = null;
-                if (appendOnlySchemaProp !=null) {
-                    if (appendOnlySchemaProp != table.isAppendOnlySchema()) {
-                        appendOnlySchema  = appendOnlySchemaProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-                ImmutableStorageScheme immutableStorageScheme = null;
-                if (immutableStorageSchemeProp!=null) {
-                    if (table.getImmutableStorageScheme() == ONE_CELL_PER_COLUMN || 
-                            immutableStorageSchemeProp == ONE_CELL_PER_COLUMN) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE)
-                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-                    }
-                    else if (immutableStorageSchemeProp != table.getImmutableStorageScheme()) {
-                        immutableStorageScheme = immutableStorageSchemeProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-            
-                if (guidePostWidth == null || guidePostWidth >= 0) {
-                    changingPhoenixTableProperty = true;
-                }
-                Boolean storeNulls = null;
-                if (storeNullsProp != null) {
-                    if (storeNullsProp.booleanValue() != table.getStoreNulls()) {
-                        storeNulls = storeNullsProp;
-                        changingPhoenixTableProperty = true;
-                    }
-                }
-                Boolean useStatsForParallelization = null;
-                if (useStatsForParallelizationProp != null
-                        && (table.useStatsForParallelization() == null
-                                || (useStatsForParallelizationProp.booleanValue() != table
-                                        .useStatsForParallelization()))) {
-                    useStatsForParallelization = useStatsForParallelizationProp;
-                    changingPhoenixTableProperty = true;
-                }
-                Boolean isTransactional = null;
-                if (isTransactionalProp != null) {
-                    if (isTransactionalProp.booleanValue() != table.isTransactional()) {
-                        isTransactional = isTransactionalProp;
-                        // We can only go one way: from non transactional to transactional
-                        // Going the other way would require rewriting the cell timestamps
-                        // and doing a major compaction to get rid of any Tephra specific
-                        // delete markers.
-                        if (!isTransactional) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
-                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-                        }
-                        // cannot create a transactional table if transactions are disabled
-                        boolean transactionsEnabled = connection.getQueryServices().getProps().getBoolean(
-                                QueryServices.TRANSACTIONS_ENABLED,
-                                QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
-                        if (!transactionsEnabled) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED)
-                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-                        }
-                        // cannot make a table transactional if it has a row timestamp column
-                        if (SchemaUtil.hasRowTimestampColumn(table)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP)
-                            .setSchemaName(schemaName).setTableName(tableName)
-                            .build().buildException();
-                        }
-                        changingPhoenixTableProperty = true;
-                        nonTxToTx = true;
-                    }
-                }
-                Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || nonTxToTx);
+                MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
+                changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
+                // If changing isImmutableRows to true or it's not being changed and is already true
+                boolean willBeImmutableRows = Boolean.TRUE.equals(metaPropertiesEvaluated.getIsImmutableRows()) || (metaPropertiesEvaluated.getIsImmutableRows() == null && table.isImmutableRows());
 
+                Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || metaProperties.getNonTxToTx());
                 int numPkColumnsAdded = 0;
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(numCols);
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
@@ -3446,7 +3323,7 @@ public class MetaDataClient {
                     // Check that HBase configured properly for mutable secondary indexing
                     // if we're changing from an immutable table to a mutable table and we
                     // have existing indexes.
-                    if (Boolean.FALSE.equals(isImmutableRows) && !table.getIndexes().isEmpty()) {
+                    if (Boolean.FALSE.equals(metaPropertiesEvaluated.getIsImmutableRows()) && !table.getIndexes().isEmpty()) {
                         int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
                         if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES)
@@ -3457,22 +3334,22 @@ public class MetaDataClient {
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
                     }
-                    if (Boolean.TRUE.equals(multiTenant)) {
-                        throwIfInsufficientColumns(schemaName, tableName, table.getPKColumns(), table.getBucketNum()!=null, multiTenant);
+                    if (Boolean.TRUE.equals(metaPropertiesEvaluated.getMultiTenant())) {
+                        throwIfInsufficientColumns(schemaName, tableName, table.getPKColumns(), table.getBucketNum()!=null, metaPropertiesEvaluated.getMultiTenant());
                     }
                 }
 
-                if (!table.getIndexes().isEmpty() && (numPkColumnsAdded>0 || nonTxToTx)) {
+                if (!table.getIndexes().isEmpty() && (numPkColumnsAdded>0 || metaProperties.getNonTxToTx())) {
                     for (PTable index : table.getIndexes()) {
-                        incrementTableSeqNum(index, index.getType(), numPkColumnsAdded, nonTxToTx ? Boolean.TRUE : null, updateCacheFrequency);
+                        incrementTableSeqNum(index, index.getType(), numPkColumnsAdded, metaProperties.getNonTxToTx() ? Boolean.TRUE : null, metaPropertiesEvaluated.getUpdateCacheFrequency());
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
                 
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
-                    incrementTableSeqNum(table, tableType, columnDefs.size(), isTransactional, updateCacheFrequency, isImmutableRows,
-                            disableWAL, multiTenant, storeNulls, guidePostWidth, appendOnlySchema, immutableStorageScheme, useStatsForParallelization);
+                    incrementTableSeqNum(table, tableType, columnDefs.size(), metaPropertiesEvaluated);
+
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
@@ -3542,10 +3419,10 @@ public class MetaDataClient {
                     // We could update the cache manually then too, it'd just be a pain.
                     String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
                     long resolvedTimeStamp = TransactionUtil.getResolvedTime(connection, result);
-                    if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && !nonTxToTx)) {
+                    if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && ! metaProperties.getNonTxToTx())) {
                         connection.addTable(result.getTable(), resolvedTimeStamp);
                         table = result.getTable();
-                    } else if (updateCacheFrequency != null) {
+                    } else if (metaPropertiesEvaluated.getUpdateCacheFrequency() != null) {
                         // Force removal from cache as the update cache frequency has changed
                         // Note that clients outside this JVM won't be affected.
                         connection.removeTable(tenantId, fullTableName, null, resolvedTimeStamp);
@@ -3553,7 +3430,7 @@ public class MetaDataClient {
                     // Delete rows in view index if we haven't dropped it already
                     // We only need to do this if the multiTenant transitioned to false
                     if (table.getType() == PTableType.TABLE
-                            && Boolean.FALSE.equals(multiTenant)
+                            && Boolean.FALSE.equals(metaPropertiesEvaluated.getMultiTenant())
                             && MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
                         connection.setAutoCommit(true);
                         MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(), table.isNamespaceMapped());
@@ -3915,9 +3792,19 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
             String dataTableName = statement.getTableName();
-            String schemaName = statement.getTable().getName().getSchemaName();
             String indexName = statement.getTable().getName().getTableName();
             boolean isAsync = statement.isAsync();
+            String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
+            PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
+            String schemaName = statement.getTable().getName().getSchemaName();
+            String tableName = table.getTableName().getString();
+
+            Map<String, List<Pair<String, Object>>> properties=new HashMap<>(statement.getProps().size());;
+            MetaProperties metaProperties = loadStmtProperties(statement.getProps(),properties,table,false);
+
+            MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
+            boolean changingPhoenixTableProperty= evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
+
             PIndexState newIndexState = statement.getIndexState();
             if (isAsync && newIndexState != PIndexState.REBUILD) { throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.ASYNC_NOT_ALLOWED)
@@ -3955,7 +3842,15 @@ public class MetaDataClient {
             List<Mutation> tableMetadata = connection.getMutationState().toMutations(timeStamp).next().getSecond();
             connection.rollback();
 
-            MetaDataMutationResult result = connection.getQueryServices().updateIndexState(tableMetadata, dataTableName);
+
+            if (changingPhoenixTableProperty) {
+                incrementTableSeqNum(table,statement.getTableType(), 0, metaPropertiesEvaluated);
+                tableMetadata.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
+                connection.rollback();
+            }
+
+            MetaDataMutationResult result = connection.getQueryServices().updateIndexState(tableMetadata, dataTableName, properties, table);
+
             MutationCode code = result.getMutationCode();
             if (code == MutationCode.TABLE_NOT_FOUND) {
                 throw new TableNotFoundException(schemaName,indexName);
@@ -4150,5 +4045,352 @@ public class MetaDataClient {
             connection.setSchema(useSchemaStatement.getSchemaName());
         }
         return new MutationState(0, 0, connection);
+    }
+
+    private MetaProperties loadStmtProperties(ListMultimap<String, Pair<String, Object>> stmtProperties, Map<String, List<Pair<String, Object>>> properties, PTable table, boolean removeTableProps)
+            throws SQLException {
+        MetaProperties metaProperties = new MetaProperties();
+        for (String family : stmtProperties.keySet()) {
+            List<Pair<String, Object>> origPropsList = stmtProperties.get(family);
+            List<Pair<String, Object>> propsList = Lists.newArrayListWithExpectedSize(origPropsList.size());
+            for (Pair<String, Object> prop : origPropsList) {
+                String propName = prop.getFirst();
+                if (TableProperty.isPhoenixTableProperty(propName)) {
+                    TableProperty tableProp = TableProperty.valueOf(propName);
+                    tableProp.validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
+                    Object value = tableProp.getValue(prop.getSecond());
+                    if (propName.equals(PTable.IS_IMMUTABLE_ROWS_PROP_NAME)) {
+                        metaProperties.setImmutableRowsProp((Boolean)value);
+                    } else if (propName.equals(PhoenixDatabaseMetaData.MULTI_TENANT)) {
+                        metaProperties.setMultiTenantProp((Boolean)value);
+                    } else if (propName.equals(DISABLE_WAL)) {
+                        metaProperties.setDisableWALProp((Boolean)value);
+                    } else if (propName.equals(STORE_NULLS)) {
+                        metaProperties.setStoreNullsProp((Boolean)value);
+                    } else if (propName.equals(TRANSACTIONAL)) {
+                        metaProperties.setIsTransactionalProp((Boolean)value);
+                    } else if (propName.equals(UPDATE_CACHE_FREQUENCY)) {
+                        metaProperties.setUpdateCacheFrequencyProp((Long)value);
+                    } else if (propName.equals(GUIDE_POSTS_WIDTH)) {
+                        metaProperties.setGuidePostWidth((Long)value);
+                    } else if (propName.equals(APPEND_ONLY_SCHEMA)) {
+                        metaProperties.setAppendOnlySchemaProp((Boolean) value);
+                    } else if (propName.equalsIgnoreCase(IMMUTABLE_STORAGE_SCHEME)) {
+                        metaProperties.setImmutableStorageSchemeProp((ImmutableStorageScheme)value);
+                    } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
+                        metaProperties.setUseStatsForParallelizationProp((Boolean)value);
+                    }
+                }
+                // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
+                if (!removeTableProps || (!TableProperty.isPhoenixTableProperty(propName) && !MetaDataUtil.isHTableProperty(propName))) {
+                    propsList.add(prop);
+                }
+            }
+            properties.put(family, propsList);
+        }
+        return metaProperties;
+    }
+
+    private boolean evaluateStmtProperties(MetaProperties metaProperties, MetaPropertiesEvaluated metaPropertiesEvaluated, PTable table, String schemaName, String tableName)
+            throws SQLException {
+        boolean changingPhoenixTableProperty = false;
+
+        if (metaProperties.getImmutableRowsProp() != null) {
+            if (metaProperties.getImmutableRowsProp().booleanValue() != table.isImmutableRows()) {
+                if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_IMMUTABLE_ROWS_PROPERTY)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                }
+                metaPropertiesEvaluated.setIsImmutableRows(metaProperties.getImmutableRowsProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getMultiTenantProp() != null) {
+            if (metaProperties.getMultiTenantProp().booleanValue() != table.isMultiTenant()) {
+                metaPropertiesEvaluated.setMultiTenant(metaProperties.getMultiTenantProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getDisableWALProp() != null) {
+            if (metaProperties.getDisableWALProp().booleanValue() != table.isWALDisabled()) {
+                metaPropertiesEvaluated.setDisableWAL(metaProperties.getDisableWALProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getUpdateCacheFrequencyProp() != null) {
+            if (metaProperties.getUpdateCacheFrequencyProp().longValue() != table.getUpdateCacheFrequency()) {
+                metaPropertiesEvaluated.setUpdateCacheFrequency(metaProperties.getUpdateCacheFrequencyProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getAppendOnlySchemaProp() !=null) {
+            if (metaProperties.getAppendOnlySchemaProp() != table.isAppendOnlySchema()) {
+                metaPropertiesEvaluated.setAppendOnlySchema(metaProperties.getAppendOnlySchemaProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getImmutableStorageSchemeProp()!=null) {
+            if (table.getImmutableStorageScheme() == ONE_CELL_PER_COLUMN ||
+                    metaProperties.getImmutableStorageSchemeProp() == ONE_CELL_PER_COLUMN) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE)
+                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+            }
+            else if (metaProperties.getImmutableStorageSchemeProp() != table.getImmutableStorageScheme()) {
+                metaPropertiesEvaluated.setImmutableStorageScheme(metaProperties.getImmutableStorageSchemeProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getGuidePostWidth() == null || metaProperties.getGuidePostWidth() >= 0) {
+            metaPropertiesEvaluated.setGuidePostWidth(metaProperties.getGuidePostWidth());
+            changingPhoenixTableProperty = true;
+        }
+
+        if (metaProperties.getStoreNullsProp() != null) {
+            if (metaProperties.getStoreNullsProp().booleanValue() != table.getStoreNulls()) {
+                metaPropertiesEvaluated.setStoreNulls(metaProperties.getStoreNullsProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
+        if (metaProperties.getUseStatsForParallelizationProp() != null
+                && (table.useStatsForParallelization() == null
+                || (metaProperties.getUseStatsForParallelizationProp().booleanValue() != table
+                .useStatsForParallelization()))) {
+            metaPropertiesEvaluated.setUseStatsForParallelization(metaProperties.getUseStatsForParallelizationProp());
+            changingPhoenixTableProperty = true;
+        }
+
+        if (metaProperties.getIsTransactionalProp() != null) {
+            if (metaProperties.getIsTransactionalProp().booleanValue() != table.isTransactional()) {
+                metaPropertiesEvaluated.setIsTransactional(metaProperties.getIsTransactionalProp());
+                // We can only go one way: from non transactional to transactional
+                // Going the other way would require rewriting the cell timestamps
+                // and doing a major compaction to get rid of any Tephra specific
+                // delete markers.
+                if (!metaPropertiesEvaluated.getIsTransactional()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                }
+                // cannot create a transactional table if transactions are disabled
+                boolean transactionsEnabled = connection.getQueryServices().getProps().getBoolean(
+                        QueryServices.TRANSACTIONS_ENABLED,
+                        QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+                if (!transactionsEnabled) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                }
+                // cannot make a table transactional if it has a row timestamp column
+                if (SchemaUtil.hasRowTimestampColumn(table)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP)
+                            .setSchemaName(schemaName).setTableName(tableName)
+                            .build().buildException();
+                }
+                changingPhoenixTableProperty = true;
+                metaProperties.setNonTxToTx(true);
+            }
+        }
+        return changingPhoenixTableProperty;
+    }
+
+    class MetaProperties{
+        private Boolean isImmutableRowsProp = null;
+        private Boolean multiTenantProp = null;
+        private Boolean disableWALProp = null;
+        private Boolean storeNullsProp = null;
+        private Boolean isTransactionalProp = null;
+        private Long updateCacheFrequencyProp = null;
+        private Boolean appendOnlySchemaProp = null;
+        private Long guidePostWidth = -1L;
+        private ImmutableStorageScheme immutableStorageSchemeProp = null;
+        private Boolean useStatsForParallelizationProp = null;
+        private boolean nonTxToTx = false;
+
+        public Boolean getImmutableRowsProp() {
+            return isImmutableRowsProp;
+        }
+
+        public void setImmutableRowsProp(Boolean isImmutableRowsProp) {
+            this.isImmutableRowsProp = isImmutableRowsProp;
+        }
+
+        public Boolean getMultiTenantProp() {
+            return multiTenantProp;
+        }
+
+        public void setMultiTenantProp(Boolean multiTenantProp) {
+            this.multiTenantProp = multiTenantProp;
+        }
+
+        public Boolean getDisableWALProp() {
+            return disableWALProp;
+        }
+
+        public void setDisableWALProp(Boolean disableWALProp) {
+            this.disableWALProp = disableWALProp;
+        }
+
+        public Boolean getStoreNullsProp() {
+            return storeNullsProp;
+        }
+
+        public void setStoreNullsProp(Boolean storeNullsProp) {
+            this.storeNullsProp = storeNullsProp;
+        }
+
+        public Boolean getIsTransactionalProp() {
+            return isTransactionalProp;
+        }
+
+        public void setIsTransactionalProp(Boolean isTransactionalProp) {
+            this.isTransactionalProp = isTransactionalProp;
+        }
+
+        public Long getUpdateCacheFrequencyProp() {
+            return updateCacheFrequencyProp;
+        }
+
+        public void setUpdateCacheFrequencyProp(Long updateCacheFrequencyProp) {
+            this.updateCacheFrequencyProp = updateCacheFrequencyProp;
+        }
+
+        public Boolean getAppendOnlySchemaProp() {
+            return appendOnlySchemaProp;
+        }
+
+        public void setAppendOnlySchemaProp(Boolean appendOnlySchemaProp) {
+            this.appendOnlySchemaProp = appendOnlySchemaProp;
+        }
+
+        public Long getGuidePostWidth() {
+            return guidePostWidth;
+        }
+
+        public void setGuidePostWidth(Long guidePostWidth) {
+            this.guidePostWidth = guidePostWidth;
+        }
+
+        public ImmutableStorageScheme getImmutableStorageSchemeProp() {
+            return immutableStorageSchemeProp;
+        }
+
+        public void setImmutableStorageSchemeProp(
+                ImmutableStorageScheme immutableStorageSchemeProp) {
+            this.immutableStorageSchemeProp = immutableStorageSchemeProp;
+        }
+
+        public Boolean getUseStatsForParallelizationProp() {
+            return useStatsForParallelizationProp;
+        }
+
+        public void setUseStatsForParallelizationProp(Boolean useStatsForParallelizationProp) {
+            this.useStatsForParallelizationProp = useStatsForParallelizationProp;
+        }
+
+        public boolean getNonTxToTx() {
+            return nonTxToTx;
+        }
+
+        public void setNonTxToTx(boolean nonTxToTx) {
+            this.nonTxToTx = nonTxToTx;
+        }
+    }
+
+    class MetaPropertiesEvaluated{
+        private Boolean isImmutableRows;
+        private Boolean multiTenant = null;
+        private Boolean disableWAL = null;
+        private Long updateCacheFrequency = null;
+        private Boolean appendOnlySchema = null;
+        private Long guidePostWidth = -1L;
+        private ImmutableStorageScheme immutableStorageScheme = null;
+        private Boolean storeNulls = null;
+        private Boolean useStatsForParallelization = null;
+        private Boolean isTransactional = null;
+
+        public Boolean getIsImmutableRows() {
+            return isImmutableRows;
+        }
+
+        public void setIsImmutableRows(Boolean isImmutableRows) {
+            this.isImmutableRows = isImmutableRows;
+        }
+
+        public Boolean getMultiTenant() {
+            return multiTenant;
+        }
+
+        public void setMultiTenant(Boolean multiTenant) {
+            this.multiTenant = multiTenant;
+        }
+
+        public Boolean getDisableWAL() {
+            return disableWAL;
+        }
+
+        public void setDisableWAL(Boolean disableWAL) {
+            this.disableWAL = disableWAL;
+        }
+
+        public Long getUpdateCacheFrequency() {
+            return updateCacheFrequency;
+        }
+
+        public void setUpdateCacheFrequency(Long updateCacheFrequency) {
+            this.updateCacheFrequency = updateCacheFrequency;
+        }
+
+        public Boolean getAppendOnlySchema() {
+            return appendOnlySchema;
+        }
+
+        public void setAppendOnlySchema(Boolean appendOnlySchema) {
+            this.appendOnlySchema = appendOnlySchema;
+        }
+
+        public Long getGuidePostWidth() {
+            return guidePostWidth;
+        }
+
+        public void setGuidePostWidth(Long guidePostWidth) {
+            this.guidePostWidth = guidePostWidth;
+        }
+
+        public ImmutableStorageScheme getImmutableStorageScheme() {
+            return immutableStorageScheme;
+        }
+
+        public void setImmutableStorageScheme(ImmutableStorageScheme immutableStorageScheme) {
+            this.immutableStorageScheme = immutableStorageScheme;
+        }
+
+        public Boolean getStoreNulls() {
+            return storeNulls;
+        }
+
+        public void setStoreNulls(Boolean storeNulls) {
+            this.storeNulls = storeNulls;
+        }
+
+        public Boolean getUseStatsForParallelization() {
+            return useStatsForParallelization;
+        }
+
+        public void setUseStatsForParallelization(Boolean useStatsForParallelization) {
+            this.useStatsForParallelization = useStatsForParallelization;
+        }
+
+        public Boolean getIsTransactional() {
+            return isTransactional;
+        }
+
+        public void setIsTransactional(Boolean isTransactional) {
+            this.isTransactional = isTransactional;
+        }
     }
 }

@@ -102,6 +102,7 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
@@ -1730,7 +1731,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         Set<TableDescriptor> tableDescriptors = Collections.emptySet();
         Set<TableDescriptor> origTableDescriptors = Collections.emptySet();
         boolean nonTxToTx = false;
-        Pair<TableDescriptor,TableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, families, tableProps);
+        Pair<TableDescriptor,TableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
         TableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
         TableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
         if (tableDescriptor != null) {
@@ -1964,7 +1965,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private Pair<TableDescriptor, TableDescriptor> separateAndValidateProperties(PTable table,
             Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded,
-            List<Pair<byte[], Map<String, Object>>> families, Map<String, Object> tableProps) throws SQLException {
+             Map<String, Object> tableProps) throws SQLException {
         Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(properties.size());
         Map<String,Object> commonFamilyProps = new HashMap<>();
         boolean addingColumns = colFamiliesForPColumnsToBeAdded != null && !colFamiliesForPColumnsToBeAdded.isEmpty();
@@ -3622,6 +3623,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return rpcCallback.get();
             }
         });
+    }
+
+    @Override
+    public MetaDataMutationResult updateIndexState(final List<Mutation> tableMetaData, String parentTableName, Map<String, List<Pair<String,Object>>> stmtProperties,  PTable table) throws SQLException {
+        if(stmtProperties==null) return updateIndexState(tableMetaData,parentTableName);
+
+        Map<String, Object> tableProps = new HashMap<String, Object>();
+        Pair<TableDescriptor,TableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, new HashSet<String>(), tableProps);
+        TableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
+        TableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
+        Set<TableDescriptor> tableDescriptors = Collections.emptySet();
+        Set<TableDescriptor> origTableDescriptors = Collections.emptySet();
+        if (tableDescriptor != null) {
+            tableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
+            origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
+            tableDescriptors.add(tableDescriptor);
+            origTableDescriptors.add(origTableDescriptor);
+        }
+        sendHBaseMetaData(tableDescriptors, true);
+        return updateIndexState(tableMetaData,parentTableName);
     }
 
     @Override
