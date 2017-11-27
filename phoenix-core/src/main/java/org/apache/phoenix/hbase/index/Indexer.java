@@ -208,8 +208,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           // make sure the right version <-> combinations are allowed.
           String errormsg = Indexer.validateVersion(env.getHBaseVersion(), env.getConfiguration());
           if (errormsg != null) {
-            IOException ioe = new IOException(errormsg);
-            throw ioe;
+              throw new RuntimeException(errormsg);
           }
         }
     

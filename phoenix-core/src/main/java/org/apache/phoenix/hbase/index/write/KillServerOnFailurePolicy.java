@@ -21,10 +21,10 @@ import java.io.IOException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 import com.google.common.collect.Multimap;
@@ -35,17 +35,15 @@ import com.google.common.collect.Multimap;
 public class KillServerOnFailurePolicy implements IndexFailurePolicy {
 
   private static final Log LOG = LogFactory.getLog(KillServerOnFailurePolicy.class);
-  private Abortable abortable;
   private Stoppable stoppable;
 
   @Override
   public void setup(Stoppable parent, RegionCoprocessorEnvironment env) {
-    setup(parent, env.getRegionServerServices());
+    setup(parent);
   }
 
-  public void setup(Stoppable parent, Abortable abort) {
+  public void setup(Stoppable parent) {
     this.stoppable = parent;
-    this.abortable = abort;
   }
 
   @Override
@@ -67,14 +65,7 @@ public class KillServerOnFailurePolicy implements IndexFailurePolicy {
     String msg =
         "Could not update the index table, killing server region because couldn't write to an index table";
     LOG.error(msg, cause);
-    try {
-      this.abortable.abort(msg, cause);
-    } catch (Exception e) {
-      LOG.fatal("Couldn't abort this server to preserve index writes, "
-          + "attempting to hard kill the server");
-      System.exit(1);
-    }
-
+    throw new IndexBuildingFailureException(msg,cause);
   }
 
 }
