@@ -148,10 +148,10 @@ public class MutableIndexFailureIT extends BaseTest {
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         indexRebuildTaskRegionEnvironment =
-                (RegionCoprocessorEnvironment) getUtility()
+                 getUtility()
                         .getRSForFirstRegionInTable(
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
-                        .getOnlineRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(MetaDataRegionObserver.class.getName());
         MetaDataRegionObserver.initRebuildIndexConnectionProps(

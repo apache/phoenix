@@ -79,7 +79,12 @@ public class IndexMemStore implements KeyValueStore {
   private CellComparator comparator;
 
   public IndexMemStore() {
-    this(CellComparatorImpl.COMPARATOR);
+    this(new CellComparatorImpl(){
+        @Override
+        public int compare(Cell a, Cell b) {
+            return super.compare(a, b, true);
+        }
+    });
   }
 
   /**

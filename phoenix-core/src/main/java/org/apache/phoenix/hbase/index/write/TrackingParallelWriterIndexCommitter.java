@@ -189,8 +189,9 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 }
 
                 private void throwFailureIfDone() throws SingleIndexWriteFailureException {
-                    if (stopped.isStopped() || env.getConnection() == null || env.getConnection().isClosed()
-                            || env.getConnection().isAborted()
+                    if (stopped.isStopped()
+                            || (env != null && (env.getConnection() == null || env.getConnection().isClosed()
+                            || env.getConnection().isAborted()))
                             || Thread.currentThread().isInterrupted()) { throw new SingleIndexWriteFailureException(
                                     "Pool closed, not attempting to write to the index!", null); }
 

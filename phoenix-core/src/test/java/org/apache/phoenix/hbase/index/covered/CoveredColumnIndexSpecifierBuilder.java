@@ -28,10 +28,11 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.hbase.index.Indexer;
 
 /**
- * Helper to build the configuration for the {@link NonTxIndexBuilder}.
+ * Helper to build the configuration for the {@link NonTxIndexker}.
  * <p>
  * This class is NOT thread-safe; all concurrent access must be managed externally.
  */
@@ -135,7 +136,9 @@ public class CoveredColumnIndexSpecifierBuilder {
     // add the codec for the index to the map of options
     Map<String, String> opts = this.convertToMap();
     opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, clazz.getName());
-   return Indexer.enableIndexing(desc, NonTxIndexBuilder.class, opts, Coprocessor.PRIORITY_USER);
+        TableDescriptorBuilder newBuilder = TableDescriptorBuilder.newBuilder(desc);
+        Indexer.enableIndexing(newBuilder, NonTxIndexBuilder.class, opts, Coprocessor.PRIORITY_USER);
+        return newBuilder.build();
   }
 
   public static List<ColumnGroup> getColumns(Configuration conf) {

@@ -19,6 +19,7 @@ package org.apache.phoenix.rpc;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.ipc.BalancedQueueRpcExecutor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcScheduler;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
@@ -28,11 +29,13 @@ import org.apache.hadoop.hbase.ipc.RpcScheduler;
 import org.mockito.Mockito;
 
 public class TestPhoenixIndexRpcSchedulerFactory extends PhoenixRpcSchedulerFactory {
-    
+    private static Abortable abortable = new AbortServer();
+    private static final Configuration conf = HBaseConfiguration.create();
+    private static PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
     private static RpcExecutor indexRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-index-queue", 30, 1,
-            300));
+            qosFunction,conf,abortable));
     private static RpcExecutor metadataRpcExecutor = Mockito.spy(new BalancedQueueRpcExecutor("test-metataqueue", 30,
-            1, 300));
+            1, qosFunction,conf,abortable));
 
     @Override
     public RpcScheduler create(Configuration conf, PriorityFunction priorityFunction, Abortable abortable) {
@@ -45,6 +48,20 @@ public class TestPhoenixIndexRpcSchedulerFactory extends PhoenixRpcSchedulerFact
     @Override
     public RpcScheduler create(Configuration configuration, PriorityFunction priorityFunction) {
         return create(configuration, priorityFunction, null);
+    }
+    
+    private static class AbortServer implements Abortable {
+        private boolean aborted = false;
+
+        @Override
+        public void abort(String why, Throwable e) {
+            aborted = true;
+        }
+
+        @Override
+        public boolean isAborted() {
+            return aborted;
+        }
     }
     
     public static RpcExecutor getIndexRpcExecutor() {

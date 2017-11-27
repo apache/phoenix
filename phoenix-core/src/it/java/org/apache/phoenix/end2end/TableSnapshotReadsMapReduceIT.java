@@ -38,8 +38,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.SnapshotDescription;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -200,7 +200,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     // call flush to create new files in the region
     admin.flush(TableName.valueOf(tableName));
 
-    List<HBaseProtos.SnapshotDescription> snapshots = admin.listSnapshots();
+    List<SnapshotDescription> snapshots = admin.listSnapshots();
     Assert.assertEquals(tableName, snapshots.get(0).getTable());
 
     // upsert data after snapshot

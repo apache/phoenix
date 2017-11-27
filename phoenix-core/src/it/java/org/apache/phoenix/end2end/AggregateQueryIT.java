@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.ByteUtil;
@@ -105,7 +104,6 @@ public class AggregateQueryIT extends BaseQueryIT {
             
             TableName tn =TableName.valueOf(tableName);
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableNameBytes);
             Configuration configuration = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
             org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(configuration);
             ((ClusterConnection)hbaseConn).clearRegionCache(TableName.valueOf(tableName));

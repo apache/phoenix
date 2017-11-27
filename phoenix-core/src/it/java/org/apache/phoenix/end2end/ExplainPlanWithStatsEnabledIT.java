@@ -30,7 +30,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -867,10 +868,10 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         createTestTable(getUrl(), ddl, null, null);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // split such that some data for view2 resides on region of view1
-            try (HBaseAdmin admin =
+            try (Admin admin =
                     conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
                 byte[] splitKey = Bytes.toBytes("00Dabcdetenant200B");
-                admin.split(Bytes.toBytes(multiTenantTable), splitKey);
+                admin.split(TableName.valueOf(multiTenantTable), splitKey);
             }
 
             /**

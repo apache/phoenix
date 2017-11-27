@@ -67,15 +67,14 @@ public class TestParalleIndexWriter {
     FakeTableFactory factory = new FakeTableFactory(
         Collections.<ImmutableBytesPtr, Table> emptyMap());
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    Abortable mockAbort = Mockito.mock(Abortable.class);
     Stoppable mockStop = Mockito.mock(Stoppable.class);
     // create a simple writer
-    writer.setup(factory, exec, mockAbort, mockStop,e);
+    writer.setup(factory, exec, mockStop,e);
     // stop the writer
     writer.stop(this.test.getTableNameString() + " finished");
     assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
     assertTrue("ExectorService isn't terminated after writer#stop!", exec.isShutdown());
-    Mockito.verifyZeroInteractions(mockAbort, mockStop);
+    Mockito.verifyZeroInteractions(mockStop);
   }
 
   @SuppressWarnings({ "unchecked", "deprecation" })
@@ -102,7 +101,7 @@ public class TestParalleIndexWriter {
 
     Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
-    Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
+    Mockito.doAnswer(new Answer<Void>() {
 
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -110,14 +109,14 @@ public class TestParalleIndexWriter {
         completed[0] = true;
         return null;
       }
-    });
+    }).when(table).batch(Mockito.anyList(),Mockito.any());
     Mockito.when(table.getName()).thenReturn(org.apache.hadoop.hbase.TableName.valueOf(test.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(tableName, table);
 
     // setup the writer and failure policy
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    writer.setup(factory, exec, abort, stop, e);
+    writer.setup(factory, exec, stop, e);
     writer.write(indexUpdates, true);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);

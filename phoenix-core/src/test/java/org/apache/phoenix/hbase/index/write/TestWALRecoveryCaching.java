@@ -47,9 +47,11 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -203,7 +205,7 @@ public class TestWALRecoveryCaching {
 
     // kill the server where the tables live - this should trigger distributed log splitting
     // find the regionserver that matches the passed server
-    List<Region> online = new ArrayList<Region>();
+    List<HRegion> online = new ArrayList<HRegion>();
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
       testTable.getTableName()));
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,

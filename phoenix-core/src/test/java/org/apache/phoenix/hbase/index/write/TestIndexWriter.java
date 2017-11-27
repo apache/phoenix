@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -111,24 +112,23 @@ public class TestIndexWriter {
 
     Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
-    Mockito.when(table.batch(Mockito.anyList(), Mockito.anyList())).thenAnswer(new Answer<Void>() {
-
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        // just keep track that it was called
-        completed[0] = true;
-        return null;
-      }
-    });
+        Mockito.doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                // just keep track that it was called
+                completed[0] = true;
+                return null;
+            }
+        }).when(table).batch(Mockito.anyList(), Mockito.any());
     Mockito.when(table.getName()).thenReturn(TableName.valueOf(testName.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // setup the writer and failure policy
     TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    committer.setup(factory, exec, abort, stop, e);
+    committer.setup(factory, exec, stop, e);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
-    policy.setup(stop, abort);
+    policy.setup(stop, e);
     IndexWriter writer = new IndexWriter(committer, policy);
     writer.write(indexUpdates);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
@@ -163,21 +163,21 @@ public class TestIndexWriter {
     final CountDownLatch writeStartedLatch = new CountDownLatch(1);
     // latch never gets counted down, so we wait forever
     final CountDownLatch waitOnAbortedLatch = new CountDownLatch(1);
-    Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        LOG.info("Write started");
-        writeStartedLatch.countDown();
-        // when we interrupt the thread for shutdown, we should see this throw an interrupt too
-        try {
-        waitOnAbortedLatch.await();
-        } catch (InterruptedException e) {
-          LOG.info("Correctly interrupted while writing!");
-          throw e;
-        }
-        return null;
-      }
-    });
+        Mockito.doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                LOG.info("Write started");
+                writeStartedLatch.countDown();
+                // when we interrupt the thread for shutdown, we should see this throw an interrupt too
+                try {
+                    waitOnAbortedLatch.await();
+                } catch (InterruptedException e) {
+                    LOG.info("Correctly interrupted while writing!");
+                    throw e;
+                }
+                return null;
+            }
+        }).when(table).batch(Mockito.anyListOf(Row.class), Mockito.any());
     // add the tables to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
@@ -189,9 +189,9 @@ public class TestIndexWriter {
 
     // setup the writer
     TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    committer.setup(factory, exec, abort, stop, e );
+    committer.setup(factory, exec, stop, e );
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
-    policy.setup(stop, abort);
+    policy.setup(stop, e);
     final IndexWriter writer = new IndexWriter(committer, policy);
 
     final boolean[] failedWrite = new boolean[] { false };

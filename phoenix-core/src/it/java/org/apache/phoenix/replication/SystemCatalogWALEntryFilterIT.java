@@ -17,14 +17,23 @@
  */
 package org.apache.phoenix.replication;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.Properties;
+import java.util.UUID;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WAL;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -38,11 +47,6 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
 
 
 public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
@@ -112,7 +116,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   public void testOtherTablesAutoPass() throws Exception {
     //Cell is nonsense but we should auto pass because the table name's not System.Catalog
     WAL.Entry entry = new WAL.Entry(new WALKey(REGION,
-        TableName.valueOf(TestUtil.ENTITY_HISTORY_TABLE_NAME)), new WALEdit());
+        TableName.valueOf(TestUtil.ENTITY_HISTORY_TABLE_NAME), System.currentTimeMillis()), new WALEdit());
     entry.getEdit().add(CellUtil.createCell(Bytes.toBytes("foo")));
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
     Assert.assertEquals(1, filter.filter(entry).getEdit().size());

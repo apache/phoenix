@@ -96,10 +96,10 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(WAIT_AFTER_DISABLED));
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
         indexRebuildTaskRegionEnvironment =
-                (RegionCoprocessorEnvironment) getUtility()
+               getUtility()
                         .getRSForFirstRegionInTable(
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
-                        .getOnlineRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(MetaDataRegionObserver.class.getName());
         MetaDataRegionObserver.initRebuildIndexConnectionProps(

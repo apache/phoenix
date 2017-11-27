@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.covered.data;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -38,7 +39,12 @@ public class TestIndexMemStore {
 
   @Test
   public void testCorrectOverwritting() throws Exception {
-    IndexMemStore store = new IndexMemStore(CellComparatorImpl.COMPARATOR);
+    IndexMemStore store = new IndexMemStore(new CellComparatorImpl(){
+        @Override
+        public int compare(Cell a, Cell b) {
+            return super.compare(a, b, true);
+        }
+    });
     long ts = 10;
     KeyValue kv = new KeyValue(row, family, qual, ts, Type.Put, val);
     kv.setSequenceId(2);

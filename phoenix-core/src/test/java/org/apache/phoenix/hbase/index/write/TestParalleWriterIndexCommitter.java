@@ -29,7 +29,6 @@ import java.util.concurrent.Executors;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -38,7 +37,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.IndexTableName;
-import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Rule;
@@ -63,27 +61,25 @@ public class TestParalleWriterIndexCommitter {
     FakeTableFactory factory = new FakeTableFactory(
         Collections.<ImmutableBytesPtr, Table> emptyMap());
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    Abortable mockAbort = Mockito.mock(Abortable.class);
     Stoppable mockStop = Mockito.mock(Stoppable.class);
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     // create a simple writer
-    writer.setup(factory, exec, mockAbort, mockStop, e);
+    writer.setup(factory, exec, mockStop, e);
     // stop the writer
     writer.stop(this.test.getTableNameString() + " finished");
     assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
     assertTrue("ExectorService isn't terminated after writer#stop!", exec.isShutdown());
-    Mockito.verifyZeroInteractions(mockAbort, mockStop);
+    Mockito.verifyZeroInteractions(mockStop);
   }
 
-  @SuppressWarnings({ "unchecked", "deprecation" })
+  @SuppressWarnings({ "unchecked"})
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
     LOG.info("Starting " + test.getTableNameString());
     LOG.info("Current thread is interrupted: " + Thread.interrupted());
-    Abortable abort = new StubAbortable();
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
@@ -103,22 +99,21 @@ public class TestParalleWriterIndexCommitter {
 
     Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
-    Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
-
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        // just keep track that it was called
-        completed[0] = true;
-        return null;
-      }
-    });
-    Mockito.when(table.getName()).thenReturn(org.apache.hadoop.hbase.TableName.valueOf(test.getTableName()));
+        Mockito.doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                // just keep track that it was called
+                completed[0] = true;
+                return null;
+            }
+        }).when(table).batch(Mockito.anyList(), Mockito.any());
+        Mockito.when(table.getName()).thenReturn(org.apache.hadoop.hbase.TableName.valueOf(test.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(tableName, table);
 
     // setup the writer and failure policy
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    writer.setup(factory, exec, abort, stop, e);
+    writer.setup(factory, exec, stop, e);
     writer.write(indexUpdates, true);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);

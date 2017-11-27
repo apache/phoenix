@@ -33,13 +33,11 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -182,8 +180,8 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
 	
 	public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
-        public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
-                final Durability durability) throws HBaseIOException {
+        public void prePut(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Put put,
+                org.apache.hadoop.hbase.wal.WALEdit edit, Durability durability) throws java.io.IOException {
             if (shouldFailUpsert(c, put)) {
                 // throwing anything other than instances of IOException result
                 // in this coprocessor being unloaded

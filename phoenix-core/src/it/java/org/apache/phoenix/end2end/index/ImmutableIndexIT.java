@@ -40,13 +40,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
@@ -298,11 +295,9 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     // used to create an index while a batch of rows are being written
     public static class CreateIndexRegionObserver extends SimpleRegionObserver {
         @Override
-        public void postPut(ObserverContext<RegionCoprocessorEnvironment> c,
-                Put put, WALEdit edit, final Durability durability)
-                        throws HBaseIOException {
-            String tableName = c.getEnvironment().getRegion().getRegionInfo()
-                    .getTable().getNameAsString();
+        public void postPut(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+                Put put, org.apache.hadoop.hbase.wal.WALEdit edit, Durability durability) throws java.io.IOException {
+            String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
             if (tableName.equalsIgnoreCase(TABLE_NAME)
                     // create the index after the second batch  
                     && Bytes.startsWith(put.getRow(), Bytes.toBytes("varchar200_upsert_select"))) {
