@@ -67,12 +67,11 @@
 
     <!-- Hadoop Versions -->
     <hbase.version>2.0.0-beta-1-SNAPSHOT</hbase.version>
-    <hadoop-two.version>2.7.1</hadoop-two.version>
+    <hadoop.version>3.0.0-beta1</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
     <hive.version>1.2.1</hive.version>
-    <hadoop.version>2.7.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
@@ -99,7 +98,7 @@
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.10.0</avatica.version>
-    <jettyVersion>8.1.7.v20120910</jettyVersion>
+    <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.13.0-incubating</tephra.version>
     <spark.version>2.0.2</spark.version>
     <scala.version>2.11.8</scala.version>
@@ -655,7 +654,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.xerial.snappy</groupId>
@@ -666,17 +665,17 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-annotations</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-core</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-minicluster</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
         <optional>true</optional>
         <scope>test</scope>
       </dependency>
@@ -685,39 +684,39 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-auth</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-common</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
         <type>test-jar</type> <!-- this does not work which is typical for maven.-->
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-minikdc</artifactId>
-        <version>${hadoop-two.version}</version>
+        <version>${hadoop.version}</version>
       </dependency>
 
       <!-- General Dependencies -->
@@ -944,6 +943,31 @@
         <groupId>com.salesforce.i18n</groupId>
         <artifactId>i18n-util</artifactId>
         <version>${i18n-util.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-http</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-security</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-server</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-servlet</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-webapp</artifactId>
+        <version>${jetty.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
