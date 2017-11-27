@@ -44,7 +44,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -53,8 +53,8 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.PhoenixMRJobUtil;
-import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil.MR_SCHEDULER_TYPE;
+import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.ZKBasedMasterElectionUtil;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONObject;
@@ -182,8 +182,8 @@ public class PhoenixMRJobSubmitter {
 
     public int scheduleIndexBuilds() throws Exception {
 
-        ZooKeeperWatcher zookeeperWatcher =
-                new ZooKeeperWatcher(conf, "phoenixAutomatedMRIndexBuild", null);
+        ZKWatcher zookeeperWatcher =
+                new ZKWatcher(conf, "phoenixAutomatedMRIndexBuild", null);
 
         if (!ZKBasedMasterElectionUtil.acquireLock(zookeeperWatcher, PHOENIX_LOCKS_PARENT,
             AUTO_INDEX_BUILD_LOCK_NAME)) {

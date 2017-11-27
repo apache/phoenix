@@ -79,11 +79,6 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
         return null;
     }
 
-    @Override
-    public byte[] getTableName() {
-        // TODO Auto-generated method stub
-        return null;
-    }
 
     @Override
     public Configuration getConfiguration() {
@@ -132,32 +127,7 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
         // TODO Auto-generated method stub
     }
 
-    @Override
-    public void setAutoFlush(boolean autoFlush) {
-        // TODO Auto-generated method stub
-    }
-
-    @Override
-    public boolean isAutoFlush() {
-        // TODO Auto-generated method stub
-        return false;
-    }
-
-    @Override
-    public long getWriteBufferSize() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
-
-    @Override
-    public void setWriteBufferSize(long writeBufferSize) throws IOException {
-        // TODO Auto-generated method stub
-    }
-
-    @Override
-    public void flushCommits() throws IOException {
-        // TODO Auto-generated method stub
-    }
+    
 
     @Override
     public void close() throws IOException {

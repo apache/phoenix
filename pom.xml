@@ -66,7 +66,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>2.0.0-alpha4</hbase.version>
+    <hbase.version>2.0.0-beta-1-SNAPSHOT</hbase.version>
     <hadoop-two.version>2.7.1</hadoop-two.version>
 
     <!-- Dependency versions -->
@@ -100,7 +100,7 @@
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.10.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
-    <tephra.version>0.13.0-incubating</tephra.version>
+    <tephra.version>0.14.0-incubating-SNAPSHOT</tephra.version>
     <spark.version>2.0.2</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>

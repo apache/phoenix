@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.Connection;
@@ -190,6 +191,16 @@ public class SnapshotScanner extends AbstractClientScanner {
 
     @Override
     public MetricRegistry getMetricRegistryForRegionServer() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Connection createConnection(Configuration conf) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ExtendedCellBuilder getCellBuilder() {
         throw new UnsupportedOperationException();
     }
     };

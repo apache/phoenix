@@ -46,7 +46,6 @@ import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.tephra.TxConstants;
-import org.apache.tephra.hbase.TransactionAwareHTable;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Message;
@@ -69,7 +68,8 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
 
         tephraTransactionContext = (TephraTransactionContext) ctx;
 
-        transactionAwareHTable = new TransactionAwareHTable(hTable, (pTable != null && pTable.isImmutableRows()) ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+        transactionAwareHTable = new TransactionAwareHTable(hTable, (pTable != null && pTable.isImmutableRows())
+                ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
 
         tephraTransactionContext.addTransactionAware(transactionAwareHTable);
 
@@ -98,10 +98,6 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
         return transactionAwareHTable.getScanner(scan);
     }
 
-    @Override
-    public byte[] getTableName() {
-        return transactionAwareHTable.getTableName();
-    }
 
     @Override
     public Configuration getConfiguration() {
@@ -142,31 +138,6 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     @Override
     public void delete(List<Delete> deletes) throws IOException {
         transactionAwareHTable.delete(deletes);
-    }
-
-    @Override
-    public void setAutoFlush(boolean autoFlush) {
-        transactionAwareHTable.setAutoFlush(autoFlush);
-    }
-
-    @Override
-    public boolean isAutoFlush() {
-        return transactionAwareHTable.isAutoFlush();
-    }
-
-    @Override
-    public long getWriteBufferSize() {
-        return transactionAwareHTable.getWriteBufferSize();
-    }
-
-    @Override
-    public void setWriteBufferSize(long writeBufferSize) throws IOException {
-        transactionAwareHTable.setWriteBufferSize(writeBufferSize);
-    }
-
-    @Override
-    public void flushCommits() throws IOException {
-        transactionAwareHTable.flushCommits();
     }
 
     @Override
@@ -333,7 +304,7 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
             byte[] value, RowMutations mutation) throws IOException {
-        return transactionAwareHTable.checkAndMutate(row, family, qualifier, op, value, mutations);
+        return transactionAwareHTable.checkAndMutate(row, family, qualifier, op, value, mutation);
     }
 
     @Override
@@ -353,7 +324,7 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
 
     @Override
     public void setWriteRpcTimeout(int writeRpcTimeout) {
-        return transactionAwareHTable.setWriteRpcTimeout(writeRpcTimeout);
+        transactionAwareHTable.setWriteRpcTimeout(writeRpcTimeout);
     }
 
     @Override
@@ -380,4 +351,5 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     public long getOperationTimeout(TimeUnit unit) {
         return transactionAwareHTable.getOperationTimeout(unit);
     }
+
 }

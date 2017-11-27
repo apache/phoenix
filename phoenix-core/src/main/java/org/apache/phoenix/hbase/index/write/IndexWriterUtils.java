@@ -27,12 +27,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.CoprocessorHConnection;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
-import org.apache.phoenix.hbase.index.table.CoprocessorHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -93,14 +89,7 @@ public class IndexWriterUtils {
                     IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
         LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
         IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
-        if (env instanceof RegionCoprocessorEnvironment) {
-            RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) env;
-            RegionServerServices services =e.getRegionServerServices();
-            if (services instanceof HRegionServer) {
-                return new CoprocessorHConnectionTableFactory(conf, (HRegionServer) services);
-            }
-        }
-        return new CoprocessorHTableFactory(env);
+        return new CoprocessorHConnectionTableFactory(conf, env);
     }
 
     /**
@@ -112,16 +101,16 @@ public class IndexWriterUtils {
         @GuardedBy("CoprocessorHConnectionTableFactory.this")
         private Connection connection;
         private final Configuration conf;
-        private final HRegionServer server;
+        private RegionCoprocessorEnvironment env;
 
-        CoprocessorHConnectionTableFactory(Configuration conf, HRegionServer server) {
+        CoprocessorHConnectionTableFactory(Configuration conf, RegionCoprocessorEnvironment env) {
             this.conf = conf;
-            this.server = server;
+            this.env = env;
         }
 
         private synchronized Connection getConnection(Configuration conf) throws IOException {
             if (connection == null || connection.isClosed()) {
-                connection = new CoprocessorHConnection(conf, server);
+                connection = env.createConnection(conf);
             }
             return connection;
         }
