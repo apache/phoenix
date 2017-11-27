@@ -328,11 +328,11 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
         conn1.commit();
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTableDescriptor tableDescriptor = admin.getTableDescriptor(physicalTableName);
-        tableDescriptor.addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
-            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null);
+        TableDescriptor tableDescriptor = admin.getDescriptor(physicalTableName);
+        tableDescriptor=TableDescriptorBuilder.newBuilder(tableDescriptor).addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
+            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null).build();
         admin.disableTable(physicalTableName);
-        admin.modifyTable(physicalTableName, tableDescriptor);
+        admin.modifyTable(tableDescriptor);
         admin.enableTable(physicalTableName);
         DeleyOpenRegionObserver.DELAY_OPEN = true;
         conn1.createStatement().execute(

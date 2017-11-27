@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.query;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
+import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
@@ -94,26 +94,30 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -435,10 +439,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
         Table htable = getTable(tableName);
         try {
-            return htable.getTableDescriptor();
+            return htable.getDescriptor();
         } catch (IOException e) {
             if(e instanceof org.apache.hadoop.hbase.TableNotFoundException
                     || e.getCause() instanceof org.apache.hadoop.hbase.TableNotFoundException) {
@@ -568,7 +572,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     HRegionLocation regionLocation = ((ClusterConnection)connection).getRegionLocation(
                             TableName.valueOf(tableName), currentKey, reload);
                     locations.add(regionLocation);
-                    currentKey = regionLocation.getRegionInfo().getEndKey();
+                    currentKey = regionLocation.getRegion().getEndKey();
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
@@ -700,30 +704,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
 
-    private HColumnDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
-        HColumnDescriptor columnDesc = new HColumnDescriptor(family.getFirst());
+    private ColumnFamilyDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
+        ColumnFamilyDescriptorBuilder columnDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(family.getFirst());
         if (tableType != PTableType.VIEW) {
             if(props.get(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB) != null){
-                columnDesc.setKeepDeletedCells(props.getBoolean(
-                        QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_KEEP_DELETED_CELLS));
+                columnDescBuilder.setKeepDeletedCells(props.getBoolean(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_KEEP_DELETED_CELLS) ? KeepDeletedCells.TRUE
+                                : KeepDeletedCells.FALSE);
             }
-            columnDesc.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
-            columnDesc.setBloomFilterType(BloomType.NONE);
+            columnDescBuilder.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
+            columnDescBuilder.setBloomFilterType(BloomType.NONE);
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
-                setHColumnDescriptorValue(columnDesc, key, value);
+                setHColumnDescriptorValue(columnDescBuilder, key, value);
             }
         }
-        return columnDesc;
+        return columnDescBuilder.build();
     }
 
     // Workaround HBASE-14737
-    private static void setHColumnDescriptorValue(HColumnDescriptor columnDesc, String key, Object value) {
+    private static void setHColumnDescriptorValue(ColumnFamilyDescriptorBuilder columnDescBuilder, String key, Object value) {
         if (HConstants.VERSIONS.equals(key)) {
-            columnDesc.setMaxVersions(getMaxVersion(value));
+            columnDescBuilder.setMaxVersions(getMaxVersion(value));
         } else {
-            columnDesc.setValue(key, value == null ? null : value.toString());
+            columnDescBuilder.setValue(key, value == null ? null : value.toString());
         }
     }
 
@@ -741,7 +746,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return Integer.parseInt(stringValue);
     }
 
-    private void modifyColumnFamilyDescriptor(HColumnDescriptor hcd, Map<String,Object> props) throws SQLException {
+    private void modifyColumnFamilyDescriptor(ColumnFamilyDescriptorBuilder hcd, Map<String,Object> props) throws SQLException {
         for (Entry<String, Object> entry : props.entrySet()) {
             String propName = entry.getKey();
             Object value = entry.getValue();
@@ -749,32 +754,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    private HTableDescriptor generateTableDescriptor(byte[] physicalTableName, HTableDescriptor existingDesc,
+    private TableDescriptorBuilder generateTableDescriptor(byte[] physicalTableName, TableDescriptor existingDesc,
             PTableType tableType, Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families,
             byte[][] splits, boolean isNamespaceMapped) throws SQLException {
         String defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);
-        HTableDescriptor tableDescriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc)
-        : new HTableDescriptor(physicalTableName);
+        TableDescriptorBuilder tableDescriptorBuilder = (existingDesc != null) ?TableDescriptorBuilder.newBuilder(existingDesc)
+        : TableDescriptorBuilder.newBuilder(TableName.valueOf(physicalTableName));
         // By default, do not automatically rebuild/catch up an index on a write failure
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
             if (!TableProperty.isPhoenixTableProperty(key)) {
                 Object value = entry.getValue();
-                tableDescriptor.setValue(key, value == null ? null : value.toString());
+                tableDescriptorBuilder.setValue(key, value == null ? null : value.toString());
             }
         }
         if (families.isEmpty()) {
             if (tableType != PTableType.VIEW) {
                 byte[] defaultFamilyByes = defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
                 // Add dummy column family so we have key values for tables that
-                HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(new Pair<byte[],Map<String,Object>>(defaultFamilyByes,Collections.<String,Object>emptyMap()), tableType);
-                tableDescriptor.addFamily(columnDescriptor);
+                ColumnFamilyDescriptor columnDescriptor = generateColumnFamilyDescriptor(new Pair<byte[],Map<String,Object>>(defaultFamilyByes,Collections.<String,Object>emptyMap()), tableType);
+                tableDescriptorBuilder.addColumnFamily(columnDescriptor);
             }
         } else {
             for (Pair<byte[],Map<String,Object>> family : families) {
                 // If family is only in phoenix description, add it. otherwise, modify its property accordingly.
                 byte[] familyByte = family.getFirst();
-                if (tableDescriptor.getFamily(familyByte) == null) {
+                if (tableDescriptorBuilder.build().getColumnFamily(familyByte) == null) {
                     if (tableType == PTableType.VIEW) {
                         String fullTableName = Bytes.toString(physicalTableName);
                         throw new ReadOnlyTableException(
@@ -783,32 +788,34 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 SchemaUtil.getTableNameFromFullName(fullTableName),
                                 Bytes.toString(familyByte));
                     }
-                    HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(family, tableType);
-                    tableDescriptor.addFamily(columnDescriptor);
+                    ColumnFamilyDescriptor columnDescriptor = generateColumnFamilyDescriptor(family, tableType);
+                    tableDescriptorBuilder.addColumnFamily(columnDescriptor);
                 } else {
                     if (tableType != PTableType.VIEW) {
-                        HColumnDescriptor columnDescriptor = tableDescriptor.getFamily(familyByte);
+                        ColumnFamilyDescriptor columnDescriptor = tableDescriptorBuilder.build().getColumnFamily(familyByte);
                         if (columnDescriptor == null) {
                             throw new IllegalArgumentException("Unable to find column descriptor with family name " + Bytes.toString(family.getFirst()));
                         }
-                        modifyColumnFamilyDescriptor(columnDescriptor, family.getSecond());
+                        ColumnFamilyDescriptorBuilder columnDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(columnDescriptor);
+                        modifyColumnFamilyDescriptor(columnDescriptorBuilder, family.getSecond());
+                        tableDescriptorBuilder.addColumnFamily(columnDescriptorBuilder.build());
                     }
                 }
             }
         }
-        addCoprocessors(physicalTableName, tableDescriptor, tableType, tableProps);
+        addCoprocessors(physicalTableName, tableDescriptorBuilder, tableType, tableProps);
 
         // PHOENIX-3072: Set index priority if this is a system table or index table
         if (tableType == PTableType.SYSTEM) {
-            tableDescriptor.setValue(QueryConstants.PRIORITY,
+            tableDescriptorBuilder.setValue(QueryConstants.PRIORITY,
                     String.valueOf(PhoenixRpcSchedulerFactory.getMetadataPriority(config)));
         } else if (tableType == PTableType.INDEX // Global, mutable index
-                && !isLocalIndexTable(tableDescriptor.getFamiliesKeys())
+                && !isLocalIndexTable(tableDescriptorBuilder.build().getColumnFamilyNames())
                 && !Boolean.TRUE.equals(tableProps.get(PhoenixDatabaseMetaData.IMMUTABLE_ROWS))) {
-            tableDescriptor.setValue(QueryConstants.PRIORITY,
+            tableDescriptorBuilder.setValue(QueryConstants.PRIORITY,
                     String.valueOf(PhoenixRpcSchedulerFactory.getIndexPriority(config)));
         }
-        return tableDescriptor;
+        return tableDescriptorBuilder;
     }
 
     private boolean isLocalIndexTable(Collection<byte[]> families) {
@@ -822,22 +829,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
 
-    private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType, Map<String,Object> tableProps) throws SQLException {
+    private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder, PTableType tableType, Map<String,Object> tableProps) throws SQLException {
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
-            if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
-            }
-            if (!descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
-            }
-            if (!descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
-            }
-            if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
-            }
+                builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
+            
+                builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
+            
+                builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
+            
+                builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             boolean isTransactional =
                     Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) ||
                     Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA)); // For ALTER TABLE
@@ -849,67 +851,49 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
-                    if (!descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                        descriptor.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
-                    }
+                        builder.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
                     // For alter table, remove non transactional index coprocessor
-                    if (descriptor.hasCoprocessor(Indexer.class.getName())) {
-                        descriptor.removeCoprocessor(Indexer.class.getName());
-                    }
+                        builder.removeCoprocessor(Indexer.class.getName());
                 } else {
-                    if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
+                    if (!builder.build().hasCoprocessor(Indexer.class.getName())) {
                         // If exception on alter table to transition back to non transactional
-                        if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                            descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
-                        }
+                            builder.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                         Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                         opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                        Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                        Indexer.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
                     }
                 }
             }
-            if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
-                descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
+            if (SchemaUtil.isStatsTable(tableName)) {
+                builder.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
                         null, priority, null);
             }
 
-            Set<byte[]> familiesKeys = descriptor.getFamiliesKeys();
+            Set<byte[]> familiesKeys = builder.build().getColumnFamilyNames();
             for(byte[] family: familiesKeys) {
                 if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                    if (!descriptor.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
-                        descriptor.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
+                        builder.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
                                 null, priority, null);
                         break;
-                    }
                 }
             }
 
             // Setup split policy on Phoenix metadata table to ensure that the key values of a Phoenix table
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName) || SchemaUtil.isFunctionTable(tableName)) {
-                if (!descriptor.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
-                    descriptor.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
-                }
+                    builder.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
                 if(SchemaUtil.isMetaTable(tableName) ) {
-                    if (!descriptor.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
-                        descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
-                    }
+                        builder.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
-                if (!descriptor.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
-                }
+                builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
             }
 
             if (isTransactional) {
-                if (!descriptor.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
-                    descriptor.addCoprocessor(PhoenixTransactionalProcessor.class.getName(), null, priority - 10, null);
-                }
+                    builder.addCoprocessor(PhoenixTransactionalProcessor.class.getName(), null, priority - 10, null);
             } else {
                 // If exception on alter table to transition back to non transactional
-                if (descriptor.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
-                    descriptor.removeCoprocessor(PhoenixTransactionalProcessor.class.getName());
-                }
+                    builder.removeCoprocessor(PhoenixTransactionalProcessor.class.getName());
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
@@ -921,7 +905,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         String getOperationName();
     }
 
-    private void pollForUpdatedTableDescriptor(final Admin admin, final HTableDescriptor newTableDescriptor,
+    private void pollForUpdatedTableDescriptor(final Admin admin, final TableDescriptor newTableDescriptor,
             final byte[] tableName) throws InterruptedException, TimeoutException {
         checkAndRetry(new RetriableOperation() {
 
@@ -932,7 +916,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             @Override
             public boolean checkForCompletion() throws TimeoutException, IOException {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(tableName));
                 return newTableDescriptor.equals(tableDesc);
             }
         });
@@ -1020,11 +1004,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @return true if table was created and false if it already exists
      * @throws SQLException
      */
-    private HTableDescriptor ensureTableCreated(byte[] physicalTableName, PTableType tableType, Map<String, Object> props,
+    private TableDescriptor ensureTableCreated(byte[] physicalTableName, PTableType tableType, Map<String, Object> props,
             List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean modifyExistingMetaData,
             boolean isNamespaceMapped) throws SQLException {
         SQLException sqlE = null;
-        HTableDescriptor existingDesc = null;
+        TableDescriptor existingDesc = null;
         boolean isMetaTable = SchemaUtil.isMetaTable(physicalTableName);
         boolean tableExist = true;
         try (Admin admin = getAdmin()) {
@@ -1032,7 +1016,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
             try {
-                existingDesc = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
+                existingDesc = admin.getDescriptor(TableName.valueOf(physicalTableName));
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 tableExist = false;
                 if (tableType == PTableType.VIEW) {
@@ -1044,23 +1028,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            HTableDescriptor newDesc = generateTableDescriptor(physicalTableName, existingDesc, tableType, props, families,
+            TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, existingDesc, tableType, props, families,
                     splits, isNamespaceMapped);
-
+            
             if (!tableExist) {
-                if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
-                        PBoolean.INSTANCE.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
-                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
+                if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
+                        PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    newDesc.setValue(Bytes.toBytes(TableDescriptorBuilder.SPLIT_POLICY), Bytes.toBytes(IndexRegionSplitPolicy.class.getName()));
                 }
                 // Remove the splitPolicy attribute to prevent HBASE-12570
                 if (isMetaTable) {
-                    newDesc.remove(HTableDescriptor.SPLIT_POLICY);
+                    newDesc.removeValue(Bytes.toBytes(TableDescriptorBuilder.SPLIT_POLICY));
                 }
                 try {
                     if (splits == null) {
-                        admin.createTable(newDesc);
+                        admin.createTable(newDesc.build());
                     } else {
-                        admin.createTable(newDesc, splits);
+                        admin.createTable(newDesc.build(), splits);
                     }
                 } catch (TableExistsException e) {
                     // We can ignore this, as it just means that another client beat us
@@ -1074,8 +1058,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * server and compatible. This works around HBASE-12570 which causes the cluster to be
                      * brought down.
                      */
-                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    modifyTable(physicalTableName, newDesc, true);
+                    newDesc.setValue(TableDescriptorBuilder.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
+                    modifyTable(physicalTableName, newDesc.build(), true);
                 }
                 return null;
             } else {
@@ -1083,11 +1067,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                 } else {
                     for(Pair<byte[],Map<String,Object>> family: families) {
-                        if ((newDesc.getValue(HTableDescriptor.SPLIT_POLICY)==null || !newDesc.getValue(HTableDescriptor.SPLIT_POLICY).equals(
+                        if ((newDesc.build().getValue(TableDescriptorBuilder.SPLIT_POLICY)==null || !newDesc.build().getValue(TableDescriptorBuilder.SPLIT_POLICY).equals(
                                 IndexRegionSplitPolicy.class.getName()))
                                 && Bytes.toString(family.getFirst()).startsWith(
                                         QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                            newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
+                            newDesc.setValue(TableDescriptorBuilder.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
                             break;
                         }
                     }
@@ -1110,14 +1094,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
                         .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
                     }
-                    newDesc.remove(PhoenixTransactionContext.READ_NON_TX_DATA);
+                    newDesc.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
                 }
                 if (existingDesc.equals(newDesc)) {
                     return null; // Indicate that no metadata was changed
                 }
 
-                modifyTable(physicalTableName, newDesc, true);
-                return newDesc;
+                modifyTable(physicalTableName, newDesc.build(), true);
+                return newDesc.build();
             }
 
         } catch (IOException e) {
@@ -1136,16 +1120,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return null; // will never make it here
     }
 
-    private void modifyTable(byte[] tableName, HTableDescriptor newDesc, boolean shouldPoll) throws IOException,
+    private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll) throws IOException,
     InterruptedException, TimeoutException, SQLException {
         TableName tn = TableName.valueOf(tableName);
         try (Admin admin = getAdmin()) {
             if (!allowOnlineTableSchemaUpdate()) {
                 admin.disableTable(tn);
-                admin.modifyTable(tn, newDesc); // TODO: Update to TableDescriptor
+                admin.modifyTable(newDesc); // TODO: Update to TableDescriptor
                 admin.enableTable(tn);
             } else {
-                admin.modifyTable(tn, newDesc); // TODO: Update to TableDescriptor
+                admin.modifyTable(newDesc); // TODO: Update to TableDescriptor
                 if (shouldPoll) {
                     pollForUpdatedTableDescriptor(admin, newDesc, tableName);
                 }
@@ -1181,8 +1165,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             List<byte[]> regionKeys = Lists.newArrayListWithExpectedSize(locations.size());
             for (HRegionLocation entry : locations) {
                 if (!serverMap.contains(entry)) {
-                    regionKeys.add(entry.getRegionInfo().getStartKey());
-                    regionMap.put(entry.getRegionInfo().getRegionName(), entry);
+                    regionKeys.add(entry.getRegion().getStartKey());
+                    regionMap.put(entry.getRegion().getRegionName(), entry);
                     serverMap.add(entry);
                 }
             }
@@ -1308,7 +1292,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
 
         tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
-        HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits,
+        TableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits,
                 false, isNamespaceMapped);
         if (desc != null) {
             if (!Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
@@ -1327,7 +1311,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (Admin admin = getAdmin()) {
             try {
                 TableName physicalIndexTableName = TableName.valueOf(physicalIndexName);
-                HTableDescriptor desc = admin.getTableDescriptor(physicalIndexTableName);
+                TableDescriptor desc = admin.getDescriptor(physicalIndexTableName);
                 if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
@@ -1350,19 +1334,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private boolean ensureLocalIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
-        HTableDescriptor desc = null;
+        TableDescriptor desc = null;
         boolean wasDeleted = false;
         try (Admin admin = getAdmin()) {
             try {
-                desc = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
-                for (byte[] fam : desc.getFamiliesKeys()) {
+                desc = admin.getDescriptor(TableName.valueOf(physicalTableName));
+                for (byte[] fam : desc.getColumnFamilyNames()) {
                     this.tableStatsCache.invalidate(new GuidePostsKey(physicalTableName, fam));
                 }
                 final ReadOnlyProps props = this.getProps();
                 final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                 if (dropMetadata) {
                     List<String> columnFamiles = new ArrayList<String>();
-                    for(HColumnDescriptor cf : desc.getColumnFamilies()) {
+                    for(ColumnFamilyDescriptor cf : desc.getColumnFamilies()) {
                         if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                             columnFamiles.add(cf.getNameAsString());
                         }
@@ -1627,7 +1611,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 for ( byte[] tableName : tableNamesToDelete ) {
                     try {
                         TableName tn = TableName.valueOf(tableName);
-                        HTableDescriptor htableDesc = this.getTableDescriptor(tableName);
+                        TableDescriptor htableDesc = this.getTableDescriptor(tableName);
                         admin.disableTable(tn);
                         admin.deleteTable(tn);
                         tableStatsCache.invalidateAll(htableDesc);
@@ -1646,12 +1630,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    private static Map<String,Object> createPropertiesMap(Map<ImmutableBytesWritable,ImmutableBytesWritable> htableProps) {
+    private static Map<String,Object> createPropertiesMap(Map<Bytes,Bytes> htableProps) {
         Map<String,Object> props = Maps.newHashMapWithExpectedSize(htableProps.size());
-        for (Map.Entry<ImmutableBytesWritable,ImmutableBytesWritable> entry : htableProps.entrySet()) {
-            ImmutableBytesWritable key = entry.getKey();
-            ImmutableBytesWritable value = entry.getValue();
-            props.put(Bytes.toString(key.get(), key.getOffset(), key.getLength()), Bytes.toString(value.get(), value.getOffset(), value.getLength()));
+        for (Map.Entry<Bytes,Bytes> entry : htableProps.entrySet()) {
+            Bytes key = entry.getKey();
+            Bytes value = entry.getValue();
+            props.put(Bytes.toString(key.get(), key.getOffset(), key.getLength()),
+                    Bytes.toString(value.get(), value.getOffset(), value.getLength()));
         }
         return props;
     }
@@ -1690,17 +1675,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void ensureViewIndexTableCreated(PTable table, long timestamp, boolean isNamespaceMapped)
             throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
-        HTableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
+       TableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
         Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
         List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size()+1));
         if (families.isEmpty()) {
             byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
-            Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
+            Map<String,Object> familyProps = createPropertiesMap(htableDesc.getColumnFamily(familyName).getValues());
             families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
                 byte[] familyName = family.getName().getBytes();
-                Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
+                Map<String,Object> familyProps = createPropertiesMap(htableDesc.getColumnFamily(familyName).getValues());
                 families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
             }
             // Always create default column family, because we don't know in advance if we'll
@@ -1723,12 +1708,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException {
         List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(stmtProperties.size());
         Map<String, Object> tableProps = new HashMap<String, Object>();
-        Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
-        Set<HTableDescriptor> origTableDescriptors = Collections.emptySet();
+        Set<TableDescriptor> tableDescriptors = Collections.emptySet();
+        Set<TableDescriptor> origTableDescriptors = Collections.emptySet();
         boolean nonTxToTx = false;
-        Pair<HTableDescriptor,HTableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
-        HTableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
-        HTableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
+        Pair<TableDescriptor,TableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, families, tableProps);
+        TableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
+        TableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
         if (tableDescriptor != null) {
             tableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
             origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
@@ -1739,9 +1724,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
              * If the table was transitioned from non transactional to transactional, we need
              * to also transition the index tables.
              */
+            
+            TableDescriptorBuilder tableDescriptorBuilder = TableDescriptorBuilder.newBuilder(tableDescriptor);
             if (nonTxToTx) {
-                updateDescriptorForTx(table, tableProps, tableDescriptor, Boolean.TRUE.toString(), tableDescriptors, origTableDescriptors);
+                updateDescriptorForTx(table, tableProps, tableDescriptorBuilder, Boolean.TRUE.toString(), tableDescriptors, origTableDescriptors);
             }
+            tableDescriptor=tableDescriptorBuilder.build();
         }
 
         boolean success = false;
@@ -1834,11 +1822,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return result;
     }
-    private void updateDescriptorForTx(PTable table, Map<String, Object> tableProps, HTableDescriptor tableDescriptor,
-            String txValue, Set<HTableDescriptor> descriptorsToUpdate, Set<HTableDescriptor> origDescriptors) throws SQLException {
+    private void updateDescriptorForTx(PTable table, Map<String, Object> tableProps, TableDescriptorBuilder tableDescriptorBuilder,
+            String txValue, Set<TableDescriptor> descriptorsToUpdate, Set<TableDescriptor> origDescriptors) throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
         try (Admin admin = getAdmin()) {
-            setTransactional(tableDescriptor, table.getType(), txValue, tableProps);
+            setTransactional(physicalTableName, tableDescriptorBuilder, table.getType(), txValue, tableProps);
             Map<String, Object> indexTableProps;
             if (txValue == null) {
                 indexTableProps = Collections.<String,Object>emptyMap();
@@ -1847,46 +1835,50 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 indexTableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.valueOf(txValue));
             }
             for (PTable index : table.getIndexes()) {
-                HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(index.getPhysicalName().getBytes()));
-                origDescriptors.add(indexDescriptor);
-                indexDescriptor = new HTableDescriptor(indexDescriptor);
-                descriptorsToUpdate.add(indexDescriptor);
+                TableDescriptor indexDesc = admin.getDescriptor(TableName.valueOf(index.getPhysicalName().getBytes()));
+                origDescriptors.add(indexDesc);
+                TableDescriptorBuilder indexDescriptorBuilder = TableDescriptorBuilder.newBuilder(indexDesc);
+                descriptorsToUpdate.add(indexDescriptorBuilder.build());
                 if (index.getColumnFamilies().isEmpty()) {
                     byte[] dataFamilyName = SchemaUtil.getEmptyColumnFamily(table);
                     byte[] indexFamilyName = SchemaUtil.getEmptyColumnFamily(index);
-                    HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(indexFamilyName);
-                    HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(dataFamilyName);
+                    ColumnFamilyDescriptorBuilder indexColDescriptor = ColumnFamilyDescriptorBuilder.newBuilder(indexDescriptorBuilder.build().getColumnFamily(indexFamilyName));
+                    ColumnFamilyDescriptor tableColDescriptor = tableDescriptorBuilder.build().getColumnFamily(dataFamilyName);
                     indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-                    indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
+                    indexColDescriptor.setValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),
+                            tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+                    indexDescriptorBuilder.addColumnFamily(indexColDescriptor.build());
                 } else {
                     for (PColumnFamily family : index.getColumnFamilies()) {
                         byte[] familyName = family.getName().getBytes();
-                        indexDescriptor.getFamily(familyName).setMaxVersions(tableDescriptor.getFamily(familyName).getMaxVersions());
-                        HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
-                        HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
+                        ColumnFamilyDescriptorBuilder indexColDescriptor = ColumnFamilyDescriptorBuilder.newBuilder(indexDescriptorBuilder.build().getColumnFamily(familyName));
+                        ColumnFamilyDescriptor tableColDescriptor = tableDescriptorBuilder.build().getColumnFamily(familyName);
                         indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-                        indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
+                        indexColDescriptor.setValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),
+                                tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+                        indexDescriptorBuilder.addColumnFamily(indexColDescriptor.build());
                     }
                 }
-                setTransactional(indexDescriptor, index.getType(), txValue, indexTableProps);
+                setTransactional(index.getPhysicalName().getBytes(), indexDescriptorBuilder, index.getType(), txValue, indexTableProps);
             }
             try {
-                HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(physicalTableName)));
+                TableDescriptor indexDescriptor = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(physicalTableName)));
                 origDescriptors.add(indexDescriptor);
-                indexDescriptor = new HTableDescriptor(indexDescriptor);
-                descriptorsToUpdate.add(indexDescriptor);
-                setSharedIndexMaxVersion(table, tableDescriptor, indexDescriptor);
-                setTransactional(indexDescriptor, PTableType.INDEX, txValue, indexTableProps);
+                TableDescriptorBuilder indexDescriptorBuilder = TableDescriptorBuilder.newBuilder(indexDescriptor);
+                setSharedIndexMaxVersion(table, tableDescriptorBuilder.build(), indexDescriptorBuilder);
+                setTransactional(MetaDataUtil.getViewIndexPhysicalName(physicalTableName), indexDescriptorBuilder, PTableType.INDEX, txValue, indexTableProps);
+                descriptorsToUpdate.add(indexDescriptorBuilder.build());
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
                 // Ignore, as we may never have created a view index table
             }
             try {
-                HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName)));
+                TableDescriptor indexDescriptor = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName)));
                 origDescriptors.add(indexDescriptor);
-                indexDescriptor = new HTableDescriptor(indexDescriptor);
-                descriptorsToUpdate.add(indexDescriptor);
-                setSharedIndexMaxVersion(table, tableDescriptor, indexDescriptor);
-                setTransactional(indexDescriptor, PTableType.INDEX, txValue, indexTableProps);
+                TableDescriptorBuilder indexDescriptorBuilder = TableDescriptorBuilder.newBuilder(indexDescriptor);
+                
+                setSharedIndexMaxVersion(table, tableDescriptorBuilder.build(), indexDescriptorBuilder);
+                setTransactional(MetaDataUtil.getViewIndexPhysicalName(physicalTableName), indexDescriptorBuilder, PTableType.INDEX, txValue, indexTableProps);
+                descriptorsToUpdate.add(indexDescriptorBuilder.build());
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
                 // Ignore, as we may never have created a view index table
             }
@@ -1894,32 +1886,36 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw ServerUtil.parseServerException(e);
         }
     }
-    private void setSharedIndexMaxVersion(PTable table, HTableDescriptor tableDescriptor,
-            HTableDescriptor indexDescriptor) {
+    private void setSharedIndexMaxVersion(PTable table, TableDescriptor tableDescriptor,
+            TableDescriptorBuilder indexDescriptorBuilder) {
         if (table.getColumnFamilies().isEmpty()) {
             byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
-            HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
-            HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
-            indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-            indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
+            ColumnFamilyDescriptorBuilder indexColDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(indexDescriptorBuilder.build().getColumnFamily(familyName));
+            ColumnFamilyDescriptor tableColDescriptor = tableDescriptor.getColumnFamily(familyName);
+            indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
+            indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+            indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
                 byte[] familyName = family.getName().getBytes();
-                HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
+                ColumnFamilyDescriptor indexColDescriptor = indexDescriptorBuilder.build().getColumnFamily(familyName);
                 if (indexColDescriptor != null) {
-                    HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
-                    indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-                    indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
+                    ColumnFamilyDescriptor tableColDescriptor = tableDescriptor.getColumnFamily(familyName);
+                    ColumnFamilyDescriptorBuilder indexColDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(indexColDescriptor);
+                    indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
+                    indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+                    indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
+                    
                 }
             }
         }
     }
 
-    private void sendHBaseMetaData(Set<HTableDescriptor> tableDescriptors, boolean pollingNeeded) throws SQLException {
+    private void sendHBaseMetaData(Set<TableDescriptor> tableDescriptors, boolean pollingNeeded) throws SQLException {
         SQLException sqlE = null;
-        for (HTableDescriptor descriptor : tableDescriptors) {
+        for (TableDescriptor descriptor : tableDescriptors) {
             try {
-                modifyTable(descriptor.getName(), descriptor, pollingNeeded);
+                modifyTable(descriptor.getTableName().getName(), descriptor, pollingNeeded);
             } catch (IOException e) {
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e) {
@@ -1935,17 +1931,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-    private void setTransactional(HTableDescriptor tableDescriptor, PTableType tableType, String txValue, Map<String, Object> tableProps) throws SQLException {
+    private void setTransactional(byte[] physicalTableName, TableDescriptorBuilder tableDescriptorBuilder, PTableType tableType, String txValue, Map<String, Object> tableProps) throws SQLException {
         if (txValue == null) {
-            tableDescriptor.remove(PhoenixTransactionContext.READ_NON_TX_DATA);
+            tableDescriptorBuilder.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
         } else {
-            tableDescriptor.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, txValue);
+            tableDescriptorBuilder.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, txValue);
         }
-        this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps);
+        this.addCoprocessors(physicalTableName, tableDescriptorBuilder, tableType, tableProps);
     }
 
-    private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties,
-      Set<String> colFamiliesForPColumnsToBeAdded, Map<String, Object> tableProps) throws SQLException {
+    private Pair<TableDescriptor, TableDescriptor> separateAndValidateProperties(PTable table,
+            Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded,
+            List<Pair<byte[], Map<String, Object>>> families, Map<String, Object> tableProps) throws SQLException {
         Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(properties.size());
         Map<String,Object> commonFamilyProps = new HashMap<>();
         boolean addingColumns = colFamiliesForPColumnsToBeAdded != null && !colFamiliesForPColumnsToBeAdded.isEmpty();
@@ -2090,21 +2087,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             .buildException();
         }
 
-        HTableDescriptor newTableDescriptor = null;
-        HTableDescriptor origTableDescriptor = null;
+        TableDescriptorBuilder newTableDescriptorBuilder = null;
+        TableDescriptor origTableDescriptor = null;
         if (!allFamiliesProps.isEmpty() || !tableProps.isEmpty()) {
             byte[] tableNameBytes = Bytes.toBytes(table.getPhysicalName().getString());
-            HTableDescriptor existingTableDescriptor = origTableDescriptor = getTableDescriptor(tableNameBytes);
-            newTableDescriptor = new HTableDescriptor(existingTableDescriptor);
+            TableDescriptor existingTableDescriptor = origTableDescriptor = this.getTableDescriptor(tableNameBytes);
+            newTableDescriptorBuilder = TableDescriptorBuilder.newBuilder(existingTableDescriptor);
             if (!tableProps.isEmpty()) {
                 // add all the table properties to the existing table descriptor
                 for (Entry<String, Object> entry : tableProps.entrySet()) {
-                    newTableDescriptor.setValue(entry.getKey(), entry.getValue() != null ? entry.getValue().toString() : null);
+                    newTableDescriptorBuilder.setValue(entry.getKey(), entry.getValue() != null ? entry.getValue().toString() : null);
                 }
             }
             if (addingColumns) {
                 // Make sure that all the CFs of the table have the same TTL as the empty CF.
-                setTTLForNewCFs(allFamiliesProps, table, newTableDescriptor, newTTL);
+                setTTLForNewCFs(allFamiliesProps, table, newTableDescriptorBuilder, newTTL);
             }
             // Set TTL on all table column families, even if they're not referenced here
             if (newTTL != null) {
@@ -2125,7 +2122,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (defaultTxMaxVersions == null) {
                     if (isTransactional) {
-                        defaultTxMaxVersions = newTableDescriptor.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions();
+                        defaultTxMaxVersions = newTableDescriptorBuilder.build()
+                                .getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions();
                     } else {
                         defaultTxMaxVersions =
                                 this.getProps().getInt(
@@ -2148,8 +2146,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // transitioning to become transactional or setting TTL on
             // an already transactional table.
             if (isOrWillBeTransactional) {
-                int ttl = getTTL(table, newTableDescriptor, newTTL);
-                if (ttl != HColumnDescriptor.DEFAULT_TTL) {
+                int ttl = getTTL(table, newTableDescriptorBuilder.build(), newTTL);
+                if (ttl != ColumnFamilyDescriptorBuilder.DEFAULT_TTL) {
                     for (Map.Entry<String, Map<String, Object>> entry : allFamiliesProps.entrySet()) {
                         Map<String, Object> props = entry.getValue();
                         if (props == null) {
@@ -2158,7 +2156,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
                         // or if the existing transactional table wasn't originally non transactional.
-                        if (!willBeTransactional && !Boolean.valueOf(newTableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
+                        if (!willBeTransactional && !Boolean.valueOf(newTableDescriptorBuilder.build().getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
                             props.remove(TTL);
                         }
                     }
@@ -2172,23 +2170,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
                 byte[] cf = Bytes.toBytes(entry.getKey());
-                HColumnDescriptor colDescriptor = newTableDescriptor.getFamily(cf);
+                ColumnFamilyDescriptor colDescriptor = newTableDescriptorBuilder.build().getColumnFamily(cf);
                 if (colDescriptor == null) {
                     // new column family
                     colDescriptor = generateColumnFamilyDescriptor(new Pair<>(cf, familyProps), table.getType());
-                    newTableDescriptor.addFamily(colDescriptor);
+                    newTableDescriptorBuilder.addColumnFamily(colDescriptor);
                 } else {
-                    modifyColumnFamilyDescriptor(colDescriptor, familyProps);
+                    ColumnFamilyDescriptorBuilder colDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(colDescriptor);
+                    modifyColumnFamilyDescriptor(colDescriptorBuilder, familyProps);
+                    colDescriptor = colDescriptorBuilder.build();
                 }
                 if (isOrWillBeTransactional) {
                     checkTransactionalVersionsValue(colDescriptor);
                 }
             }
         }
-        return new Pair<>(origTableDescriptor, newTableDescriptor);
+        return new Pair<>(origTableDescriptor, newTableDescriptorBuilder.build());
     }
 
-    private void checkTransactionalVersionsValue(HColumnDescriptor colDescriptor) throws SQLException {
+    private void checkTransactionalVersionsValue(ColumnFamilyDescriptor colDescriptor) throws SQLException {
         int maxVersions = colDescriptor.getMaxVersions();
         if (maxVersions <= 1) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE)
@@ -2212,17 +2212,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return cfNames;
     }
 
-    private static int getTTL(PTable table, HTableDescriptor tableDesc, Integer newTTL) throws SQLException {
+    private static int getTTL(PTable table, TableDescriptor tableDesc, Integer newTTL) throws SQLException {
         // If we're setting TTL now, then use that value. Otherwise, use empty column family value
         int ttl = newTTL != null ? newTTL
-                : tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
+                : tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
         return ttl;
     }
 
     private static void setTTLForNewCFs(Map<String, Map<String, Object>> familyProps, PTable table,
-            HTableDescriptor tableDesc, Integer newTTL) throws SQLException {
+            TableDescriptorBuilder tableDescBuilder, Integer newTTL) throws SQLException {
         if (!familyProps.isEmpty()) {
-            int ttl = getTTL(table, tableDesc, newTTL);
+            int ttl = getTTL(table, tableDescBuilder.build(), newTTL);
             for (Map.Entry<String, Map<String, Object>> entry : familyProps.entrySet()) {
                 Map<String, Object> props = entry.getValue();
                 if (props == null) {
@@ -2538,11 +2538,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 logger.debug("System mutex table already appears to exist, not creating it");
                 return;
             }
-            HTableDescriptor tableDesc = new HTableDescriptor(mutexTableName);
-            HColumnDescriptor columnDesc = new HColumnDescriptor(
-                    PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
-            columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
-            tableDesc.addFamily(columnDesc);
+            TableDescriptor tableDesc = TableDescriptorBuilder.newBuilder(mutexTableName)
+                    .addColumnFamily(ColumnFamilyDescriptorBuilder
+                            .newBuilder(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES)
+                            .setTimeToLive(TTL_FOR_MUTEX).build())
+                    .build();
             admin.createTable(tableDesc);
             try (Table sysMutexTable = getTable(mutexTableName.getName())) {
                 byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
@@ -2557,7 +2557,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     List<TableName> getSystemTableNames(Admin admin) throws IOException {
-        return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*")); // TODO: replace to pattern
+        return Lists.newArrayList(admin.listTableNames(Pattern.compile(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"))); // TODO: replace to pattern
     }
 
     private void createOtherSystemTables(PhoenixConnection metaConnection, Admin hbaseAdmin) throws SQLException, IOException {
@@ -2632,19 +2632,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     columnsToAdd = addColumn(columnsToAdd, PhoenixDatabaseMetaData.STORE_NULLS
                             + " " + PBoolean.INSTANCE.getSqlTypeName());
                     try (Admin admin = getAdmin()) {
-                        HTableDescriptor[] localIndexTables = admin
-                                .listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + ".*");
-                        for (HTableDescriptor table : localIndexTables) {
+                        List<TableDescriptor> localIndexTables =
+                                admin.listTableDescriptors(Pattern
+                                        .compile(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + ".*"));
+                        for (TableDescriptor table : localIndexTables) {
                             if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
                                     && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
-                                table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
-                                        MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString()));
+                                
+                                table=TableDescriptorBuilder.newBuilder(table).setValue(Bytes.toBytes(MetaDataUtil.PARENT_TABLE_KEY),
+                                        Bytes.toBytes(MetaDataUtil.getLocalIndexUserTableName(table.getTableName().getNameAsString()))).build();
                                 // Explicitly disable, modify and enable the table to ensure
                                 // co-location of data and index regions. If we just modify the
                                 // table descriptor when online schema change enabled may reopen 
                                 // the region in same region server instead of following data region.
                                 admin.disableTable(table.getTableName());
-                                admin.modifyTable(table.getTableName(), table);
+                                admin.modifyTable(table);
                                 admin.enableTable(table.getTableName());
                             }
                         }
@@ -3680,7 +3682,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         incrementSequenceValues(sequenceAllocations, timestamp, values, exceptions, Sequence.ValueOp.INCREMENT_SEQUENCE);
     }
 
-    @SuppressWarnings("deprecation")
     private void incrementSequenceValues(List<SequenceAllocation> sequenceAllocations, long timestamp, long[] values, SQLException[] exceptions, Sequence.ValueOp op) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(sequenceAllocations.size());
         for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
@@ -3808,7 +3809,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void returnSequences(List<SequenceKey> keys, long timestamp, SQLException[] exceptions) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
@@ -3885,7 +3885,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Take no locks, as this only gets run when there are no open connections
     // so there's no danger of contention.
-    @SuppressWarnings("deprecation")
     private void returnAllSequences(ConcurrentMap<SequenceKey,Sequence> sequenceMap) throws SQLException {
         List<Append> mutations = Lists.newArrayListWithExpectedSize(sequenceMap.size());
         for (Sequence sequence : sequenceMap.values()) {

@@ -33,8 +33,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -166,53 +167,53 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
 
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true");
 
-        HTableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(nonTxTableName + "1"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        TableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(nonTxTableName + "1"));
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Bytes.toInt(propertyTTL));
         }
 
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX1"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Bytes.toInt(propertyTTL));
         }
         
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX2"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Bytes.toInt(propertyTTL));
         }
         
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
-            assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
-            assertEquals(null, colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL));
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, colDesc.getTimeToLive());
+            assertEquals(null, colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES));
         }
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TTL=1000");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Bytes.toInt(propertyTTL));
         }
 
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "3 SET TRANSACTIONAL=true, b.VERSIONS=10, c.VERSIONS=20");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "3"));
-        assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, desc.getFamily(Bytes.toBytes("A")).getMaxVersions());
-        assertEquals(10, desc.getFamily(Bytes.toBytes("B")).getMaxVersions());
-        assertEquals(20, desc.getFamily(Bytes.toBytes("C")).getMaxVersions());
+        assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, desc.getColumnFamily(Bytes.toBytes("A")).getMaxVersions());
+        assertEquals(10, desc.getColumnFamily(Bytes.toBytes("B")).getMaxVersions());
+        assertEquals(20, desc.getColumnFamily(Bytes.toBytes("C")).getMaxVersions());
 
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "4(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
         try {
@@ -231,11 +232,11 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         
         conn.createStatement().execute("CREATE TABLE TX_TABLE1(k INTEGER PRIMARY KEY, v VARCHAR) TTL=1000, TRANSACTIONAL=true");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("TX_TABLE1"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
-            assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, colDesc.getTimeToLive());
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Bytes.toInt(propertyTTL));
         }
     }
     

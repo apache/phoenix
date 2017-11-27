@@ -18,13 +18,20 @@
 
 package org.apache.phoenix.iterate;
 
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.hadoop.hbase.util.FSUtils;
@@ -32,13 +39,6 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
 
 public class TableSnapshotResultIterator implements ResultIterator {
 
@@ -48,8 +48,8 @@ public class TableSnapshotResultIterator implements ResultIterator {
   private final ScanMetricsHolder scanMetricsHolder;
   private Tuple lastTuple = null;
   private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
-  private ArrayList<HRegionInfo> regions;
-  private HTableDescriptor htd;
+  private ArrayList<RegionInfo> regions;
+  private TableDescriptor htd;
   private String snapshotName;
 
   private Path restoreDir;
@@ -83,14 +83,14 @@ public class TableSnapshotResultIterator implements ResultIterator {
     Iterator i$ = restoredRegions.iterator();
 
     while(i$.hasNext()) {
-      HRegionInfo hri = (HRegionInfo)i$.next();
+      RegionInfo hri = (RegionInfo)i$.next();
       if(CellUtil.overlappingKeys(this.scan.getStartRow(), this.scan.getStopRow(),
           hri.getStartKey(), hri.getEndKey())) {
         this.regions.add(hri);
       }
     }
 
-    Collections.sort(this.regions);
+    Collections.sort(this.regions,RegionInfo.COMPARATOR);
   }
 
   public boolean initSnapshotScanner() throws SQLException {
@@ -103,7 +103,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
       if (this.currentRegion >= this.regions.size())
         return false;
       try {
-        HRegionInfo hri = regions.get(this.currentRegion);
+        RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
                 scan, scanMetricsHolder);

@@ -20,8 +20,10 @@ package org.apache.phoenix.transaction;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
@@ -36,6 +38,7 @@ import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -180,24 +183,10 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
-    public Object[] batch(List<? extends Row> actions) throws IOException,
-            InterruptedException {
-        // TODO Auto-generated method stub
-        return null;
-    }
-
-    @Override
     public <R> void batchCallback(List<? extends Row> actions,
             Object[] results, Callback<R> callback) throws IOException,
             InterruptedException {
         // TODO Auto-generated method stub
-    }
-
-    @Override
-    public <R> Object[] batchCallback(List<? extends Row> actions,
-            Callback<R> callback) throws IOException, InterruptedException {
-        // TODO Auto-generated method stub
-        return null;
     }
 
     @Override
@@ -329,6 +318,87 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     public void setRpcTimeout(int arg0) {
         // TODO Auto-generated method stub
         
+    }
+
+    @Override
+    public TableDescriptor getDescriptor() throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public boolean[] exists(List<Get> gets) throws IOException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value, Put put)
+            throws IOException {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
+            Delete delete) throws IOException {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
+            RowMutations mutation) throws IOException {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public long getRpcTimeout(TimeUnit unit) {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public long getReadRpcTimeout(TimeUnit unit) {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public int getReadRpcTimeout() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public void setReadRpcTimeout(int readRpcTimeout) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public long getWriteRpcTimeout(TimeUnit unit) {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public int getWriteRpcTimeout() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public void setWriteRpcTimeout(int writeRpcTimeout) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public long getOperationTimeout(TimeUnit unit) {
+        // TODO Auto-generated method stub
+        return 0;
     }
 
 }

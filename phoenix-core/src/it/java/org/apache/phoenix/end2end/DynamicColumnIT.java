@@ -31,13 +31,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -69,11 +69,11 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
         try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices services = pconn.getQueryServices();
             try (Admin admin = services.getAdmin()) {
-                HTableDescriptor htd = new HTableDescriptor(TableName.valueOf(tableName));
-                htd.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
-                htd.addFamily(new HColumnDescriptor(FAMILY_NAME_A));
-                htd.addFamily(new HColumnDescriptor(FAMILY_NAME_B));
-                admin.createTable(htd);
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_A));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_B));
+                admin.createTable(builder.build());
             }
 
             try (Table hTable = services.getTable(Bytes.toBytes(tableName))) {

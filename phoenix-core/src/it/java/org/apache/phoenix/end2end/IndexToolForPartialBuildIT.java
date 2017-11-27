@@ -270,7 +270,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
                 throw new DoNotRetryIOException();
             }
             Mutation operation = miniBatchOp.getOperation(0);
-            Set<byte[]> keySet = operation.getFamilyMap().keySet();
+            Set<byte[]> keySet = operation.getFamilyCellMap().keySet();
             for(byte[] family: keySet) {
                 if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) && FAIL_WRITE) {
                     throw new DoNotRetryIOException();

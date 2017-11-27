@@ -75,8 +75,10 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.getReplayWrite() != null, false, context);
             ValueGetter valueGetter = statePair.getFirst();
             IndexUpdate indexUpdate = statePair.getSecond();
-            indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
-                    .getTableDesc().getName() : maintainer.getIndexTableName());
+            indexUpdate
+                    .setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
+                            .getTableDescriptor().getTableName().getName() : maintainer
+                            .getIndexTableName());
             Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(), env
                     .getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
             indexUpdate.setUpdate(put);
@@ -104,7 +106,8 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             if (valueGetter!=null) {
                 IndexUpdate indexUpdate = statePair.getSecond();
                 indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
-                        .getTableDesc().getName() : maintainer.getIndexTableName());
+                        .getTableDescriptor().getTableName().getName() : maintainer
+                        .getIndexTableName());
                 Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
                         state.getCurrentTimestamp(), env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
                 indexUpdate.setUpdate(delete);

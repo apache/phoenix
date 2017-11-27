@@ -2429,8 +2429,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             List<HRegionLocation> regionLocations=
                     conn.getQueryServices().getAllTableRegions(Bytes.toBytes("SALT_TEST2900"));
             for (HRegionLocation regionLocation : regionLocations) {
-                assertTrue(ranges.intersectRegion(regionLocation.getRegionInfo().getStartKey(),
-                    regionLocation.getRegionInfo().getEndKey(), false));
+                assertTrue(ranges.intersectRegion(regionLocation.getRegion().getStartKey(),
+                    regionLocation.getRegion().getEndKey(), false));
             }
         } finally {
             conn.close();

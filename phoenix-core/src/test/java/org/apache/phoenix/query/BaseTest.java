@@ -112,10 +112,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1526,9 +1526,9 @@ public abstract class BaseTest {
         if (driver == null) return;
         Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
-            HTableDescriptor[] tables = admin.listTables();
-            for (HTableDescriptor table : tables) {
-                String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
+            TableDescriptor[] tables = admin.listTables();
+            for (TableDescriptor table : tables) {
+                String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getTableName().getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
                     disableAndDropTable(admin, table.getTableName());
                 }

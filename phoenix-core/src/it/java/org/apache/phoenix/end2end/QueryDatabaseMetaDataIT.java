@@ -44,13 +44,15 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
@@ -83,7 +85,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                         + "    a.col1 integer,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
                         + "    b.col4 decimal(5),\n" + "    b.col5 decimal(6,3))\n" + "    a."
                         + HConstants.VERSIONS + "=" + 1 + "," + "a."
-                        + HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
+                        + ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
                         + "'";
         if (extraProps != null && extraProps.length() > 0) {
             ddl += "," + extraProps;
@@ -716,32 +718,30 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
 
-            @SuppressWarnings("deprecation")
-            HTableDescriptor descriptor = new HTableDescriptor(htableName);
+            TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
             for (byte[] familyName : familyNames) {
-                HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-                descriptor.addFamily(columnDescriptor);
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
             }
-            admin.createTable(descriptor);
+            admin.createTable(builder.build());
             createMDTestTable(pconn, tableName,
-                "a." + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
+                "a." + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
 
-            descriptor = admin.getTableDescriptor(TableName.valueOf(htableName));
+            TableDescriptor descriptor = admin.getDescriptor(TableName.valueOf(htableName));
             assertEquals(3, descriptor.getColumnFamilies().length);
-            HColumnDescriptor cdA = descriptor.getFamily(cfA);
-            assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+            ColumnFamilyDescriptor cdA = descriptor.getColumnFamily(cfA);
+            assertNotEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
             assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using
                                                                               // WITH
             assertEquals(1, cdA.getMaxVersions());// Overriden using WITH
-            HColumnDescriptor cdB = descriptor.getFamily(cfB);
+            ColumnFamilyDescriptor cdB = descriptor.getColumnFamily(cfB);
             // Allow KEEP_DELETED_CELLS to be false for VIEW
-            assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
             assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the
                                                                               // original value.
             // CF c should stay the same since it's not a Phoenix cf.
-            HColumnDescriptor cdC = descriptor.getFamily(cfC);
+            ColumnFamilyDescriptor cdC = descriptor.getColumnFamily(cfC);
             assertNotNull("Column family not found", cdC);
-            assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
             assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
             assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
             assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
@@ -794,12 +794,11 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                 } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 }
 
-                HTableDescriptor descriptor = new HTableDescriptor(htableName);
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
                 for (byte[] familyName : familyNames) {
-                    HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-                    descriptor.addFamily(columnDescriptor);
+                    builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
                 }
-                admin.createTable(descriptor);
+                admin.createTable(builder.build());
             }
             String createStmt =
                     "create view " + generateUniqueName() + "  (id char(1) not null primary key,\n"
@@ -866,7 +865,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
             Table htable =
                     pconn.getQueryServices()
-                            .getTable(TableName.valueOf(SchemaUtil.getTableNameAsBytes(schemaName, tableName)));
+                            .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
             Put put = new Put(Bytes.toBytes("0"));
             put.addColumn(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
             put.addColumn(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));

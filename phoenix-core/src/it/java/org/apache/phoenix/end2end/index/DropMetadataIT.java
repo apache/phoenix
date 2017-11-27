@@ -23,9 +23,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -65,12 +68,11 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
 
         byte[] hbaseNativeBytes = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, hbaseNativeViewName);
         try {
-            @SuppressWarnings("deprecation")
-            HTableDescriptor descriptor = new HTableDescriptor(hbaseNativeBytes);
-            HColumnDescriptor columnDescriptor =  new HColumnDescriptor(FAMILY_NAME);
-            columnDescriptor.setKeepDeletedCells(true);
-            descriptor.addFamily(columnDescriptor);
-            admin.createTable(descriptor);
+             TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(hbaseNativeBytes));
+            ColumnFamilyDescriptor columnDescriptor = ColumnFamilyDescriptorBuilder.newBuilder(FAMILY_NAME)
+                    .setKeepDeletedCells(KeepDeletedCells.TRUE).build();
+            builder.addColumnFamily(columnDescriptor);
+            admin.createTable(builder.build());
         } finally {
             admin.close();
         }
@@ -82,7 +84,7 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
                 "    \"1\".uint_col unsigned_int," +
                 "    \"1\".ulong_col unsigned_long" +
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
-                     HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'");
+                ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'");
         conn.createStatement().execute("drop view " + hbaseNativeViewName);
         conn.close();
     }

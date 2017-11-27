@@ -28,25 +28,23 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.ClusterConnection;
-import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
-import org.apache.hadoop.hbase.protobuf.RequestConverter;
-import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
-import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService.BlockingInterface;
-import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -459,7 +457,7 @@ public class MetaDataUtil {
             throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         try {
-            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
+            TableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
             return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(IS_VIEW_INDEX_TABLE_PROP_BYTES)));
         } catch (TableNotFoundException e) {
             return false;
@@ -472,7 +470,7 @@ public class MetaDataUtil {
 
     public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
         try {
-            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalTableName);
+            TableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalTableName);
             if(desc == null ) return false;
             return hasLocalIndexColumnFamily(desc);
         } catch (TableNotFoundException e) {
@@ -480,8 +478,8 @@ public class MetaDataUtil {
         }
     }
 
-    public static boolean hasLocalIndexColumnFamily(HTableDescriptor desc) {
-        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+    public static boolean hasLocalIndexColumnFamily(TableDescriptor desc) {
+        for (ColumnFamilyDescriptor cf : desc.getColumnFamilies()) {
             if (cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 return true;
             }
@@ -489,9 +487,9 @@ public class MetaDataUtil {
         return false;
     }
 
-    public static List<byte[]> getNonLocalIndexColumnFamilies(HTableDescriptor desc) {
+    public static List<byte[]> getNonLocalIndexColumnFamilies(TableDescriptor desc) {
     	List<byte[]> families = new ArrayList<byte[]>(desc.getColumnFamilies().length);
-        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+        for (ColumnFamilyDescriptor cf : desc.getColumnFamilies()) {
             if (!cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
             	families.add(cf.getName());
             }
@@ -500,10 +498,10 @@ public class MetaDataUtil {
     }
 
     public static List<byte[]> getLocalIndexColumnFamilies(PhoenixConnection conn, byte[] physicalTableName) throws SQLException {
-        HTableDescriptor desc = conn.getQueryServices().getTableDescriptor(physicalTableName);
+        TableDescriptor desc = conn.getQueryServices().getTableDescriptor(physicalTableName);
         if(desc == null ) return Collections.emptyList();
         List<byte[]> families = new ArrayList<byte[]>(desc.getColumnFamilies().length / 2);
-        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+        for (ColumnFamilyDescriptor cf : desc.getColumnFamilies()) {
             if (cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 families.add(cf.getName());
             }
@@ -530,10 +528,10 @@ public class MetaDataUtil {
      * @throws
      */
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
-        Connection hcon = null;
+        ClusterConnection hcon = null;
 
         try {
-            hcon = ConnectionFactory.createConnection(conf);
+            hcon = (ClusterConnection)ConnectionFactory.createConnection(conf);
             List<HRegionLocation> locations = ((ClusterConnection)hcon).locateRegions(
                 org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
 
@@ -542,17 +540,12 @@ public class MetaDataUtil {
                     ServerName sn = loc.getServerName();
                     if (sn == null) continue;
 
-                    AdminService.BlockingInterface admin = (BlockingInterface) ((ClusterConnection)hcon).getAdmin(sn);
-                    GetRegionInfoRequest request = RequestConverter.buildGetRegionInfoRequest(
-                        loc.getRegionInfo().getRegionName());
-
-                    admin.getRegionInfo(null, request);
-                } catch (ServiceException e) {
-                    IOException ie = ProtobufUtil.getRemoteException(e);
-                    logger.debug("Region " + loc.getRegionInfo().getEncodedName() + " isn't online due to:" + ie);
-                    return false;
+                    AdminService.BlockingInterface admin = ((ClusterConnection) hcon).getAdmin(sn);
+                    HBaseRpcController controller = hcon.getRpcControllerFactory().newController();
+                    org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.getRegionInfo(controller,
+                        (AdminService.BlockingInterface) admin, loc.getRegion().getRegionName());
                 } catch (RemoteException e) {
-                    logger.debug("Cannot get region " + loc.getRegionInfo().getEncodedName() + " info due to error:" + e);
+                    logger.debug("Cannot get region " + loc.getRegion().getEncodedName() + " info due to error:" + e);
                     return false;
                 }
             }
@@ -651,7 +644,7 @@ public class MetaDataUtil {
     }
 
     public static boolean isHColumnProperty(String propName) {
-        return HColumnDescriptor.getDefaultValues().containsKey(propName);
+        return ColumnFamilyDescriptorBuilder.getDefaultValues().containsKey(propName);
     }
 
     public static boolean isHTableProperty(String propName) {

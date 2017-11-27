@@ -38,14 +38,15 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
@@ -429,7 +430,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         PreparedStatement stmt;
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER, w INTEGER) "
                 + (!tableDDLOptions.isEmpty() ? tableDDLOptions + "," : "") 
-                + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
+                + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
         stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
         for (int i = 0; i < nRows; i++) {
             stmt.setString(1, Character.toString((char) ('a' + i)));

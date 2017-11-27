@@ -23,7 +23,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -37,13 +36,10 @@ import java.util.Properties;
 
 import jline.internal.Log;
 
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -51,7 +47,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -622,18 +617,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void createTableAndLoadData(Connection conn1, String tableName, String indexName, String[] strings, boolean isReverse) throws SQLException {
-        createBaseTable(conn1, tableName, null);
-        for (int i = 0; i < 26; i++) {
-            conn1.createStatement().execute(
-                "UPSERT INTO " + tableName + " values('"+strings[i]+"'," + i + ","
-                        + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
-        }
-        conn1.commit();
-        conn1.createStatement().execute(
-            "CREATE " + (localIndex ? "LOCAL" : "")+" INDEX " + indexName + " ON " + tableName + "(v1"+(isReverse?" DESC":"")+") include (k3)");
-    }
-
     @Test
     public void testIndexHalfStoreFileReader() throws Exception {
         Connection conn1 = getConnection();
@@ -658,7 +641,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         TableName indexTable = TableName.valueOf(localIndex?tableName: indexName);
         admin.flush(indexTable);
         boolean merged = false;
-        Table table = connectionQueryServices.getTable(indexTable.getName());
         // merge regions until 1 left
         long numRegions = 0;
         while (true) {
@@ -666,16 +648,16 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           assertTrue(rs.next());
           assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
           try {
-            List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);
+            List<RegionInfo> indexRegions = admin.getRegions(indexTable);
             numRegions = indexRegions.size();
             if (numRegions==1) {
               break;
             }
             if(!merged) {
-                      List<HRegionInfo> regions =
-                              admin.getTableRegions(indexTable);
+                      List<RegionInfo> regions =
+                              admin.getRegions(indexTable);
                 Log.info("Merging: " + regions.size());
-                admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
+                admin.mergeRegionsAsync(regions.get(0).getEncodedNameAsBytes(),
                     regions.get(1).getEncodedNameAsBytes(), false);
                 merged = true;
                 Threads.sleep(10000);
@@ -686,7 +668,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           long waitStartTime = System.currentTimeMillis();
           // wait until merge happened
           while (System.currentTimeMillis() - waitStartTime < 10000) {
-            List<HRegionInfo> regions = admin.getTableRegions(indexTable);
+            List<RegionInfo> regions = admin.getRegions(indexTable);
             Log.info("Waiting:" + regions.size());
             if (regions.size() < numRegions) {
               break;
@@ -696,72 +678,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           SnapshotTestingUtils.waitForTableToBeOnline(BaseTest.getUtility(), indexTable);
           assertTrue("Index table should be online ", admin.isTableAvailable(indexTable));
         }
-    }
-
-
-    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, Admin admin, boolean isReverse)
-            throws SQLException, IOException, InterruptedException {
-        ResultSet rs;
-
-        String query = "SELECT t_id,k1,v1 FROM " + tableName;
-        rs = conn1.createStatement().executeQuery(query);
-        String[] tIdColumnValues = new String[26]; 
-        String[] v1ColumnValues = new String[26];
-        int[] k1ColumnValue = new int[26];
-        for (int j = 0; j < 5; j++) {
-            assertTrue(rs.next());
-            tIdColumnValues[j] = rs.getString("t_id");
-            k1ColumnValue[j] = rs.getInt("k1");
-            v1ColumnValues[j] = rs.getString("V1");
-        }
-
-        String[] splitKeys = new String[2];
-        splitKeys[0] = strings[4];
-        splitKeys[1] = strings[12];
-
-        int[] splitInts = new int[2];
-        splitInts[0] = 22;
-        splitInts[1] = 4;
-        List<HRegionInfo> regionsOfUserTable = null;
-        for(int i = 0; i <=1; i++) {
-            Threads.sleep(10000);
-            if(localIndex) {
-                admin.split(TableName.valueOf(tableName),
-                    ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
-            } else {
-                admin.split(TableName.valueOf(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
-            }
-            Thread.sleep(100);
-            regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                        admin.getConnection(), TableName.valueOf(localIndex?tableName:indexName),
-                        false);
-
-            while (regionsOfUserTable.size() != (i+2)) {
-                Thread.sleep(100);
-                regionsOfUserTable =
-                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(),
-                            TableName.valueOf(localIndex?tableName:indexName), false);
-            }
-            assertEquals(i+2, regionsOfUserTable.size());
-        }
-        for (int j = 5; j < 26; j++) {
-            assertTrue(rs.next());
-            tIdColumnValues[j] = rs.getString("t_id");
-            k1ColumnValue[j] = rs.getInt("k1");
-            v1ColumnValues[j] = rs.getString("V1");
-        }
-        Arrays.sort(tIdColumnValues);
-        Arrays.sort(v1ColumnValues);
-        Arrays.sort(k1ColumnValue);
-        assertTrue(Arrays.equals(strings, tIdColumnValues));
-        assertTrue(Arrays.equals(strings, v1ColumnValues));
-        for(int i=0;i<26;i++) {
-            assertEquals(i, k1ColumnValue[i]);
-        }
-        assertFalse(rs.next());
-        return regionsOfUserTable;
     }
 
     private void createBaseTable(Connection conn, String tableName, String splits) throws SQLException {

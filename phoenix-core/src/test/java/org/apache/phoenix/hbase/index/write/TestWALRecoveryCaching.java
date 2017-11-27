@@ -34,12 +34,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -173,18 +172,19 @@ public class TestWALRecoveryCaching {
     builder.addIndexGroup(columns);
 
     // create the primary table w/ indexing enabled
-    HTableDescriptor primaryTable = new HTableDescriptor(testTable.getTableName());
-    primaryTable.addFamily(new HColumnDescriptor(family));
-    primaryTable.addFamily(new HColumnDescriptor(nonIndexedFamily));
+    TableDescriptor primaryTable = TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
     builder.addArbitraryConfigForTesting(Indexer.RecoveryFailurePolicyKeyForTesting,
       ReleaseLatchOnFailurePolicy.class.getName());
     builder.build(primaryTable);
     admin.createTable(primaryTable);
 
     // create the index table
-    HTableDescriptor indexTableDesc = new HTableDescriptor(Bytes.toBytes(getIndexTableName()));
-    indexTableDesc.addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
-    TestIndexManagementUtil.createIndexTable(admin, indexTableDesc);
+    TableDescriptorBuilder indexTableBuilder = TableDescriptorBuilder
+                .newBuilder(TableName.valueOf(Bytes.toBytes(getIndexTableName())))
+                .addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
+    TestIndexManagementUtil.createIndexTable(admin, indexTableBuilder);
 
     // figure out where our tables live
     ServerName shared =
@@ -218,7 +218,8 @@ public class TestWALRecoveryCaching {
         LOG.info("\t== Offline: " + server.getServerName());
         continue;
       }
-      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server.getRSRpcServices());
+      
+      List<HRegion> regions = server.getRegions();
       LOG.info("\t" + server.getServerName() + " regions: " + regions);
     }
 
@@ -268,14 +269,14 @@ public class TestWALRecoveryCaching {
    * @param table
    * @return
    */
-  private List<Region> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
+  private List<HRegion> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
       byte[] table) {
-    List<Region> online = Collections.emptyList();
+    List<HRegion> online = Collections.emptyList();
     for (RegionServerThread rst : cluster.getRegionServerThreads()) {
       // if its the server we are going to kill, get the regions we want to reassign
       if (rst.getRegionServer().getServerName().equals(server)) {
-        online = rst.getRegionServer().getOnlineRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
-        break;
+          online = rst.getRegionServer().getRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
+          break;
       }
     }
     return online;
@@ -306,7 +307,7 @@ public class TestWALRecoveryCaching {
       tryIndex = !tryIndex;
       for (ServerName server : servers) {
         // find the regionserver that matches the passed server
-        List<Region> online = getRegionsFromServerForTable(cluster, server, table);
+        List<HRegion> online = getRegionsFromServerForTable(cluster, server, table);
 
         LOG.info("Shutting down and reassigning regions from " + server);
         cluster.stopRegionServer(server);
@@ -314,7 +315,7 @@ public class TestWALRecoveryCaching {
 
         // force reassign the regions from the table
         for (Region region : online) {
-          cluster.getMaster().assignRegion(region.getRegionInfo());
+          cluster.getMaster().getAssignmentManager().assign(region.getRegionInfo());
         }
 
         LOG.info("Starting region server:" + server.getHostname());

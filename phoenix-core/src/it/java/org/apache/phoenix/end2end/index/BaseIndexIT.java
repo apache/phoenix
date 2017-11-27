@@ -42,14 +42,14 @@ import java.util.Random;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -967,7 +967,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     CellScanner cellScanner = result.cellScanner();
                     while (cellScanner.advance()) {
                         Cell current = cellScanner.current();
-                        assertEquals (KeyValue.Type.Put.getCode(), current.getTypeByte());
+                        assertTrue(CellUtil.isPut(current));
                     }
                 }
             };
@@ -1059,7 +1059,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
                 String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
                 org.apache.hadoop.hbase.TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tName), p);
-                HTableDescriptor htd = admin.getTableDescriptor(hbaseTableName);
+                TableDescriptor htd = admin.getDescriptor(hbaseTableName);
                 String val = htd.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + htd, val);
                 assertTrue(Integer.parseInt(val)
@@ -1078,13 +1078,13 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 stmt.execute(ddl);
             }
 
-            HTableDescriptor dataTable = admin.getTableDescriptor(
+            TableDescriptor dataTable = admin.getDescriptor(
                     org.apache.hadoop.hbase.TableName.valueOf(fullTableName));
             String val = dataTable.getValue("PRIORITY");
             assertTrue(val == null || Integer.parseInt(val) < HConstants.HIGH_QOS);
 
             if (!localIndex && mutable) {
-                HTableDescriptor indexTable = admin.getTableDescriptor(
+                TableDescriptor indexTable = admin.getDescriptor(
                         org.apache.hadoop.hbase.TableName.valueOf(indexName));
                 val = indexTable.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + indexTable, val);

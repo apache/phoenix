@@ -35,7 +35,8 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -565,14 +566,14 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
-            HTableDescriptor tableDesc1 = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable)); 
+            TableDescriptor tableDesc1 = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getDescriptor(TableName.valueOf(baseTable)); 
             try (Connection tenant1Conn = getTenantConnection("tenant1")) {
                 String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
                 tenant1Conn.createStatement().execute(view1DDL);
                 // This should not modify the base table
                 String alterView = "ALTER VIEW " + view1 + " ADD NEWCOL1 VARCHAR";
                 tenant1Conn.createStatement().execute(alterView);
-                HTableDescriptor tableDesc2 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable));
+                TableDescriptor tableDesc2 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getDescriptor(TableName.valueOf(baseTable));
                 assertEquals(tableDesc1, tableDesc2);
                 
                 // Add a new column family that doesn't already exist in the base table
@@ -580,16 +581,16 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
                 tenant1Conn.createStatement().execute(alterView);
                 
                 // Verify that the column family now shows up in the base table descriptor
-                tableDesc2 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable));
+                tableDesc2 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getDescriptor(TableName.valueOf(baseTable));
                 assertFalse(tableDesc2.equals(tableDesc1));
-                assertNotNull(tableDesc2.getFamily(Bytes.toBytes("CF")));
+                assertNotNull(tableDesc2.getColumnFamily(Bytes.toBytes("CF")));
                 
                 // Add a column with an existing column family. This shouldn't modify the base table.
                 alterView = "ALTER VIEW " + view1 + " ADD CF.NEWCOL3 VARCHAR";
                 tenant1Conn.createStatement().execute(alterView);
-                HTableDescriptor tableDesc3 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getTableDescriptor(Bytes.toBytes(baseTable));
+                TableDescriptor tableDesc3 = tenant1Conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getDescriptor(TableName.valueOf(baseTable));
                 assertTrue(tableDesc3.equals(tableDesc2));
-                assertNotNull(tableDesc3.getFamily(Bytes.toBytes("CF")));
+                assertNotNull(tableDesc3.getColumnFamily(Bytes.toBytes("CF")));
             }
         }
     }

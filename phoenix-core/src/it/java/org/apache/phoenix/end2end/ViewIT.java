@@ -36,10 +36,10 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -729,9 +729,9 @@ public class ViewIT extends BaseViewIT {
 
             // test for a view that is in non-default schema
             {
-                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, TBL));
-                desc.addFamily(new HColumnDescriptor(CF));
-                admin.createTable(desc);
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS, TBL));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
+                admin.createTable(builder.build());
 
                 String view = NS + "." + TBL;
                 conn.createStatement().execute(
@@ -746,9 +746,9 @@ public class ViewIT extends BaseViewIT {
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for backward compatibility)
             {
-                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS + "." + TBL));
-                desc.addFamily(new HColumnDescriptor(CF));
-                admin.createTable(desc);
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS + "." + TBL));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
+                admin.createTable(builder.build());
 
                 String view = "\"" + NS + "." + TBL + "\"";
                 conn.createStatement().execute(
@@ -763,9 +763,9 @@ public class ViewIT extends BaseViewIT {
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
             {
-                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, NS + "." + TBL));
-                desc.addFamily(new HColumnDescriptor(CF));
-                admin.createTable(desc);
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS, NS + "." + TBL));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
+                admin.createTable(builder.build());
 
                 String view = NS + ".\"" + NS + "." + TBL + "\"";
                 conn.createStatement().execute(

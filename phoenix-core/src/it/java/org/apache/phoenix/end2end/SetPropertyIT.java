@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_REPLICATION_SCOPE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -29,11 +28,13 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
@@ -95,7 +96,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
         ddl = "ALTER TABLE " + dataTableFullName + " SET REPLICATION_SCOPE=1";
         conn1.createStatement().execute(ddl);
         try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+            ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                     .getColumnFamilies();
             assertEquals(1, columnFamilies.length);
             assertEquals("0", columnFamilies[0].getNameAsString());
@@ -118,10 +119,10 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
         ddl = "ALTER TABLE " + dataTableFullName + " SET COMPACTION_ENABLED=FALSE";
         conn1.createStatement().execute(ddl);
         try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
+            TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
             assertEquals(1, tableDesc.getColumnFamilies().length);
             assertEquals("0", tableDesc.getColumnFamilies()[0].getNameAsString());
-            assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
+            assertEquals(Boolean.toString(false), tableDesc.getValue(TableDescriptorBuilder.COMPACTION_ENABLED));
         }
     }
 
@@ -140,8 +141,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
         ddl = "ALTER TABLE " + dataTableFullName + " SET COMPACTION_ENABLED = FALSE, REPLICATION_SCOPE = 1";
         conn1.createStatement().execute(ddl);
         try (Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-            HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+            TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+            ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
             assertEquals(1, columnFamilies.length);
             assertEquals("0", columnFamilies[0].getNameAsString());
             assertEquals(1, columnFamilies[0].getScope());
@@ -169,8 +170,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-            HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+            TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+            ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
             assertEquals(3, columnFamilies.length);
 
             assertEquals("0", columnFamilies[0].getNameAsString());
@@ -188,7 +189,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             assertEquals(10, columnFamilies[2].getMaxVersions());
             assertEquals(KeepDeletedCells.FALSE, columnFamilies[2].getKeepDeletedCells());
 
-            assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
+            assertEquals(Boolean.toString(false), tableDesc.getValue(TableDescriptorBuilder.COMPACTION_ENABLED));
         }
     }
 
@@ -388,16 +389,16 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
         assertImmutableRows(conn, dataTableFullName, true);
         try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-            HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-            HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+            TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+            ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
             assertEquals(2, columnFamilies.length);
             assertEquals("CF", columnFamilies[0].getNameAsString());
             assertEquals(1, columnFamilies[0].getScope());
             assertEquals(1000, columnFamilies[0].getTimeToLive());
             assertEquals("XYZ", columnFamilies[1].getNameAsString());
-            assertEquals(DEFAULT_REPLICATION_SCOPE, columnFamilies[1].getScope());
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_REPLICATION_SCOPE, columnFamilies[1].getScope());
             assertEquals(1000, columnFamilies[1].getTimeToLive());
-            assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
+            assertEquals(Boolean.toString(false), tableDesc.getValue(TableDescriptorBuilder.COMPACTION_ENABLED));
         }
     }
 
@@ -419,7 +420,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     "ALTER TABLE " + dataTableFullName + " ADD CF.col3 integer CF.IN_MEMORY=true");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                         .getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
@@ -448,7 +449,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                                     + dataTableFullName
                                     + " ADD col4 integer, CF1.col5 integer, CF2.col6 integer IN_MEMORY=true, CF1.REPLICATION_SCOPE=1, CF2.IN_MEMORY=false ");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                         .getColumnFamilies();
                 assertEquals(3, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
@@ -482,7 +483,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                                     + dataTableFullName
                                     + " ADD col4 integer, CF1.col5 integer, CF2.col6 integer IN_MEMORY=true, CF1.REPLICATION_SCOPE=1, CF2.IN_MEMORY=false, XYZ.REPLICATION_SCOPE=1 ");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                         .getColumnFamilies();
                 assertEquals(3, columnFamilies.length);
                 assertEquals("CF1", columnFamilies[0].getNameAsString());
@@ -539,7 +540,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                                     + dataTableFullName
                                     + " ADD col4 integer, CF1.col5 integer, CF2.col6 integer, CF3.col7 integer CF1.REPLICATION_SCOPE=1, CF1.IN_MEMORY=false, IN_MEMORY=true ");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                         .getColumnFamilies();
                 assertEquals(4, columnFamilies.length);
                 assertEquals("CF1", columnFamilies[0].getNameAsString());
@@ -575,7 +576,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement()
                     .execute("ALTER TABLE " + dataTableFullName + " ADD XYZ.col5 integer IN_MEMORY=true ");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                         .getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("CF1", columnFamilies[0].getNameAsString());
@@ -602,7 +603,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " ADD col2 integer IN_MEMORY=true");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName))
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName))
                         .getColumnFamilies();
                 assertEquals(1, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
@@ -632,9 +633,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
                 assertTrue(tableDesc.isCompactionEnabled());
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(5, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
                 assertFalse(columnFamilies[0].isInMemory());
@@ -671,9 +672,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
                 assertTrue(tableDesc.isCompactionEnabled());
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(3, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
                 assertFalse(columnFamilies[0].isInMemory());
@@ -748,8 +749,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                     + " ) " + generateDDLOptions("TTL=86400, SALT_BUCKETS = 4, DEFAULT_COLUMN_FAMILY='XYZ'");
             conn.createStatement().execute(ddl);
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(1, columnFamilies.length);
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
                 assertEquals(86400, columnFamilies[0].getTimeToLive());
@@ -758,8 +759,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(1, columnFamilies.length);
                 assertEquals(30, columnFamilies[0].getTimeToLive());
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
@@ -786,8 +787,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(1, columnFamilies.length);
                 assertEquals(true, columnFamilies[0].isInMemory());
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
@@ -814,8 +815,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(1, columnFamilies.length);
                 assertEquals(true, columnFamilies[0].isInMemory());
                 assertEquals("0", columnFamilies[0].getNameAsString());
@@ -842,8 +843,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(1, columnFamilies.length);
                 assertEquals(true, columnFamilies[0].isInMemory());
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
@@ -870,8 +871,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("NEWCF", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());
@@ -900,8 +901,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("NEWCF", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());
@@ -915,8 +916,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("NEWCF", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());
@@ -933,8 +934,8 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.commit();
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("NEWCF", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());
@@ -970,7 +971,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             ddl = "ALTER TABLE " + dataTableFullName + " SET UNKNOWN_PROP='ABC'";
             conn.createStatement().execute(ddl);
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
                 assertEquals("ABC", tableDesc.getValue("UNKNOWN_PROP"));
             }
         } finally {

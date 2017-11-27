@@ -25,13 +25,13 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -52,7 +52,6 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
      * namespace or not
      */
     @Test
-    @SuppressWarnings("deprecation")
     public void testBackWardCompatibility() throws Exception {
 
         String namespace = "TEST_SCHEMA";
@@ -63,10 +62,10 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         String hbaseFullTableName = schemaName + ":" + tableName;
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(namespace).build());
-        admin.createTable(new HTableDescriptor(TableName.valueOf(namespace, tableName))
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
-        admin.createTable(new HTableDescriptor(TableName.valueOf(phoenixFullTableName))
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
+        admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(namespace, tableName))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
+        admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(phoenixFullTableName))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
 
         Put put = new Put(PVarchar.INSTANCE.toBytes(phoenixFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,

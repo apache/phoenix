@@ -33,20 +33,23 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
@@ -100,7 +103,6 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   @Before
   public void setUp() throws Exception {
     setupCluster();
-    Path hbaseRootDir = UTIL.getDataTestDir();
     this.conf = HBaseConfiguration.create(UTIL.getConfiguration());
     this.fs = UTIL.getDFSCluster().getFileSystem();
     this.hbaseRootDir = new Path(this.conf.get(HConstants.HBASE_DIR));
@@ -167,15 +169,13 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * seqids.
    * @throws Exception on failure
    */
-  @SuppressWarnings("deprecation")
 @Test
   public void testReplayEditsWrittenViaHRegion() throws Exception {
     final String tableNameStr = "testReplayEditsWrittenViaHRegion";
-    final HRegionInfo hri = new HRegionInfo(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr), 
-        null, null, false);
+    final RegionInfo hri = RegionInfoBuilder.newBuilder(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr)).setSplit(false).build();
     final Path basedir = FSUtils.getTableDir(hbaseRootDir, org.apache.hadoop.hbase.TableName.valueOf(tableNameStr));
     deleteDir(basedir);
-    final HTableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
+    final TableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
     
     //setup basic indexing for the table
     // enable indexing to a non-existant index table
@@ -216,7 +216,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
       Mockito.any(Exception.class));
 
     // then create the index table so we are successful on WAL replay
-    TestIndexManagementUtil.createIndexTable(UTIL.getHBaseAdmin(), INDEX_TABLE_NAME);
+    TestIndexManagementUtil.createIndexTable(UTIL.getAdmin(), INDEX_TABLE_NAME);
 
     // run the WAL split and setup the region
     runWALSplit(this.conf, walFactory);
@@ -237,7 +237,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     assertEquals("Primary region wasn't updated from WAL replay!", 1, result.size());
 
     // cleanup the index table
-    Admin admin = UTIL.getHBaseAdmin();
+    Admin admin = UTIL.getAdmin();
     admin.disableTable(TableName.valueOf(INDEX_TABLE_NAME));
     admin.deleteTable(TableName.valueOf(INDEX_TABLE_NAME));
     admin.close();
@@ -248,16 +248,15 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @param tableName name of the table descriptor
    * @return
    */
-  private HTableDescriptor createBasic3FamilyHTD(final String tableName) {
-    @SuppressWarnings("deprecation")
-    HTableDescriptor htd = new HTableDescriptor(tableName);
-    HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
-    htd.addFamily(a);
-    HColumnDescriptor b = new HColumnDescriptor(Bytes.toBytes("b"));
-    htd.addFamily(b);
-    HColumnDescriptor c = new HColumnDescriptor(Bytes.toBytes("c"));
-    htd.addFamily(c);
-    return htd;
+  private TableDescriptor createBasic3FamilyHTD(final String tableName) {
+    TableDescriptorBuilder tableBuilder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor  a = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("a"));
+    tableBuilder.addColumnFamily(a);
+    ColumnFamilyDescriptor b = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("b"));
+    tableBuilder.addColumnFamily(b);
+    ColumnFamilyDescriptor c = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("c"));
+    tableBuilder.addColumnFamily(c);
+    return tableBuilder.build();
   }
 
   /*

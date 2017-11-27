@@ -57,9 +57,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -161,7 +161,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
         public KeyRange apply(HRegionLocation region) {
-            return KeyRange.getKeyRange(region.getRegionInfo().getStartKey(), region.getRegionInfo().getEndKey());
+            return KeyRange.getKeyRange(region.getRegion().getStartKey(), region.getRegion().getEndKey());
         }
     };
 
@@ -533,7 +533,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         int nBoundaries = regionLocations.size() - 1;
         List<byte[]> ranges = Lists.newArrayListWithExpectedSize(nBoundaries);
         for (int i = 0; i < nBoundaries; i++) {
-            HRegionInfo regionInfo = regionLocations.get(i).getRegionInfo();
+            RegionInfo regionInfo = regionLocations.get(i).getRegion();
             ranges.add(regionInfo.getEndKey());
         }
         return ranges;
@@ -650,7 +650,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         List<Scan> scans = Lists.newArrayListWithExpectedSize(2);
         while (regionIndex <= stopIndex) {
             HRegionLocation regionLocation = regionLocations.get(regionIndex);
-            HRegionInfo regionInfo = regionLocation.getRegionInfo();
+            RegionInfo regionInfo = regionLocation.getRegion();
             Scan newScan = ScanUtil.newScan(scan);
             byte[] endKey;
             if (regionIndex == stopIndex) {
@@ -727,7 +727,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (stopKey.length > 0) {
             stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopKey));
             if (isLocalIndex) {
-                stopKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
+                stopKey = regionLocations.get(stopIndex).getRegion().getEndKey();
             }
         }
         List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
@@ -773,7 +773,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             // Merge bisect with guideposts for all but the last region
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
-                HRegionInfo regionInfo = regionLocation.getRegionInfo();
+                RegionInfo regionInfo = regionLocation.getRegion();
                 byte[] currentGuidePostBytes = currentGuidePost.copyBytes();
                 byte[] endKey, endRegionKey = EMPTY_BYTE_ARRAY;
                 if (regionIndex == stopIndex) {

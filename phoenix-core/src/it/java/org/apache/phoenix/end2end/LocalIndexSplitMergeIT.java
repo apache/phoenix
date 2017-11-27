@@ -29,10 +29,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
@@ -114,15 +114,15 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             for (int i = 1; i < 5; i++) {
                 admin.split(physicalTableName, ByteUtil.concat(Bytes.toBytes(strings[3 * i])));
-                List<HRegionInfo> regionsOfUserTable =
-                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(), physicalTableName, false);
+                List<RegionInfo> regionsOfUserTable =
+                        MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                            false);
 
                 while (regionsOfUserTable.size() != (4 + i)) {
                     Thread.sleep(100);
                     regionsOfUserTable =
-                            MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                                admin.getConnection(), physicalTableName, false);
+                            MetaTableAccessor.getTableRegions(admin.getConnection(),
+                                physicalTableName, false);
                 }
                 assertEquals(4 + i, regionsOfUserTable.size());
                 String[] tIdColumnValues = new String[26];
@@ -213,20 +213,20 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             assertTrue(rs.next());
 
             Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            List<HRegionInfo> regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                        admin.getConnection(), physicalTableName, false);
-            admin.mergeRegions(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
+            List<RegionInfo> regionsOfUserTable =
+                    MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                        false);
+            admin.mergeRegionsAsync(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
                 regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
             regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                        admin.getConnection(), physicalTableName, false);
+                    MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                        false);
 
             while (regionsOfUserTable.size() != 3) {
                 Thread.sleep(100);
                 regionsOfUserTable =
-                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(), physicalTableName, false);
+                        MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                            false);
             }
             String query = "SELECT t_id,k1,v1 FROM " + tableName;
             rs = conn1.createStatement().executeQuery(query);

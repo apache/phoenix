@@ -282,8 +282,8 @@ public class IndexUtil {
                 byte[] regionEndkey = null;
                 if(maintainer.isLocalIndex()) {
                     HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
-                    regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                    regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                    regionStartKey = tableRegionLocation.getRegion().getStartKey();
+                    regionEndkey = tableRegionLocation.getRegion().getEndKey();
                 }
                 Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<Cell>emptyList(), ts, regionStartKey, regionEndkey);
                 delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY));
@@ -349,8 +349,8 @@ public class IndexUtil {
                     byte[] regionEndkey = null;
                     if(maintainer.isLocalIndex()) {
                         HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
-                        regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                        regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                        regionStartKey = tableRegionLocation.getRegion().getStartKey();
+                        regionEndkey = tableRegionLocation.getRegion().getEndKey();
                     }
                     indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey));
                 }

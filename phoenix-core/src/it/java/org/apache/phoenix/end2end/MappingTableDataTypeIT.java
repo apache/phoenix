@@ -34,15 +34,15 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -60,12 +60,10 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         Admin admin = conn.getQueryServices().getAdmin();
         try {
             // Create table then get the single region for our new table.
-            HTableDescriptor descriptor = new HTableDescriptor(tableName);
-            HColumnDescriptor columnDescriptor1 =  new HColumnDescriptor(Bytes.toBytes("cf1"));
-            HColumnDescriptor columnDescriptor2 =  new HColumnDescriptor(Bytes.toBytes("cf2"));
-            descriptor.addFamily(columnDescriptor1);
-            descriptor.addFamily(columnDescriptor2);
-            admin.createTable(descriptor);
+            TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
+            builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf1")))
+                    .addColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf2")));
+            admin.createTable(builder.build());
             Table t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             insertData(tableName.getName(), admin, t);
             t.close();

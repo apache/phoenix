@@ -38,20 +38,23 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
+import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
-import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
@@ -91,8 +94,8 @@ public class MutableIndexReplicationIT extends BaseTest {
     protected static Configuration conf1 = HBaseConfiguration.create();
     protected static Configuration conf2;
 
-    protected static ZooKeeperWatcher zkw1;
-    protected static ZooKeeperWatcher zkw2;
+    protected static ZKWatcher zkw1;
+    protected static ZKWatcher zkw2;
 
     protected static ReplicationAdmin admin;
 
@@ -122,7 +125,6 @@ public class MutableIndexReplicationIT extends BaseTest {
         conf1.setLong("hbase.master.logcleaner.ttl", 10);
         conf1.setInt("zookeeper.recovery.retry", 1);
         conf1.setInt("zookeeper.recovery.retry.intervalmill", 10);
-        conf1.setBoolean(HConstants.REPLICATION_ENABLE_KEY, HConstants.REPLICATION_ENABLE_DEFAULT);
         conf1.setBoolean("dfs.support.append", true);
         conf1.setLong(HConstants.THREAD_WAKE_FREQUENCY, 100);
         conf1.setInt("replication.stats.thread.period.seconds", 5);
@@ -134,7 +136,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         // Have to reset conf1 in case zk cluster location different
         // than default
         conf1 = utility1.getConfiguration();
-        zkw1 = new ZooKeeperWatcher(conf1, "cluster1", null, true);
+        zkw1 = new ZKWatcher(conf1, "cluster1", null, true);
         admin = new ReplicationAdmin(conf1);
         LOG.info("Setup first Zk");
 
@@ -142,16 +144,15 @@ public class MutableIndexReplicationIT extends BaseTest {
         conf2 = HBaseConfiguration.create(conf1);
         conf2.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/2");
         conf2.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 6);
-        conf2.setBoolean(HConstants.REPLICATION_ENABLE_KEY, HConstants.REPLICATION_ENABLE_DEFAULT);
         conf2.setBoolean("dfs.support.append", true);
         conf2.setBoolean("hbase.tests.use.shortcircuit.reads", false);
 
         utility2 = new HBaseTestingUtility(conf2);
         utility2.setZkCluster(miniZK);
-        zkw2 = new ZooKeeperWatcher(conf2, "cluster2", null, true);
+        zkw2 = new ZKWatcher(conf2, "cluster2", null, true);
 
         //replicate from cluster 1 -> cluster 2, but not back again
-        admin.addPeer("1", utility2.getClusterKey());
+        admin.addPeer("1", new ReplicationPeerConfig().setClusterKey(utility2.getClusterKey()),null);
 
         LOG.info("Setup second Zk");
         utility1.startMiniCluster(2);
@@ -193,28 +194,27 @@ public class MutableIndexReplicationIT extends BaseTest {
         assertFalse(rs.next());
 
         // make sure the data tables are created on the remote cluster
-        Admin admin = utility1.getHBaseAdmin();
-        Admin admin2 = utility2.getHBaseAdmin();
+        Admin admin = utility1.getAdmin();
+        Admin admin2 = utility2.getAdmin();
 
         List<String> dataTables = new ArrayList<String>();
         dataTables.add(DATA_TABLE_FULL_NAME);
         dataTables.add(INDEX_TABLE_FULL_NAME);
         for (String tableName : dataTables) {
-            HTableDescriptor desc = admin.getTableDescriptor(TableName.valueOf(tableName));
+            TableDescriptor desc = admin.getDescriptor(TableName.valueOf(tableName));
 
             //create it as-is on the remote cluster
             admin2.createTable(desc);
 
             LOG.info("Enabling replication on source table: "+tableName);
-            HColumnDescriptor[] cols = desc.getColumnFamilies();
+            ColumnFamilyDescriptor[] cols = desc.getColumnFamilies();
             assertEquals(1, cols.length);
             // add the replication scope to the column
-            HColumnDescriptor col = desc.removeFamily(cols[0].getName());
-            col.setScope(HConstants.REPLICATION_SCOPE_GLOBAL);
-            desc.addFamily(col);
+            ColumnFamilyDescriptor col = ColumnFamilyDescriptorBuilder.newBuilder(cols[0].getName()).setScope(HConstants.REPLICATION_SCOPE_GLOBAL).build();
+            desc=TableDescriptorBuilder.newBuilder(desc).addColumnFamily(col).build();
             //disable/modify/enable table so it has replication enabled
             admin.disableTable(desc.getTableName());
-            admin.modifyTable(TableName.valueOf(tableName), desc);
+            admin.modifyTable(desc);
             admin.enableTable(desc.getTableName());
             LOG.info("Replication enabled on source table: "+tableName);
         }
@@ -250,7 +250,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         for (int i = 0; i < REPLICATION_RETRIES; i++) {
             if (i >= REPLICATION_RETRIES - 1) {
                 fail("Waited too much time for put replication on table " + remoteTable
-                        .getTableDescriptor().getNameAsString());
+                        .getDescriptor().getTableName());
             }
             if (ensureAnyRows(remoteTable)) {
                 break;

@@ -33,7 +33,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
@@ -41,18 +40,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
@@ -177,9 +176,9 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTableDescriptor htd = admin
-                .getTableDescriptor(TableName.valueOf(indexPhysicalTableName));
-        assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
+        TableDescriptor htd = admin
+                .getDescriptor(TableName.valueOf(indexPhysicalTableName));
+        assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(TableDescriptorBuilder.SPLIT_POLICY));
         try(org.apache.hadoop.hbase.client.Connection c = ConnectionFactory.createConnection(admin.getConfiguration())) {
             try (RegionLocator userTable= c.getRegionLocator(SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
                 try (RegionLocator indxTable = c.getRegionLocator(TableName.valueOf(indexPhysicalTableName))) {
@@ -443,8 +442,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                 Scan s = new Scan();
                 s.setStartRow(startKeys[i]);
                 s.setStopRow(endKeys[i]);
-                Collection<HColumnDescriptor> families = table.getTableDescriptor().getFamilies();
-                for(HColumnDescriptor cf: families) {
+                ColumnFamilyDescriptor[] families = table.getDescriptor().getColumnFamilies();
+                for(ColumnFamilyDescriptor cf: families) {
                     if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)){
                         s.addFamily(cf.getName());
                     }
@@ -607,7 +606,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName);
             assertTrue(rs.next());
             assertEquals(2000, rs.getLong(1));
-            List<HRegionInfo> tableRegions = admin.getTableRegions(TableName.valueOf(tableName));
+            List<RegionInfo> tableRegions = admin.getRegions(TableName.valueOf(tableName));
             admin.disableTable(TableName.valueOf(tableName));
             copyLocalIndexHFiles(config, tableRegions.get(0), tableRegions.get(1), false);
             copyLocalIndexHFiles(config, tableRegions.get(3), tableRegions.get(0), false);
@@ -671,14 +670,14 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn1.close();
     }
 
-    private void copyLocalIndexHFiles(Configuration conf, HRegionInfo fromRegion, HRegionInfo toRegion, boolean move)
+    private void copyLocalIndexHFiles(Configuration conf, RegionInfo fromRegion, RegionInfo toRegion, boolean move)
             throws IOException {
         Path root = FSUtils.getRootDir(conf);
 
-        Path seondRegion = new Path(HTableDescriptor.getTableDir(root, fromRegion.getTableName()) + Path.SEPARATOR
+        Path seondRegion = new Path(FSUtils.getTableDir(root, fromRegion.getTable()) + Path.SEPARATOR
                 + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
         Path hfilePath = FSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next().getPath();
-        Path firstRegionPath = new Path(HTableDescriptor.getTableDir(root, toRegion.getTableName()) + Path.SEPARATOR
+        Path firstRegionPath = new Path(FSUtils.getTableDir(root, toRegion.getTable()) + Path.SEPARATOR
                 + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
         FileSystem currentFileSystem = FSUtils.getCurrentFileSystem(conf);
         assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath, move, conf));

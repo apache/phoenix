@@ -23,6 +23,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -45,6 +46,7 @@ public interface PhoenixTransactionContext {
     public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "tephra.tx.rollback"; //"phoenix.tx.rollback"; 
 
     public static final String PROPERTY_TTL = "dataset.table.ttl";
+    public static final byte[] PROPERTY_TTL_BYTES = Bytes.toBytes(PROPERTY_TTL);
 
     public static final String READ_NON_TX_DATA = "data.tx.read.pre.existing";
 

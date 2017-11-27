@@ -28,7 +28,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -50,7 +50,7 @@ public class StatisticsScannerTest {
     private StatisticsScanner mockScanner;
     private StatisticsCollector tracker;
     private InternalScanner delegate;
-    private HRegionInfo regionInfo;
+    private RegionInfo regionInfo;
 
     private Configuration config;
 
@@ -67,11 +67,10 @@ public class StatisticsScannerTest {
         this.mockScanner = mock(StatisticsScanner.class);
         this.tracker = mock(StatisticsCollector.class);
         this.delegate = mock(InternalScanner.class);
-        this.regionInfo = mock(HRegionInfo.class);
+        this.regionInfo = mock(RegionInfo.class);
 
         // Wire up the mocks to the mock StatisticsScanner
         when(mockScanner.getStatisticsWriter()).thenReturn(statsWriter);
-        when(mockScanner.getRegionServerServices()).thenReturn(rsServices);
         when(mockScanner.createCallable()).thenReturn(callable);
         when(mockScanner.getStatsCollectionRunTracker(any(Configuration.class))).thenReturn(runTracker);
         when(mockScanner.getRegion()).thenReturn(region);

@@ -28,9 +28,9 @@ import java.sql.PreparedStatement;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
@@ -56,7 +56,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     @Test
     public void testStateBeforeAndAfterUpdateStatsCommand() throws Exception {
         String tableName = fullTableName;
-        HRegionInfo regionInfo = createTableAndGetRegion(tableName);
+        RegionInfo regionInfo = createTableAndGetRegion(tableName);
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
         // assert that the region wasn't added to the tracker
@@ -71,7 +71,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     @Test
     public void testStateBeforeAndAfterMajorCompaction() throws Exception {
         String tableName = fullTableName;
-        HRegionInfo regionInfo = createTableAndGetRegion(tableName);
+        RegionInfo regionInfo = createTableAndGetRegion(tableName);
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
         // Upsert values in the table.
@@ -99,7 +99,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     @Test
     public void testMajorCompactionPreventsUpdateStatsFromRunning() throws Exception {
         String tableName = fullTableName;
-        HRegionInfo regionInfo = createTableAndGetRegion(tableName);
+        RegionInfo regionInfo = createTableAndGetRegion(tableName);
         // simulate stats collection via major compaction by marking the region as compacting in the tracker
         markRegionAsCompacting(regionInfo);
         Assert.assertEquals("Row count didn't match", COMPACTION_UPDATE_STATS_ROW_COUNT, runUpdateStats(tableName));
@@ -112,7 +112,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     @Test
     public void testUpdateStatsPreventsAnotherUpdateStatsFromRunning() throws Exception {
         String tableName = fullTableName;
-        HRegionInfo regionInfo = createTableAndGetRegion(tableName);
+        RegionInfo regionInfo = createTableAndGetRegion(tableName);
         markRunningUpdateStats(regionInfo);
         Assert.assertEquals("Row count didn't match", CONCURRENT_UPDATE_STATS_ROW_COUNT,
             runUpdateStats(tableName));
@@ -123,26 +123,26 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
         assertTrue(tracker.removeUpdateStatsCommandRegion(regionInfo));
     }
     
-    private void markRegionAsCompacting(HRegionInfo regionInfo) {
+    private void markRegionAsCompacting(RegionInfo regionInfo) {
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
         tracker.addCompactingRegion(regionInfo);
     }
 
-    private void markRunningUpdateStats(HRegionInfo regionInfo) {
+    private void markRunningUpdateStats(RegionInfo regionInfo) {
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
         tracker.addUpdateStatsCommandRegion(regionInfo);
     }
 
-    private HRegionInfo createTableAndGetRegion(String tableName) throws Exception {
+    private RegionInfo createTableAndGetRegion(String tableName) throws Exception {
         TableName tn = TableName.valueOf(tableName);
         String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR PRIMARY KEY, KV1 VARCHAR)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
             try (Admin admin = phxConn.getQueryServices().getAdmin()) {
-                List<HRegionInfo> tableRegions = admin.getTableRegions(tn);
+                List<RegionInfo> tableRegions = admin.getRegions(tn);
                 return tableRegions.get(0);
             }
         }

@@ -158,8 +158,8 @@ public class UpsertCompiler {
                     statement.getConnection().getQueryServices()
                             .getTableRegionLocation(table.getParentName().getBytes(), rowKey);
             byte[] regionPrefix =
-                    region.getRegionInfo().getStartKey().length == 0 ? new byte[region
-                            .getRegionInfo().getEndKey().length] : region.getRegionInfo()
+                    region.getRegion().getStartKey().length == 0 ? new byte[region
+                            .getRegion().getEndKey().length] : region.getRegion()
                             .getStartKey();
             if (regionPrefix.length != 0) {
                 ptr.set(ScanRanges.prefixKey(ptr.get(), 0, ptr.getLength(), regionPrefix,

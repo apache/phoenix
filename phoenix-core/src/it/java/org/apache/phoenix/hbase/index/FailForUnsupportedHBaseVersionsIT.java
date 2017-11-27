@@ -27,10 +27,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -122,12 +124,12 @@ public class FailForUnsupportedHBaseVersionsIT {
 
         try {
             // setup the primary table
-            @SuppressWarnings("deprecation")
-            HTableDescriptor desc = new HTableDescriptor(
-                    "testDoesNotStartRegionServerForUnsupportedCompressionAndVersion");
+            TableDescriptorBuilder descBuilder = TableDescriptorBuilder.newBuilder(TableName.valueOf(
+                    "testDoesNotStartRegionServerForUnsupportedCompressionAndVersion"));
             byte[] family = Bytes.toBytes("f");
-            desc.addFamily(new HColumnDescriptor(family));
-
+            
+            descBuilder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(family));
+            TableDescriptor desc=descBuilder.build();
             // enable indexing to a non-existant index table
             String indexTableName = "INDEX_TABLE";
             ColumnGroup fam1 = new ColumnGroup(indexTableName);
@@ -140,7 +142,7 @@ public class FailForUnsupportedHBaseVersionsIT {
             HRegionServer server = util.getMiniHBaseCluster().getRegionServer(0);
 
             // create the primary table
-            Admin admin = util.getHBaseAdmin();
+            Admin admin = util.getAdmin();
             if (supported) {
                 admin.createTable(desc);
                 assertFalse("Hosting regeion server failed, even the HBase version (" + version

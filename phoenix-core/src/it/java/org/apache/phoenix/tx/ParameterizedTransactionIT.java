@@ -16,8 +16,8 @@
  * limitations under the License.
  */
 package org.apache.phoenix.tx;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -35,12 +35,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -280,9 +281,9 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + " SET TRANSACTIONAL=true");
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes( nonTxTableName));
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+        assertTrue(htable.getDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(index));
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+        assertTrue(htable.getDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
 
         conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (4, 'c')");
         ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM " + nonTxTableName + " WHERE v IS NULL");
@@ -357,10 +358,10 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
-        assertFalse(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+        assertFalse(htable.getDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
         assertEquals(1,conn.unwrap(PhoenixConnection.class).getQueryServices().
                 getTableDescriptor(Bytes.toBytes("SYSTEM." + nonTxTableName)).
-                getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
+                getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
     }
     
     @Test
@@ -375,7 +376,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         PTable table = pconn.getTable(new PTableKey(null, t1));
         Table htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+        assertTrue(htable.getDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
         
         try {
             ddl = "ALTER TABLE " + t1 + " SET transactional=false";
@@ -386,14 +387,14 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         }
 
         Admin admin = pconn.getQueryServices().getAdmin();
-        HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(t2));
-        desc.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
-        admin.createTable(desc);
+        
+        admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(t2))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
         ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
 
-        HTableDescriptor htableDescriptor = admin.getTableDescriptor(TableName.valueOf(t2));
-        String str = htableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA);
+        TableDescriptor tableDescriptor = admin.getDescriptor(TableName.valueOf(t2));
+        String str = tableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA);
         assertEquals(Boolean.TRUE.toString(), str);
         
         // Should be ok, as HBase metadata should match existing metadata.
@@ -409,7 +410,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         table = pconn.getTable(new PTableKey(null, t1));
         htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
+        assertTrue(htable.getDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
     }
 
     @Test

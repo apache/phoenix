@@ -25,11 +25,11 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
@@ -69,7 +69,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public Table getTable(byte[] tableName) throws SQLException;
 
-    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
+    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;

@@ -113,7 +113,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
 			if (env != null
 					&& !allowLocalUpdates
 					&& tableReference.getTableName().equals(
-							env.getRegion().getTableDesc().getNameAsString())) {
+							env.getRegion().getTableDescriptor().getTableName().getNameAsString())) {
 				continue;
 			}
             /*
@@ -147,7 +147,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         if (allowLocalUpdates
                                 && env != null
                                 && tableReference.getTableName().equals(
-                                    env.getRegion().getTableDesc().getNameAsString())) {
+                                    env.getRegion().getTableDescriptor().getTableName().getNameAsString())) {
                             try {
                                 throwFailureIfDone();
                                 IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);

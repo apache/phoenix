@@ -39,12 +39,12 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -205,14 +205,14 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
 
             // keep trying to split the region
             final HBaseTestingUtility utility = getUtility();
-            final Admin admin = utility.getHBaseAdmin();
+            final Admin admin = utility.getAdmin();
             final TableName dataTN = TableName.valueOf(dataTable);
             assertEquals(1, utility.getHBaseCluster().getRegions(dataTN).size());
             utility.waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
                 @Override
                 public boolean evaluate() throws Exception {
                     try {
-                        List<HRegionInfo> regions = admin.getTableRegions(dataTN);
+                        List<RegionInfo> regions = admin.getRegions(dataTN);
                         if (regions.size() > 1) {
                             logger.info("Found region was split");
                             return true;
@@ -223,9 +223,9 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
                             return false;
                         }
                         ;
-                        HRegionInfo hRegion = regions.get(0);
+                        RegionInfo hRegion = regions.get(0);
                         logger.info("Attempting to split region");
-                        admin.splitRegion(hRegion.getRegionName(), Bytes.toBytes(2));
+                        admin.splitRegionAsync(hRegion.getRegionName(), Bytes.toBytes(2));
                         return false;
                     } catch (NotServingRegionException nsre) {
                         // during split
@@ -260,18 +260,18 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
             final HBaseTestingUtility utility = getUtility();
             // try to close the region while UPSERT SELECTs are happening,
             final HRegionServer dataRs = utility.getHBaseCluster().getRegionServer(0);
-            final Admin admin = utility.getHBaseAdmin();
-            final HRegionInfo dataRegion =
-                    admin.getTableRegions(TableName.valueOf(dataTable)).get(0);
+            final Admin admin = utility.getAdmin();
+            final RegionInfo dataRegion =
+                    admin.getRegions(TableName.valueOf(dataTable)).get(0);
             logger.info("Closing data table region");
-            admin.closeRegion(dataRs.getServerName(), dataRegion);
+            admin.unassign(dataRegion.getEncodedNameAsBytes(), true);
             // make sure the region is offline
             utility.waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
                 @Override
                 public boolean evaluate() throws Exception {
-                    List<HRegionInfo> onlineRegions =
-                            admin.getOnlineRegions(dataRs.getServerName());
-                    for (HRegionInfo onlineRegion : onlineRegions) {
+                    List<RegionInfo> onlineRegions =
+                            admin.getRegions(dataRs.getServerName());
+                    for (RegionInfo onlineRegion : onlineRegions) {
                         if (onlineRegion.equals(dataRegion)) {
                             logger.info("Data region still online");
                             return false;

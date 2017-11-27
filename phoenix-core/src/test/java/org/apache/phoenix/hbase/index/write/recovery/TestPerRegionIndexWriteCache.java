@@ -30,12 +30,14 @@ import java.util.Set;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
@@ -76,15 +78,18 @@ public class TestPerRegionIndexWriteCache {
       TEST_UTIL.getConfiguration().set("hbase.rootdir", hbaseRootDir.toString());
 
       FileSystem newFS = FileSystem.newInstance(TEST_UTIL.getConfiguration());
-      HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
+      RegionInfo hri = RegionInfoBuilder.newBuilder(tableName).setStartKey(null).setEndKey(null).setSplit(false).build();
       Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
       Random rn = new Random();
       tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
       WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, "TestPerRegionIndexWriteCache");
       wal = walFactory.getWAL(Bytes.toBytes("logs"), null);
-      HTableDescriptor htd = new HTableDescriptor(tableName);
-      HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
-      htd.addFamily(a);
+        TableDescriptor htd =
+                TableDescriptorBuilder
+                        .newBuilder(tableName)
+                        .addColumnFamily(
+                            ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("a")).build())
+                        .build();
       
       r1 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
           @Override

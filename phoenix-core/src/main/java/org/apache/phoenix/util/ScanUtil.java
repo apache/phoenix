@@ -36,8 +36,8 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
@@ -669,7 +669,7 @@ public class ScanUtil {
         }
     }
 
-    public static byte[] getActualStartRow(Scan localIndexScan, HRegionInfo regionInfo) {
+    public static byte[] getActualStartRow(Scan localIndexScan, RegionInfo regionInfo) {
         return localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX) == null ? localIndexScan
                 .getStartRow() : ScanRanges.prefixKey(localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX), 0 ,
             regionInfo.getStartKey().length == 0 ? new byte[regionInfo.getEndKey().length]

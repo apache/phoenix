@@ -32,17 +32,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -67,7 +68,6 @@ import org.junit.Test;
 
 public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     
-    @SuppressWarnings("deprecation")
     private String initTableValues() throws Exception {
         final String tableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         final byte[] tableBytes = tableName.getBytes();
@@ -75,11 +75,10 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
         Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
-            HTableDescriptor descriptor = new HTableDescriptor(tableBytes);
-            HColumnDescriptor columnDescriptor =  new HColumnDescriptor(familyName);
-            columnDescriptor.setKeepDeletedCells(true);
-            descriptor.addFamily(columnDescriptor);
-            admin.createTable(descriptor, splits);
+            admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(tableBytes))
+                    .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
+                            .setKeepDeletedCells(KeepDeletedCells.TRUE).build())
+                    .build(), splits);
         } finally {
             admin.close();
         }
@@ -149,7 +148,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
                 "    \"1\".uint_col unsigned_int," +
                 "    \"1\".ulong_col unsigned_long" +
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
-                     HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'";
+                ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'";
         
         try (Connection conn = DriverManager.getConnection(url)) {
             conn.createStatement().execute(ddl);
@@ -162,7 +161,6 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testRangeQuery1() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and ulong_key >= 400";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -181,7 +179,6 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testRangeQuery2() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and uint_key < 40";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -268,7 +265,6 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         }
     }
     
-    @SuppressWarnings("deprecation")
     @Test
     public void testNegativeCompareNegativeValue() throws Exception {
         String tableName = initTableValues();

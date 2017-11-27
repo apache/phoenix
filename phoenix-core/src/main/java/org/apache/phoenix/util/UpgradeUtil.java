@@ -60,6 +60,7 @@ import java.sql.SQLException;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -75,12 +76,12 @@ import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -89,7 +90,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -190,9 +192,9 @@ public class UpgradeUtil {
     
     private static void createSequenceSnapshot(Admin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
-        HColumnDescriptor columnDesc = new HColumnDescriptor(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES);
-        HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(tableName));
-        desc.addFamily(columnDesc);
+        TableDescriptor desc = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES))
+                .build();
         try {
             admin.createTable(desc);
             copyTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, tableName);
@@ -294,7 +296,7 @@ public class UpgradeUtil {
                 return;
             }
             logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
-            HTableDescriptor desc = admin.getTableDescriptor(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
+            TableDescriptor desc = admin.getDescriptor(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
             createSequenceSnapshot(admin, conn);
             snapshotCreated = true;
             admin.disableTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
@@ -346,33 +348,34 @@ public class UpgradeUtil {
             boolean droppedLocalIndexes = false;
             while (rs.next()) {
                 if(!droppedLocalIndexes) {
-                    HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    TableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                     String localIndexSplitter = LocalIndexSplitter.class.getName();
-                    for (HTableDescriptor table : localIndexTables) {
-                        HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString())));
-                        HColumnDescriptor[] columnFamilies = dataTableDesc.getColumnFamilies();
+                    for (TableDescriptor table : localIndexTables) {
+                        TableDescriptor dataTableDesc = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getTableName().getNameAsString())));
+                        TableDescriptorBuilder dataTableDescBuilder = TableDescriptorBuilder.newBuilder(dataTableDesc);
+                        ColumnFamilyDescriptor[] columnFamilies = dataTableDesc.getColumnFamilies();
                         boolean modifyTable = false;
-                        for(HColumnDescriptor cf : columnFamilies) {
+                        for(ColumnFamilyDescriptor cf : columnFamilies) {
                             String localIndexCf = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX+cf.getNameAsString();
-                            if(dataTableDesc.getFamily(Bytes.toBytes(localIndexCf))==null){
-                                HColumnDescriptor colDef =
-                                        new HColumnDescriptor(localIndexCf);
-                                for(Entry<ImmutableBytesWritable, ImmutableBytesWritable> keyValue: cf.getValues().entrySet()){
-                                    colDef.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
+                            if(dataTableDesc.getColumnFamily(Bytes.toBytes(localIndexCf))==null){
+                                ColumnFamilyDescriptorBuilder colDefBuilder =
+                                        ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes(localIndexCf));
+                                for(Entry<Bytes, Bytes> keyValue: cf.getValues().entrySet()){
+                                    colDefBuilder.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
                                 }
-                                dataTableDesc.addFamily(colDef);
+                                dataTableDescBuilder.addColumnFamily(colDefBuilder.build());
                                 modifyTable = true;
                             }
                         }
-                        List<String> coprocessors = dataTableDesc.getCoprocessors();
+                        Collection<String> coprocessors = dataTableDesc.getCoprocessors();
                         for(String coprocessor:  coprocessors) {
                             if(coprocessor.equals(localIndexSplitter)) {
-                                dataTableDesc.removeCoprocessor(localIndexSplitter);
+                                dataTableDescBuilder.removeCoprocessor(localIndexSplitter);
                                 modifyTable = true;
                             }
                         }
                         if(modifyTable) {
-                            admin.modifyTable(dataTableDesc.getTableName(), dataTableDesc);
+                            admin.modifyTable(dataTableDescBuilder.build());
                         }
                     }
                     admin.disableTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");

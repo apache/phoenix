@@ -27,7 +27,7 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.hbase.index.Indexer;
 
 /**
@@ -127,15 +127,15 @@ public class CoveredColumnIndexSpecifierBuilder {
     }
   }
 
-  public void build(HTableDescriptor desc) throws IOException {
-    build(desc, CoveredColumnIndexCodec.class);
-  }
+    public TableDescriptor build(TableDescriptor desc) throws IOException {
+        return build(desc, CoveredColumnIndexCodec.class);
+    }
 
-  public void build(HTableDescriptor desc, Class<? extends IndexCodec> clazz) throws IOException {
+  public TableDescriptor build(TableDescriptor desc, Class<? extends IndexCodec> clazz) throws IOException {
     // add the codec for the index to the map of options
     Map<String, String> opts = this.convertToMap();
     opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, clazz.getName());
-    Indexer.enableIndexing(desc, NonTxIndexBuilder.class, opts, Coprocessor.PRIORITY_USER);
+   return Indexer.enableIndexing(desc, NonTxIndexBuilder.class, opts, Coprocessor.PRIORITY_USER);
   }
 
   public static List<ColumnGroup> getColumns(Configuration conf) {

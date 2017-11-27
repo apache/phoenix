@@ -125,7 +125,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
                 throw new DoNotRetryIOException();
             }
             Mutation operation = miniBatchOp.getOperation(0);
-            Set<byte[]> keySet = operation.getFamilyMap().keySet();
+            Set<byte[]> keySet = operation.getFamilyCellMap().keySet();
             for(byte[] family: keySet) {
                 if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) && failIndexTableWrite) {
                     throw new DoNotRetryIOException();
@@ -232,17 +232,17 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             assertTrue(!Arrays.equals(mutations[0].getRow(),Bytes.toBytes("a")));
 
             //wait for data table region repoen.
-            List<Region> dataTableRegions=null;
+            List<HRegion> dataTableRegions=null;
 
             for(int i=1;i<=200;i++) {
-                dataTableRegions=liveRegionServer.getOnlineRegions(TableName.valueOf(DATA_TABLE_NAME));
+                dataTableRegions=liveRegionServer.getRegions(TableName.valueOf(DATA_TABLE_NAME));
                 if(dataTableRegions.size() > 0) {
                     break;
                 }
                 Thread.sleep(ONE_SEC);
             }
 
-            dataTableRegions=liveRegionServer.getOnlineRegions(TableName.valueOf(DATA_TABLE_NAME));
+            dataTableRegions=liveRegionServer.getRegions(TableName.valueOf(DATA_TABLE_NAME));
             assertTrue(dataTableRegions.size()==1);
 
 

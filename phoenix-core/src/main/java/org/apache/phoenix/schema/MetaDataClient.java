@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import static com.google.common.collect.Sets.newLinkedHashSet;
 import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
-import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
@@ -127,14 +126,15 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -1065,11 +1065,11 @@ public class MetaDataClient {
     private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> props, Map<String, Object> tableProps,
             Map<String, Object> commonFamilyProps) {
         // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
-        HColumnDescriptor defaultDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+        ColumnFamilyDescriptor defaultDescriptor = ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         if (!props.isEmpty()) {
             Collection<Pair<String,Object>> propsList = props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
             for (Pair<String,Object> prop : propsList) {
-                if (defaultDescriptor.getValue(prop.getFirst()) == null) {
+                if (defaultDescriptor.getValue(Bytes.toBytes(prop.getFirst())) == null) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                 } else {
                     commonFamilyProps.put(prop.getFirst(), prop.getSecond());
@@ -2003,7 +2003,7 @@ public class MetaDataClient {
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactional);
             if (transactional) {
                 // If TTL set, use Tephra TTL property name instead
-                Object ttl = commonFamilyProps.remove(HColumnDescriptor.TTL);
+                Object ttl = commonFamilyProps.remove(ColumnFamilyDescriptorBuilder.TTL);
                 if (ttl != null) {
                     commonFamilyProps.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                 }
@@ -2034,9 +2034,9 @@ public class MetaDataClient {
                     Integer maxVersionsProp = (Integer) commonFamilyProps.get(HConstants.VERSIONS);
                     if (maxVersionsProp == null) {
                         if (parent != null) {
-                            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(parent.getPhysicalName().getBytes());
+                            TableDescriptor desc = connection.getQueryServices().getTableDescriptor(parent.getPhysicalName().getBytes());
                             if (desc != null) {
-                                maxVersionsProp = desc.getFamily(SchemaUtil.getEmptyColumnFamily(parent)).getMaxVersions();
+                                maxVersionsProp = desc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(parent)).getMaxVersions();
                             }
                         }
                         if (maxVersionsProp == null) {
@@ -2225,7 +2225,7 @@ public class MetaDataClient {
                 byte[] tableNameBytes = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
                 boolean tableExists = true;
                 try {
-                    HTableDescriptor tableDescriptor = connection.getQueryServices().getTableDescriptor(tableNameBytes);
+                    TableDescriptor tableDescriptor = connection.getQueryServices().getTableDescriptor(tableNameBytes);
                     if (tableDescriptor == null) { // for connectionless
                         tableExists = false;
                     }
@@ -2420,7 +2420,7 @@ public class MetaDataClient {
                     for (Pair<String,Object> prop : props) {
                         // Don't allow specifying column families for TTL. TTL can only apply for the all the column families of the table
                         // i.e. it can't be column family specific.
-                        if (!familyName.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY) && prop.getFirst().equals(TTL)) {
+                        if (!familyName.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY) && prop.getFirst().equals(ColumnFamilyDescriptorBuilder.TTL)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL).build().buildException();
                         }
                         combinedFamilyProps.put(prop.getFirst(), prop.getSecond());

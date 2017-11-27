@@ -21,6 +21,7 @@ package org.apache.phoenix.iterate;
 import com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -105,7 +106,7 @@ public abstract class RegionScannerFactory {
     return new RegionScanner() {
 
       private boolean hasReferences = checkForReferenceFiles();
-      private HRegionInfo regionInfo = env.getRegionInfo();
+      private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
 
       // If there are any reference files after local index region merge some cases we might
@@ -150,7 +151,7 @@ public abstract class RegionScannerFactory {
       }
 
       @Override
-      public HRegionInfo getRegionInfo() {
+      public RegionInfo getRegionInfo() {
         return s.getRegionInfo();
       }
 

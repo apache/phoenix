@@ -20,6 +20,7 @@ package org.apache.phoenix.transaction;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -42,10 +43,10 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
-import org.apache.tephra.TxConstants;
-import org.apache.tephra.hbase.TransactionAwareHTable;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.tephra.TxConstants;
+import org.apache.tephra.hbase.TransactionAwareHTable;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Message;
@@ -353,5 +354,30 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     @Override
     public void setWriteRpcTimeout(int writeRpcTimeout) {
         return transactionAwareHTable.setWriteRpcTimeout(writeRpcTimeout);
+    }
+
+    @Override
+    public boolean[] exists(List<Get> gets) throws IOException {
+        return transactionAwareHTable.exists(gets);
+    }
+
+    @Override
+    public long getRpcTimeout(TimeUnit unit) {
+        return transactionAwareHTable.getRpcTimeout();
+    }
+
+    @Override
+    public long getReadRpcTimeout(TimeUnit unit) {
+        return transactionAwareHTable.getReadRpcTimeout(unit);
+    }
+
+    @Override
+    public long getWriteRpcTimeout(TimeUnit unit) {
+        return transactionAwareHTable.getWriteRpcTimeout(unit);
+    }
+
+    @Override
+    public long getOperationTimeout(TimeUnit unit) {
+        return transactionAwareHTable.getOperationTimeout(unit);
     }
 }

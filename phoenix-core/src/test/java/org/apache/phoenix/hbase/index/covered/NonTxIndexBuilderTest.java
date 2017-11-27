@@ -34,11 +34,11 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -64,6 +64,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
@@ -102,7 +103,6 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
     private static final byte[] VALUE_2 = Bytes.toBytes(222);
     private static final byte[] VALUE_3 = Bytes.toBytes(333);
     private static final byte[] VALUE_4 = Bytes.toBytes(444);
-    private static final byte PUT_TYPE = KeyValue.Type.Put.getCode();
 
     private NonTxIndexBuilder indexBuilder;
     private PhoenixIndexMetaData mockIndexMetaData;
@@ -139,7 +139,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
                 });
 
         // the following is called by PhoenixIndexCodec#getIndexUpserts() , getIndexDeletes()
-        HRegionInfo mockRegionInfo = Mockito.mock(HRegionInfo.class);
+        RegionInfo mockRegionInfo = Mockito.mock(RegionInfo.class);
         Mockito.when(mockRegion.getRegionInfo()).thenReturn(mockRegionInfo);
         Mockito.when(mockRegionInfo.getStartKey()).thenReturn(Bytes.toBytes("a"));
         Mockito.when(mockRegionInfo.getEndKey()).thenReturn(Bytes.toBytes("z"));
@@ -232,10 +232,10 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
 
         // the current row state has 3 versions, but if we rebuild as of t=2, scanner in LocalTable
         // should only return first
-        Cell currentCell1 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 1, PUT_TYPE, VALUE_1);
-        Cell currentCell2 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 2, PUT_TYPE, VALUE_2);
-        Cell currentCell3 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 3, PUT_TYPE, VALUE_3);
-        Cell currentCell4 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 4, PUT_TYPE, VALUE_4);
+        Cell currentCell1 = PhoenixKeyValueUtil.newKeyValue(ROW, FAM, INDEXED_QUALIFIER, 1, VALUE_1);
+        Cell currentCell2 = PhoenixKeyValueUtil.newKeyValue(ROW, FAM, INDEXED_QUALIFIER, 2, VALUE_2);
+        Cell currentCell3 = PhoenixKeyValueUtil.newKeyValue(ROW, FAM, INDEXED_QUALIFIER, 3, VALUE_3);
+        Cell currentCell4 = PhoenixKeyValueUtil.newKeyValue(ROW, FAM, INDEXED_QUALIFIER, 4, VALUE_4);
         setCurrentRowState(Arrays.asList(currentCell4, currentCell3, currentCell2, currentCell1));
 
         // rebuilder replays mutations starting from t=2
@@ -322,7 +322,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
     }
 
     private void setCurrentRowState(byte[] fam2, byte[] indexedQualifier, int i, byte[] value1) {
-        Cell cell = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 1, PUT_TYPE, VALUE_1);
+        Cell cell = PhoenixKeyValueUtil.newKeyValue(ROW, FAM, INDEXED_QUALIFIER, 1, VALUE_1);
         currentRowCells = Collections.singletonList(cell);
     }
 

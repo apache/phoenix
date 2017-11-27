@@ -124,7 +124,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 			if (env != null
 					&& !allowLocalUpdates
 					&& tableReference.getTableName().equals(
-							env.getRegion().getTableDesc().getNameAsString())) {
+							env.getRegion().getTableDescriptor().getTableName().getNameAsString())) {
 				continue;
 			}
             tables.add(tableReference);
@@ -153,7 +153,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         if (allowLocalUpdates
                                 && env != null
                                 && tableReference.getTableName().equals(
-                                    env.getRegion().getTableDesc().getNameAsString())) {
+                                    env.getRegion().getTableDescriptor().getTableName().getNameAsString())) {
                             try {
                                 throwFailureIfDone();
                                 IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);

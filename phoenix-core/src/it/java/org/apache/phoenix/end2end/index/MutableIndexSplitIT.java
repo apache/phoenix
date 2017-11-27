@@ -32,10 +32,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -103,7 +103,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
             "CREATE " + (localIndex ? "LOCAL" : "")+" INDEX " + indexName + " ON " + tableName + "(v1"+(isReverse?" DESC":"")+") include (k3)");
     }
 
-    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, Admin admin, boolean isReverse)
+    private List<RegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, Admin admin, boolean isReverse)
             throws SQLException, IOException, InterruptedException {
         ResultSet rs;
 
@@ -126,7 +126,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         int[] splitInts = new int[2];
         splitInts[0] = 22;
         splitInts[1] = 4;
-        List<HRegionInfo> regionsOfUserTable = null;
+        List<RegionInfo> regionsOfUserTable = null;
         for(int i = 0; i <=1; i++) {
             Threads.sleep(10000);
             if(localIndex) {
@@ -137,16 +137,14 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
             }
             Thread.sleep(100);
             regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                        admin.getConnection(), TableName.valueOf(localIndex?tableName:indexName),
-                        false);
+                    MetaTableAccessor.getTableRegions(admin.getConnection(),
+                        TableName.valueOf(localIndex ? tableName : indexName), false);
 
             while (regionsOfUserTable.size() != (i+2)) {
                 Thread.sleep(100);
                 regionsOfUserTable =
-                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(),
-                            TableName.valueOf(localIndex?tableName:indexName), false);
+                        MetaTableAccessor.getTableRegions(admin.getConnection(),
+                            TableName.valueOf(localIndex ? tableName : indexName), false);
             }
             assertEquals(i+2, regionsOfUserTable.size());
         }

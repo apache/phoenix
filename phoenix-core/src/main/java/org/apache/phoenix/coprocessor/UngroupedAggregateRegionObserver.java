@@ -48,7 +48,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -62,6 +61,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -464,7 +464,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
         if (flushSize <= 0) {
             flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
-                    HTableDescriptor.DEFAULT_MEMSTORE_FLUSH_SIZE);
+                    TableDescriptorBuilder.DEFAULT_MEMSTORE_FLUSH_SIZE);
         }
 
         /**

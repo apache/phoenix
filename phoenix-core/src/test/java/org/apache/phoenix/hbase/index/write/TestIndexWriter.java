@@ -17,10 +17,8 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,11 +35,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -79,7 +78,8 @@ public class TestIndexWriter {
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     Mockito.when(env.getConfiguration()).thenReturn(conf);
-    Mockito.when(region.getTableDesc()).thenReturn(new HTableDescriptor());
+    Mockito.when(region.getTableDescriptor()).thenReturn(
+        TableDescriptorBuilder.newBuilder(TableName.valueOf("dummy")).build());
     assertNotNull(IndexWriter.getFailurePolicy(env));
   }
 
@@ -111,7 +111,7 @@ public class TestIndexWriter {
 
     Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
-    Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
+    Mockito.when(table.batch(Mockito.anyList(), Mockito.anyList())).thenAnswer(new Answer<Void>() {
 
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -120,7 +120,7 @@ public class TestIndexWriter {
         return null;
       }
     });
-    Mockito.when(table.getTableName()).thenReturn(testName.getTableName());
+    Mockito.when(table.getName()).thenReturn(TableName.valueOf(testName.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
@@ -158,8 +158,8 @@ public class TestIndexWriter {
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
-    HTableInterface table = Mockito.mock(HTableInterface.class);
-    Mockito.when(table.getTableName()).thenReturn(tableName);
+    Table table = Mockito.mock(Table.class);
+    Mockito.when(table.getName()).thenReturn(TableName.valueOf(tableName));
     final CountDownLatch writeStartedLatch = new CountDownLatch(1);
     // latch never gets counted down, so we wait forever
     final CountDownLatch waitOnAbortedLatch = new CountDownLatch(1);

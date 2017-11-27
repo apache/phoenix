@@ -17,16 +17,12 @@
  */
 package org.apache.phoenix.parse;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableProperty;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;

@@ -31,14 +31,15 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -159,9 +160,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         if (regions != null) {
             return regions;
         }
-        return Collections.singletonList(new HRegionLocation(
-            new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
-            SERVER_NAME, -1));
+        RegionInfo hri =
+                RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
+                        .setStartKey(HConstants.EMPTY_START_ROW)
+                        .setStartKey(HConstants.EMPTY_END_ROW).build();
+        return Collections.singletonList(new HRegionLocation(hri, SERVER_NAME, -1));
     }
 
     @Override
@@ -222,14 +225,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         byte[] startKey = HConstants.EMPTY_START_ROW;
         List<HRegionLocation> regions = Lists.newArrayListWithExpectedSize(splits.length);
         for (byte[] split : splits) {
-            regions.add(new HRegionLocation(
-                    new HRegionInfo(TableName.valueOf(physicalName), startKey, split),
-                    SERVER_NAME, -1));
+            regions.add(new HRegionLocation(RegionInfoBuilder
+                    .newBuilder(TableName.valueOf(physicalName)).setStartKey(startKey)
+                    .setEndKey(split).build(), SERVER_NAME, -1));
             startKey = split;
         }
-        regions.add(new HRegionLocation(
-                new HRegionInfo(TableName.valueOf(physicalName), startKey, HConstants.EMPTY_END_ROW),
-                SERVER_NAME, -1));
+        regions.add(new HRegionLocation(RegionInfoBuilder
+                .newBuilder(TableName.valueOf(physicalName)).setStartKey(startKey)
+                .setEndKey(HConstants.EMPTY_END_ROW).build(), SERVER_NAME, -1));
         return regions;
     }
     
@@ -383,7 +386,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
         return null;
     }
 
@@ -582,16 +585,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
        List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
        if (regions != null) {
-               for(HRegionLocation region: regions) {
-                       if (Bytes.compareTo(region.getRegionInfo().getStartKey(), row) <= 0
-                                       && Bytes.compareTo(region.getRegionInfo().getEndKey(), row) > 0) {
-                           return region;
-                       }
-               }
+            for (HRegionLocation region : regions) {
+                if (Bytes.compareTo(region.getRegion().getStartKey(), row) <= 0
+                        && Bytes.compareTo(region.getRegion().getEndKey(), row) > 0) {
+                    return region;
+                }
+            }
        }
-       return new HRegionLocation(
-                       new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
-                       SERVER_NAME, -1);
+        return new HRegionLocation(RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
+                .setStartKey(HConstants.EMPTY_START_ROW).setEndKey(HConstants.EMPTY_END_ROW)
+                .build(), SERVER_NAME, -1);
     }
 
     @Override

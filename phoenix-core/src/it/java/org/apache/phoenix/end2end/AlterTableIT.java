@@ -46,10 +46,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -233,7 +233,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " ADD CF.col2 integer CF.IN_MEMORY=true");
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
+                ColumnFamilyDescriptor[] columnFamilies = admin.getDescriptor(TableName.valueOf(dataTableFullName)).getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
                 assertFalse(columnFamilies[0].isInMemory());
@@ -938,8 +938,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(dataTableFullName));
-                HColumnDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
                 assertEquals(2, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());

@@ -42,12 +42,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.types.PInteger;
@@ -219,13 +220,11 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
         byte[] htableName = SchemaUtil.getTableNameAsBytes("", table);
         Admin admin = pconn.getQueryServices().getAdmin();
 
-        @SuppressWarnings("deprecation")
-        HTableDescriptor descriptor = new HTableDescriptor(htableName);
+        TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
         for (byte[] familyName : familyNames) {
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-            descriptor.addFamily(columnDescriptor);
+            builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
         }
-        admin.createTable(descriptor);
+        admin.createTable(builder.build());
 
         Properties props = new Properties();
         Connection conn1 = DriverManager.getConnection(getUrl(), props);

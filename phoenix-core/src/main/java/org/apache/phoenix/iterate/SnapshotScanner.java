@@ -19,25 +19,35 @@
 package org.apache.phoenix.iterate;
 
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ConcurrentMap;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.*;
-import org.apache.hadoop.hbase.client.*;
-
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.AbstractClientScanner;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.IsolationLevel;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.*;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.OnlineRegions;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.*;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 
 public class SnapshotScanner extends AbstractClientScanner {
 
@@ -48,7 +58,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   List<Cell> values;
 
   public SnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
-      HTableDescriptor htd, HRegionInfo hri,  Scan scan) throws Throwable{
+      TableDescriptor htd, RegionInfo hri,  Scan scan) throws Throwable{
 
     scan.setIsolationLevel(IsolationLevel.READ_UNCOMMITTED);
     values = new ArrayList<>();
@@ -119,13 +129,8 @@ public class SnapshotScanner extends AbstractClientScanner {
       }
 
       @Override
-      public HRegionInfo getRegionInfo() {
+      public RegionInfo getRegionInfo() {
         return region.getRegionInfo();
-      }
-
-      @Override
-      public RegionServerServices getRegionServerServices() {
-        throw new UnsupportedOperationException();
       }
 
       @Override
@@ -140,11 +145,6 @@ public class SnapshotScanner extends AbstractClientScanner {
 
       @Override
       public String getHBaseVersion() {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Coprocessor getInstance() {
         throw new UnsupportedOperationException();
       }
 
@@ -164,20 +164,34 @@ public class SnapshotScanner extends AbstractClientScanner {
       }
 
       @Override
-      public Table getTable(TableName tableName) throws IOException {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public Table getTable(TableName tableName, ExecutorService executorService)
-          throws IOException {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
       public ClassLoader getClassLoader() {
         throw new UnsupportedOperationException();
       }
+
+    @Override
+    public RegionCoprocessor getInstance() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public OnlineRegions getOnlineRegions() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ServerName getServerName() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Connection getConnection() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public MetricRegistry getMetricRegistryForRegionServer() {
+        throw new UnsupportedOperationException();
+    }
     };
   }
 }

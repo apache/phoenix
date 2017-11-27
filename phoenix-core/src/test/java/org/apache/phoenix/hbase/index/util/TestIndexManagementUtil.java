@@ -20,10 +20,12 @@ package org.apache.phoenix.hbase.index.util;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedHLogReader;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
@@ -77,19 +79,17 @@ public class TestIndexManagementUtil {
    * @throws IOException
    */
   public static void createIndexTable(Admin admin, String indexTable) throws IOException {
-    createIndexTable(admin, new HTableDescriptor(indexTable));
+    createIndexTable(admin, TableDescriptorBuilder.newBuilder(TableName.valueOf(indexTable)));
   }
 
   /**
    * @param admin to create the table
    * @param index descriptor to update before creating table
    */
-  public static void createIndexTable(Admin admin, HTableDescriptor index) throws IOException {
-    HColumnDescriptor col =
-        new HColumnDescriptor(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY);
-    // ensure that we can 'see past' delete markers when doing scans
-    col.setKeepDeletedCells(true);
-    index.addFamily(col);
-    admin.createTable(index);
+  public static void createIndexTable(Admin admin, TableDescriptorBuilder indexBuilder) throws IOException {
+        indexBuilder.addColumnFamily(
+                ColumnFamilyDescriptorBuilder.newBuilder(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY)
+                        .setKeepDeletedCells(KeepDeletedCells.TRUE).build());
+    admin.createTable(indexBuilder.build());
   }
 }

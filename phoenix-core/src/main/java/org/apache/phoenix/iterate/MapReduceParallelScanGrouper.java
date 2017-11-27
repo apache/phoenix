@@ -22,15 +22,16 @@ import java.util.List;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
-import org.apache.hadoop.hbase.protobuf.generated.SnapshotProtos;
+import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.SnapshotProtos.SnapshotDescription;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.SnapshotProtos.SnapshotRegionManifest;
 import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
 import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.phoenix.compile.QueryPlan;
@@ -66,7 +67,7 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 				Path rootDir = new Path(conf.get(HConstants.HBASE_DIR));
 				FileSystem fs = rootDir.getFileSystem(conf);
 				Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
-				HBaseProtos.SnapshotDescription snapshotDescription = SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+				SnapshotDescription snapshotDescription = SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
 				SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshotDescription);
 				return getRegionLocationsFromManifest(manifest);
 			}
@@ -80,14 +81,14 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 	}
 
 	private List<HRegionLocation> getRegionLocationsFromManifest(SnapshotManifest manifest) {
-		List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
+		List<SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
 		Preconditions.checkNotNull(regionManifests);
 
 		List<HRegionLocation> regionLocations = Lists.newArrayListWithCapacity(regionManifests.size());
 
-		for (SnapshotProtos.SnapshotRegionManifest regionManifest : regionManifests) {
+		for (SnapshotRegionManifest regionManifest : regionManifests) {
 			regionLocations.add(new HRegionLocation(
-					HRegionInfo.convert(regionManifest.getRegionInfo()), null));
+					ProtobufUtil.toRegionInfo(regionManifest.getRegionInfo()), null));
 		}
 
 		return regionLocations;

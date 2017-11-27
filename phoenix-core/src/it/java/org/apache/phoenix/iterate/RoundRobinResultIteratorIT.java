@@ -37,9 +37,9 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -240,7 +240,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         Connection conn = getConnection();
         conn.createStatement().execute("CREATE TABLE " + tableName + "("
                 + "a VARCHAR PRIMARY KEY, b VARCHAR) " 
-                + HTableDescriptor.MAX_FILESIZE + "=" + maxFileSize + ","
+                + TableDescriptorBuilder.MAX_FILESIZE + "=" + maxFileSize + ","
                 + " SALT_BUCKETS = " + NUM_SALT_BUCKETS);
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
         int rowCount = 0;
@@ -309,7 +309,6 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testBug2074() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = getConnection();
         try {
             conn.createStatement().execute("CREATE TABLE EVENTS" 

@@ -32,11 +32,11 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -90,7 +90,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         this.env = env;
         rebuildIndexOnFailure = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB,
                 QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
-        HTableDescriptor htd = env.getRegion().getTableDesc();
+        TableDescriptor htd = env.getRegion().getTableDescriptor();
         // If rebuild index is turned off globally, no need to check the table because the background thread
         // won't be running in this case
         if (rebuildIndexOnFailure) {
@@ -194,8 +194,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             timestamp = minTimeStamp;
 
             // If the data table has local index column families then get local indexes to disable.
-            if (ref.getTableName().equals(env.getRegion().getTableDesc().getTableName().getNameAsString())
-                    && MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDesc())) {
+            if (ref.getTableName().equals(env.getRegion().getTableDescriptor().getTableName().getNameAsString())
+                    && MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDescriptor())) {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
                 }
@@ -283,7 +283,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             }
 
             IndexMaintainer indexMaintainer = localIndex.getIndexMaintainer(dataTable, conn);
-            HRegionInfo regionInfo = this.env.getRegion().getRegionInfo();
+            RegionInfo regionInfo = this.env.getRegion().getRegionInfo();
             int offset =
                     regionInfo.getStartKey().length == 0 ? regionInfo.getEndKey().length
                             : regionInfo.getStartKey().length;

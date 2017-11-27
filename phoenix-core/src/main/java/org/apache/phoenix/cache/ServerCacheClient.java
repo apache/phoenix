@@ -248,15 +248,15 @@ public class ServerCacheClient {
             Set<HRegionLocation> servers = new HashSet<HRegionLocation>(nRegions);
             for (HRegionLocation entry : locations) {
                 // Keep track of servers we've sent to and only send once
-                byte[] regionStartKey = entry.getRegionInfo().getStartKey();
-                byte[] regionEndKey = entry.getRegionInfo().getEndKey();
+                byte[] regionStartKey = entry.getRegion().getStartKey();
+                byte[] regionEndKey = entry.getRegion().getEndKey();
                 if ( ! servers.contains(entry) && 
                         keyRanges.intersectRegion(regionStartKey, regionEndKey,
                                 cacheUsingTable.getIndexType() == IndexType.LOCAL)) {  
                     // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
-                    final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
+                    final byte[] key = getKeyInRegion(entry.getRegion().getStartKey());
                     final Table htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
                     closeables.add(htable);
                     futures.add(executor.submit(new JobCallable<Boolean>() {
@@ -355,7 +355,7 @@ public class ServerCacheClient {
              // Call once per server
                 if (remainingOnServers.contains(entry)) { 
                     try {
-                        byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
+                        byte[] key = getKeyInRegion(entry.getRegion().getStartKey());
                         iterateOverTable.coprocessorService(ServerCachingService.class, key, key,
                                 new Batch.Call<ServerCachingService, RemoveServerCacheResponse>() {
                                     @Override

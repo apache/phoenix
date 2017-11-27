@@ -55,7 +55,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
@@ -64,6 +63,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -965,17 +966,20 @@ public class TestUtil {
     public static void addCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
         int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptorBuilder descriptorBuilder = null;
 		if (!descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
-			descriptor.addCoprocessor(coprocessorClass.getName(), null, priority, null);
+		    descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
+		    descriptorBuilder.addCoprocessor(coprocessorClass.getName(), null, priority, null);
 		}else{
 			return;
 		}
         final int retries = 10;
         int numTries = 10;
+        descriptor = descriptorBuilder.build();
         try (Admin admin = services.getAdmin()) {
-            admin.modifyTable(TableName.valueOf(tableName), descriptor);
-            while (!admin.getTableDescriptor(TableName.valueOf(tableName)).equals(descriptor)
+            admin.modifyTable(descriptor);
+            while (!admin.getDescriptor(TableName.valueOf(tableName)).equals(descriptor)
                     && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {
@@ -990,17 +994,20 @@ public class TestUtil {
 
     public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptorBuilder descriptorBuilder = null;
         if (descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
-            descriptor.removeCoprocessor(coprocessorClass.getName());
+            descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
+            descriptorBuilder.removeCoprocessor(coprocessorClass.getName());
         }else{
             return;
         }
         final int retries = 10;
         int numTries = retries;
+        descriptor = descriptorBuilder.build();
         try (Admin admin = services.getAdmin()) {
-            admin.modifyTable(TableName.valueOf(tableName), descriptor);
-            while (!admin.getTableDescriptor(TableName.valueOf(tableName)).equals(descriptor)
+            admin.modifyTable(descriptor);
+            while (!admin.getDescriptor(TableName.valueOf(tableName)).equals(descriptor)
                     && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {

@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -204,7 +203,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         }
 
         @Override
-        protected Tuple wrapKeyValueAsResult(KeyValue keyValue) {
+        protected Tuple wrapKeyValueAsResult(Cell keyValue) {
             return new MultiKeyValueTuple(Collections.<Cell> singletonList(keyValue));
         }
 
@@ -230,7 +229,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         }
 
         @Override
-        protected Tuple wrapKeyValueAsResult(KeyValue keyValue)
+        protected Tuple wrapKeyValueAsResult(Cell keyValue)
                 throws SQLException {
             return new MultiKeyValueTuple(Collections.<Cell> singletonList(keyValue));
         }

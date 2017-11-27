@@ -40,8 +40,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
@@ -49,7 +47,10 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -329,7 +330,6 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           // Causes the Increment to be ignored as we're committing the mutations
           // ourselves below.
           e.bypass();
-          e.complete();
           // ON DUPLICATE KEY IGNORE will return empty list if row already exists
           // as no action is required in that case.
           if (!mutations.isEmpty()) {
@@ -789,20 +789,20 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
 
   /**
    * Enable indexing on the given table
-   * @param desc {@link HTableDescriptor} for the table on which indexing should be enabled
+   * @param desc {@link TableDescriptor} for the table on which indexing should be enabled
  * @param builder class to use when building the index for this table
  * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
  * @param priority TODO
    * @throws IOException the Indexer coprocessor cannot be added
    */
-  public static void enableIndexing(HTableDescriptor desc, Class<? extends IndexBuilder> builder,
+  public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,
       Map<String, String> properties, int priority) throws IOException {
     if (properties == null) {
       properties = new HashMap<String, String>();
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-    desc.addCoprocessor(Indexer.class.getName(), null, priority, properties);
+     descBuilder.addCoprocessor(Indexer.class.getName(), null, priority, properties);
   }
 }
 
