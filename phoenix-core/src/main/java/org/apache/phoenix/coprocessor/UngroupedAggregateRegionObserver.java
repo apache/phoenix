@@ -307,7 +307,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
             Scan scan) throws IOException {
-    
+        super.preScannerOpen(c, scan);
         if (ScanUtil.isAnalyzeTable(scan)) {
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
