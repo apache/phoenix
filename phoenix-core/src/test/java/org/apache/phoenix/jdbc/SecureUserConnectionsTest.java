@@ -46,6 +46,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -54,6 +55,7 @@ import org.junit.Test;
  * a ConcurrentHashMap. We can use a HashSet to determine when instances of ConnectionInfo
  * collide and when they do not.
  */
+@Ignore
 public class SecureUserConnectionsTest {
     private static final Log LOG = LogFactory.getLog(SecureUserConnectionsTest.class); 
     private static final int KDC_START_ATTEMPTS = 10;

@@ -834,16 +834,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
             TableDescriptor newDesc = builder.build();
-            if(newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
+            if(!newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
                 builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
             }
-            if(newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
+            if(!newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
-            if(newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
+            if(!newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
-            if(newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
+            if(!newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
             boolean isTransactional =
