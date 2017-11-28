@@ -798,7 +798,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                         ColumnFamilyDescriptorBuilder columnDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(columnDescriptor);
                         modifyColumnFamilyDescriptor(columnDescriptorBuilder, family.getSecond());
-                        tableDescriptorBuilder.addColumnFamily(columnDescriptorBuilder.build());
+                        tableDescriptorBuilder.modifyColumnFamily(columnDescriptorBuilder.build());
                     }
                 }
             }
