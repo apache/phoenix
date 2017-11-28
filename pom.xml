@@ -925,16 +925,6 @@
         <version>${jodatime.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.curator</groupId>
-        <artifactId>curator-test</artifactId>
-        <version>${curator.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.curator</groupId>
-        <artifactId>curator-client</artifactId>
-        <version>${curator.version}</version>
-      </dependency>
-      <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>${stream.version}</version>
