@@ -833,13 +833,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
+            TableDescriptor newDesc = builder.build();
+            if(newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
                 builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
-            
+            }
+            if(newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
-            
+            }
+            if(newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
-            
+            }
+            if(newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
+            }
             boolean isTransactional =
                     Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) ||
                     Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA)); // For ALTER TABLE
@@ -855,7 +861,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // For alter table, remove non transactional index coprocessor
                         builder.removeCoprocessor(Indexer.class.getName());
                 } else {
-                    if (!builder.build().hasCoprocessor(Indexer.class.getName())) {
+                    if (!newDesc.hasCoprocessor(Indexer.class.getName())) {
                         // If exception on alter table to transition back to non transactional
                             builder.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                         Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
