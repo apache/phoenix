@@ -87,7 +87,8 @@ public class QueryParserTest {
         parseQuery(sql6);
         String sql7 = "GRANT 'A' TO GROUP 'group7'";
         parseQuery(sql7);
-
+        String sql8 = "GRANT 'ARXRRRRR' TO GROUP 'group8'";
+        parseQueryThatShouldFail(sql8);
     }
 
     @Test
@@ -105,7 +106,8 @@ public class QueryParserTest {
         parseQuery(sql4);
         String sql5 = "REVOKE FROM GROUP 'group5'";
         parseQuery(sql5);
-
+        String sql6 = "REVOKE 'RRWWXAAA' FROM GROUP 'group6'";
+        parseQueryThatShouldFail(sql6);
     }
 
     @Test

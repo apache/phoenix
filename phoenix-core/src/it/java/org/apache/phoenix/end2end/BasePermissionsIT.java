@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -28,10 +29,14 @@ import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
@@ -220,14 +225,21 @@ public class BasePermissionsIT extends BaseTest {
         AccessControlClient.revoke(getUtility().getConnection(), unprivilegedUser.getShortName(), Permission.Action.values() );
     }
 
-    Properties getClientProperties() {
+    Properties getClientProperties(String tenantId) {
         Properties props = new Properties();
+        if(tenantId != null) {
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return props;
     }
 
-    public Connection getConnection() throws SQLException{
-        return DriverManager.getConnection(getUrl(), getClientProperties());
+    public Connection getConnection() throws SQLException {
+        return getConnection(null);
+    }
+
+    public Connection getConnection(String tenantId) throws SQLException {
+        return DriverManager.getConnection(getUrl(), getClientProperties(tenantId));
     }
 
     protected static String getUrl() {
@@ -366,12 +378,35 @@ public class BasePermissionsIT extends BaseTest {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
-                    assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk INTEGER not null primary key, data VARCHAR,val integer)"));
+                    assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk INTEGER not null primary key, data VARCHAR, val integer)"));
                     try (PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?, ?, ?)")) {
                         for (int i = 0; i < NUM_RECORDS; i++) {
                             pstmt.setInt(1, i);
                             pstmt.setString(2, Integer.toString(i));
                             pstmt.setInt(3, i);
+                            assertEquals(1, pstmt.executeUpdate());
+                        }
+                    }
+                    conn.commit();
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction createMultiTenantTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    assertFalse(stmt.execute("CREATE TABLE " + tableName
+                            + "(ORG_ID VARCHAR NOT NULL, PREFIX CHAR(3) NOT NULL, DATA VARCHAR, VAL INTEGER CONSTRAINT PK PRIMARY KEY (ORG_ID, PREFIX))  MULTI_TENANT=TRUE"));
+                    try (PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?, ?, ?, ?)")) {
+                        for (int i = 0; i < NUM_RECORDS; i++) {
+                            pstmt.setString(1, "o" + i);
+                            pstmt.setString(2, "pr" + i);
+                            pstmt.setString(3, Integer.toString(i));
+                            pstmt.setInt(4, i);
                             assertEquals(1, pstmt.executeUpdate());
                         }
                     }
@@ -423,7 +458,7 @@ public class BasePermissionsIT extends BaseTest {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
-                    String readTableSQL = "SELECT "+(indexName!=null?"/*+ INDEX("+tableName+" "+indexName+")*/":"")+" pk, data,val FROM " + tableName +" where data>='0'";
+                    String readTableSQL = "SELECT "+(indexName!=null?"/*+ INDEX("+tableName+" "+indexName+")*/":"")+" pk, data, val FROM " + tableName +" where data >= '0'";
                     ResultSet rs = stmt.executeQuery(readTableSQL);
                     assertNotNull(rs);
                     int i = 0;
@@ -434,6 +469,77 @@ public class BasePermissionsIT extends BaseTest {
                         i++;
                     }
                     assertEquals(NUM_RECORDS, i);
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction readMultiTenantTableWithoutIndex(final String tableName) throws SQLException {
+        return readMultiTenantTableWithoutIndex(tableName, null);
+    }
+
+    AccessTestAction readMultiTenantTableWithoutIndex(final String tableName, final String tenantId) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(tenantId); Statement stmt = conn.createStatement()) {
+                    // Accessing all the data from the table avoids the use of index
+                    String readTableSQL = "SELECT data, val FROM " + tableName;
+                    ResultSet rs = stmt.executeQuery(readTableSQL);
+                    assertNotNull(rs);
+                    int i = 0;
+                    String explainPlan = Joiner.on(" ").join(((PhoenixStatement)stmt).getQueryPlan().getExplainPlan().getPlanSteps());
+                    rs = stmt.executeQuery(readTableSQL);
+                    if(tenantId != null) {
+                        rs.next();
+                        assertFalse(explainPlan.contains("_IDX_"));
+                        assertEquals(((PhoenixConnection)conn).getTenantId().toString(), tenantId);
+                        // For tenant ID "o3", the value in table will be 3
+                        assertEquals(Character.toString(tenantId.charAt(1)), rs.getString(1));
+                        // Only 1 record is inserted per Tenant
+                        assertFalse(rs.next());
+                    } else {
+                        while(rs.next()) {
+                            assertEquals(Integer.toString(i), rs.getString(1));
+                            assertEquals(i, rs.getInt(2));
+                            i++;
+                        }
+                        assertEquals(NUM_RECORDS, i);
+                    }
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction readMultiTenantTableWithIndex(final String tableName, final String tenantId) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(tenantId); Statement stmt = conn.createStatement()) {
+                    // Accessing only the 'data' from the table uses index since index tables are built on 'data' column
+                    String readTableSQL = "SELECT data FROM " + tableName;
+                    ResultSet rs = stmt.executeQuery(readTableSQL);
+                    assertNotNull(rs);
+                    int i = 0;
+                    String explainPlan = Joiner.on(" ").join(((PhoenixStatement)stmt).getQueryPlan().getExplainPlan().getPlanSteps());
+                    rs = stmt.executeQuery(readTableSQL);
+                    if(tenantId != null) {
+                        rs.next();
+                        assertTrue(explainPlan.contains("_IDX_"));
+                        assertEquals(((PhoenixConnection)conn).getTenantId().toString(), tenantId);
+                        // For tenant ID "o3", the value in table will be 3
+                        assertEquals(Character.toString(tenantId.charAt(1)), rs.getString(1));
+                        // Only 1 record is inserted per Tenant
+                        assertFalse(rs.next());
+                    } else {
+                        while(rs.next()) {
+                            assertEquals(Integer.toString(i), rs.getString(1));
+                            i++;
+                        }
+                        assertEquals(NUM_RECORDS, i);
+                    }
                 }
                 return null;
             }
@@ -478,11 +584,15 @@ public class BasePermissionsIT extends BaseTest {
     }
 
     AccessTestAction createIndex(final String indexName, final String dataTable) throws SQLException {
+        return createIndex(indexName, dataTable, null);
+    }
+
+    AccessTestAction createIndex(final String indexName, final String dataTable, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
 
-                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                try (Connection conn = getConnection(tenantId); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute("CREATE INDEX " + indexName + " on " + dataTable + "(data)"));
                 }
                 return null;
@@ -541,11 +651,16 @@ public class BasePermissionsIT extends BaseTest {
     }
 
     AccessTestAction createView(final String viewName, final String dataTable) throws SQLException {
+        return createView(viewName, dataTable, null);
+    }
+
+    AccessTestAction createView(final String viewName, final String dataTable, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
-                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
-                    assertFalse(stmt.execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable));
+                try (Connection conn = getConnection(tenantId); Statement stmt = conn.createStatement();) {
+                    String viewStmtSQL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable;
+                    assertFalse(stmt.execute(viewStmtSQL));
                 }
                 return null;
             }

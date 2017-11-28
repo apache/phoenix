@@ -75,8 +75,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     private ArrayList<BaseMasterAndRegionObserver> accessControllers;
     private boolean accessCheckEnabled;
     private UserProvider userProvider;
-    private boolean isAutomaticGrantEnabled;
-    private boolean isStrictMode;
     public static final Log LOG = LogFactory.getLog(PhoenixAccessController.class);
     private static final Log AUDITLOG =
             LogFactory.getLog("SecurityLogger."+PhoenixAccessController.class.getName());
@@ -125,8 +123,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         // set the user-provider.
         this.userProvider = UserProvider.instantiate(env.getConfiguration());
-        this.isStrictMode = conf.getBoolean(QueryServices.PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED);
         // init superusers and add the server principal (if using security)
         // or process owner as default super user.
         Superusers.initialize(env.getConfiguration());
@@ -221,12 +217,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     public void handleRequireAccessOnDependentTable(String request, String userName, TableName dependentTable,
             String requestTable, Set<Action> requireAccess, Set<Action> accessExists) throws IOException {
 
-        if (!isStrictMode) {
-            AUDITLOG.warn("Strict mode is not enabled, so " + request + " is allowed but User:" + userName
-                    + " will not have following access " + requireAccess + " to the existing dependent physical table "
-                    + dependentTable);
-            return;
-        }
         Set<Action> unionSet = new HashSet<Action>();
         unionSet.addAll(requireAccess);
         unionSet.addAll(accessExists);

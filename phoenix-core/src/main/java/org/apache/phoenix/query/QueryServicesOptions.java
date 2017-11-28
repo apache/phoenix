@@ -64,7 +64,6 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_LOADBA
 import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_SERVICE_NAME;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
@@ -321,7 +320,6 @@ public class QueryServicesOptions {
     
     //Security defaults
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
-    public static final boolean DEFAULT_PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED = true;
 
     //default update cache frequency
     public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
@@ -421,8 +419,7 @@ public class QueryServicesOptions {
             .setIfUnset(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
             .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
             .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
-            .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED)
-            .setIfUnset(PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED,  DEFAULT_PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED);
+            .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.

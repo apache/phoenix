@@ -464,15 +464,27 @@ create_schema_node returns [CreateSchemaStatement ret]
     ;
 
 // Parse a grant permission statement
-grant_permission_node returns [GrantStatement ret]
+grant_permission_node returns [ChangePermsStatement ret]
     :   GRANT p=literal (ON ((TABLE)? table=table_name | s=SCHEMA schema=identifier))? TO (g=GROUP)? ug=literal
-        { ret = factory.grantStatement(p, s!=null, table, schema, g!=null, ug); }
+        {
+            String permsString = SchemaUtil.normalizeLiteral(p);
+            if (permsString != null && permsString.length() > 5) {
+                throw new RuntimeException("Permissions String length should be less than 5 characters");
+            }
+            $ret = factory.changePermsStatement(permsString, s!=null, table, schema, g!=null, ug, Boolean.TRUE);
+        }
     ;
 
 // Parse a revoke permission statement
-revoke_permission_node returns [RevokeStatement ret]
+revoke_permission_node returns [ChangePermsStatement ret]
     :   REVOKE (p=literal)? (ON ((TABLE)? table=table_name | s=SCHEMA schema=identifier))? FROM (g=GROUP)? ug=literal
-        { ret = factory.revokeStatement(p, s!=null, table, schema, g!=null, ug); }
+        {
+            String permsString = SchemaUtil.normalizeLiteral(p);
+            if (permsString != null && permsString.length() > 5) {
+                throw new RuntimeException("Permissions String length should be less than 5 characters");
+            }
+            $ret = factory.changePermsStatement(permsString, s!=null, table, schema, g!=null, ug, Boolean.FALSE);
+        }
     ;
 
 // Parse a create view statement.

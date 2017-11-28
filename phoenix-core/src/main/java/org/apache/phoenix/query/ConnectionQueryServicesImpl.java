@@ -2483,6 +2483,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     } catch (NewerSchemaAlreadyExistsException e) {
                                         // Older clients with appropriate perms may try getting a new connection
                                         // This results in NewerSchemaAlreadyExistsException, so we can safely ignore it here
+                                    } catch (PhoenixIOException e) {
+                                        if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
+                                            // Ignore ADE
+                                        } else {
+                                            throw e;
+                                        }
                                     }
                                 }
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {

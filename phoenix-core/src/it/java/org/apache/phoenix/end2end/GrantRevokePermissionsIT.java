@@ -34,7 +34,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
 
     private static final Log LOG = LogFactory.getLog(GrantRevokePermissionsIT.class);
 
-    private static final String SCHEMA_NAME = "GRANTSCHEMA";
+    private static final String SCHEMA_NAME = "GRANTREVOKESCHEMA";
     private static final String TABLE_NAME =
             GrantRevokePermissionsIT.class.getSimpleName().toUpperCase();
     private static final String FULL_TABLE_NAME = SCHEMA_NAME + "." + TABLE_NAME;
@@ -42,6 +42,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
     private static final String IDX2_TABLE_NAME = TABLE_NAME + "_IDX2";
     private static final String LOCAL_IDX1_TABLE_NAME = TABLE_NAME + "_LIDX1";
     private static final String VIEW1_TABLE_NAME = TABLE_NAME + "_V1";
+    private static final String VIEW2_TABLE_NAME = TABLE_NAME + "_V2";
 
     public GrantRevokePermissionsIT(boolean isNamespaceMapped) throws Exception {
         super(isNamespaceMapped);
@@ -136,7 +137,6 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         startNewMiniCluster();
 
         grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
-        getHBaseTables();
 
         // Create new schema and grant CREATE permissions to a user
         if(isNamespaceMapped) {
@@ -187,6 +187,9 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
 
     }
 
+    /**
+     * Verifies permissions for users present inside a group
+     */
     @Test
     public void testGroupUserPerms() throws Exception {
 
@@ -201,14 +204,63 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         verifyAllowed(grantPermissions("RX", GROUP_SYSTEM_ACCESS, PHOENIX_SYSTEM_TABLES_IDENTIFIERS, false), superUser1);
         grantSystemTableAccess(superUser1, regularUser1);
 
+        // Grant Permissions to Groups (Should be automatically applicable to all users inside it)
         verifyAllowed(grantPermissions("AR", GROUP_SYSTEM_ACCESS, FULL_TABLE_NAME, false), superUser1);
         verifyAllowed(readTable(FULL_TABLE_NAME), groupUser);
 
+        // GroupUser is an admin and can grant perms to other users
         verifyDenied(readTable(FULL_TABLE_NAME), AccessDeniedException.class, regularUser1);
         verifyAllowed(grantPermissions("R", regularUser1, FULL_TABLE_NAME, false), groupUser);
         verifyAllowed(readTable(FULL_TABLE_NAME), regularUser1);
 
+        // Revoke the perms and try accessing data again
         verifyAllowed(revokePermissions(GROUP_SYSTEM_ACCESS, FULL_TABLE_NAME, false), superUser1);
         verifyDenied(readTable(FULL_TABLE_NAME), AccessDeniedException.class, groupUser);
+    }
+
+    /**
+     * Tests permissions for MultiTenant Tables and view index tables
+     */
+    @Test
+    public void testMultiTenantTables() throws Exception {
+
+        startNewMiniCluster();
+
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
+        } else {
+            verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
+        }
+
+        // Create MultiTenant Table (View Index Table should be automatically created)
+        // At this point, the index table doesn't contain any data
+        verifyAllowed(createMultiTenantTable(FULL_TABLE_NAME), regularUser1);
+
+        // RegularUser2 doesn't have access yet, RegularUser1 should have RWXCA on the table
+        verifyDenied(readMultiTenantTableWithoutIndex(FULL_TABLE_NAME), AccessDeniedException.class, regularUser2);
+
+        // Grant perms to base table (Should propagate to View Index as well)
+        verifyAllowed(grantPermissions("R", regularUser2, FULL_TABLE_NAME, false), regularUser1);
+        // Try reading full table
+        verifyAllowed(readMultiTenantTableWithoutIndex(FULL_TABLE_NAME), regularUser2);
+
+        // Create tenant specific views on the table using tenant specific Phoenix Connection
+        verifyAllowed(createView(VIEW1_TABLE_NAME, FULL_TABLE_NAME, "o1"), regularUser1);
+        verifyAllowed(createView(VIEW2_TABLE_NAME, FULL_TABLE_NAME, "o2"), regularUser1);
+
+        // Create indexes on those views using tenant specific Phoenix Connection
+        // It is not possible to create indexes on tenant specific views without tenant connection
+        verifyAllowed(createIndex(IDX1_TABLE_NAME, VIEW1_TABLE_NAME, "o1"), regularUser1);
+        verifyAllowed(createIndex(IDX2_TABLE_NAME, VIEW2_TABLE_NAME, "o2"), regularUser1);
+
+        // Read the tables as regularUser2, with and without the use of Index table
+        // If perms are propagated correctly, then both of them should work
+        // The test checks if the query plan uses the index table by searching for "_IDX_" string
+        // _IDX_ is the prefix used with base table name to derieve the name of view index table
+        verifyAllowed(readMultiTenantTableWithIndex(VIEW1_TABLE_NAME, "o1"), regularUser2);
+        verifyAllowed(readMultiTenantTableWithoutIndex(VIEW2_TABLE_NAME, "o2"), regularUser2);
     }
 }

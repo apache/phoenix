@@ -79,7 +79,7 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
 
         if (!isNamespaceMapped) { return; }
         try {
-            startNewMiniCluster(null);
+            startNewMiniCluster();
             grantSystemTableAccess();
             final String schemaName = "TEST_SCHEMA_PERMISSION";
             superUser1.runAs(new PrivilegedExceptionAction<Void>() {
@@ -111,8 +111,7 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
 
     @Test
     public void testAutomaticGrantWithIndexAndView() throws Throwable {
-        Configuration conf = new Configuration();
-        startNewMiniCluster(conf);
+        startNewMiniCluster();
         final String schema = "TEST_INDEX_VIEW";
         final String tableName = "TABLE_DDL_PERMISSION_IT";
         final String phoenixTableName = schema + "." + tableName;
