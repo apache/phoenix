@@ -18,11 +18,11 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.util.Collections;
 
-import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
-import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.GlobalCache;
@@ -49,10 +49,15 @@ import com.google.protobuf.Service;
  * 
  * @since 0.1
  */
-public class ServerCachingEndpointImpl extends ServerCachingService implements CoprocessorService,
-    Coprocessor {
+public class ServerCachingEndpointImpl extends ServerCachingService implements RegionCoprocessor 
+     {
 
   private RegionCoprocessorEnvironment env;
+  
+  @Override
+  public Iterable<Service> getServices() {
+      return Collections.singleton(this);
+  }
 
   @Override
   public void addServerCache(RpcController controller, AddServerCacheRequest request,
@@ -113,8 +118,4 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
     // nothing to do
   }
 
-  @Override
-  public Service getService() {
-    return this;
-  }
 }

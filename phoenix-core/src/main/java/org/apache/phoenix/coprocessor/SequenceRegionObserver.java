@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.TimeRange;
@@ -73,12 +75,17 @@ import com.google.common.collect.Lists;
  * 
  * @since 3.0.0
  */
-public class SequenceRegionObserver implements RegionObserver {
+public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor {
     public static final String OPERATION_ATTRIB = "SEQUENCE_OPERATION";
     public static final String MAX_TIMERANGE_ATTRIB = "MAX_TIMERANGE";
     public static final String CURRENT_VALUE_ATTRIB = "CURRENT_VALUE";
     public static final String NUM_TO_ALLOCATE = "NUM_TO_ALLOCATE";
     private static final byte[] SUCCESS_VALUE = PInteger.INSTANCE.toBytes(Integer.valueOf(Sequence.SUCCESS));
+    
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
     
     private static Result getErrorResult(byte[] row, long timestamp, int errorCode) {
         byte[] errorCodeBuf = new byte[PInteger.INSTANCE.getByteSize()];
