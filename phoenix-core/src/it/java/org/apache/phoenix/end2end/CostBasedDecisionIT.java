@@ -21,7 +21,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class CostBasedDecisionIT extends BaseTest {
+public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -31,11 +31,6 @@ public class CostBasedDecisionIT extends BaseTest {
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
         props.put(QueryServices.COST_BASED_OPTIMIZER_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-
-    @AfterClass
-    public static void tearDownMiniCluster() throws Exception {
-        BaseTest.tearDownMiniClusterIfBeyondThreshold();
     }
 
     @Test
