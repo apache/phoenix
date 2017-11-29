@@ -60,7 +60,7 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     }
 
     @Override
-    public Cost getCost() throws SQLException {
+    public Cost getCost() {
         return delegate.getCost();
     }
 

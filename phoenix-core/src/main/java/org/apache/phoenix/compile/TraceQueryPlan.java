@@ -195,7 +195,7 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     @Override
-    public Cost getCost() throws SQLException {
+    public Cost getCost() {
         return Cost.ZERO;
     }
 

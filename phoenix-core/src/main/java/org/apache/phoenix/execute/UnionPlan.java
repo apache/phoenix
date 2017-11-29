@@ -211,7 +211,7 @@ public class UnionPlan implements QueryPlan {
     }
 
     @Override
-    public Cost getCost() throws SQLException {
+    public Cost getCost() {
         Cost cost = Cost.ZERO;
         for (QueryPlan plan : plans) {
             cost = cost.plus(plan.getCost());

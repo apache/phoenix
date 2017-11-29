@@ -489,7 +489,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             }
 
             @Override
-            public Cost getCost() throws SQLException {
+            public Cost getCost() {
                 return Cost.ZERO;
             }
             

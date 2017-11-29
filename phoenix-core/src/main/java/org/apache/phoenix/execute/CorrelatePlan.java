@@ -202,11 +202,22 @@ public class CorrelatePlan extends DelegateQueryPlan {
     }
 
     @Override
-    public Cost getCost() throws SQLException {
-        Long lhsByteCount = delegate.getEstimatedBytesToScan();
-        Long rhsRowCount = rhs.getEstimatedRowsToScan();
+    public Cost getCost() {
+        Long lhsByteCount = null;
+        try {
+            lhsByteCount = delegate.getEstimatedBytesToScan();
+        } catch (SQLException e) {
+            // ignored.
+        }
+        Long rhsRowCount = null;
+        try {
+            rhsRowCount = rhs.getEstimatedRowsToScan();
+        } catch (SQLException e) {
+            // ignored.
+        }
+
         if (lhsByteCount == null || rhsRowCount == null) {
-            return Cost.ZERO;
+            return Cost.UNKNOWN;
         }
 
         Cost cost = new Cost(0, 0, lhsByteCount * rhsRowCount);

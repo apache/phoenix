@@ -25,6 +25,14 @@ import java.util.Objects;
  *
  */
 public class Cost implements Comparable<Cost> {
+    /** The unknown cost. */
+    public static Cost UNKNOWN = new Cost(Double.NaN, Double.NaN, Double.NaN) {
+        @Override
+        public String toString() {
+            return "{unknown}";
+        }
+    };
+
     /** The zero cost. */
     public static Cost ZERO = new Cost(0, 0, 0) {
         @Override
@@ -55,7 +63,15 @@ public class Cost implements Comparable<Cost> {
         return io;
     }
 
+    public boolean isUnknown() {
+        return this == UNKNOWN;
+    }
+
     public Cost plus(Cost other) {
+        if (isUnknown() || other.isUnknown()) {
+            return UNKNOWN;
+        }
+
         return new Cost(
                 this.cpu + other.cpu,
                 this.memory + other.memory,
@@ -63,6 +79,10 @@ public class Cost implements Comparable<Cost> {
     }
 
     public Cost multiplyBy(double factor) {
+        if (isUnknown()) {
+            return UNKNOWN;
+        }
+
         return new Cost(
                 this.cpu * factor,
                 this.memory * factor,
@@ -73,6 +93,14 @@ public class Cost implements Comparable<Cost> {
     // add those into account as our cost model mature.
     @Override
     public int compareTo(Cost other) {
+        if (isUnknown() && other.isUnknown()) {
+            return 0;
+        } else if (isUnknown() && !other.isUnknown()) {
+            return 1;
+        } else if (!isUnknown() && other.isUnknown()) {
+            return -1;
+        }
+
         double d = this.io - other.io;
         return d == 0 ? 0 : (d > 0 ? 1 : -1);
     }

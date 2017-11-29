@@ -54,7 +54,7 @@ public interface QueryPlan extends StatementPlan {
 
     public long getEstimatedSize();
 
-    public Cost getCost() throws SQLException;
+    public Cost getCost();
 
     // TODO: change once joins are supported
     TableRef getTableRef();

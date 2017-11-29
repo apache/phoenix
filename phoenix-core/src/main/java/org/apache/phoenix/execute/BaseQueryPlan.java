@@ -515,9 +515,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // Optimize here when getting explain plan, as queries don't get optimized until after compilation
         QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
         ExplainPlan exp = plan instanceof BaseQueryPlan ? new ExplainPlan(getPlanSteps(plan.iterator())) : plan.getExplainPlan();
-        this.estimatedRows = plan.getEstimatedRowsToScan();
-        this.estimatedSize = plan.getEstimatedBytesToScan();
-        this.estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
+        if (!costBased) { // do not override estimates if they are used for cost calculation.
+            this.estimatedRows = plan.getEstimatedRowsToScan();
+            this.estimatedSize = plan.getEstimatedBytesToScan();
+            this.estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
+        }
         return exp;
     }
 

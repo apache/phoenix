@@ -292,10 +292,16 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
 
     @Override
-    public Cost getCost() throws SQLException {
-        Long byteCount = getEstimatedBytesToScan();
+    public Cost getCost() {
+        Long byteCount = null;
+        try {
+            byteCount = getEstimatedBytesToScan();
+        } catch (SQLException e) {
+            // ignored.
+        }
+
         if (byteCount == null) {
-            return Cost.ZERO;
+            return Cost.UNKNOWN;
         }
 
         Cost cost = new Cost(0, 0, byteCount);
