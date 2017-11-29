@@ -30,21 +30,22 @@ import org.junit.experimental.categories.Category;
  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class GrantRevokePermissionsIT extends BasePermissionsIT {
+public class ChangePermissionsIT extends BasePermissionsIT {
 
-    private static final Log LOG = LogFactory.getLog(GrantRevokePermissionsIT.class);
+    private static final Log LOG = LogFactory.getLog(ChangePermissionsIT.class);
 
-    private static final String SCHEMA_NAME = "GRANTREVOKESCHEMA";
+    private static final String SCHEMA_NAME = "CHANGEPERMSSCHEMA";
     private static final String TABLE_NAME =
-            GrantRevokePermissionsIT.class.getSimpleName().toUpperCase();
+            ChangePermissionsIT.class.getSimpleName().toUpperCase();
     private static final String FULL_TABLE_NAME = SCHEMA_NAME + "." + TABLE_NAME;
     private static final String IDX1_TABLE_NAME = TABLE_NAME + "_IDX1";
     private static final String IDX2_TABLE_NAME = TABLE_NAME + "_IDX2";
+    private static final String IDX3_TABLE_NAME = TABLE_NAME + "_IDX3";
     private static final String LOCAL_IDX1_TABLE_NAME = TABLE_NAME + "_LIDX1";
     private static final String VIEW1_TABLE_NAME = TABLE_NAME + "_V1";
     private static final String VIEW2_TABLE_NAME = TABLE_NAME + "_V2";
 
-    public GrantRevokePermissionsIT(boolean isNamespaceMapped) throws Exception {
+    public ChangePermissionsIT(boolean isNamespaceMapped) throws Exception {
         super(isNamespaceMapped);
     }
 
@@ -146,13 +147,14 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
             verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
         }
 
-        // Create new table. Create indexes and views on top of it. Verify the contents by querying it
+        // Create new table. Create indexes, views and view indexes on top of it. Verify the contents by querying it
         verifyAllowed(createTable(FULL_TABLE_NAME), regularUser1);
         verifyAllowed(readTable(FULL_TABLE_NAME), regularUser1);
         verifyAllowed(createIndex(IDX1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
         verifyAllowed(createIndex(IDX2_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
         verifyAllowed(createLocalIndex(LOCAL_IDX1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
         verifyAllowed(createView(VIEW1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
+        verifyAllowed(createIndex(IDX3_TABLE_NAME, VIEW1_TABLE_NAME), regularUser1);
 
         // RegularUser2 doesn't have any permissions. It can get a PhoenixConnection
         // However it cannot query table, indexes or views without READ perms
@@ -177,6 +179,7 @@ public class GrantRevokePermissionsIT extends BasePermissionsIT {
         verifyAllowed(readTable(FULL_TABLE_NAME, LOCAL_IDX1_TABLE_NAME), regularUser2);
         verifyAllowed(readTableWithoutVerification(SCHEMA_NAME + "." + IDX1_TABLE_NAME), regularUser2);
         verifyAllowed(readTable(VIEW1_TABLE_NAME), regularUser2);
+        verifyAllowed(readMultiTenantTableWithIndex(VIEW1_TABLE_NAME), regularUser2);
 
         // Revoke READ permissions to RegularUser2 on the table
         // Permissions should propagate automatically to relevant physical tables such as global index and view index.

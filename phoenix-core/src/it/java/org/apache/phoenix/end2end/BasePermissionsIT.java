@@ -513,6 +513,10 @@ public class BasePermissionsIT extends BaseTest {
         };
     }
 
+    AccessTestAction readMultiTenantTableWithIndex(final String tableName) throws SQLException {
+        return readMultiTenantTableWithIndex(tableName, null);
+    }
+
     AccessTestAction readMultiTenantTableWithIndex(final String tableName, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
@@ -523,18 +527,18 @@ public class BasePermissionsIT extends BaseTest {
                     ResultSet rs = stmt.executeQuery(readTableSQL);
                     assertNotNull(rs);
                     int i = 0;
-                    String explainPlan = Joiner.on(" ").join(((PhoenixStatement)stmt).getQueryPlan().getExplainPlan().getPlanSteps());
+                    String explainPlan = Joiner.on(" ").join(((PhoenixStatement) stmt).getQueryPlan().getExplainPlan().getPlanSteps());
+                    assertTrue(explainPlan.contains("_IDX_"));
                     rs = stmt.executeQuery(readTableSQL);
-                    if(tenantId != null) {
+                    if (tenantId != null) {
                         rs.next();
-                        assertTrue(explainPlan.contains("_IDX_"));
-                        assertEquals(((PhoenixConnection)conn).getTenantId().toString(), tenantId);
+                        assertEquals(((PhoenixConnection) conn).getTenantId().toString(), tenantId);
                         // For tenant ID "o3", the value in table will be 3
                         assertEquals(Character.toString(tenantId.charAt(1)), rs.getString(1));
                         // Only 1 record is inserted per Tenant
                         assertFalse(rs.next());
                     } else {
-                        while(rs.next()) {
+                        while (rs.next()) {
                             assertEquals(Integer.toString(i), rs.getString(1));
                             i++;
                         }

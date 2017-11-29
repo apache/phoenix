@@ -4177,6 +4177,11 @@ public class MetaDataClient {
         return new MutationState(0, 0, connection);
     }
 
+    /**
+     * GRANT/REVOKE statements use this method to update HBase acl's
+     * Perms can be changed at Schema, Table or User level
+     * @throws SQLException
+     */
     public MutationState changePermissions(ChangePermsStatement changePermsStatement) throws SQLException {
 
         logger.info(changePermsStatement.toString());
@@ -4198,9 +4203,12 @@ public class MetaDataClient {
                     throw new AccessDeniedException("Cannot GRANT or REVOKE permissions on INDEX TABLES or VIEWS");
                 }
 
+                // Changing perms on base table and update the perms for global and view indexes
+                // Views and local indexes are not physical tables and hence update perms is not needed
                 changePermsOnTables(clusterConnection, admin, changePermsStatement, inputTable);
             } else {
 
+                // User can be given perms at the global level
                 changePermsOnUser(clusterConnection, changePermsStatement);
             }
 
@@ -4208,7 +4216,8 @@ public class MetaDataClient {
             // Bubble up the SQL Exception
             throw e;
         } catch (Throwable throwable) {
-            // Wrap around other exceptions to PhoenixIOException (Ex: org.apache.hadoop.hbase.security.AccessDeniedException)
+            // To change perms, the user must have ADMIN perms on that scope, otherwise it throws ADE
+            // Wrap around ADE and other exceptions to PhoenixIOException
             throw ServerUtil.parseServerException(throwable);
         }
 
@@ -4260,15 +4269,16 @@ public class MetaDataClient {
                     inconsistentTables.get(0).getTableName().getString(), "Namespace properties");
         }
 
-        if(inputTable.isMultiTenant()) {
-            byte[] viewIndexTableBytes = MetaDataUtil.getViewIndexPhysicalName(inputTable.getPhysicalName().getBytes());
-            tableName = org.apache.hadoop.hbase.TableName.valueOf(viewIndexTableBytes);
-            boolean viewIndexTableExists = admin.tableExists(tableName);
-            if(viewIndexTableExists) {
-                logger.info("Updating permissions for View Index Table: " +
-                        Bytes.toString(viewIndexTableBytes) + " Base Table: " + inputTable.getName());
-                changePermsOnTable(clusterConnection, changePermsStatement, tableName);
-            } else {
+        // There will be only a single View Index Table for all the indexes created on views
+        byte[] viewIndexTableBytes = MetaDataUtil.getViewIndexPhysicalName(inputTable.getPhysicalName().getBytes());
+        tableName = org.apache.hadoop.hbase.TableName.valueOf(viewIndexTableBytes);
+        boolean viewIndexTableExists = admin.tableExists(tableName);
+        if(viewIndexTableExists) {
+            logger.info("Updating permissions for View Index Table: " +
+                    Bytes.toString(viewIndexTableBytes) + " Base Table: " + inputTable.getName());
+            changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+        } else {
+            if(inputTable.isMultiTenant()) {
                 logger.error("View Index Table not found for MultiTenant Table: " + inputTable.getName());
                 logger.error("Fail to propagate permissions to view Index Table: " + tableName.getNameAsString());
                 throw new TablesNotInSyncException(inputTable.getTableName().getString(),
