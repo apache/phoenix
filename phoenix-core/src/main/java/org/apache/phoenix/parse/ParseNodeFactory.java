@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -925,4 +924,10 @@ public class ParseNodeFactory {
     public UseSchemaStatement useSchema(String schemaName) {
         return new UseSchemaStatement(schemaName);
     }
+
+    public ChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName
+            , String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
+        return new ChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
+    }
+
 }
