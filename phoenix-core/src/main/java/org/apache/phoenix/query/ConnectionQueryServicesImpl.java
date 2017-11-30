@@ -1123,12 +1123,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     newDesc.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
                 }
-                if (existingDesc.equals(newDesc)) {
+                TableDescriptor result = newDesc.build();
+                if (existingDesc.equals(result)) {
                     return null; // Indicate that no metadata was changed
                 }
 
-                modifyTable(physicalTableName, newDesc.build(), true);
-                return newDesc.build();
+                modifyTable(physicalTableName, result, true);
+                return result;
             }
 
         } catch (IOException e) {
