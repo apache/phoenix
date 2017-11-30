@@ -15,18 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.hadoop.hbase.ipc;
 
-import org.apache.hadoop.hbase.regionserver.ConstantSizeRegionSplitPolicy;
+import org.apache.hadoop.hbase.ipc.RpcServer.Call;
 
-import org.apache.phoenix.util.SchemaUtil;
+public class RpcUtil {
 
-
-public class MetaDataSplitPolicy extends ConstantSizeRegionSplitPolicy {
-
-    @Override
-    protected boolean shouldSplit() {
-        // never split SYSTEM.CATALOG
-        return false;
+    public static Call getRpcContext() {
+        return RpcServer.CurCall.get();
     }
+    
+    public static void setRpcContext(Call c){
+        RpcServer.CurCall.set(c);
+    }
+
 }

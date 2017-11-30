@@ -867,7 +867,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             }
-            if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
+            if ((SchemaUtil.isStatsTable(tableName) || SchemaUtil.isMetaTable(tableName))
+                    && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
                         null, priority, null);
             }
@@ -1721,7 +1722,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
         Set<HTableDescriptor> origTableDescriptors = Collections.emptySet();
         boolean nonTxToTx = false;
-        Pair<HTableDescriptor,HTableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, families, tableProps);
+        Pair<HTableDescriptor,HTableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
         HTableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
         HTableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
         if (tableDescriptor != null) {
@@ -1939,7 +1940,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps);
     }
 
-    private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<Pair<byte[], Map<String, Object>>> families, Map<String, Object> tableProps) throws SQLException {
+    private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties,
+      Set<String> colFamiliesForPColumnsToBeAdded, Map<String, Object> tableProps) throws SQLException {
         Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(properties.size());
         Map<String,Object> commonFamilyProps = new HashMap<>();
         boolean addingColumns = colFamiliesForPColumnsToBeAdded != null && !colFamiliesForPColumnsToBeAdded.isEmpty();
@@ -2528,7 +2530,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final TableName mutexTableName = SchemaUtil.getPhysicalTableName(
                 PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props);
             List<TableName> systemTables = getSystemTableNames(admin);
-            if (systemTables.contains(mutexTableName)) {
+            if (systemTables.contains(mutexTableName) || admin.tableExists( TableName.valueOf(
+                PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME))) {
                 logger.debug("System mutex table already appears to exist, not creating it");
                 return;
             }
@@ -2545,8 +2548,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 put.add(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
                 sysMutexTable.put(put);
             }
-        } catch (TableExistsException e) {
+        } catch (TableExistsException | AccessDeniedException e) {
             // Ignore
+        }catch(PhoenixIOException e){
+            if(e.getCause()!=null && e.getCause() instanceof AccessDeniedException)
+            {
+                //Ignore
+            }else{
+                throw e;
+            }
         }
     }
 
