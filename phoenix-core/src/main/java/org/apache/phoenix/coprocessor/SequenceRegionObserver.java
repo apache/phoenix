@@ -26,6 +26,7 @@ import java.util.Optional;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Append;
@@ -107,8 +108,9 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
      * @since 3.0.0
      */
     @Override
-    public Result preIncrement(final ObserverContext<RegionCoprocessorEnvironment> e,
-        final Increment increment) throws IOException {
+    public Result preIncrement(
+            org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> e,
+            Increment increment) throws IOException {
         RegionCoprocessorEnvironment env = e.getEnvironment();
         // We need to set this to prevent region.increment from being called
         e.bypass();
@@ -327,8 +329,9 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
      */
     @SuppressWarnings("deprecation")
     @Override
-    public Result preAppend(final ObserverContext<RegionCoprocessorEnvironment> e,
-            final Append append) throws IOException {
+    public Result preAppend(
+            org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> e,
+            Append append) throws IOException {
         byte[] opBuf = append.getAttribute(OPERATION_ATTRIB);
         if (opBuf == null) {
             return null;
@@ -395,7 +398,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
                 Mutation m = null;
                 switch (op) {
                 case RETURN_SEQUENCE:
-                    KeyValue currentValueKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.rawCells()[0]);
+                    KeyValue currentValueKV = PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[0]);
                     long expectedValue = PLong.INSTANCE.getCodec().decodeLong(append.getAttribute(CURRENT_VALUE_ATTRIB), 0, SortOrder.getDefault());
                     long value = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(),
                       currentValueKV.getValueOffset(), SortOrder.getDefault());
@@ -419,7 +422,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
                 if (!hadClientTimestamp) {
                     for (List<Cell> kvs : m.getFamilyCellMap().values()) {
                         for (Cell kv : kvs) {
-                            ((KeyValue)kv).updateLatestStamp(clientTimestampBuf);
+                            ((ExtendedCell)kv).setTimestamp(clientTimestampBuf, 0);
                         }
                     }
                 }
