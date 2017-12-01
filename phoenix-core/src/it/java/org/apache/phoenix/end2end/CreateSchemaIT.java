@@ -43,31 +43,50 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         String schemaName = generateUniqueName();
+        // Create unique name schema and verify that it exists
         String ddl = "CREATE SCHEMA " + schemaName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             conn.createStatement().execute(ddl);
             assertNotNull(admin.getNamespaceDescriptor(schemaName));
         }
+        // Try creating it again and verify that it throws SchemaAlreadyExistsException
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SchemaAlreadyExistsException e) {
             // expected
         }
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            conn.createStatement().execute("CREATE SCHEMA " + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
+
+        // See PHOENIX-4424
+        // Create schema DEFAULT and HBASE (Should allow since they are upper-cased) and verify that it exists
+        // Create schema default and hbase and it should fail
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+
+            // default is a SQL keyword, hence it should always be passed in double-quotes
+            conn.createStatement().execute("CREATE SCHEMA \""
+                    + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase() + "\"");
+            conn.createStatement().execute("CREATE SCHEMA \""
+                    + SchemaUtil.HBASE_NAMESPACE.toUpperCase() + "\"");
+
+            assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
+            assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
+
+            try {
+                conn.createStatement().execute("CREATE SCHEMA \""
+                        + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
+            }
+            try {
+                conn.createStatement().execute("CREATE SCHEMA \""
+                        + SchemaUtil.HBASE_NAMESPACE + "\"");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
+            }
         }
-        try {
-            conn.createStatement().execute("CREATE SCHEMA " + SchemaUtil.HBASE_NAMESPACE);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
-        }
-        conn.close();
     }
 }
