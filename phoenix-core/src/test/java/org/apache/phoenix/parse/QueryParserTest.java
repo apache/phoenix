@@ -69,6 +69,19 @@ public class QueryParserTest {
     }
 
     @Test
+    public void testCreateSchema() throws Exception {
+
+        String sql0 = "create schema \"schema1\"";
+        parseQuery(sql0);
+        String sql1 = "create schema schema1";
+        parseQuery(sql1);
+        String sql2 = "create schema \"default\"";
+        parseQuery(sql2);
+        String sql3 = "create schema \"DEFAULT\"";
+        parseQuery(sql3);
+    }
+
+    @Test
     public void testParseGrantQuery() throws Exception {
 
         String sql0 = "GRANT 'RX' ON SYSTEM.\"SEQUENCE\" TO 'user'";
