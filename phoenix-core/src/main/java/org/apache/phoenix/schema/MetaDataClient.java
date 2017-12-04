@@ -4089,8 +4089,10 @@ public class MetaDataClient {
                             SQLExceptionCode.CREATE_SCHEMA_NOT_ALLOWED).setSchemaName(create.getSchemaName())
                             .build().buildException(); }
             boolean isIfNotExists = create.isIfNotExists();
-            validateSchema(create.getSchemaName());
             PSchema schema = new PSchema(create.getSchemaName());
+            // Use SchemaName from PSchema object to get the normalized SchemaName
+            // See PHOENIX-4424 for details
+            validateSchema(schema.getSchemaName());
             connection.setAutoCommit(false);
             List<Mutation> schemaMutations;
 

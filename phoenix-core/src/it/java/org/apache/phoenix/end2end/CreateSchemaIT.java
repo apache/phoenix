@@ -43,16 +43,24 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         String schemaName = generateUniqueName();
+        String schemaName1 = schemaName.toLowerCase();
+        String schemaName2 = schemaName.toLowerCase();
         // Create unique name schema and verify that it exists
-        String ddl = "CREATE SCHEMA " + schemaName;
+        // ddl1 should create lowercase schemaName since it is passed in with double-quotes
+        // ddl2 should create uppercase schemaName since Phoenix upper-cases identifiers without quotes
+        // Both the statements should succeed
+        String ddl1 = "CREATE SCHEMA \"" + schemaName1 + "\"";
+        String ddl2 = "CREATE SCHEMA " + schemaName2;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
-            conn.createStatement().execute(ddl);
-            assertNotNull(admin.getNamespaceDescriptor(schemaName));
+            conn.createStatement().execute(ddl1);
+            assertNotNull(admin.getNamespaceDescriptor(schemaName1));
+            conn.createStatement().execute(ddl2);
+            assertNotNull(admin.getNamespaceDescriptor(schemaName2.toUpperCase()));
         }
         // Try creating it again and verify that it throws SchemaAlreadyExistsException
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(ddl1);
             fail();
         } catch (SchemaAlreadyExistsException e) {
             // expected
@@ -65,6 +73,23 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
              HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
 
             // default is a SQL keyword, hence it should always be passed in double-quotes
+            try {
+                conn.createStatement().execute("CREATE SCHEMA \""
+                        + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
+            }
+
+            try {
+                conn.createStatement().execute("CREATE SCHEMA \""
+                        + SchemaUtil.HBASE_NAMESPACE + "\"");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
+            }
+
+            // default is a SQL keyword, hence it should always be passed in double-quotes
             conn.createStatement().execute("CREATE SCHEMA \""
                     + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase() + "\"");
             conn.createStatement().execute("CREATE SCHEMA \""
@@ -73,20 +98,6 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
             assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
             assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
 
-            try {
-                conn.createStatement().execute("CREATE SCHEMA \""
-                        + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"");
-                fail();
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
-            }
-            try {
-                conn.createStatement().execute("CREATE SCHEMA \""
-                        + SchemaUtil.HBASE_NAMESPACE + "\"");
-                fail();
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.SCHEMA_NOT_ALLOWED.getErrorCode(), e.getErrorCode());
-            }
         }
     }
 }

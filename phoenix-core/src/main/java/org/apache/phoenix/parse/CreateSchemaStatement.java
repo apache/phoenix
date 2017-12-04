@@ -24,7 +24,7 @@ public class CreateSchemaStatement extends MutableStatement {
 	private final boolean ifNotExists;
 	
 	public CreateSchemaStatement(String schemaName,boolean ifNotExists) {
-		this.schemaName = SchemaUtil.normalizeIdentifier(schemaName);
+		this.schemaName = schemaName;
 		this.ifNotExists = ifNotExists;
 	}
 	
