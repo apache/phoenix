@@ -199,8 +199,8 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                     // as otherwise we need it to ensure sort order is correct
                     for (int k = expressionCount -1 ; 
                             k >=0 &&  getChildren().get(k).getDataType() != null 
-                                  && !getChildren().get(k).getDataType().isFixedWidth() 
-                                  && outputBytes[outputSize-1] == QueryConstants.SEPARATOR_BYTE ; k--) {
+                                  && !getChildren().get(k).getDataType().isFixedWidth()
+                                  && outputBytes[outputSize-1] == SchemaUtil.getSeparatorByte(true, false, getChildren().get(k)) ; k--) {
                         outputSize--;
                     }
                     ptr.set(outputBytes, 0, outputSize);
