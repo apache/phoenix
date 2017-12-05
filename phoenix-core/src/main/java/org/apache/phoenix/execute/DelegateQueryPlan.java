@@ -32,6 +32,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
@@ -56,6 +57,11 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     @Override
     public long getEstimatedSize() {
         return delegate.getEstimatedSize();
+    }
+
+    @Override
+    public Cost getCost() {
+        return delegate.getCost();
     }
 
     @Override
