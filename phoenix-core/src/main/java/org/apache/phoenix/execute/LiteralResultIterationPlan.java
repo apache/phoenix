@@ -35,6 +35,7 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
@@ -57,6 +58,11 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
             Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null, null);
         this.tuples = tuples;
+    }
+
+    @Override
+    public Cost getCost() {
+        return Cost.ZERO;
     }
 
     @Override
