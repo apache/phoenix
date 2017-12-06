@@ -76,7 +76,7 @@ hadoop_config_path = phoenix_utils.hadoop_conf
 hadoop_classpath = phoenix_utils.hadoop_classpath
 
 # TODO: add windows support
-phoenix_file_basename = '%s-queryserver' % getpass.getuser()
+phoenix_file_basename = 'phoenix-%s-queryserver' % getpass.getuser()
 phoenix_log_file = '%s.log' % phoenix_file_basename
 phoenix_out_file = '%s.out' % phoenix_file_basename
 phoenix_pid_file = '%s.pid' % phoenix_file_basename
