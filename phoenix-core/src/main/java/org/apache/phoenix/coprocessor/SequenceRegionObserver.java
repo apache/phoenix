@@ -422,7 +422,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
                 if (!hadClientTimestamp) {
                     for (List<Cell> kvs : m.getFamilyCellMap().values()) {
                         for (Cell kv : kvs) {
-                            ((ExtendedCell)kv).setTimestamp(clientTimestampBuf, 0);
+                            ((ExtendedCell)kv).setTimestamp(clientTimestampBuf);
                         }
                     }
                 }

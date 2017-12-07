@@ -320,10 +320,10 @@ public class DelegateRegionObserver implements RegionObserver {
     }
 
     @Override
-    public boolean postBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
-            List<Pair<byte[], String>> stagingFamilyPaths, Map<byte[], List<Path>> finalPaths, boolean hasLoaded)
+    public void postBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
+            List<Pair<byte[], String>> stagingFamilyPaths, Map<byte[], List<Path>> finalPaths)
             throws IOException {
-        return delegate.postBulkLoadHFile(ctx, stagingFamilyPaths, finalPaths, hasLoaded);
+        delegate.postBulkLoadHFile(ctx, stagingFamilyPaths, finalPaths);
     }
     
    
