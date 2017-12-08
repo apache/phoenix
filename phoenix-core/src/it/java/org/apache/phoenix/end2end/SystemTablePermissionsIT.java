@@ -37,6 +37,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
@@ -51,7 +52,6 @@ import org.junit.experimental.categories.Category;
 /**
  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
  */
-@Ignore("This test is flaky, disabled waiting for PHOENIX-4389")
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemTablePermissionsIT {
     private static String SUPERUSER;
@@ -85,6 +85,7 @@ public class SystemTablePermissionsIT {
         conf.set("hbase.security.exec.permission.checks", "true");
         conf.set("hbase.security.authorization", "true");
         conf.set("hbase.superuser", SUPERUSER);
+        conf.setInt(HConstants.MASTER_INFO_PORT, -1);
     }
 
     @After

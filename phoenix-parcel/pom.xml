@@ -38,7 +38,6 @@
     <source.skip>true</source.skip>
     <top.dir>${project.basedir}/..</top.dir>
     <maven.test.skip>true</maven.test.skip>
-    <phoenix.version>${phoenix.release.version}</phoenix.version>
     <parcel.patch.count>0</parcel.patch.count>
     <parcel.release>0.${parcel.patch.count}</parcel.release>
     <parcel.folder>APACHE_PHOENIX-${phoenix.version}-${cdh.version}.p${parcel.release}</parcel.folder>
@@ -53,8 +52,28 @@
   </properties>
 
   <build>
-
     <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.0.0</version>
+        <executions>
+          <execution>
+            <id>regex-property</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>regex-property</goal>
+            </goals>
+            <configuration>
+              <name>phoenix.version</name>
+              <value>${project.version}</value>
+              <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$</regex>
+              <replacement>$1.$2.$3</replacement>
+              <failIfNoMatch>true</failIfNoMatch>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <!-- No jars created for this module -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -88,144 +107,6 @@
             </configuration>
           </execution>
         </executions>
-      </plugin>
-      <plugin>
-        <groupId>com.coderplus.maven.plugins</groupId>
-        <artifactId>copy-rename-maven-plugin</artifactId>
-        <version>1.0.1</version>
-        <executions>
-          <execution>
-            <id>copy-file-el6</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-el6.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-el5</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-el5.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-el7</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-el7.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-sles11</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-sles11.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-sles12</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-sles12.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-precise</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-precise.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-jessie</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-jessie.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-trusty</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-trusty.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-wheezy</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-wheezy.parcel</destinationFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>copy-file-xenial</id>
-            <phase>package</phase>
-            <goals>
-              <goal>copy</goal>
-            </goals>
-            <configuration>
-              <sourceFile>${project.build.directory}/${parcel.folder}.parcel.tar</sourceFile>
-              <destinationFile>${project.build.directory}/${parcel.folder}-xenial.parcel</destinationFile>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>make-manifest</id>
-            <phase>package</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <executable>python</executable>
-          <workingDirectory>${project.build.directory}</workingDirectory>
-          <arguments>
-            <argument>${project.basedir}/src/build/manifest/make_manifest.py</argument>
-            <argument>${project.build.directory}</argument>
-          </arguments>
-        </configuration>
       </plugin>
     </plugins>
   </build>

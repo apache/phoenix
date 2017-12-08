@@ -40,6 +40,9 @@ DIR_BIN=$DIR_REL_BIN_PATH/bin
 DIR_PHERF_CONF=phoenix-pherf/config
 DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
 DIR_DOCS=dev/release_files
+DIR_PARCEL_TAR=phoenix-parcel/target
+DIR_REL_PARCELS_PATH=$DIR_REL_ROOT/parcels
+SCRIPT_MAKE_MANIFEST=phoenix-parcel/src/build/manifest/make_manifest.py
 
 # Verify no target exists
 mvn clean; rm -rf $DIR_REL_BASE;
@@ -62,6 +65,7 @@ mkdir $DIR_REL_ROOT;
 mkdir $DIR_REL_BIN_PATH;
 mkdir $DIR_REL_BIN_TAR_PATH;
 mkdir $DIR_REL_SRC_TAR_PATH;
+mkdir $DIR_REL_PARCELS_PATH;
 mkdir $DIR_EXAMPLES;
 mkdir $DIR_BIN;
 
@@ -92,29 +96,43 @@ tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT apache-phoen
 rm -rf $DIR_REL_BIN_PATH;
 
 echo "DONE generating binary and source tars in release directory."
+
+# Generate parcels folder
+FILE_PARCEL_TAR=$(find $DIR_PARCEL_TAR -name '*.parcel.tar' -printf '%f\n')
+PARCEL_BASENAME=$(echo $FILE_PARCEL_TAR | sed 's/\.parcel\.tar//')
+
+PARCEL_DISTROS=( "el5" "el6" "el7" "sles11" "sles12" "jessie" "precise" "trusty" "wheezy" "xenial")
+for distro in "${PARCEL_DISTROS[@]}"
+do
+  cp $DIR_PARCEL_TAR/$FILE_PARCEL_TAR $DIR_REL_PARCELS_PATH/$PARCEL_BASENAME-$distro.parcel
+done
+python $SCRIPT_MAKE_MANIFEST $DIR_REL_PARCELS_PATH
+
+echo "DONE copying parcels to release directory."
 echo "Now signing source and binary tars"
 
 # Sign
 function_sign() {
-  phoenix_tar=$(find apache-phoenix-*.gz);
-
+  file=$1
+  echo "Signing file $1"
   # if on MAC OS
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    gpg2 --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
-    openssl md5 $phoenix_tar > $phoenix_tar.md5;
-    openssl dgst -sha512 $phoenix_tar > $phoenix_tar.sha;
-    openssl dgst -sha256 $phoenix_tar >> $phoenix_tar.sha;
+    gpg2 --armor --output $file.asc --detach-sig $file;
+    openssl md5 $file > $file.md5;
+    openssl dgst -sha512 $file > $file.sha;
+    openssl dgst -sha256 $file >> $file.sha;
   # all other OS
   else
-    gpg --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
-    md5sum -b $phoenix_tar > $phoenix_tar.md5;
-    sha512sum -b $phoenix_tar > $phoenix_tar.sha;
-    sha256sum -b $phoenix_tar >> $phoenix_tar.sha;
+    gpg --armor --output $file.asc --detach-sig $file;
+    md5sum -b $file > $file.md5;
+    sha512sum -b $file > $file.sha;
+    sha256sum -b $file >> $file.sha;
   fi
 }
 
-cd $DIR_REL_BIN_TAR_PATH; function_sign;
-cd $DIR_REL_SRC_TAR_PATH; function_sign;
+cd $DIR_REL_BIN_TAR_PATH; function_sign $(find apache-phoenix-*.gz);
+cd $DIR_REL_SRC_TAR_PATH; function_sign $(find apache-phoenix-*.gz);
+cd $DIR_REL_PARCELS_PATH; for i in *.parcel; do if [ -f "$i" ]; then function_sign $i ; fi; done;
 
 # Tag
 read -p "Do you want add tag for this RC in GIT? (Y for yes or any other key to continue)" prompt

@@ -55,7 +55,6 @@ import java.util.Set;
 
 import static org.junit.Assert.*;
 
-@Ignore("This test is flaky, disabled waiting for PHOENIX-4389")
 @Category(NeedsOwnMiniClusterTest.class)
 public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
