@@ -1069,4 +1069,40 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                     .getQueryPlan().getScans().get(0).size());
         }
     }
+
+    @Test
+    public void testQueryingWithUseStatsForParallelizationOnOff() throws SQLException {
+        testUseStatsForParallelizationOnSaltedTable(true, true);
+        testUseStatsForParallelizationOnSaltedTable(true, false);
+        testUseStatsForParallelizationOnSaltedTable(false, true);
+        testUseStatsForParallelizationOnSaltedTable(false, false);
+    }
+
+    private void testUseStatsForParallelizationOnSaltedTable(boolean useStatsFlag, boolean salted)
+            throws SQLException {
+        String tableName = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(
+            "create table " + tableName + "(k varchar not null primary key, v varchar) "
+                    + (salted ? " SALT_BUCKETS=2," : "") + " USE_STATS_FOR_PARALLELIZATION="
+                    + useStatsFlag);
+        conn.createStatement().execute("upsert into " + tableName + " values ('1', 'B')");
+        conn.createStatement().execute("upsert into " + tableName + " values ('2', 'A')");
+        conn.commit();
+        String query = "SELECT V FROM " + tableName + " ORDER BY V";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("A", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("B", rs.getString(1));
+
+        // Collect stats and make sure query still works correctly
+        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("A", rs.getString(1));
+        assertTrue(rs.next());
+        assertEquals("B", rs.getString(1));
+    }
+
 }

@@ -607,11 +607,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 estimate.bytesEstimate += gpsBytes;
             }
         }
-        if (startNewScan && !scans.isEmpty() && useStatsForParallelization) {
-            /*
-             * Note that even if region boundary was crossed, if we are not using stats for
-             * parallelization, nothing gets added to the parallel scans.
-             */
+        if (startNewScan && !scans.isEmpty()) {
             parallelScans.add(scans);
             scans = Lists.newArrayListWithExpectedSize(1);
         }
