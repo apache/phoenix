@@ -20,14 +20,15 @@ package org.apache.phoenix.mapreduce.util;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.Collections;
 import java.util.Properties;
+import java.util.Set;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+
+import com.google.common.base.Preconditions;
 
 /**
  * Utility class to return a {@link Connection} .
@@ -74,15 +75,29 @@ public class ConnectionUtil {
      * Create the configured output Connection.
      *
      * @param conf configuration containing the connection information
+     * @return the configured output connection
+     */
+    public static Connection getOutputConnectionWithoutTheseProps(final Configuration conf, Set<String> ignoreTheseProps) throws SQLException {
+        return getOutputConnection(conf, new Properties(), ignoreTheseProps);
+    }
+    
+    /**
+     * Create the configured output Connection.
+     *
+     * @param conf configuration containing the connection information
      * @param props custom connection properties
      * @return the configured output connection
      */
     public static Connection getOutputConnection(final Configuration conf, Properties props) throws SQLException {
+        return getOutputConnection(conf, props, Collections.<String>emptySet());
+    }
+    
+    public static Connection getOutputConnection(final Configuration conf, Properties props, Set<String> withoutTheseProps) throws SQLException {
         Preconditions.checkNotNull(conf);
 		return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf),
 				PhoenixConfigurationUtil.getClientPort(conf),
 				PhoenixConfigurationUtil.getZNodeParent(conf),
-				PropertiesUtil.combineProperties(props, conf));
+				PropertiesUtil.combineProperties(props, conf, withoutTheseProps));
     }
 
     /**
