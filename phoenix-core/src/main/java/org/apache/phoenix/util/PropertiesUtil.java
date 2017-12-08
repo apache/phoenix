@@ -17,10 +17,13 @@
  */
 package org.apache.phoenix.util;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
 
 public class PropertiesUtil {
@@ -50,13 +53,17 @@ public class PropertiesUtil {
      *         properties contained in conf
      */
     public static Properties combineProperties(Properties props, final Configuration conf) {
+        return combineProperties(props, conf, Collections.<String>emptySet());
+    }
+    
+    public static Properties combineProperties(Properties props, final Configuration conf, Set<String> withoutTheseProps) {
         Iterator<Map.Entry<String, String>> iterator = conf.iterator();
         Properties copy = deepCopy(props);
         if (iterator != null) {
             while (iterator.hasNext()) {
                 Map.Entry<String, String> entry = iterator.next();
                 // set the property from config only if props doesn't have it already
-                if (copy.getProperty(entry.getKey()) == null) {
+                if (copy.getProperty(entry.getKey()) == null && !withoutTheseProps.contains(entry.getKey())) {
                     copy.setProperty(entry.getKey(), entry.getValue());
                 }
             }
