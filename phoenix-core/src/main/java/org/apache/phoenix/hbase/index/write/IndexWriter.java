@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -88,7 +89,7 @@ public class IndexWriter implements Stoppable {
     Configuration conf = env.getConfiguration();
     try {
       IndexFailurePolicy committer =
-          conf.getClass(INDEX_FAILURE_POLICY_CONF_KEY, KillServerOnFailurePolicy.class,
+          conf.getClass(INDEX_FAILURE_POLICY_CONF_KEY, PhoenixIndexFailurePolicy.class,
             IndexFailurePolicy.class).newInstance();
       return committer;
     } catch (InstantiationException e) {
