@@ -906,9 +906,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
                 if(!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    // Just giving more priority to this coprocessor till HBASE-19384 get's fixed
-                    // because in HBase 2.0 the bypass is not working as old versions.
-                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority + 1, null);
+                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
                 }
             }
 

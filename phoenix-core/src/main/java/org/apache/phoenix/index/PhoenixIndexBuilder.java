@@ -102,11 +102,6 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     @Override
     public void setup(RegionCoprocessorEnvironment env) throws IOException {
         super.setup(env);
-        Configuration conf = env.getConfiguration();
-        // Install handler that will attempt to disable the index first before killing the region
-        // server
-        conf.setIfUnset(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY,
-            PhoenixIndexFailurePolicy.class.getName());
     }
 
     @Override

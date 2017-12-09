@@ -71,7 +71,6 @@ public class TestIndexWriter {
     assertNotNull(IndexWriter.getCommitter(env));
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void getDefaultFailurePolicy() throws Exception {
     Configuration conf = new Configuration(false);
@@ -89,7 +88,6 @@ public class TestIndexWriter {
    * all index writes for a mutation/batch are completed.
    * @throws Exception on failure
    */
-  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
     LOG.info("Starting " + testName.getTableNameString());
@@ -143,7 +141,6 @@ public class TestIndexWriter {
    * that we correctly end the task
    * @throws Exception on failure
    */
-  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testShutdownInterruptsAsExpected() throws Exception {
     Stoppable stop = Mockito.mock(Stoppable.class);
