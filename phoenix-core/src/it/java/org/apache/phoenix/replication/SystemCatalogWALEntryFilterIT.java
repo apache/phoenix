@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALEdit;
-import org.apache.hadoop.hbase.wal.WALKey;
+import org.apache.hadoop.hbase.wal.WALKeyImpl;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -73,7 +73,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   private static final String DROP_TENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + TENANT_VIEW_NAME;
   private static final String DROP_NONTENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + NONTENANT_VIEW_NAME;
   private static PTable catalogTable;
-  private static WALKey walKey = null;
+  private static WALKeyImpl walKey = null;
   private static TableName systemCatalogTableName =
       TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
 
@@ -89,7 +89,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
       ensureTableCreated(getUrl(), TestUtil.ENTITY_HISTORY_TABLE_NAME);
       connection.createStatement().execute(CREATE_TENANT_VIEW_SQL);
       catalogTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-      walKey = new WALKey(REGION, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME), 0, 0, uuid);
+      walKey = new WALKeyImpl(REGION, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME), 0, 0, uuid);
     };
     Assert.assertNotNull(catalogTable);
     try (java.sql.Connection connection =
@@ -115,7 +115,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   @Test
   public void testOtherTablesAutoPass() throws Exception {
     //Cell is nonsense but we should auto pass because the table name's not System.Catalog
-    WAL.Entry entry = new WAL.Entry(new WALKey(REGION,
+    WAL.Entry entry = new WAL.Entry(new WALKeyImpl(REGION,
         TableName.valueOf(TestUtil.ENTITY_HISTORY_TABLE_NAME), System.currentTimeMillis()), new WALEdit());
     entry.getEdit().add(CellUtil.createCell(Bytes.toBytes("foo")));
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
@@ -232,7 +232,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
       }
       Assert.assertTrue("Didn't retrieve any cells from SYSTEM.CATALOG",
           edit.getCells().size() > 0);
-      WALKey key = new WALKey(REGION, tableName, 0, 0, uuid);
+      WALKeyImpl key = new WALKeyImpl(REGION, tableName, 0, 0, uuid);
       entry = new WAL.Entry(key, edit);
     }
     return entry;
