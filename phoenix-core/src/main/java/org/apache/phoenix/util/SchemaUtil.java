@@ -20,9 +20,11 @@ package org.apache.phoenix.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -42,8 +44,10 @@ import java.util.TreeSet;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -54,6 +58,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -76,6 +81,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -127,8 +133,9 @@ public class SchemaUtil {
         
     };
     public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
-    public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "DEFAULT";
-    public static final String HBASE_NAMESPACE = "HBASE";
+    // See PHOENIX-4424
+    public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "default";
+    public static final String HBASE_NAMESPACE = "hbase";
     public static final List<String> NOT_ALLOWED_SCHEMA_LIST = Arrays.asList(SCHEMA_FOR_DEFAULT_NAMESPACE,
             HBASE_NAMESPACE);
     
@@ -200,7 +207,25 @@ public class SchemaUtil {
         }
         return name.toUpperCase();
     }
-    
+
+    /**
+     * Normalize a Literal. If literal is surrounded by single quotes,
+     * the quotes are trimmed, else full string is returned
+     * @param literal the parsed LiteralParseNode
+     * @return the normalized literal string
+     */
+    public static String normalizeLiteral(LiteralParseNode literal) {
+        if (literal == null) {
+            return null;
+        }
+        String literalString = literal.toString();
+        if (isEnclosedInSingleQuotes(literalString)) {
+            // Trim the single quotes
+            return literalString.substring(1, literalString.length()-1);
+        }
+        return literalString;
+    }
+
     /**
      * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
      * @param fullTableName
@@ -214,6 +239,10 @@ public class SchemaUtil {
             normalizedTableName =  normalizeIdentifier(schemaName) + QueryConstants.NAME_SEPARATOR;
         }
         return normalizedTableName + normalizeIdentifier(tableName);
+    }
+
+    public static boolean isEnclosedInSingleQuotes(String name) {
+        return name!=null && name.length() > 0 && name.charAt(0)=='\'';
     }
 
     public static boolean isCaseSensitive(String name) {
@@ -1130,4 +1159,11 @@ public class SchemaUtil {
         }
         return false;
     }
+
+    public static boolean isNamespaceMapped(Result currentResult) {
+        Cell isNamespaceMappedCell = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
+        return isNamespaceMappedCell!=null && (boolean) PBoolean.INSTANCE.toObject(isNamespaceMappedCell.getValue());
+    }
+    
+
 }

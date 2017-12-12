@@ -15,16 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compile;
+package org.apache.hadoop.hbase.ipc;
 
-import java.sql.SQLException;
+import org.apache.hadoop.hbase.ipc.RpcServer.Call;
 
-import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.schema.TableRef;
+public class RpcUtil {
 
+    public static Call getRpcContext() {
+        return RpcServer.CurCall.get();
+    }
+    
+    public static void setRpcContext(Call c){
+        RpcServer.CurCall.set(c);
+    }
 
-public interface MutationPlan extends StatementPlan {
-    MutationState execute() throws SQLException;
-    TableRef getTargetRef();
-    QueryPlan getQueryPlan();
 }

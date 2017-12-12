@@ -17,20 +17,31 @@
  */
 package org.apache.phoenix.parse;
 
+import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.ListMultimap;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTableType;
 
 public class AlterIndexStatement extends SingleTableStatement {
     private final String dataTableName;
     private final boolean ifExists;
     private final PIndexState indexState;
     private boolean async;
+    private ListMultimap<String,Pair<String,Object>> props;
+    private static final PTableType tableType=PTableType.INDEX;
 
     public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState indexState, boolean async) {
+        this(indexTableNode,dataTableName,ifExists,indexState,async,null);
+    }
+
+    public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState indexState, boolean async, ListMultimap<String,Pair<String,Object>> props) {
         super(indexTableNode,0);
         this.dataTableName = dataTableName;
         this.ifExists = ifExists;
         this.indexState = indexState;
         this.async = async;
+        this.props= props==null ? ImmutableListMultimap.<String,Pair<String,Object>>of() : props;
     }
 
     public String getTableName() {
@@ -54,4 +65,7 @@ public class AlterIndexStatement extends SingleTableStatement {
         return async;
     }
 
+    public ListMultimap<String,Pair<String,Object>> getProps() { return props; }
+
+    public PTableType getTableType(){ return tableType; }
 }
