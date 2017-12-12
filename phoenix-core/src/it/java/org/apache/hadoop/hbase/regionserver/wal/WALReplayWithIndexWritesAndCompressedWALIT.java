@@ -60,6 +60,7 @@ import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.hbase.index.util.TestIndexManagementUtil;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.After;
 import org.junit.Before;
@@ -100,6 +101,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     setupCluster();
     Path hbaseRootDir = UTIL.getDataTestDir();
     this.conf = HBaseConfiguration.create(UTIL.getConfiguration());
+    this.conf.setBoolean(QueryServices.INDEX_FAILURE_THROW_EXCEPTION_ATTRIB, false);
     this.fs = UTIL.getDFSCluster().getFileSystem();
     this.hbaseRootDir = new Path(this.conf.get(HConstants.HBASE_DIR));
     this.oldLogDir = new Path(this.hbaseRootDir, HConstants.HREGION_OLDLOGDIR_NAME);
