@@ -24,7 +24,14 @@ import subprocess
 import sys
 import phoenix_utils
 import atexit
-import argparse
+
+# import argparse
+try:
+    import argparse
+except ImportError:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.append(os.path.join(current_dir, 'argparse-1.4.0'))
+    import argparse
 
 global childProc
 childProc = None
@@ -39,8 +46,9 @@ atexit.register(kill_child)
 phoenix_utils.setPath()
 
 parser = argparse.ArgumentParser(description='Launches the Apache Phoenix Client.')
-# Positional argument 'zookeepers' is optional
-parser.add_argument('zookeepers', nargs='?', help='The ZooKeeper quorum string', default='localhost:2181:/hbase')
+# Positional argument 'zookeepers' is optional. The PhoenixDriver will automatically populate
+# this if it's not provided by the user (so, we want to leave a default value of empty)
+parser.add_argument('zookeepers', nargs='?', help='The ZooKeeper quorum string', default='')
 # Positional argument 'sqlfile' is optional
 parser.add_argument('sqlfile', nargs='?', help='A file of SQL commands to execute', default='')
 # Common arguments across sqlline.py and sqlline-thin.py
