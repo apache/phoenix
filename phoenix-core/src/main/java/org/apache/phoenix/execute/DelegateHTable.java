@@ -271,6 +271,11 @@ public class DelegateHTable implements Table {
     }
 
     @Override
+    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
+        return delegate.checkAndMutate(row, family);
+    }
+
+    @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
             byte[] value, RowMutations mutation) throws IOException {
         return delegate.checkAndMutate(row, family, qualifier, op, value, mutation);

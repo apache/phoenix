@@ -317,6 +317,12 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
+    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
             RowMutations mutation) throws IOException {
         // TODO Auto-generated method stub

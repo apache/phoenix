@@ -302,6 +302,11 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
+    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
+        return transactionAwareHTable.checkAndMutate(row, family);
+    }
+
+    @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op,
             byte[] value, RowMutations mutation) throws IOException {
         return transactionAwareHTable.checkAndMutate(row, family, qualifier, op, value, mutation);

@@ -605,6 +605,15 @@ public class TransactionAwareHTable extends AbstractTransactionAwareTable implem
     }
 
     @Override
+    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
+        if(allowNonTransactional){
+            return hTable.checkAndMutate(row, family);
+        }else{
+            throw new UnsupportedOperationException("Operation is not supported transactionally");
+        }
+    }
+
+    @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
             RowMutations mutation) throws IOException {
         if(allowNonTransactional){
