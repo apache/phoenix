@@ -57,6 +57,7 @@ import signal
 import socket
 import atexit
 import fcntl
+import time
 try:
     # Python 2 has both ‘str’ (bytes) and ‘unicode’ (text).
     basestring = basestring
@@ -386,7 +387,7 @@ class DaemonContext:
         change_process_owner(self.uid, self.gid)
 
         if self.detach_process:
-            detach_process_context()
+            detach_process_context(self.pidfile)
 
         signal_handler_map = self._make_signal_handler_map()
         set_signal_handlers(signal_handler_map)
@@ -657,7 +658,7 @@ def prevent_core_dump():
     resource.setrlimit(core_resource, core_limit)
 
 
-def detach_process_context():
+def detach_process_context(pidfile):
     """ Detach the process context from parent and session.
 
         :return: ``None``.
@@ -683,6 +684,8 @@ def detach_process_context():
         try:
             pid = os.fork()
             if pid > 0:
+                while not os.path.exists(pidfile.path):
+                    time.sleep(0.1)
                 os._exit(0)
         except OSError as exc:
             error = DaemonProcessDetachError(
@@ -959,7 +962,14 @@ found at [1].
     def __init__(self, path, enter_err_msg=None):
         self.path = path
         self.enter_err_msg = enter_err_msg
-        self.pidfile = None
+        self.pidfile = open(self.path, 'a+')
+        try:
+            fcntl.flock(self.pidfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(self.pidfile.fileno(), fcntl.LOCK_UN)
+            self.pidfile.close()
+            os.remove(self.path)
+        except IOError:
+            sys.exit(self.enter_err_msg)
 
     def __enter__(self):
         self.pidfile = open(self.path, 'a+')
