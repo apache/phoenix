@@ -365,7 +365,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
       if (scan.isRaw() || ScanInfoUtil.isKeepDeletedCells(store.getScanInfo()) || scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP || TransactionUtil.isTransactionalTimestamp(scan.getTimeRange().getMax())) {
         return s;
       }
-
+      
+      if (s!=null) {
+          s.close();
+      }
       ScanInfo scanInfo = ScanInfoUtil.cloneScanInfoWithKeepDeletedCells(store.getScanInfo());
       return new StoreScanner(store, scanInfo, scan, targetCols,
           c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel()));
