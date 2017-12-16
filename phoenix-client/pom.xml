@@ -129,8 +129,6 @@
                 <excludes>
                   <exclude>org.apache.phoenix:phoenix-client</exclude>
                   <exclude>xom:xom</exclude>
-                  <exclude>log4j:log4j</exclude>
-                  <exclude>org.slf4j:slf4j-log4j12</exclude>
                 </excludes>
               </artifactSet>
               <filters>
