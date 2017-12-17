@@ -118,7 +118,6 @@ tokens
     UNION='union';
     FUNCTION='function';
     AS='as';
-    TO='to';
     TEMPORARY='temporary';
     RETURNS='returns';
     USING='using';
@@ -145,8 +144,6 @@ tokens
     DUPLICATE = 'duplicate';
     IGNORE = 'ignore';
     IMMUTABLE = 'immutable';
-    GRANT = 'grant';
-    REVOKE = 'revoke';
 }
 
 
@@ -433,8 +430,6 @@ oneStatement returns [BindableStatement ret]
     |   s=delete_jar_node
     |   s=alter_session_node
     |	s=create_sequence_node
-    |   s=grant_permission_node
-    |   s=revoke_permission_node
     |	s=drop_sequence_node
     |	s=drop_schema_node
     |	s=use_schema_node
@@ -459,32 +454,8 @@ create_table_node returns [CreateTableStatement ret]
    
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
-    :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
+    :   CREATE SCHEMA (IF NOT ex=EXISTS)? (DEFAULT | s=identifier)
         {ret = factory.createSchema(s, ex!=null); }
-    ;
-
-// Parse a grant permission statement
-grant_permission_node returns [ChangePermsStatement ret]
-    :   GRANT p=literal (ON ((TABLE)? table=table_name | s=SCHEMA schema=identifier))? TO (g=GROUP)? ug=literal
-        {
-            String permsString = SchemaUtil.normalizeLiteral(p);
-            if (permsString != null && permsString.length() > 5) {
-                throw new RuntimeException("Permissions String length should be less than 5 characters");
-            }
-            $ret = factory.changePermsStatement(permsString, s!=null, table, schema, g!=null, ug, Boolean.TRUE);
-        }
-    ;
-
-// Parse a revoke permission statement
-revoke_permission_node returns [ChangePermsStatement ret]
-    :   REVOKE (p=literal)? (ON ((TABLE)? table=table_name | s=SCHEMA schema=identifier))? FROM (g=GROUP)? ug=literal
-        {
-            String permsString = SchemaUtil.normalizeLiteral(p);
-            if (permsString != null && permsString.length() > 5) {
-                throw new RuntimeException("Permissions String length should be less than 5 characters");
-            }
-            $ret = factory.changePermsStatement(permsString, s!=null, table, schema, g!=null, ug, Boolean.FALSE);
-        }
     ;
 
 // Parse a create view statement.
@@ -605,9 +576,8 @@ drop_index_node returns [DropIndexStatement ret]
 
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
-    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
-      ((s=(USABLE | UNUSABLE | REBUILD | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)?)
-      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), async!=null, p); }
+    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name s=(USABLE | UNUSABLE | REBUILD | DISABLE | ACTIVE) (async=ASYNC)?
+      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), async!=null); }
     ;
 
 // Parse a trace statement.
@@ -1190,6 +1160,7 @@ SL_COMMENT2: '--';
 BIND_NAME
     : COLON (DIGIT)+
     ;
+
 
 NAME
     :    LETTER (FIELDCHAR)*

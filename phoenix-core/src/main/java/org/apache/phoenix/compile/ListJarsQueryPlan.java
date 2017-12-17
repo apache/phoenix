@@ -49,7 +49,6 @@ import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -184,11 +183,6 @@ public class ListJarsQueryPlan implements QueryPlan {
     @Override
     public long getEstimatedSize() {
         return PVarchar.INSTANCE.getByteSize();
-    }
-
-    @Override
-    public Cost getCost() {
-        return Cost.ZERO;
     }
 
     @Override

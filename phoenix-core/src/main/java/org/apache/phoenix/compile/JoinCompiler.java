@@ -110,12 +110,6 @@ import com.google.common.collect.Sets;
 
 public class JoinCompiler {
 
-    public enum Strategy {
-        HASH_BUILD_LEFT,
-        HASH_BUILD_RIGHT,
-        SORT_MERGE,
-    }
-
     public enum ColumnRefType {
         JOINLOCAL,
         GENERAL,
@@ -495,7 +489,7 @@ public class JoinCompiler {
             return dependencies;
         }
 
-        public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext lhsCtx, StatementContext rhsCtx, Strategy strategy) throws SQLException {
+        public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext lhsCtx, StatementContext rhsCtx, boolean sortExpressions) throws SQLException {
             if (onConditions.isEmpty()) {
                 return new Pair<List<Expression>, List<Expression>>(
                         Collections.<Expression> singletonList(LiteralExpression.newConstant(1)),
@@ -511,16 +505,15 @@ public class JoinCompiler {
                 rhsCompiler.reset();
                 Expression right = condition.getRHS().accept(rhsCompiler);
                 PDataType toType = getCommonType(left.getDataType(), right.getDataType());
-                SortOrder toSortOrder = strategy == Strategy.SORT_MERGE ? SortOrder.ASC : (strategy == Strategy.HASH_BUILD_LEFT ? right.getSortOrder() : left.getSortOrder());
-                if (left.getDataType() != toType || left.getSortOrder() != toSortOrder) {
-                    left = CoerceExpression.create(left, toType, toSortOrder, left.getMaxLength());
+                if (left.getDataType() != toType || left.getSortOrder() == SortOrder.DESC) {
+                    left = CoerceExpression.create(left, toType, SortOrder.ASC, left.getMaxLength());
                 }
-                if (right.getDataType() != toType || right.getSortOrder() != toSortOrder) {
-                    right = CoerceExpression.create(right, toType, toSortOrder, right.getMaxLength());
+                if (right.getDataType() != toType || right.getSortOrder() == SortOrder.DESC) {
+                    right = CoerceExpression.create(right, toType, SortOrder.ASC, right.getMaxLength());
                 }
                 compiled.add(new Pair<Expression, Expression>(left, right));
             }
-            if (strategy != Strategy.SORT_MERGE) {
+            if (sortExpressions) {
                 Collections.sort(compiled, new Comparator<Pair<Expression, Expression>>() {
                     @Override
                     public int compare(Pair<Expression, Expression> o1, Pair<Expression, Expression> o2) {

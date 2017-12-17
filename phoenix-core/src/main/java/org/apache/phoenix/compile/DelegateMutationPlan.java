@@ -42,11 +42,6 @@ public class DelegateMutationPlan implements MutationPlan {
     }
 
     @Override
-    public QueryPlan getQueryPlan() {
-        return plan.getQueryPlan();
-    }
-
-    @Override
     public ParameterMetaData getParameterMetaData() {
         return plan.getParameterMetaData();
     }

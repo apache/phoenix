@@ -67,12 +67,10 @@ public class QueryOptimizer {
 
     private final QueryServices services;
     private final boolean useIndexes;
-    private final boolean costBased;
 
     public QueryOptimizer(QueryServices services) {
         this.services = services;
         this.useIndexes = this.services.getProps().getBoolean(QueryServices.USE_INDEXES_ATTRIB, QueryServicesOptions.DEFAULT_USE_INDEXES);
-        this.costBased = this.services.getProps().getBoolean(QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
     }
 
     public QueryPlan optimize(PhoenixStatement statement, QueryPlan dataPlan) throws SQLException {
@@ -93,7 +91,7 @@ public class QueryOptimizer {
     }
     
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        List<QueryPlan> plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, true);
+        List<QueryPlan>plans = getApplicablePlans(dataPlan, statement, targetColumns, parallelIteratorFactory, true);
         return plans.get(0);
     }
     
@@ -311,11 +309,10 @@ public class QueryOptimizer {
         }
         return null;
     }
-
+    
     /**
      * Order the plans among all the possible ones from best to worst.
-     * If option COST_BASED_OPTIMIZER_ENABLED is on and stats are available, we order the plans based on
-     * their costs, otherwise we use the following simple algorithm:
+     * Since we don't keep stats yet, we use the following simple algorithm:
      * 1) If the query is a point lookup (i.e. we have a set of exact row keys), choose that one immediately.
      * 2) If the query has an ORDER BY and a LIMIT, choose the plan that has all the ORDER BY expression
      * in the same order as the row key columns.
@@ -323,6 +320,9 @@ public class QueryOptimizer {
      *    a) the most row key columns that may be used to form the start/stop scan key (i.e. bound slots).
      *    b) the plan that preserves ordering for a group by.
      *    c) the non local index table plan
+     * TODO: We should make more of a cost based choice: The largest number of bound slots does not necessarily
+     * correspond to the least bytes scanned. We could consider the slots bound for upper and lower ranges 
+     * separately, or we could calculate the bytes scanned between the start and stop row of each table.
      * @param plans the list of candidate plans
      * @return list of plans ordered from best to worst.
      */
@@ -331,21 +331,7 @@ public class QueryOptimizer {
         if (plans.size() == 1) {
             return plans;
         }
-
-        if (this.costBased) {
-            Collections.sort(plans, new Comparator<QueryPlan>() {
-                @Override
-                public int compare(QueryPlan plan1, QueryPlan plan2) {
-                    return plan1.getCost().compareTo(plan2.getCost());
-                }
-            });
-            // Return ordered list based on cost if stats are available; otherwise fall
-            // back to static ordering.
-            if (!plans.get(0).getCost().isUnknown()) {
-                return stopAtBestPlan ? plans.subList(0, 1) : plans;
-            }
-        }
-
+        
         /**
          * If we have a plan(s) that are just point lookups (i.e. fully qualified row
          * keys), then favor those first.
@@ -442,7 +428,7 @@ public class QueryOptimizer {
             }
             
         });
-
+        
         return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
     }
 
