@@ -429,8 +429,15 @@ public class PhoenixRuntime {
         return result.getTable();
 
     }
+    
     /**
-     * 
+     * Returns the table if it is found in the connection metadata cache. If the metadata of this
+     * table has changed since it was put in the cache these changes will not necessarily be
+     * reflected in the returned table. If the table is not found, makes a call to the server to
+     * fetch the latest metadata of the table. This is different than how a table is resolved when
+     * it is referenced from a query (a call is made to the server to fetch the latest metadata of the table
+     * depending on the UPDATE_CACHE_FREQUENCY property)
+     * See https://issues.apache.org/jira/browse/PHOENIX-4475
      * @param conn
      * @param name requires a pre-normalized table name or a pre-normalized schema and table name
      * @return
@@ -442,13 +449,24 @@ public class PhoenixRuntime {
         try {
             table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-            String tableName = SchemaUtil.getTableNameFromFullName(name);
-            MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(schemaName, tableName);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                throw e;
+            // parent indexes on child view metadata rows are not present on the server
+            if (name.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                String viewName =
+                        SchemaUtil.getTableNameFromFullName(name,
+                            QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                // resolve the view which should also load any parent indexes
+                getTable(conn, viewName);
+                table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
+            } else {
+                String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+                String tableName = SchemaUtil.getTableNameFromFullName(name);
+                MetaDataMutationResult result =
+                        new MetaDataClient(pconn).updateCache(schemaName, tableName);
+                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                    throw e;
+                }
+                table = result.getTable();
             }
-            table = result.getTable();
         }
         return table;
     }
