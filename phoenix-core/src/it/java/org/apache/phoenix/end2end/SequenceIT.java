@@ -1358,35 +1358,6 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         assertEquals(5, rs.getInt(2));        
     }
     
-    @Test
-    public void testReturnAllSequencesNotCalledForNoOpenConnections() throws Exception {
-        String sequenceName = generateSequenceNameWithSchema();
-        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
-        String schemaName = getSchemaName(sequenceName);
-        
-        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2 CACHE 5");
-        
-        String query = "SELECT NEXT VALUE FOR " + sequenceName ;
-        ResultSet rs = conn.prepareStatement(query).executeQuery();
-        assertTrue(rs.next());
-        assertEquals(3, rs.getInt(1));
-        assertFalse(rs.next());
-        rs = conn.prepareStatement(query).executeQuery();
-        assertTrue(rs.next());
-        assertEquals(5, rs.getInt(1));
-        assertFalse(rs.next());
-        
-        // verify that calling close() does not return sequence values back to the server
-        query = "SELECT CURRENT_VALUE FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA=? AND SEQUENCE_NAME=?";
-        PreparedStatement preparedStatement = conn.prepareStatement(query);
-        preparedStatement.setString(1, schemaName);
-        preparedStatement.setString(2, sequenceNameWithoutSchema);
-        rs = preparedStatement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(13, rs.getInt(1));
-        assertFalse(rs.next());
-    }
-    
     private static String getSchemaName(String tableName) {
     	return tableName.substring(0, tableName.indexOf("."));
     }
