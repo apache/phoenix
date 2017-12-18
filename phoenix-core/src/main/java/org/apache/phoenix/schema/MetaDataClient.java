@@ -846,8 +846,8 @@ public class MetaDataClient {
             if (containsAllReqdCols) {
                 // Tack on view statement to index to get proper filtering for view
                 String viewStatement = IndexUtil.rewriteViewStatement(connection, index, parentTable, view.getViewStatement());
-                PName modifiedIndexName = PNameFactory.newName(index.getSchemaName().getString() + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR
-                        + index.getName().getString() + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + view.getName().getString());
+                PName modifiedIndexName = PNameFactory.newName(index.getName().getString() 
+                    + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + view.getName().getString());
                 // add the index table with a new name so that it does not conflict with the existing index table
                 // also set update cache frequency to never since the renamed index is not present on the server
                 indexesToAdd.add(PTableImpl.makePTable(index, modifiedIndexName, viewStatement, Long.MAX_VALUE, view.getTenantId()));
