@@ -98,8 +98,8 @@ import java.util.NavigableMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.Cell.DataType;
 import org.apache.hadoop.hbase.CellBuilder;
-import org.apache.hadoop.hbase.CellBuilder.DataType;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellComparatorImpl;

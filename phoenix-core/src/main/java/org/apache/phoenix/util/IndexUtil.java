@@ -658,6 +658,11 @@ public class IndexUtil {
                 public int getTagsLength() {
                     return cell.getTagsLength();
                 }
+
+                @Override
+                public DataType getType() {
+                    return cell.getType();
+                }
             };
             itr.set(newCell);
         }

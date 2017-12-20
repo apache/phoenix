@@ -578,6 +578,9 @@ public class EncodedColumnQualifierCellsListTest {
             return delegate.getTagsLength();
         }
 
+        @Override
+        public DataType getType() {
+            return delegate.getType();
+        }
     }
-    
 }

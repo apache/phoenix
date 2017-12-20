@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
+import org.apache.hadoop.hbase.RawCellBuilder;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -122,7 +123,7 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public ExtendedCellBuilder getCellBuilder() {
+    public RawCellBuilder getCellBuilder() {
         return delegate.getCellBuilder();
     }
    

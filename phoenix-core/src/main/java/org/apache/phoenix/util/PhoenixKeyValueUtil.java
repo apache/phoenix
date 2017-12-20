@@ -25,8 +25,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellBuilder;
-import org.apache.hadoop.hbase.CellBuilder.DataType;
+import org.apache.hadoop.hbase.Cell.DataType;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
@@ -77,7 +76,7 @@ public class PhoenixKeyValueUtil {
     
     public static Cell newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, 
         int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength, long ts, byte[] value, 
-        int valueOffset, int valueLength,CellBuilder.DataType type) {
+        int valueOffset, int valueLength,DataType type) {
         return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(key, keyOffset, keyLength).setFamily(cf, cfOffset, cfLength)
                 .setQualifier(cq, cqOffset, cqLength).setTimestamp(ts)

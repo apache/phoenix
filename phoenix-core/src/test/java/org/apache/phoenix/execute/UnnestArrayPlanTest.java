@@ -31,6 +31,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -160,7 +161,7 @@ public class UnnestArrayPlanTest {
         for (Object[] array : arrays) {
             PhoenixArray pArray = new PhoenixArray(baseType, array);
             byte[] bytes = arrayType.toBytes(pArray);            
-            tuples.add(new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(bytes, 0, bytes.length, bytes, 0, 0, bytes, 0, 0, 0, bytes, 0, 0,CellBuilder.DataType.Put)));
+            tuples.add(new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(bytes, 0, bytes.length, bytes, 0, 0, bytes, 0, 0, 0, bytes, 0, 0, Cell.DataType.Put)));
         }
         
         return tuples;
