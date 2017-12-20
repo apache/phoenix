@@ -267,7 +267,7 @@ public class PTableImpl implements PTable {
     
     public static PTableImpl makePTable(PTable table, PName tableName, long timeStamp, List<PName> physicalNames, List<PTable> indexes, String viewStatement, long updateCacheFrequency, PName tenantId) throws SQLException {
             return new PTableImpl(
-                    tenantId, PNameImpl.EMPTY_NAME, tableName, table.getType(), table.getIndexState(), timeStamp,
+                    tenantId, table.getSchemaName(), tableName, table.getType(), table.getIndexState(), timeStamp,
                     table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table), table.getParentSchemaName(), table.getParentTableName(),
                     indexes, table.isImmutableRows(), physicalNames, table.getDefaultFamilyName(), viewStatement,
                     table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
