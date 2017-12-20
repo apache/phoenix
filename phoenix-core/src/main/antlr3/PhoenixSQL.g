@@ -1084,7 +1084,6 @@ from_table_name returns [TableName ret]
 table_identifier returns [String ret]
     :   c=identifier {
            if (c.contains(QueryConstants.NAMESPACE_SEPARATOR) ) { throw new RuntimeException("Table or schema name cannot contain colon"); }
-           if (c.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR) ) { throw new RuntimeException("Table or schema name cannot contain hash"); }
            $ret = c;
     }
     ;
