@@ -579,7 +579,14 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             CompilableStatement compilableStmt = getStatement();
-            final StatementPlan plan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            StatementPlan compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            // For a QueryPlan, we need to get its optimized plan; for a MutationPlan, its enclosed QueryPlan
+            // has already been optimized during compilation.
+            if (compilePlan instanceof QueryPlan) {
+                QueryPlan dataPlan = (QueryPlan) compilePlan;
+                compilePlan = stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
+            }
+            final StatementPlan plan = compilePlan;
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
