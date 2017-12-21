@@ -172,7 +172,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
             byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
-            assertEquals(1000, Bytes.toInt(propertyTTL));
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
 
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX1"));
@@ -180,7 +180,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
             byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
-            assertEquals(1000, Bytes.toInt(propertyTTL));
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
         
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX2"));
@@ -188,7 +188,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
             byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
-            assertEquals(1000, Bytes.toInt(propertyTTL));
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
         
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
@@ -205,7 +205,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
             byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
-            assertEquals(1000, Bytes.toInt(propertyTTL));
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
 
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
@@ -236,7 +236,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, colDesc.getTimeToLive());
             byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
-            assertEquals(1000, Bytes.toInt(propertyTTL));
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
     }
     

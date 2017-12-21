@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.MAX_VERSIONS;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
@@ -1743,8 +1744,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (tableDescriptor != null) {
             tableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
             origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
-            tableDescriptors.add(tableDescriptor);
-            origTableDescriptors.add(origTableDescriptor);
             nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
             /*
              * If the table was transitioned from non transactional to transactional, we need
@@ -1756,6 +1755,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 updateDescriptorForTx(table, tableProps, tableDescriptorBuilder, Boolean.TRUE.toString(), tableDescriptors, origTableDescriptors);
             }
             tableDescriptor=tableDescriptorBuilder.build();
+            tableDescriptors.add(tableDescriptor);
+            origTableDescriptors.add(origTableDescriptor);
         }
 
         boolean success = false;
@@ -1864,7 +1865,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 TableDescriptor indexDesc = admin.getDescriptor(TableName.valueOf(index.getPhysicalName().getBytes()));
                 origDescriptors.add(indexDesc);
                 TableDescriptorBuilder indexDescriptorBuilder = TableDescriptorBuilder.newBuilder(indexDesc);
-                descriptorsToUpdate.add(indexDescriptorBuilder.build());
                 if (index.getColumnFamilies().isEmpty()) {
                     byte[] dataFamilyName = SchemaUtil.getEmptyColumnFamily(table);
                     byte[] indexFamilyName = SchemaUtil.getEmptyColumnFamily(index);
@@ -1873,6 +1873,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
                     indexColDescriptor.setValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),
                             tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+                    indexDescriptorBuilder.removeColumnFamily(indexFamilyName);
                     indexDescriptorBuilder.addColumnFamily(indexColDescriptor.build());
                 } else {
                     for (PColumnFamily family : index.getColumnFamilies()) {
@@ -1882,10 +1883,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
                         indexColDescriptor.setValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),
                                 tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+                        indexDescriptorBuilder.removeColumnFamily(familyName);
                         indexDescriptorBuilder.addColumnFamily(indexColDescriptor.build());
                     }
                 }
                 setTransactional(index.getPhysicalName().getBytes(), indexDescriptorBuilder, index.getType(), txValue, indexTableProps);
+                descriptorsToUpdate.add(indexDescriptorBuilder.build());
             }
             try {
                 TableDescriptor indexDescriptor = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(physicalTableName)));
@@ -1931,7 +1934,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
                     indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
                     indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
-                    
                 }
             }
         }
@@ -2144,7 +2146,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Calculate default for max versions
                 Map<String, Object> emptyFamilyProps = allFamiliesProps.get(SchemaUtil.getEmptyColumnFamilyAsString(table));
                 if (emptyFamilyProps != null) {
-                    defaultTxMaxVersions = (Integer)emptyFamilyProps.get(HConstants.VERSIONS);
+                    defaultTxMaxVersions = (Integer)emptyFamilyProps.get(MAX_VERSIONS);
                 }
                 if (defaultTxMaxVersions == null) {
                     if (isTransactional) {
@@ -2162,7 +2164,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     for (PColumnFamily family : table.getColumnFamilies()) {
                         if (!allFamiliesProps.containsKey(family.getName().getString())) {
                             Map<String,Object> familyProps = Maps.newHashMapWithExpectedSize(1);
-                            familyProps.put(HConstants.VERSIONS, defaultTxMaxVersions);
+                            familyProps.put(MAX_VERSIONS, defaultTxMaxVersions);
                             allFamiliesProps.put(family.getName().getString(), familyProps);
                         }
                     }
@@ -2179,7 +2181,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (props == null) {
                             props = new HashMap<String, Object>();
                         }
-                        props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
+                        props.put(PhoenixTransactionContext.PROPERTY_TTL, new Integer(ttl));
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
                         // or if the existing transactional table wasn't originally non transactional.
                         if (!willBeTransactional && !Boolean.valueOf(newTableDescriptorBuilder.build().getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
@@ -2191,8 +2193,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (Entry<String, Map<String, Object>> entry : allFamiliesProps.entrySet()) {
                 Map<String,Object> familyProps = entry.getValue();
                 if (isOrWillBeTransactional) {
-                    if (!familyProps.containsKey(HConstants.VERSIONS)) {
-                        familyProps.put(HConstants.VERSIONS, defaultTxMaxVersions);
+                    if (!familyProps.containsKey(MAX_VERSIONS)) {
+                        familyProps.put(MAX_VERSIONS, defaultTxMaxVersions);
                     }
                 }
                 byte[] cf = Bytes.toBytes(entry.getKey());
@@ -2205,6 +2207,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     ColumnFamilyDescriptorBuilder colDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(colDescriptor);
                     modifyColumnFamilyDescriptor(colDescriptorBuilder, familyProps);
                     colDescriptor = colDescriptorBuilder.build();
+                    newTableDescriptorBuilder.removeColumnFamily(cf);
+                    newTableDescriptorBuilder.addColumnFamily(colDescriptor);
                 }
                 if (isOrWillBeTransactional) {
                     checkTransactionalVersionsValue(colDescriptor);

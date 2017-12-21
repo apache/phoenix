@@ -98,10 +98,6 @@ import java.util.NavigableMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.Cell.DataType;
-import org.apache.hadoop.hbase.CellBuilder;
-import org.apache.hadoop.hbase.CellBuilderFactory;
-import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -1367,7 +1363,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     public void createTable(RpcController controller, CreateTableRequest request,
             RpcCallback<MetaDataResponse> done) {
         MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
-        CellBuilder cellBuilder = CellBuilderFactory.create(CellBuilderType.DEEP_COPY);
         byte[][] rowKeyMetaData = new byte[3][];
         byte[] schemaName = null;
         byte[] tableName = null;
@@ -1552,14 +1547,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     else { 
                         viewStatement = Bytes.toBytes(QueryUtil.getViewStatement(parentTable.getSchemaName().getString(), parentTable.getTableName().getString(), autoPartitionWhere));
                     }
-                    cellBuilder
-                            .clear()
-                            .setRow(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength())
-                            .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(),
-                                cell.getFamilyLength()).setQualifier(VIEW_STATEMENT_BYTES)
-                            .setTimestamp(cell.getTimestamp()).setType(DataType.Put)
-                            .setValue(viewStatement);
-                    cells.add(cellBuilder.build());
+                    Cell viewStatementCell =
+                            PhoenixKeyValueUtil.newKeyValue(cell.getRowArray(),
+                                cell.getRowOffset(), cell.getRowLength(), cell.getFamilyArray(),
+                                cell.getFamilyOffset(), cell.getFamilyLength(),
+                                VIEW_STATEMENT_BYTES, 0, VIEW_STATEMENT_BYTES.length,
+                                cell.getTimestamp(), viewStatement, 0, viewStatement.length,
+                                cell.getType());
+                    cells.add(viewStatementCell);
                     // set the IS_VIEW_REFERENCED column of the auto partition column row
                     Put autoPartitionPut = MetaDataUtil.getPutOnlyAutoPartitionColumn(parentTable, tableMetadata);
                     familyCellMap = autoPartitionPut.getFamilyCellMap();
@@ -1569,14 +1564,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     Object val = dataType.toObject(autoPartitionNum, PLong.INSTANCE);
                     byte[] bytes = new byte [dataType.getByteSize() + 1];
                     dataType.toBytes(val, bytes, 0);
-                    cellBuilder
-                            .clear()
-                            .setRow(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength())
-                            .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(),
-                                cell.getFamilyLength()).setQualifier(VIEW_CONSTANT_BYTES)
-                            .setTimestamp(cell.getTimestamp()).setType(DataType.Put)
-                            .setValue(bytes);
-                    cells.add(cellBuilder.build());
+                    Cell viewConstantCell =
+                            PhoenixKeyValueUtil.newKeyValue(cell.getRowArray(),
+                                cell.getRowOffset(), cell.getRowLength(), cell.getFamilyArray(),
+                                cell.getFamilyOffset(), cell.getFamilyLength(),
+                                VIEW_CONSTANT_BYTES, 0, VIEW_CONSTANT_BYTES.length,
+                                cell.getTimestamp(), bytes, 0, bytes.length, cell.getType());
+                    cells.add(viewConstantCell);
                 }
                 Short indexId = null;
                 if (request.hasAllocateIndexId() && request.getAllocateIndexId()) {
@@ -1617,15 +1611,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         Object val = dataType.toObject(seqValue, PLong.INSTANCE);
                         byte[] bytes = new byte [dataType.getByteSize() + 1];
                         dataType.toBytes(val, bytes, 0);
-                        cellBuilder
-                                .clear()
-                                .setRow(cell.getRowArray(), cell.getRowOffset(),
-                                    cell.getRowLength())
-                                .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(),
-                                    cell.getFamilyLength()).setQualifier(VIEW_INDEX_ID_BYTES)
-                                .setTimestamp(cell.getTimestamp()).setType(DataType.Put)
-                                .setValue(bytes);
-                        cells.add(cellBuilder.build());
+                        Cell indexIdCell =
+                                PhoenixKeyValueUtil.newKeyValue(cell.getRowArray(),
+                                    cell.getRowOffset(), cell.getRowLength(),
+                                    cell.getFamilyArray(), cell.getFamilyOffset(),
+                                    cell.getFamilyLength(), VIEW_INDEX_ID_BYTES, 0,
+                                    VIEW_INDEX_ID_BYTES.length, cell.getTimestamp(), bytes, 0,
+                                    bytes.length, cell.getType());
+                        cells.add(indexIdCell);
                         indexId = (short) seqValue;
                     }
                 }
@@ -2326,7 +2319,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             Region region, List<RowLock> locks, int clientVersion) throws IOException, SQLException {
         List<PutWithOrdinalPosition> columnPutsForBaseTable = Lists.newArrayListWithExpectedSize(tableMetadata.size());
         Map<TableProperty, Cell> tablePropertyCellMap = Maps.newHashMapWithExpectedSize(tableMetadata.size());
-        CellBuilder cellBuilder = CellBuilderFactory.create(CellBuilderType.DEEP_COPY);
         // Isolate the puts relevant to adding columns. Also figure out what kind of columns are being added.
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
@@ -2349,20 +2341,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             if (Bytes.compareTo(propNameBytes, 0, propNameBytes.length, cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength())==0
                                     && tableProp.isValidOnView() && tableProp.isMutable()) {
                                 Cell tablePropCell =
-                                        cellBuilder
-                                                .clear()
-                                                .setRow(cell.getRowArray(), cell.getRowOffset(),
-                                                    cell.getRowLength())
-                                                .setFamily(cell.getFamilyArray(),
-                                                    cell.getFamilyOffset(), cell.getFamilyLength())
-                                                .setQualifier(cell.getQualifierArray(),
-                                                    cell.getQualifierOffset(),
-                                                    cell.getQualifierLength())
-                                                .setTimestamp(cell.getTimestamp())
-                                                .setType(DataType.Put)
-                                                .setValue(cell.getValueArray(),
-                                                    cell.getValueOffset(), cell.getValueLength())
-                                                .build();
+                                        PhoenixKeyValueUtil.newKeyValue(cell.getRowArray(),
+                                            cell.getRowOffset(), cell.getRowLength(),
+                                            cell.getFamilyArray(), cell.getFamilyOffset(),
+                                            cell.getFamilyLength(), cell.getQualifierArray(),
+                                            cell.getQualifierOffset(), cell.getQualifierLength(),
+                                            cell.getTimestamp(), cell.getValueArray(),
+                                            cell.getValueOffset(), cell.getValueLength(),
+                                            cell.getType());
                                 tablePropertyCellMap.put(tableProp, tablePropCell);
                             }
                         }
@@ -2468,19 +2454,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     // The column doesn't exist in the view.
                     Put viewColumnPut = new Put(columnKey, clientTimeStamp);
                     for (Cell cell : baseTableColumnPut.getFamilyCellMap().values().iterator().next()) {
-                        Cell newCell =
-                                cellBuilder
-                                        .clear()
-                                        .setRow(columnKey)
-                                        .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(),
-                                            cell.getFamilyLength())
-                                        .setQualifier(cell.getQualifierArray(),
-                                            cell.getQualifierOffset(), cell.getQualifierLength())
-                                        .setTimestamp(cell.getTimestamp())
-                                        .setType(DataType.Put)
-                                        .setValue(cell.getValueArray(), cell.getValueOffset(),
-                                            cell.getValueLength()).build();
-                        viewColumnPut.add(newCell);
+                        Cell viewColumnCell =
+                                PhoenixKeyValueUtil.newKeyValue(columnKey, 0, columnKey.length,
+                                    cell.getFamilyArray(), cell.getFamilyOffset(),
+                                    cell.getFamilyLength(), cell.getQualifierArray(),
+                                    cell.getQualifierOffset(), cell.getQualifierLength(),
+                                    cell.getTimestamp(), cell.getValueArray(),
+                                    cell.getValueOffset(), cell.getValueLength(), cell.getType());
+                        viewColumnPut.add(viewColumnCell);
                     }
                     if (isDivergedView(view)) {
                         if (isPkCol) {

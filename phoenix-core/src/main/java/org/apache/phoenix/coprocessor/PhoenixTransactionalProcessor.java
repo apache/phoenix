@@ -17,10 +17,18 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.util.Optional;
+
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.transaction.TransactionFactory;
 
 public class PhoenixTransactionalProcessor extends DelegateRegionObserver {
 
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
+    
     public PhoenixTransactionalProcessor() {
         super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoProcessor());
     }
