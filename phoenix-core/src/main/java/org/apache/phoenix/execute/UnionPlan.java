@@ -69,7 +69,7 @@ public class UnionPlan implements QueryPlan {
     private Long estimatedRows;
     private Long estimatedBytes;
     private Long estimateInfoTs;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
@@ -174,7 +174,6 @@ public class UnionPlan implements QueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         List<String> steps = new ArrayList<String>();
         steps.add("UNION ALL OVER " + this.plans.size() + " QUERIES");
         ResultIterator iterator = iterator();
@@ -183,23 +182,6 @@ public class UnionPlan implements QueryPlan {
         int offset = !orderBy.getOrderByExpressions().isEmpty() && limit != null ? 2 : limit != null ? 1 : 0;
         for (int i = 1 ; i < steps.size()-offset; i++) {
             steps.set(i, "    " + steps.get(i));
-        }
-        for (QueryPlan plan : plans) {
-            if (plan.getEstimatedBytesToScan() == null || plan.getEstimatedRowsToScan() == null
-                    || plan.getEstimateInfoTimestamp() == null) {
-                /*
-                 * If any of the sub plans doesn't have the estimate info available, then we don't
-                 * provide estimate for the overall plan
-                 */
-                estimatedBytes = null;
-                estimatedRows = null;
-                estimateInfoTs = null;
-                break;
-            } else {
-                estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
-                estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
-                estimateInfoTs = getMin(estimateInfoTs, plan.getEstimateInfoTimestamp());
-            }
         }
         return new ExplainPlan(steps);
     }
@@ -265,25 +247,46 @@ public class UnionPlan implements QueryPlan {
 
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedBytes;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTs;
+    }
+
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        for (QueryPlan plan : plans) {
+            if (plan.getEstimatedBytesToScan() == null || plan.getEstimatedRowsToScan() == null
+                    || plan.getEstimateInfoTimestamp() == null) {
+                /*
+                 * If any of the sub plans doesn't have the estimate info available, then we don't
+                 * provide estimate for the overall plan
+                 */
+                estimatedBytes = null;
+                estimatedRows = null;
+                estimateInfoTs = null;
+                break;
+            } else {
+                estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
+                estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
+                estimateInfoTs = getMin(estimateInfoTs, plan.getEstimateInfoTimestamp());
+            }
+        }
     }
 }
