@@ -99,7 +99,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private Long estimatedRows;
     private Long estimatedBytes;
     private Long estimateInfoTs;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
     
     public static HashJoinPlan create(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
@@ -247,7 +247,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
         int count = subPlans.length;
         for (int i = 0; i < count; i++) {
@@ -262,26 +261,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
         }
         if (joinInfo != null && joinInfo.getLimit() != null) {
             planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
-        }
-        for (SubPlan subPlan : subPlans) {
-            if (subPlan.getInnerPlan().getEstimatedBytesToScan() == null
-                    || subPlan.getInnerPlan().getEstimatedRowsToScan() == null
-                    || subPlan.getInnerPlan().getEstimateInfoTimestamp() == null) {
-                /*
-                 * If any of the sub plans doesn't have the estimate info available, then we don't
-                 * provide estimate for the overall plan
-                 */
-                estimatedBytes = null;
-                estimatedRows = null;
-                estimateInfoTs = null;
-                break;
-            } else {
-                estimatedBytes =
-                        add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
-                estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
-                estimateInfoTs =
-                        getMin(estimateInfoTs, subPlan.getInnerPlan().getEstimateInfoTimestamp());
-            }
         }
         return new ExplainPlan(planSteps);
     }
@@ -520,26 +499,50 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedBytes;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTs;
+    }
+
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        for (SubPlan subPlan : subPlans) {
+            if (subPlan.getInnerPlan().getEstimatedBytesToScan() == null
+                    || subPlan.getInnerPlan().getEstimatedRowsToScan() == null
+                    || subPlan.getInnerPlan().getEstimateInfoTimestamp() == null) {
+                /*
+                 * If any of the sub plans doesn't have the estimate info available, then we don't
+                 * provide estimate for the overall plan
+                 */
+                estimatedBytes = null;
+                estimatedRows = null;
+                estimateInfoTs = null;
+                break;
+            } else {
+                estimatedBytes =
+                        add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
+                estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
+                estimateInfoTs =
+                        getMin(estimateInfoTs, subPlan.getInnerPlan().getEstimateInfoTimestamp());
+            }
+        }
     }
 }
 
