@@ -95,7 +95,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     private Long estimatedBytes;
     private Long estimatedRows;
     private Long estimateInfoTs;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
 
     public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
             JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
@@ -157,7 +157,6 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         List<String> steps = Lists.newArrayList();
         steps.add("SORT-MERGE-JOIN (" + type.toString().toUpperCase() + ") TABLES");
         for (String step : lhsPlan.getExplainPlan().getPlanSteps()) {
@@ -166,28 +165,6 @@ public class SortMergeJoinPlan implements QueryPlan {
         steps.add("AND" + (rhsSchema.getFieldCount() == 0 ? " (SKIP MERGE)" : ""));
         for (String step : rhsPlan.getExplainPlan().getPlanSteps()) {
             steps.add("    " + step);            
-        }
-        if ((lhsPlan.getEstimatedBytesToScan() == null || rhsPlan.getEstimatedBytesToScan() == null)
-                || (lhsPlan.getEstimatedRowsToScan() == null
-                        || rhsPlan.getEstimatedRowsToScan() == null)
-                || (lhsPlan.getEstimateInfoTimestamp() == null
-                        || rhsPlan.getEstimateInfoTimestamp() == null)) {
-            /*
-             * If any of the sub plans doesn't have the estimate info available, then we don't
-             * provide estimate for the overall plan
-             */
-            estimatedBytes = null;
-            estimatedRows = null;
-            estimateInfoTs = null;
-        } else {
-            estimatedBytes =
-                    add(add(estimatedBytes, lhsPlan.getEstimatedBytesToScan()),
-                        rhsPlan.getEstimatedBytesToScan());
-            estimatedRows =
-                    add(add(estimatedRows, lhsPlan.getEstimatedRowsToScan()),
-                        rhsPlan.getEstimatedRowsToScan());
-            estimateInfoTs =
-                    getMin(lhsPlan.getEstimateInfoTimestamp(), rhsPlan.getEstimateInfoTimestamp());
         }
         return new ExplainPlan(steps);
     }
@@ -754,25 +731,51 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedBytes;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTs;
+    }
+
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        if ((lhsPlan.getEstimatedBytesToScan() == null || rhsPlan.getEstimatedBytesToScan() == null)
+                || (lhsPlan.getEstimatedRowsToScan() == null
+                || rhsPlan.getEstimatedRowsToScan() == null)
+                || (lhsPlan.getEstimateInfoTimestamp() == null
+                || rhsPlan.getEstimateInfoTimestamp() == null)) {
+            /*
+             * If any of the sub plans doesn't have the estimate info available, then we don't
+             * provide estimate for the overall plan
+             */
+            estimatedBytes = null;
+            estimatedRows = null;
+            estimateInfoTs = null;
+        } else {
+            estimatedBytes =
+                    add(add(estimatedBytes, lhsPlan.getEstimatedBytesToScan()),
+                            rhsPlan.getEstimatedBytesToScan());
+            estimatedRows =
+                    add(add(estimatedRows, lhsPlan.getEstimatedRowsToScan()),
+                            rhsPlan.getEstimatedRowsToScan());
+            estimateInfoTs =
+                    getMin(lhsPlan.getEstimateInfoTimestamp(), rhsPlan.getEstimateInfoTimestamp());
+        }
     }
 }
