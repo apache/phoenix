@@ -303,8 +303,8 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200L, info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
+            assertEquals((Long) 176l, info.estimatedBytes);
+            assertEquals((Long) 2l, info.estimatedRows);
             assertTrue(info.estimateInfoTs > 0);
         }
     }

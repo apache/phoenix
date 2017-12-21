@@ -118,7 +118,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected Long estimatedRows;
     protected Long estimatedSize;
     protected Long estimateInfoTimestamp;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
     
 
     protected BaseQueryPlan(
@@ -500,32 +500,17 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + getTableRef().getTable().getName().getString()));
         }
 
-        // If cost-based optimizer is enabled, we need to initialize a dummy iterator to
-        // get the stats for computing costs.
-        boolean costBased =
-                context.getConnection().getQueryServices().getConfiguration().getBoolean(
-                        QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
-        if (costBased) {
-            ResultIterator iterator = iterator();
-            iterator.close();
-        }
-        // Optimize here when getting explain plan, as queries don't get optimized until after compilation
-        QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
-        ExplainPlan exp = plan instanceof BaseQueryPlan ? new ExplainPlan(getPlanSteps(plan.iterator())) : plan.getExplainPlan();
-        if (!costBased) { // do not override estimates if they are used for cost calculation.
-            this.estimatedRows = plan.getEstimatedRowsToScan();
-            this.estimatedSize = plan.getEstimatedBytesToScan();
-            this.estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
-        }
-        return exp;
+        ResultIterator iterator = iterator();
+        ExplainPlan explainPlan = new ExplainPlan(getPlanSteps(iterator));
+        iterator.close();
+        return explainPlan;
     }
 
-    private List<String> getPlanSteps(ResultIterator iterator){
+    private List<String> getPlanSteps(ResultIterator iterator) {
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);
         return planSteps;
@@ -538,26 +523,32 @@ public abstract class BaseQueryPlan implements QueryPlan {
     
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedSize;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTimestamp;
     }
 
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        // Initialize a dummy iterator to get the estimates based on stats.
+        ResultIterator iterator = iterator();
+        iterator.close();
+    }
 }
