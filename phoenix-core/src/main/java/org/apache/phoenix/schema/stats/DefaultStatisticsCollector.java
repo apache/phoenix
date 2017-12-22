@@ -334,7 +334,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     incrementRow = false;
                 }
             }
-            int kvLength = CellUtil.estimatedSerializedSizeOf(cell);
+            int kvLength = KeyValueUtil.getSerializedSize(cell, true);
             long byteCount = gps.getFirst() + kvLength;
             gps.setFirst(byteCount);
             if (byteCount >= guidePostDepth) {
