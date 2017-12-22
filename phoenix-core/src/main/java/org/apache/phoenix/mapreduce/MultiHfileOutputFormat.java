@@ -191,7 +191,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 }
 
                 // we now have the proper WAL writer. full steam ahead
-                CellUtil.setTimestamp(cell,this.now);
+                if (cell.getTimestamp() == HConstants.LATEST_TIMESTAMP) {
+                    CellUtil.setTimestamp(cell, this.now);
+                }
                 wl.writer.append(kv);
                 wl.written += length;
     
