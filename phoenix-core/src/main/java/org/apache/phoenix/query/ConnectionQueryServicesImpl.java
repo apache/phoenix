@@ -1923,6 +1923,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             ColumnFamilyDescriptor tableColDescriptor = tableDescriptor.getColumnFamily(familyName);
             indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
             indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+            indexDescriptorBuilder.removeColumnFamily(familyName);
             indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
@@ -1933,6 +1934,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     ColumnFamilyDescriptorBuilder indexColDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(indexColDescriptor);
                     indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
                     indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
+                    indexDescriptorBuilder.removeColumnFamily(familyName);
                     indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
                 }
             }
