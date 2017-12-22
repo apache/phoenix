@@ -123,9 +123,19 @@
                   <shadedPattern>${shaded.package}.com.google.protobuf</shadedPattern>
                 </relocation>
                 <!-- ORG relocation -->
-                <!-- Calcite/Avatica is not relocated because the wire API (as of <=1.8.0) expects
-                     consistent class names on client and server. Relocating these would break
-                     backwards compatibility. -->
+                <relocation>
+                  <pattern>org.apache.calcite.avatica</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.calcite.avatica</shadedPattern>
+                  <!-- The protobuf messages can't be relocated due to a limitation
+                       in the Avatica protocol. -->
+                  <excludes>
+                    <exclude>org.apache.calcite.avatica.proto.*</exclude>
+                  </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.hadoop</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.hadoop</shadedPattern>
+                </relocation>
                 <relocation>
                   <pattern>org.apache.commons</pattern>
                   <shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
