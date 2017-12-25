@@ -34,7 +34,6 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
@@ -48,15 +47,13 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 
-public class DelegateRegionObserver implements RegionObserver, RegionCoprocessor {
+public class DelegateRegionObserver implements RegionObserver {
 
     protected final RegionObserver delegate;
-    
+
     public DelegateRegionObserver(RegionObserver delegate) {
         this.delegate = delegate;
     }
-
-   
 
     @Override
     public void preOpen(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {

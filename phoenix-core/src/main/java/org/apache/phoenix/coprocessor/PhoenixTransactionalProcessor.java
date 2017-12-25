@@ -17,20 +17,36 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.io.IOException;
 import java.util.Optional;
 
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.transaction.TransactionFactory;
 
-public class PhoenixTransactionalProcessor extends DelegateRegionObserver {
+public class PhoenixTransactionalProcessor extends DelegateRegionObserver implements RegionCoprocessor {
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
-      return Optional.of(this);
+        return Optional.of(this);
     }
-    
+
     public PhoenixTransactionalProcessor() {
         super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoProcessor());
     }
 
+    @Override
+    public void start(CoprocessorEnvironment env) throws IOException {
+        if (delegate instanceof RegionCoprocessor) {
+            ((RegionCoprocessor)delegate).start(env);
+        }
+    }
+
+    @Override
+    public void stop(CoprocessorEnvironment env) throws IOException {
+        if (delegate instanceof RegionCoprocessor) {
+            ((RegionCoprocessor)delegate).stop(env);
+        }
+    }
 }
