@@ -824,9 +824,8 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 
     private RegionCoprocessorEnvironment getRegionEnvrionment(String tableName)
             throws IOException, InterruptedException {
-        return getUtility()
-                .getRSForFirstRegionInTable(TableName.valueOf(tableName))
-                .getOnlineRegionsLocalContext().iterator().next().getCoprocessorHost()
+        return getUtility().getMiniHBaseCluster().getRegions(TableName.valueOf(tableName)).get(0)
+                .getCoprocessorHost()
                 .findCoprocessorEnvironment(UngroupedAggregateRegionObserver.class.getName());
     }
 }
