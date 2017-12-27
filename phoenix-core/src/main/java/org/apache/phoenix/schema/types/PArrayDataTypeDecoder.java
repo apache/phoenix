@@ -132,6 +132,7 @@ public class PArrayDataTypeDecoder implements ColumnValueDecoder {
         return true;
     }
 
+    // returns true if the prior element in the array is a null
     private static boolean isNullValue(int arrayIndex, byte[] bytes, int initPos,
             byte serializationVersion, boolean useShort, int indexOffset, int currOffset,
             int elementLength) {
@@ -142,6 +143,8 @@ public class PArrayDataTypeDecoder implements ColumnValueDecoder {
             } else {
                 // if there's no prior null, there can be at most 1 null
                 if (elementLength == 2) {
+                    // nullByte calculation comes from the encoding of one null
+                    // see PArrayDataType#serializeNulls
                     byte nullByte = SortOrder.invert((byte)(0));
                     if (bytes[initPos+currOffset+1] == nullByte) {
                         return true;
@@ -152,6 +155,7 @@ public class PArrayDataTypeDecoder implements ColumnValueDecoder {
         return false;
     }
 
+    // checks prior value length by subtracting offset of the previous item from the current offset
     private static boolean isPriorValueZeroLength(int arrayIndex, byte[] bytes, byte serializationVersion,
             boolean useShort, int indexOffset, int currOffset) {
         return arrayIndex > 0 && currOffset - PArrayDataType.getOffset(bytes, arrayIndex - 1,
