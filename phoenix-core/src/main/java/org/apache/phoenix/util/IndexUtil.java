@@ -468,13 +468,14 @@ public class IndexUtil {
             KeyValueSchema keyValueSchema = deserializeLocalIndexJoinSchemaFromScan(scan); 
             boolean storeColsInSingleCell = scan.getAttribute(BaseScannerRegionObserver.COLUMNS_STORED_IN_SINGLE_CELL) != null;
             QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+            ImmutableStorageScheme immutableStorageScheme = EncodedColumnsUtil.getImmutableStorageScheme(scan);
             Expression[] colExpressions = storeColsInSingleCell ? new SingleCellColumnExpression[dataColumns.length] : new KeyValueColumnExpression[dataColumns.length];
             for (int i = 0; i < dataColumns.length; i++) {
                 byte[] family = dataColumns[i].getFamily();
                 byte[] qualifier = dataColumns[i].getQualifier();
                 Field field = keyValueSchema.getField(i);
                 Expression dataColumnExpr =
-                        storeColsInSingleCell ? new SingleCellColumnExpression(field, family, qualifier, encodingScheme)
+                        storeColsInSingleCell ? new SingleCellColumnExpression(field, family, qualifier, encodingScheme, immutableStorageScheme)
                             : new KeyValueColumnExpression(field, family, qualifier);
                 colExpressions[i] = dataColumnExpr;
             }
