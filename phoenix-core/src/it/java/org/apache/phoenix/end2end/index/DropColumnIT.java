@@ -254,7 +254,9 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         assertNotNull(result);
         byte[] colValue;
         if (!mutable && columnEncoded) {
-            KeyValueColumnExpression colExpression = new SingleCellColumnExpression(dataColumn, "V2", dataTable.getEncodingScheme());
+            KeyValueColumnExpression colExpression =
+                    new SingleCellColumnExpression(dataColumn, "V2", dataTable.getEncodingScheme(),
+                            dataTable.getImmutableStorageScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             colExpression.evaluate(new ResultTuple(result), ptr);
             colValue = ptr.copyBytesIfNecessary();
@@ -273,7 +275,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         result = results.next();
         assertNotNull(result);
         if (!mutable && columnEncoded) {
-            KeyValueColumnExpression colExpression = new SingleCellColumnExpression(glovalIndexCol, "0:V2", globalIndexTable.getEncodingScheme());
+            KeyValueColumnExpression colExpression =
+                    new SingleCellColumnExpression(glovalIndexCol, "0:V2",
+                            globalIndexTable.getEncodingScheme(),
+                            globalIndexTable.getImmutableStorageScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             colExpression.evaluate(new ResultTuple(result), ptr);
             colValue = ptr.copyBytesIfNecessary();
@@ -293,7 +298,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         result = results.next();
         assertNotNull(result);
         if (!mutable && columnEncoded) {
-            KeyValueColumnExpression colExpression = new SingleCellColumnExpression(localIndexCol, "0:V2", localIndexTable.getEncodingScheme());
+            KeyValueColumnExpression colExpression =
+                    new SingleCellColumnExpression(localIndexCol, "0:V2",
+                            localIndexTable.getEncodingScheme(),
+                            localIndexTable.getImmutableStorageScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             assertTrue(colExpression.evaluate(new ResultTuple(result), ptr));
             colValue = ptr.copyBytesIfNecessary();
@@ -387,7 +395,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             PColumn localIndexCol = localIndex2.getColumnForColumnName(indexColumnName);
             byte[] colValue;
             if (!mutable && columnEncoded) {
-                KeyValueColumnExpression colExpression = new SingleCellColumnExpression(localIndexCol, indexColumnName, localIndex2.getEncodingScheme());
+                KeyValueColumnExpression colExpression =
+                        new SingleCellColumnExpression(localIndexCol, indexColumnName,
+                                localIndex2.getEncodingScheme(),
+                                localIndex2.getImmutableStorageScheme());
                 ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                 colExpression.evaluate(new ResultTuple(result), ptr);
                 colValue = ptr.copyBytesIfNecessary();

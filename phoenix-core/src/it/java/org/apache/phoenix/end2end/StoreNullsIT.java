@@ -148,7 +148,11 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         byte[] qualifier = table.getImmutableStorageScheme()== ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES : nameColumn.getColumnQualifierBytes();
         assertTrue(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, qualifier));
         assertTrue(rs.size() == 2); // 2 because it also includes the empty key value column
-        KeyValueColumnExpression colExpression = table.getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? new SingleCellColumnExpression(nameColumn, "NAME", table.getEncodingScheme()) : new KeyValueColumnExpression(nameColumn);
+        KeyValueColumnExpression colExpression =
+                table.getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+                        ? new SingleCellColumnExpression(nameColumn, "NAME",
+                                table.getEncodingScheme(), table.getImmutableStorageScheme())
+                        : new KeyValueColumnExpression(nameColumn);
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         colExpression.evaluate(new ResultTuple(rs), ptr);
         assertEquals(new ImmutableBytesPtr(PVarchar.INSTANCE.toBytes("v1")), ptr);
