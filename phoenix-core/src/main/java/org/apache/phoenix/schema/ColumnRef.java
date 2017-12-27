@@ -126,7 +126,9 @@ public class ColumnRef {
         }
 
         Expression expression = table.getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? 
-        		new SingleCellColumnExpression(column, displayName, table.getEncodingScheme()) : new KeyValueColumnExpression(column, displayName);
+                        new SingleCellColumnExpression(column, displayName,
+                                table.getEncodingScheme(), table.getImmutableStorageScheme())
+                        : new KeyValueColumnExpression(column, displayName);
 
         if (column.getExpressionStr() != null) {
             String url = PhoenixRuntime.JDBC_PROTOCOL
