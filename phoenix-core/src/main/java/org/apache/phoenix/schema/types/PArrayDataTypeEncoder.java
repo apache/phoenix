@@ -92,7 +92,9 @@ public class PArrayDataTypeEncoder implements ColumnValueEncoder {
     // used to represent the absence of a value 
     @Override
     public void appendAbsentValue() {
-        if (serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION && !baseType.isFixedWidth()) {
+        if ((serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION
+                || serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_V2)
+                && !baseType.isFixedWidth()) {
             offsetPos.add(-byteStream.size());
             nulls++;
         }
@@ -125,7 +127,11 @@ public class PArrayDataTypeEncoder implements ColumnValueEncoder {
                     offsetPos.add(byteStream.size());
                     nulls++;
                 } else {
-                    nulls = PArrayDataType.serializeNulls(oStream, nulls);
+                    // we don't serialize nulls for IMMUTABLE_SERIALIZATION_V2
+                    if (serializationVersion == PArrayDataType.SORTABLE_SERIALIZATION_VERSION
+                            || serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION) {
+                        nulls = PArrayDataType.serializeNulls(oStream, nulls);
+                    }
                     offsetPos.add(byteStream.size());
                     if (sortOrder == SortOrder.DESC) {
                         SortOrder.invert(bytes, offset, bytes, offset, len);
