@@ -190,14 +190,14 @@ public interface PTable extends PMetaDataEntity {
             }
         },
         // stores a single cell per column family that contains all serialized column values
-        SINGLE_CELL_ARRAY_WITH_OFFSETS((byte)2) {
+        SINGLE_CELL_ARRAY_WITH_OFFSETS((byte)2, PArrayDataType.IMMUTABLE_SERIALIZATION_V2) {
             @Override
             public ColumnValueEncoder getEncoder(int numElements) {
                 PDataType type = PVarbinary.INSTANCE;
                 int estimatedSize = PArrayDataType.estimateSize(numElements, type);
                 TrustedByteArrayOutputStream byteStream = new TrustedByteArrayOutputStream(estimatedSize);
                 DataOutputStream oStream = new DataOutputStream(byteStream);
-                return new PArrayDataTypeEncoder(byteStream, oStream, numElements, type, SortOrder.ASC, false, PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION);
+                return new PArrayDataTypeEncoder(byteStream, oStream, numElements, type, SortOrder.ASC, false, getSerializationVersion());
             }
             
             @Override
@@ -207,13 +207,28 @@ public interface PTable extends PMetaDataEntity {
         };
 
         private final byte serializedValue;
-        
+        private byte serializationVersion;
+
         private ImmutableStorageScheme(byte serializedValue) {
             this.serializedValue = serializedValue;
         }
 
+        private ImmutableStorageScheme(byte serializedValue, byte serializationVersion) {
+            this.serializedValue = serializedValue;
+            this.serializationVersion = serializationVersion;
+        }
+
         public byte getSerializedMetadataValue() {
             return this.serializedValue;
+        }
+
+        public byte getSerializationVersion() {
+            return this.serializationVersion;
+        }
+
+        @VisibleForTesting
+        void setSerializationVersion(byte serializationVersion) {
+            this.serializationVersion = serializationVersion;
         }
 
         public static ImmutableStorageScheme fromSerializedValue(byte serializedValue) {
