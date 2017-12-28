@@ -49,6 +49,7 @@ import org.apache.phoenix.expression.function.DayOfMonthFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DefaultValueExpression;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.DistinctSumAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
@@ -203,6 +204,7 @@ public enum ExpressionType {
     LowerFunction(LowerFunction.class),
     TrimFunction(TrimFunction.class),
     DistinctCountAggregateFunction(DistinctCountAggregateFunction.class),
+    DistinctSumAggregateFunction(DistinctSumAggregateFunction.class),
     PercentileContAggregateFunction(PercentileContAggregateFunction.class),
     PercentRankAggregateFunction(PercentRankAggregateFunction.class),
     StddevPopFunction(StddevPopFunction.class),

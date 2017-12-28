@@ -37,7 +37,9 @@ import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.CurrentDateFunction;
 import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.DistinctSumAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -447,13 +449,16 @@ public class ParseNodeFactory {
         return new ExecuteUpgradeStatement();
     }
 
-
     public FunctionParseNode functionDistinct(String name, List<ParseNode> args) {
-        if (CountAggregateFunction.NAME.equals(SchemaUtil.normalizeIdentifier(name))) {
-            BuiltInFunctionInfo info = getInfo(
-                    SchemaUtil.normalizeIdentifier(DistinctCountAggregateFunction.NAME), args);
+        BuiltInFunctionInfo info;
+        switch (SchemaUtil.normalizeIdentifier(name)) {
+        case CountAggregateFunction.NAME:
+            info = getInfo(SchemaUtil.normalizeIdentifier(DistinctCountAggregateFunction.NAME), args);
             return new DistinctCountParseNode(DistinctCountAggregateFunction.NAME, args, info);
-        } else {
+        case SumAggregateFunction.NAME:
+            info = getInfo(SchemaUtil.normalizeIdentifier(DistinctSumAggregateFunction.NAME), args);
+            return new DistinctSumParseNode(DistinctSumAggregateFunction.NAME, args, info);
+        default:
             throw new UnsupportedOperationException("DISTINCT not supported with " + name);
         }
     }
