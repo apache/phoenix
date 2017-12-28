@@ -3077,7 +3077,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, ordinalPositionBytes);
             
             // New PK columns have to be nullable after the first DDL
-            byte[] isNullableBytes = PBoolean.INSTANCE.toBytes(true);
+            byte[] isNullableBytes = PBoolean.INSTANCE.toBytes(ResultSetMetaData.columnNullable);
             indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.NULLABLE_BYTES, isNullableBytes);
             
