@@ -201,8 +201,6 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
             verifyAllowed(readTable(phoenixTableName, indexName1), unprivilegedUser);
             verifyAllowed(readTable(phoenixTableName, indexName2), unprivilegedUser);
             verifyAllowed(rebuildIndex(indexName2, phoenixTableName), unprivilegedUser);
-            verifyAllowed(dropView(viewName3), regularUser);
-            verifyAllowed(dropView(viewName4), regularUser);
 
             // data table user should be able to read new index
             verifyAllowed(rebuildIndex(indexName2, phoenixTableName), regularUser1);
