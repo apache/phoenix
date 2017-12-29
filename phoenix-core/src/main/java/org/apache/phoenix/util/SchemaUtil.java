@@ -62,6 +62,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -136,8 +137,9 @@ public class SchemaUtil {
         
     };
     public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
-    public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "DEFAULT";
-    public static final String HBASE_NAMESPACE = "HBASE";
+    // See PHOENIX-4424
+    public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "default";
+    public static final String HBASE_NAMESPACE = "hbase";
     public static final List<String> NOT_ALLOWED_SCHEMA_LIST = Arrays.asList(SCHEMA_FOR_DEFAULT_NAMESPACE,
             HBASE_NAMESPACE);
     
@@ -209,7 +211,25 @@ public class SchemaUtil {
         }
         return name.toUpperCase();
     }
-    
+
+    /**
+     * Normalize a Literal. If literal is surrounded by single quotes,
+     * the quotes are trimmed, else full string is returned
+     * @param literal the parsed LiteralParseNode
+     * @return the normalized literal string
+     */
+    public static String normalizeLiteral(LiteralParseNode literal) {
+        if (literal == null) {
+            return null;
+        }
+        String literalString = literal.toString();
+        if (isEnclosedInSingleQuotes(literalString)) {
+            // Trim the single quotes
+            return literalString.substring(1, literalString.length()-1);
+        }
+        return literalString;
+    }
+
     /**
      * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
      * @param fullTableName
@@ -223,6 +243,10 @@ public class SchemaUtil {
             normalizedTableName =  normalizeIdentifier(schemaName) + QueryConstants.NAME_SEPARATOR;
         }
         return normalizedTableName + normalizeIdentifier(tableName);
+    }
+
+    public static boolean isEnclosedInSingleQuotes(String name) {
+        return name!=null && name.length() > 0 && name.charAt(0)=='\'';
     }
 
     public static boolean isCaseSensitive(String name) {

@@ -209,7 +209,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       int arrayKVRefSize = WritableUtils.readVInt(input);
       for (int i = 0; i < arrayKVRefSize; i++) {
         PTable.ImmutableStorageScheme scheme = EncodedColumnsUtil.getImmutableStorageScheme(scan);
-        KeyValueColumnExpression kvExp = scheme != PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN ? new SingleCellColumnExpression()
+        KeyValueColumnExpression kvExp = scheme != PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN ? new SingleCellColumnExpression(scheme)
             : new KeyValueColumnExpression();
         kvExp.readFields(input);
         arrayKVRefs.add(kvExp);

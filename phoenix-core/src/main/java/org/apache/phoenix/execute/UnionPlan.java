@@ -43,6 +43,7 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.UnionResultIterators;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
@@ -68,7 +69,7 @@ public class UnionPlan implements QueryPlan {
     private Long estimatedRows;
     private Long estimatedBytes;
     private Long estimateInfoTs;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
@@ -173,7 +174,6 @@ public class UnionPlan implements QueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         List<String> steps = new ArrayList<String>();
         steps.add("UNION ALL OVER " + this.plans.size() + " QUERIES");
         ResultIterator iterator = iterator();
@@ -183,23 +183,6 @@ public class UnionPlan implements QueryPlan {
         for (int i = 1 ; i < steps.size()-offset; i++) {
             steps.set(i, "    " + steps.get(i));
         }
-        for (QueryPlan plan : plans) {
-            if (plan.getEstimatedBytesToScan() == null || plan.getEstimatedRowsToScan() == null
-                    || plan.getEstimateInfoTimestamp() == null) {
-                /*
-                 * If any of the sub plans doesn't have the estimate info available, then we don't
-                 * provide estimate for the overall plan
-                 */
-                estimatedBytes = null;
-                estimatedRows = null;
-                estimateInfoTs = null;
-                break;
-            } else {
-                estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
-                estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
-                estimateInfoTs = getMin(estimateInfoTs, plan.getEstimateInfoTimestamp());
-            }
-        }
         return new ExplainPlan(steps);
     }
 
@@ -207,6 +190,15 @@ public class UnionPlan implements QueryPlan {
     @Override
     public long getEstimatedSize() {
         return DEFAULT_ESTIMATED_SIZE;
+    }
+
+    @Override
+    public Cost getCost() {
+        Cost cost = Cost.ZERO;
+        for (QueryPlan plan : plans) {
+            cost = cost.plus(plan.getCost());
+        }
+        return cost;
     }
 
     @Override
@@ -255,25 +247,46 @@ public class UnionPlan implements QueryPlan {
 
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedBytes;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTs;
+    }
+
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        for (QueryPlan plan : plans) {
+            if (plan.getEstimatedBytesToScan() == null || plan.getEstimatedRowsToScan() == null
+                    || plan.getEstimateInfoTimestamp() == null) {
+                /*
+                 * If any of the sub plans doesn't have the estimate info available, then we don't
+                 * provide estimate for the overall plan
+                 */
+                estimatedBytes = null;
+                estimatedRows = null;
+                estimateInfoTs = null;
+                break;
+            } else {
+                estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
+                estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
+                estimateInfoTs = getMin(estimateInfoTs, plan.getEstimateInfoTimestamp());
+            }
+        }
     }
 }

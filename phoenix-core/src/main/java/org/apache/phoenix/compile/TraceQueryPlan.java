@@ -46,6 +46,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.metrics.MetricInfo;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -191,6 +192,11 @@ public class TraceQueryPlan implements QueryPlan {
     @Override
     public long getEstimatedSize() {
         return PLong.INSTANCE.getByteSize();
+    }
+
+    @Override
+    public Cost getCost() {
+        return Cost.ZERO;
     }
 
     @Override

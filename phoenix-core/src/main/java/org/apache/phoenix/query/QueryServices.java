@@ -262,8 +262,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String UPLOAD_BINARY_DATA_TYPE_ENCODING = "phoenix.upload.binaryDataType.encoding";
     // Toggle for server-written updates to SYSTEM.CATALOG
     public static final String PHOENIX_ACLS_ENABLED = "phoenix.acls.enabled";
-    public static final String PHOENIX_AUTOMATIC_GRANT_ENABLED = "phoenix.security.automatic.grant.enabled";
-    public static final String PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED = "phoenix.security.strict.mode.enabled";
 
     public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
 
@@ -295,6 +293,9 @@ public interface QueryServices extends SQLCloseable {
 
     //Update Cache Frequency default config attribute
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";
+
+    // Whether to enable cost-based-decision in the query optimizer
+    public static final String COST_BASED_OPTIMIZER_ENABLED = "phoenix.costbased.optimizer.enabled";
 
     /**
      * Get executor service used for parallel scans

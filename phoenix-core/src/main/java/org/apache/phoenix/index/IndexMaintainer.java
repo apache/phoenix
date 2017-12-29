@@ -1010,7 +1010,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         public PDataType getDataType() {
                             return null;
                         }
-                    }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme);
+                    }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme, immutableStorageScheme);
                     ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                     expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
                     byte[] value = ptr.copyBytesIfNecessary();
