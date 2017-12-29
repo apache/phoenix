@@ -24,7 +24,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
+import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
 import com.google.common.collect.Multimap;
@@ -65,7 +65,7 @@ public class KillServerOnFailurePolicy implements IndexFailurePolicy {
     String msg =
         "Could not update the index table, killing server region because couldn't write to an index table";
     LOG.error(msg, cause);
-    throw new IndexBuildingFailureException(msg,cause);
+    throw new FatalIndexBuildingFailureException(msg,cause);
   }
 
 }

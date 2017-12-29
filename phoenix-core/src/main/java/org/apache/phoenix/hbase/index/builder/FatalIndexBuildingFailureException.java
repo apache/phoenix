@@ -17,32 +17,28 @@
  */
 package org.apache.phoenix.hbase.index.builder;
 
-import java.io.IOException;
-
-import org.apache.hadoop.hbase.DoNotRetryIOException;
-
 /**
- * Unexpected failure while building index updates that wasn't caused by an {@link IOException}.
- * This should be used if there is some basic issue with indexing - and no matter of retries will
- * fix it.
+ * This exception should be thrown if we are unable to handle Index failure and want regionserver to go down to avoid
+ * inconsistency
  */
-@SuppressWarnings("serial")
-public class IndexBuildingFailureException extends DoNotRetryIOException {
+public class FatalIndexBuildingFailureException extends RuntimeException {
 
-  /**
-   * Constructor for over the wire propagation. Generally, shouldn't be used since index failure
-   * should have an underlying cause to propagate.
-   * @param msg reason for the failure
-   */
-  public IndexBuildingFailureException(String msg) {
-    super(msg);
-  }
+    /**
+     * @param msg
+     *            reason for the failure
+     */
+    public FatalIndexBuildingFailureException(String msg) {
+        super(msg);
+    }
 
-  /**
-   * @param msg reason
-   * @param cause underlying cause for the failure
-   */
-  public IndexBuildingFailureException(String msg, Throwable cause) {
-    super(msg, cause);
-  }
+    /**
+     * @param msg
+     *            reason
+     * @param cause
+     *            underlying cause for the failure
+     */
+    public FatalIndexBuildingFailureException(String msg, Throwable cause) {
+        super(msg, cause);
+    }
+
 }

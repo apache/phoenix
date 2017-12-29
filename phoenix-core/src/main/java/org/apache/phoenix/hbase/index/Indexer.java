@@ -69,6 +69,7 @@ import org.apache.htrace.TraceScope;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.LockManager.RowLock;
+import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
@@ -208,7 +209,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           // make sure the right version <-> combinations are allowed.
           String errormsg = Indexer.validateVersion(env.getHBaseVersion(), env.getConfiguration());
           if (errormsg != null) {
-              throw new RuntimeException(errormsg);
+              throw new FatalIndexBuildingFailureException(errormsg);
           }
         }
     
