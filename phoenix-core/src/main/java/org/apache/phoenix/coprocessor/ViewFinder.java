@@ -40,6 +40,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.LinkedHashMultimap;
@@ -81,12 +82,8 @@ class ViewFinder {
         if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
             throw new IllegalArgumentException("findAllRelatives does not support link type "+linkType);
         }
-        Scan scan = new Scan();
-        byte[] startRow = ByteUtil.concat(SchemaUtil.getTableKey(tenantId, schema, table), SEPARATOR_BYTE_ARRAY);
-        byte[] stopRow = ByteUtil.nextKey(startRow);
-        scan.setStartRow(startRow);
-        scan.setStopRow(stopRow);
-        scan.setTimeRange(0, timestamp);
+        byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
+		Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
         SingleColumnValueFilter linkFilter =
             new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
                 linkType.getSerializedValueAsByteArray());

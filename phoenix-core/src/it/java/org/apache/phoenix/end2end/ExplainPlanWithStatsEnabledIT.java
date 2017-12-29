@@ -604,7 +604,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             assertTrue(info.getEstimateInfoTs() > 0);
 
             conn.createStatement()
-                    .execute("ALTER TABLE " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
+                    .execute("ALTER VIEW " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
             sql = "SELECT COUNT(*) FROM " + viewName;
             // query the view
             rs = conn.createStatement().executeQuery(sql);

@@ -167,7 +167,7 @@ public class TableDDLPermissionsIT{
 
     @Parameters(name = "isNamespaceMapped={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
-        return Arrays.asList(true/*, false*/);
+        return Arrays.asList(true, false);
     }
 
     @BeforeClass

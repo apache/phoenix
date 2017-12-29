@@ -234,7 +234,9 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         // now lets drop the parent table
         conn.createStatement().execute("DROP TABLE " + baseTable + " CASCADE");
 
-        // the grand child should no longer exist
+        // the tables should no longer exist
+        PhoenixRuntime.getTableNoCache(conn, baseTable);
+        PhoenixRuntime.getTableNoCache(conn, child);
         PhoenixRuntime.getTableNoCache(conn, grandChild);
     }
 
