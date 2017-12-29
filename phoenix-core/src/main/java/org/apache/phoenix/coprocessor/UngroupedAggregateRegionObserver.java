@@ -713,7 +713,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 Delete delete = new Delete(results.get(0).getRowArray(),
                                     results.get(0).getRowOffset(),
                                     results.get(0).getRowLength());
-                                delete.addColumn(deleteCF,  deleteCQ, ts);
+                                delete.addColumns(deleteCF,  deleteCQ, ts);
                                 // force tephra to ignore this deletes
                                 delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                                 mutations.add(delete);
