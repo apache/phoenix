@@ -165,7 +165,7 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
             verifyDenied(createIndex(indexName2, phoenixTableName), AccessDeniedException.class, unprivilegedUser);
             verifyDenied(createView(viewName2, phoenixTableName),AccessDeniedException.class,  unprivilegedUser);
             verifyDenied(createView(viewName3, viewName1), AccessDeniedException.class, unprivilegedUser);
-            verifyDenied(dropView(viewName1), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(dropView(viewName1, true), AccessDeniedException.class, unprivilegedUser);
             
             verifyDenied(dropIndex(indexName1, phoenixTableName), AccessDeniedException.class, unprivilegedUser);
             verifyDenied(dropTable(phoenixTableName), AccessDeniedException.class, unprivilegedUser);
@@ -210,8 +210,8 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
             verifyAllowed(rebuildIndex(indexName1, phoenixTableName), regularUser1);
             verifyAllowed(addColumn(phoenixTableName, "val1"), regularUser1);
             verifyAllowed(addProperties(phoenixTableName, "GUIDE_POSTS_WIDTH", "100"), regularUser1);
-            verifyAllowed(dropView(viewName1), regularUser1);
-            verifyAllowed(dropView(viewName2), regularUser1);
+            verifyAllowed(dropView(viewName1, true), regularUser1);
+            verifyAllowed(dropView(viewName2, false), regularUser1);
             verifyAllowed(dropColumn(phoenixTableName, "val1"), regularUser1);
             verifyAllowed(dropIndex(indexName2, phoenixTableName), regularUser1);
             verifyAllowed(dropIndex(indexName1, phoenixTableName), regularUser1);
@@ -222,7 +222,7 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
             verifyAllowed(createIndex(indexName1, phoenixTableName), superUser2);
             verifyAllowed(createView(viewName1, phoenixTableName), superUser2);
             verifyAllowed(readTable(phoenixTableName), superUser2);
-            verifyAllowed(dropView(viewName1), superUser2);
+            verifyAllowed(dropView(viewName1, false), superUser2);
             verifyAllowed(dropTable(phoenixTableName), superUser2);
 
         } finally {

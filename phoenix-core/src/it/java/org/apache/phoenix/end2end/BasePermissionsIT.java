@@ -642,12 +642,12 @@ public class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction dropView(final String viewName) throws SQLException {
+    AccessTestAction dropView(final String viewName, final boolean cascade) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
-                    assertFalse(stmt.execute("DROP VIEW " + viewName));
+                    assertFalse(stmt.execute("DROP VIEW " + viewName + ( cascade ? " CASCADE" : "" ) ));
                 }
                 return null;
             }
