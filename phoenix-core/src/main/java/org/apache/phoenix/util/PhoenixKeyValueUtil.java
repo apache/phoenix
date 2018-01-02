@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.Cell.DataType;
+import org.apache.hadoop.hbase.Cell.Type;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
@@ -57,26 +57,26 @@ public class PhoenixKeyValueUtil {
 
     public static Cell newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
         return CellBuilderFactory.create(CellBuilderType.DEEP_COPY).setRow(key).setFamily(cf)
-                .setQualifier(cq).setTimestamp(ts).setType(DataType.Put)
+                .setQualifier(cq).setTimestamp(ts).setType(Type.Put)
                 .setValue(value, valueOffset, valueLength).build();
     }
 
     public static Cell newKeyValue(ImmutableBytesWritable key, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
         return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(key.get(), key.getOffset(), key.getLength()).setFamily(cf).setQualifier(cq)
-                .setTimestamp(ts).setType(DataType.Put).setValue(value, valueOffset, valueLength)
+                .setTimestamp(ts).setType(Type.Put).setValue(value, valueOffset, valueLength)
                 .build();
     }
 
     public static Cell newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, byte[] cq, long ts, byte[] value, int valueOffset, int valueLength) {
         return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(key, keyOffset, keyLength).setFamily(cf).setQualifier(cq).setTimestamp(ts)
-                .setType(DataType.Put).setValue(value, valueOffset, valueLength).build();
+                .setType(Type.Put).setValue(value, valueOffset, valueLength).build();
     }
     
     public static Cell newKeyValue(byte[] key, int keyOffset, int keyLength, byte[] cf, 
         int cfOffset, int cfLength, byte[] cq, int cqOffset, int cqLength, long ts, byte[] value, 
-        int valueOffset, int valueLength,DataType type) {
+        int valueOffset, int valueLength,Type type) {
         return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(key, keyOffset, keyLength).setFamily(cf, cfOffset, cfLength)
                 .setQualifier(cq, cqOffset, cqLength).setTimestamp(ts)

@@ -579,7 +579,7 @@ public class EncodedColumnQualifierCellsListTest {
         }
 
         @Override
-        public DataType getType() {
+        public Type getType() {
             return delegate.getType();
         }
     }

@@ -161,7 +161,7 @@ public class UnnestArrayPlanTest {
         for (Object[] array : arrays) {
             PhoenixArray pArray = new PhoenixArray(baseType, array);
             byte[] bytes = arrayType.toBytes(pArray);            
-            tuples.add(new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(bytes, 0, bytes.length, bytes, 0, 0, bytes, 0, 0, 0, bytes, 0, 0, Cell.DataType.Put)));
+            tuples.add(new SingleKeyValueTuple(PhoenixKeyValueUtil.newKeyValue(bytes, 0, bytes.length, bytes, 0, 0, bytes, 0, 0, 0, bytes, 0, 0, Cell.Type.Put)));
         }
         
         return tuples;

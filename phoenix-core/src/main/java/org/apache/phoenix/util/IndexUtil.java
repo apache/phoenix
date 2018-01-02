@@ -661,7 +661,7 @@ public class IndexUtil {
                 }
 
                 @Override
-                public DataType getType() {
+                public Type getType() {
                     return cell.getType();
                 }
             };
