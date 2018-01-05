@@ -133,10 +133,6 @@
                   </excludes>
                 </relocation>
                 <relocation>
-                  <pattern>org.apache.hadoop</pattern>
-                  <shadedPattern>${shaded.package}.org.apache.hadoop</shadedPattern>
-                </relocation>
-                <relocation>
                   <pattern>org.apache.commons</pattern>
                   <shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
                   <excludes>
