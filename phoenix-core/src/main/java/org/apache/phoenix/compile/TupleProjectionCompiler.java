@@ -161,10 +161,9 @@ public class TupleProjectionCompiler {
     
     public static PTable createProjectedTable(TableRef tableRef, List<ColumnRef> sourceColumnRefs, boolean retainPKColumns) throws SQLException {
         PTable table = tableRef.getTable();
-        boolean hasSaltingColumn = retainPKColumns && table.getBucketNum() != null;
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
-        int position = hasSaltingColumn ? 1 : 0;
-        for (int i = position; i < sourceColumnRefs.size(); i++) {
+        int position = table.getBucketNum() != null ? 1 : 0;
+        for (int i = retainPKColumns ? position : 0; i < sourceColumnRefs.size(); i++) {
             ColumnRef sourceColumnRef = sourceColumnRefs.get(i);
             PColumn sourceColumn = sourceColumnRef.getColumn();
             String colName = sourceColumn.getName().getString();
@@ -183,7 +182,7 @@ public class TupleProjectionCompiler {
         
         return PTableImpl.makePTable(table.getTenantId(), PROJECTED_TABLE_SCHEMA, table.getName(), PTableType.PROJECTED,
                 null, table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                retainPKColumns ? table.getBucketNum() : null, projectedColumns, null, null,
+                table.getBucketNum(), projectedColumns, null, null,
                 Collections.<PTable> emptyList(), table.isImmutableRows(), Collections.<PName> emptyList(), null, null,
                 table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
                 table.getViewIndexId(), null, table.rowKeyOrderOptimizable(), table.isTransactional(),
