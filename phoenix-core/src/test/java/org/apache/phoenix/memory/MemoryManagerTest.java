@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.junit.Test;
 
@@ -177,4 +178,18 @@ public class MemoryManagerTest {
         // make sure all memory is freed
         assertTrue(gmm.getAvailableMemory() == gmm.getMaxMemory());
     }
+
+    /**
+     * Test for SpillableGroupByCache which is using MemoryManager to allocate chunks for GroupBy execution
+     * @throws Exception
+     */
+    @Test
+    public void testCorrectnessOfChunkAllocation() throws Exception {
+        for(int i = 1000;i < Integer.MAX_VALUE;) {
+            i *=1.5f;
+            long result = GroupedAggregateRegionObserver.sizeOfUnorderedGroupByMap(i, 100);
+            assertTrue("Size for GroupByMap is negative" , result > 0);
+        }
+    }
+
 }
