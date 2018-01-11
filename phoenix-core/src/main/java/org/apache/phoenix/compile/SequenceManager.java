@@ -211,7 +211,7 @@ public class SequenceManager {
 
         // Create reverse indexes
         for (int i = 0; i < nextSequences.size(); i++) {
-            sequencePosition[i] = sequenceMap.get(nextSequences.get(i)).getIndex();
+            sequencePosition[i] = sequenceMap.get(nextSequences.get(i).getSequenceKey()).getIndex();
         }
         int offset = nextSequences.size();
         for (int i = 0; i < currentSequences.size(); i++) {
