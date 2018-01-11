@@ -288,7 +288,7 @@ public class PMetaDataImpl implements PMetaData {
 
     @Override
     public void removeSchema(PSchema schema, long schemaTimeStamp) {
-        this.metaData.schemas.remove(SchemaUtil.getSchemaKey(schema.getSchemaName()));
+        this.metaData.schemas.remove(schema.getSchemaKey());
     }
 
 }
