@@ -1779,6 +1779,8 @@ public class UpgradeUtil {
                 admin.deleteTable(srcTableName);
                 logger.info(String.format("deleting snapshot %s..", snapshotName));
                 admin.deleteSnapshot(snapshotName);
+            } else {
+                logger.info(String.format("Destination Table %s already exists. No migration needed.", destTableName));
             }
         }
     }
