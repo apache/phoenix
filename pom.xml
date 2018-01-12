@@ -500,6 +500,9 @@
             <exclude>examples/pig/testdata</exclude>
             <!-- precommit? -->
             <exclude>**/patchprocess/**</exclude>
+            <!-- Exclude .git* files -->
+            <exclude>.git/**</exclude>
+            <exclude>.git*</exclude>
           </excludes>
         </configuration>
       </plugin>
