@@ -471,52 +471,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         });
     }
 
-
-//    private List<UserPermission> getUserPermissions(final String tableName) throws IOException {
-//        return User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
-//            @Override
-//            public List<UserPermission> run() throws Exception {
-//                final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
-//                try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
-//                    for (BaseMasterAndRegionObserver service : accessControllers) {
-//                        if (service.getClass().getName().equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())) {
-//                            userPermissions.addAll(AccessControlClient.getUserPermissions(connection, tableName));
-//                        } else {
-//                            AccessControlProtos.GetUserPermissionsRequest.Builder builder = AccessControlProtos.GetUserPermissionsRequest
-//                                    .newBuilder();
-//                            builder.setTableName(ProtobufUtil.toProtoTableName(TableName.valueOf(tableName)));
-//                            builder.setType(AccessControlProtos.Permission.Type.Table);
-//                            AccessControlProtos.GetUserPermissionsRequest request = builder.build();
-//
-//                            PayloadCarryingRpcController controller = ((ClusterConnection)connection)
-//                                    .getRpcControllerFactory().newController();
-//                            ((AccessControlService.Interface)service).getUserPermissions(controller, request,
-//                                    new RpcCallback<AccessControlProtos.GetUserPermissionsResponse>() {
-//                                        @Override
-//                                        public void run(AccessControlProtos.GetUserPermissionsResponse message) {
-//                                            if (message != null) {
-//                                                for (AccessControlProtos.UserPermission perm : message
-//                                                        .getUserPermissionList()) {
-//                                                    userPermissions.add(ProtobufUtil.toUserPermission(perm));
-//                                                }
-//                                            }
-//                                        }
-//                                    });
-//                        }
-//                    }
-//                } catch (Throwable e) {
-//                    if (e instanceof Exception) {
-//                        throw (Exception) e;
-//                    } else if (e instanceof Error) {
-//                        throw (Error) e;
-//                    }
-//                    throw new Exception(e);
-//                }
-//                return userPermissions;
-//            }
-//        });
-//    }
-    
     /**
      * Authorizes that the current user has all the given permissions for the
      * given table and for the hbase namespace of the table
