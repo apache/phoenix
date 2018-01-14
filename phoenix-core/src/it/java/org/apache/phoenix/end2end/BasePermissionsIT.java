@@ -746,6 +746,10 @@ public class BasePermissionsIT extends BaseTest {
         }
     }
 
+    String surroundWithDoubleQuotes(String input) {
+        return "\"" + input + "\"";
+    }
+
     void validateAccessDeniedException(AccessDeniedException ade) {
         String msg = ade.getMessage();
         assertTrue("Exception contained unexpected message: '" + msg + "'",
