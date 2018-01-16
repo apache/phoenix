@@ -72,6 +72,7 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 /**
@@ -313,7 +314,7 @@ public class TestWALRecoveryCaching {
 
         // force reassign the regions from the table
         for (Region region : online) {
-          cluster.getMaster().assignRegion(region.getRegionInfo());
+          cluster.getMaster().getAssignmentManager().assign(Lists.newArrayList(region.getRegionInfo()));
         }
 
         LOG.info("Starting region server:" + server.getHostname());

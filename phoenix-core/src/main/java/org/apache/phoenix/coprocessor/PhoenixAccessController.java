@@ -43,7 +43,7 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.coprocessor.BaseMasterAndRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcServer;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
@@ -412,7 +412,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             builder.setType(AccessControlProtos.Permission.Type.Table);
                             AccessControlProtos.GetUserPermissionsRequest request = builder.build();
 
-                            PayloadCarryingRpcController controller = ((ClusterConnection)connection)
+                            HBaseRpcController controller = ((ClusterConnection)connection)
                                     .getRpcControllerFactory().newController();
                             ((AccessControlService.Interface)service).getUserPermissions(controller, request,
                                     new RpcCallback<AccessControlProtos.GetUserPermissionsResponse>() {

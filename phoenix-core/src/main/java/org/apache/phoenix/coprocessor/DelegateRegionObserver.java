@@ -678,7 +678,33 @@ public class DelegateRegionObserver implements RegionObserver {
             throws IOException {
         return delegate.postInstantiateDeleteTracker(ctx, delTracker);
     }
-    
-   
-    
+
+    @Override
+    public InternalScanner preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
+            Store store, KeyValueScanner memstoreScanner, InternalScanner s, long readPoint)
+            throws IOException {
+        return delegate.preFlushScannerOpen(c, store, memstoreScanner, s, readPoint);
+    }
+
+    @Override
+    public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
+            Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
+            long earliestPutTs, InternalScanner s, CompactionRequest request, long readPoint)
+            throws IOException {
+      return delegate.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s, request,
+          readPoint);
+    }
+
+    @Override
+    public void preCommitStoreFile(ObserverContext<RegionCoprocessorEnvironment> ctx, byte[] family,
+            List<Pair<Path, Path>> pairs) throws IOException {
+        delegate.preCommitStoreFile(ctx, family, pairs);
+    }
+
+    @Override
+    public void postCommitStoreFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
+            byte[] family, Path srcPath, Path dstPath) throws IOException {
+        delegate.postCommitStoreFile(ctx, family, srcPath, dstPath);
+    }
+
 }

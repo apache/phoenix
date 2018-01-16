@@ -329,22 +329,38 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
-    public void setOperationTimeout(int i) {
-//        transactionAwareHTable.setOperationTimeout(i);
-    }
-
-    @Override
     public int getOperationTimeout() {
-        return 0; //transactionAwareHTable.getOperationTimeout();
+        return 0;
     }
 
     @Override
-    public void setRpcTimeout(int i) {
-//        transactionAwareHTable.setRpcTimeout(i);
+    public void setOperationTimeout(int i) {
     }
 
     @Override
     public int getRpcTimeout() {
-        return 0; //transactionAwareHTable.getRpcTimeout();
+        return 0;
+    }
+
+    @Override
+    public void setRpcTimeout(int i) {
+    }
+
+    @Override
+    public int getReadRpcTimeout() {
+        return 0;
+    }
+
+    @Override
+    public void setReadRpcTimeout(int readRpcTimeout) {
+    }
+
+    @Override
+    public int getWriteRpcTimeout() {
+        return 0;
+    }
+
+    @Override
+    public void setWriteRpcTimeout(int writeRpcTimeout) {
     }
 }
