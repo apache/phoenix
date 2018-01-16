@@ -21,8 +21,8 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.ipc.DelegatingHBaseRpcController;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
+import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
+import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.SchemaUtil;
@@ -34,7 +34,7 @@ import com.google.protobuf.RpcController;
  * {@link RpcController} that sets the appropriate priority of RPC calls destined for Phoenix SYSTEM
  * tables
  */
-class MetadataRpcController extends DelegatingHBaseRpcController {
+class MetadataRpcController extends DelegatingPayloadCarryingRpcController {
 
 	private int priority;
 	// list of system tables
@@ -53,7 +53,7 @@ class MetadataRpcController extends DelegatingHBaseRpcController {
                     .getNameAsString())
             .build();
 
-	public MetadataRpcController(HBaseRpcController delegate,
+	public MetadataRpcController(PayloadCarryingRpcController delegate,
 			Configuration conf) {
 		super(delegate);
 		this.priority = PhoenixRpcSchedulerFactory.getMetadataPriority(conf);

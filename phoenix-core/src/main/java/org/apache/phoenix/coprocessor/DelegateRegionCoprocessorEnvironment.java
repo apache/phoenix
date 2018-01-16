@@ -27,7 +27,6 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 
@@ -110,11 +109,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     @Override
     public ConcurrentMap<String, Object> getSharedData() {
         return delegate.getSharedData();
-    }
-
-    @Override
-    public MetricRegistry getMetricRegistryForRegionServer() {
-        return delegate.getMetricRegistryForRegionServer();
     }
 
 }
