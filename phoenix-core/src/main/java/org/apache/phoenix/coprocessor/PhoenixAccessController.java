@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.google.protobuf.ByteString;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -166,7 +167,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
                 User user = getActiveUser();
                 List<UserPermission> permissionForUser = getPermissionForUser(
-                        getUserPermissions(index.getNameAsString()), Bytes.toBytes(user.getShortName()));
+                        getUserPermissions(index), Bytes.toBytes(user.getShortName()));
                 Set<Action> requireAccess = new HashSet<>();
                 Set<Action> accessExists = new HashSet<>();
                 if (permissionForUser != null) {
@@ -247,8 +248,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             @Override
             public Void run() throws IOException {
                 try (Connection conn = ConnectionFactory.createConnection(env.getConfiguration())) {
-                    List<UserPermission> userPermissions = getUserPermissions(fromTable.getNameAsString());
-                    List<UserPermission> permissionsOnTheTable = getUserPermissions(toTable.getNameAsString());
+                    List<UserPermission> userPermissions = getUserPermissions(fromTable);
+                    List<UserPermission> permissionsOnTheTable = getUserPermissions(toTable);
                     if (userPermissions != null) {
                         for (UserPermission userPermission : userPermissions) {
                             Set<Action> requireAccess = new HashSet<Action>();
@@ -396,36 +397,27 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
     }
 
-    private List<UserPermission> getUserPermissions(final String tableName) throws IOException {
+
+    /**
+     * Gets all the permissions for a given tableName for all the users
+     * Also, get the permissions at table's namespace level and merge all of them
+     * @throws IOException
+     */
+    private List<UserPermission> getUserPermissions(final TableName tableName) throws IOException {
         return User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
             @Override
             public List<UserPermission> run() throws Exception {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
                 try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
+                    // Merge permissions from all accessController coprocessors loaded in memory
                     for (BaseMasterAndRegionObserver service : accessControllers) {
+                        // Use AccessControlClient API's if the accessController is an instance of org.apache.hadoop.hbase.security.access.AccessController
                         if (service.getClass().getName().equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())) {
-                            userPermissions.addAll(AccessControlClient.getUserPermissions(connection, tableName));
+                            userPermissions.addAll(AccessControlClient.getUserPermissions(connection, tableName.getNameAsString()));
+                            userPermissions.addAll(AccessControlClient.getUserPermissions(
+                                    connection, AuthUtil.toGroupEntry(tableName.getNamespaceAsString())));
                         } else {
-                            AccessControlProtos.GetUserPermissionsRequest.Builder builder = AccessControlProtos.GetUserPermissionsRequest
-                                    .newBuilder();
-                            builder.setTableName(ProtobufUtil.toProtoTableName(TableName.valueOf(tableName)));
-                            builder.setType(AccessControlProtos.Permission.Type.Table);
-                            AccessControlProtos.GetUserPermissionsRequest request = builder.build();
-
-                            HBaseRpcController controller = ((ClusterConnection)connection)
-                                    .getRpcControllerFactory().newController();
-                            ((AccessControlService.Interface)service).getUserPermissions(controller, request,
-                                    new RpcCallback<AccessControlProtos.GetUserPermissionsResponse>() {
-                                        @Override
-                                        public void run(AccessControlProtos.GetUserPermissionsResponse message) {
-                                            if (message != null) {
-                                                for (AccessControlProtos.UserPermission perm : message
-                                                        .getUserPermissionList()) {
-                                                    userPermissions.add(ProtobufUtil.toUserPermission(perm));
-                                                }
-                                            }
-                                        }
-                                    });
+                            getUserPermsFromUserDefinedAccessController(userPermissions, connection, (AccessControlService.Interface) service);
                         }
                     }
                 } catch (Throwable e) {
@@ -438,12 +430,51 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 }
                 return userPermissions;
             }
+
+            private void getUserPermsFromUserDefinedAccessController(final List<UserPermission> userPermissions, Connection connection, AccessControlService.Interface service) {
+
+                HBaseRpcController controller = ((ClusterConnection)connection)
+                        .getRpcControllerFactory().newController();
+
+                AccessControlProtos.GetUserPermissionsRequest.Builder builderTablePerms = AccessControlProtos.GetUserPermissionsRequest
+                        .newBuilder();
+                builderTablePerms.setTableName(ProtobufUtil.toProtoTableName(tableName));
+                builderTablePerms.setType(AccessControlProtos.Permission.Type.Table);
+                AccessControlProtos.GetUserPermissionsRequest requestTablePerms = builderTablePerms.build();
+
+                callGetUserPermissionsRequest(userPermissions, service, requestTablePerms, controller);
+
+                AccessControlProtos.GetUserPermissionsRequest.Builder builderNamespacePerms = AccessControlProtos.GetUserPermissionsRequest
+                        .newBuilder();
+                builderNamespacePerms.setNamespaceName(ByteString.copyFrom(tableName.getNamespace()));
+                builderNamespacePerms.setType(AccessControlProtos.Permission.Type.Namespace);
+                AccessControlProtos.GetUserPermissionsRequest requestNamespacePerms = builderNamespacePerms.build();
+
+                callGetUserPermissionsRequest(userPermissions, service, requestNamespacePerms, controller);
+
+            }
+
+            private void callGetUserPermissionsRequest(final List<UserPermission> userPermissions, AccessControlService.Interface service
+                    , AccessControlProtos.GetUserPermissionsRequest request, HBaseRpcController controller) {
+                service.getUserPermissions(controller, request,
+                        new RpcCallback<AccessControlProtos.GetUserPermissionsResponse>() {
+                            @Override
+                            public void run(AccessControlProtos.GetUserPermissionsResponse message) {
+                                if (message != null) {
+                                    for (AccessControlProtos.UserPermission perm : message
+                                            .getUserPermissionList()) {
+                                        userPermissions.add(ProtobufUtil.toUserPermission(perm));
+                                    }
+                                }
+                            }
+                        });
+            }
         });
     }
-    
+
     /**
      * Authorizes that the current user has all the given permissions for the
-     * given table
+     * given table and for the hbase namespace of the table
      * @param tableName Table requested
      * @throws IOException if obtaining the current user fails
      * @throws AccessDeniedException if user has no authorization
@@ -453,7 +484,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         AuthResult result = null;
         List<Action> requiredAccess = new ArrayList<Action>();
         for (Action permission : permissions) {
-            if (hasAccess(getUserPermissions(tableName.getNameAsString()), tableName, permission, user)) {
+             if (hasAccess(getUserPermissions(tableName), tableName, permission, user)) {
                 result = AuthResult.allow(request, "Table permission granted", user, permission, tableName, null, null);
             } else {
                 result = AuthResult.deny(request, "Insufficient permissions", user, permission, tableName, null, null);
@@ -471,8 +502,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
     /**
      * Checks if the user has access to the table for the specified action.
-     *
-     * @param perms All table permissions
+     * @param perms All table and table's namespace permissions
      * @param table tablename
      * @param action action for access is required
      * @return true if the user has access to the table for specified action, false otherwise
@@ -498,7 +528,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
               }
             }
         } else if (LOG.isDebugEnabled()) {
-            LOG.debug("No permissions found for table=" + table);
+            LOG.debug("No permissions found for table=" + table + " or namespace=" + table.getNamespaceAsString());
         }
         return false;
     }
