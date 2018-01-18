@@ -106,7 +106,7 @@ public class TestPerRegionIndexWriteCache {
       Random rn = new Random();
       tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
       WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, getClass().getSimpleName());
-      wal = walFactory.getWAL(Bytes.toBytes("logs"), null);
+      wal = walFactory.getWAL(RegionInfoBuilder.newBuilder(TableName.valueOf("logs")).build());
         TableDescriptor htd =
                 TableDescriptorBuilder
                         .newBuilder(tableName)

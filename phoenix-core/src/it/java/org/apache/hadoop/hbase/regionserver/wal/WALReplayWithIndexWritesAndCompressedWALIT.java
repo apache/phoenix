@@ -267,7 +267,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @throws IOException
    */
   private WAL createWAL(final Configuration c, WALFactory walFactory) throws IOException {
-    WAL wal = walFactory.getWAL(new byte[]{}, null);
+    WAL wal = walFactory.getWAL(null);
 
     // Set down maximum recovery so we dfsclient doesn't linger retrying something
     // long gone.
