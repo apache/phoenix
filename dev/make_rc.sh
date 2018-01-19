@@ -119,14 +119,14 @@ function_sign() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     gpg2 --armor --output $file.asc --detach-sig $file;
     openssl md5 $file > $file.md5;
-    openssl dgst -sha512 $file > $file.sha;
-    openssl dgst -sha256 $file >> $file.sha;
+    openssl dgst -sha512 $file > $file.sha512;
+    openssl dgst -sha256 $file >> $file.sha256;
   # all other OS
   else
     gpg --armor --output $file.asc --detach-sig $file;
     md5sum -b $file > $file.md5;
-    sha512sum -b $file > $file.sha;
-    sha256sum -b $file >> $file.sha;
+    sha512sum -b $file > $file.sha512;
+    sha256sum -b $file >> $file.sha256;
   fi
 }
 
