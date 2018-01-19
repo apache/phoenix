@@ -472,6 +472,9 @@
             <exclude>examples/pig/testdata</exclude>
             <!-- precommit? -->
             <exclude>**/patchprocess/**</exclude>
+            <!-- Argparse is bundled to work around system Python version
+                 issues, compatibile with ALv2 -->
+            <exclude>bin/argparse-1.4.0/argparse.py</exclude>
           </excludes>
         </configuration>
       </plugin>
