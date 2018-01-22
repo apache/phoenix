@@ -66,7 +66,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>2.0.0-beta-1-SNAPSHOT</hbase.version>
+    <hbase.version>2.0.0-beta-1</hbase.version>
     <hadoop.version>3.0.0-beta1</hadoop.version>
 
     <!-- Dependency versions -->
