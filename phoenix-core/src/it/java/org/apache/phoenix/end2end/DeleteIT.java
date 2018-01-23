@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -733,6 +734,34 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             }
         }
 
+    }
+
+    @Test
+    public void testClientSideDeleteShouldNotFailWhenSameColumnPresentInMultipleIndexes()
+            throws Exception {
+        String tableName = generateUniqueName();
+        String indexName1 = generateUniqueName();
+        String indexName2 = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS "
+                        + tableName
+                        + " (pk1 DECIMAL NOT NULL, v1 VARCHAR, v2 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
+        String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
+        String idx2 = "CREATE INDEX " + indexName2 + " ON " + tableName + "(v1, v2)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(idx1);
+            conn.createStatement().execute(idx2);
+            Statement stmt = conn.createStatement();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES (1,'value', 'value2')");
+            conn.commit();
+            conn.setAutoCommit(false);
+            try {
+                conn.createStatement().execute("DELETE FROM " + tableName + " WHERE pk1 > 0");
+            } catch (Exception e) {
+                fail("Should not throw any exception");
+            }
+        }
     }
 }
 
