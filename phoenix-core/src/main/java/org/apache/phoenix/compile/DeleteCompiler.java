@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -442,7 +443,7 @@ public class DeleteCompiler {
         for (PTable index : immutableIndexes) {
             selectColumnCount += index.getPKColumns().size() - pkColumnCount;
         }
-        List<PColumn> projectedColumns = Lists.newArrayListWithExpectedSize(selectColumnCount + pkColumnOffset);
+        Set<PColumn> projectedColumns = new LinkedHashSet<PColumn>(selectColumnCount + pkColumnOffset);
         List<AliasedNode> aliasedNodes = Lists.newArrayListWithExpectedSize(selectColumnCount);
         for (int i = isSalted ? 1 : 0; i < pkColumnOffset; i++) {
             PColumn column = table.getPKColumns().get(i);
@@ -463,8 +464,10 @@ public class DeleteCompiler {
                     String columnName = columnInfo.getSecond();
                     boolean hasNoColumnFamilies = table.getColumnFamilies().isEmpty();
                     PColumn column = hasNoColumnFamilies ? table.getColumnForColumnName(columnName) : table.getColumnFamily(familyName).getPColumnForColumnName(columnName);
-                    projectedColumns.add(column);
-                    aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
+                    if(!projectedColumns.contains(column)) {
+                        projectedColumns.add(column);
+                        aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
+                    }
                 }
             }
         }
@@ -718,9 +721,11 @@ public class DeleteCompiler {
             final DeletingParallelIteratorFactory parallelIteratorFactory = parallelIteratorFactoryToBe;
             List<PColumn> adjustedProjectedColumns = Lists.newArrayListWithExpectedSize(projectedColumns.size());
             final int offset = table.getBucketNum() == null ? 0 : 1;
-            for (int i = 0; i < projectedColumns.size(); i++) {
-                final int position = i;
-                adjustedProjectedColumns.add(new DelegateColumn(projectedColumns.get(i)) {
+            Iterator<PColumn> projectedColsItr = projectedColumns.iterator();
+            int i = 0;
+            while(projectedColsItr.hasNext()) {
+                final int position = i++;
+                adjustedProjectedColumns.add(new DelegateColumn(projectedColsItr.next()) {
                     @Override
                     public int getPosition() {
                         return position + offset;
