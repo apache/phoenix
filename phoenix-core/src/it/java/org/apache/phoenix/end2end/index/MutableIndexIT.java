@@ -728,6 +728,47 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       }
   }
 
+
+  @Test
+  public void testUpsertingDeletedRowShouldGiveProperDataWithIndexes() throws Exception {
+      testUpsertingDeletedRowShouldGiveProperDataWithIndexes(false);
+  }
+
+  @Test
+  public void testUpsertingDeletedRowShouldGiveProperDataWithMultiCFIndexes() throws Exception {
+      testUpsertingDeletedRowShouldGiveProperDataWithIndexes(true);
+  }
+
+  private void testUpsertingDeletedRowShouldGiveProperDataWithIndexes(boolean multiCf) throws Exception {
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IDX_" + generateUniqueName();
+      String columnFamily1 = "cf1";
+      String columnFamily2 = "cf2";
+      String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+      try (Connection conn = getConnection()) {
+            conn.createStatement().execute(
+                "create table " + fullTableName + " (id integer primary key, "
+                        + (multiCf ? columnFamily1 : "") + "f float, "
+                        + (multiCf ? columnFamily2 : "") + "s varchar)" + tableDDLOptions);
+            conn.createStatement().execute(
+                "create index " + indexName + " on " + fullTableName + " ("
+                        + (multiCf ? columnFamily1 : "") + "f) include ("+(multiCf ? columnFamily2 : "") +"s)");
+            conn.createStatement().execute(
+                "upsert into " + fullTableName + " values (1, 0.5, 'foo')");
+          conn.commit();
+          conn.createStatement().execute("delete from  " + fullTableName + " where id = 1");
+          conn.commit();
+            conn.createStatement().execute(
+                "upsert into  " + fullTableName + " values (1, 0.5, 'foo')");
+          conn.commit();
+          ResultSet rs = conn.createStatement().executeQuery("select * from "+indexName);
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(2));
+          assertEquals(0.5F, rs.getFloat(1), 0.0);
+          assertEquals("foo", rs.getString(3));
+      } 
+  }
+
 private void upsertRow(String dml, Connection tenantConn, int i) throws SQLException {
     PreparedStatement stmt = tenantConn.prepareStatement(dml);
       stmt.setString(1, "00000000000000" + String.valueOf(i));

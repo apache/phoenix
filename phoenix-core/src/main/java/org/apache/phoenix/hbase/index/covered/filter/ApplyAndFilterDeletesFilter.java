@@ -53,7 +53,6 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
  */
 public class ApplyAndFilterDeletesFilter extends FilterBase {
 
-  private boolean done = false;
   List<ImmutableBytesPtr> families;
   private final DeleteTracker coveringDelete = new DeleteTracker();
   private Hinter currentHint;
@@ -106,11 +105,6 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
 
   @Override
   public ReturnCode filterKeyValue(Cell next) {
-    // we marked ourselves done, but the END_ROW_KEY didn't manage to seek to the very last key
-    if (this.done) {
-      return ReturnCode.SKIP;
-    }
-
     KeyValue nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
     switch (KeyValue.Type.codeToType(next.getTypeByte())) {
     /*
@@ -187,8 +181,6 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
           getNextFamily(new ImmutableBytesPtr(peeked.getFamilyArray(), peeked.getFamilyOffset(),
               peeked.getFamilyLength()));
       if (nextFamily == null) {
-        // no known next family, so we can be completely done
-        done = true;
         return KeyValue.LOWESTKEY;
       }
         // there is a valid family, so we should seek to that
