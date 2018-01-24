@@ -31,7 +31,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -49,6 +48,7 @@ import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PhoenixRuntime;
 
@@ -96,14 +96,16 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
-        HConnection connection = HConnectionManager.createConnection(config);
+        List<InputSplit> psplits;
+        try (HConnection connection =
+                     HBaseFactoryProvider.getHConnectionFactory().createConnection(config)) {
         String tableName = qplan
                 .getTableRef().getTable().getPhysicalName().toString();
         HTable table = new HTable(config, tableName);
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(table);
 
 
-        final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
+            psplits = Lists.newArrayListWithExpectedSize(splits.size());
         for (List<Scan> scans : qplan.getScans()) {
             // Get the region location
             HRegionLocation location = connection.getRegionLocation(
@@ -133,8 +135,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
                     psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
                 }
-            }
-            else {
+                } else {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
                             .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
@@ -154,6 +155,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
                 psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
             }
+        }
         }
         return psplits;
     }
