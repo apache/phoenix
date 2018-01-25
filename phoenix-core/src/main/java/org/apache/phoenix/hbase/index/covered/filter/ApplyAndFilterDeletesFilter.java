@@ -94,7 +94,6 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   @Override
   public void reset(){
     this.coveringDelete.reset();
-    this.done = false;
   }
   
   
