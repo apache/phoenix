@@ -39,6 +39,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -541,6 +542,116 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(0.9, rs.getDouble(1), 0.01);
         assertEquals("a", rs.getString(2));
+    }
+
+    @Test
+    public void testAggregateOrderBy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, VAL1 VARCHAR, VAL2 INTEGER)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABC','aa123', 11)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABD','ba124', 1)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABE','cf125', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABF','dan126', 4)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABG','elf127', 15)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABH','fan128', 6)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAA','get211', 100)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAB','hat212', 7)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAC','aap12', 2)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAD','ball12', 3)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAE','inn2110', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAF','key2112', 40)");
+        conn.commit();
+
+        ResultSet rs;
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        rs = stmt.executeQuery("select distinct ID, VAL1, VAL2 from " + tableName + " where ID in ('ABC','ABD','ABE','ABF','ABG','ABH','AAA', 'AAB', 'AAC','AAD','AAE','AAF') order by VAL1");
+        assertFalse(stmt.getQueryPlan().getOrderBy().getOrderByExpressions().isEmpty());
+        assertTrue(rs.next());
+        assertEquals("ABC", rs.getString(1));
+        assertEquals("aa123", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("aap12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ba124", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ball12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("cf125", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("dan126", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("elf127", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("fan128", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("get211", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("hat212", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("inn2110", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("AAF", rs.getString(1));
+        assertEquals("key2112", rs.getString(2));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testAggregateOptimizedOutOrderBy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + " (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, VAL1 VARCHAR, VAL2 INTEGER, CONSTRAINT pk PRIMARY KEY(K1,K2))";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABC','ABC','aa123', 11)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABD','ABC','ba124', 1)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABE','ABC','cf125', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABF','ABC','dan126', 4)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABG','ABC','elf127', 15)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABH','ABC','fan128', 6)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAA','ABC','get211', 100)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAB','ABC','hat212', 7)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAC','ABC','aap12', 2)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAD','ABC','ball12', 3)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAE','ABC','inn2110', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAF','ABC','key2112', 40)");
+        conn.commit();
+
+        ResultSet rs;
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        rs = stmt.executeQuery("select distinct K2, VAL1, VAL2 from " + tableName + " where K2 = 'ABC' order by VAL1");
+        assertTrue(stmt.getQueryPlan().getOrderBy().getOrderByExpressions().isEmpty());
+        assertTrue(rs.next());
+        assertEquals("ABC", rs.getString(1));
+        assertEquals("aa123", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("aap12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ba124", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ball12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("cf125", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("dan126", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("elf127", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("fan128", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("get211", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("hat212", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("inn2110", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ABC", rs.getString(1));
+        assertEquals("key2112", rs.getString(2));
+        assertFalse(rs.next());
     }
 
     @Test
