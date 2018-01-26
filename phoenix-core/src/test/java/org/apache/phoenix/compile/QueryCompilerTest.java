@@ -1827,6 +1827,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testNotOrderByOrderPreservingForAggregation() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS VA_TEST(ID VARCHAR NOT NULL PRIMARY KEY, VAL1 VARCHAR, VAL2 INTEGER)");
+        String[] queries = {
+                "select distinct ID, VAL1, VAL2 from VA_TEST where \"ID\" in ('ABC','ABD','ABE','ABF','ABG','ABH','AAA', 'AAB', 'AAC','AAD','AAE','AAF') order by VAL1 ASC"
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected order by not to be compiled out: " + query, plan.getOrderBy().getOrderByExpressions().isEmpty());
+        }
+    }
+    
+    @Test
     public void testGroupByOrderPreserving() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
