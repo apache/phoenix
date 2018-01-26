@@ -44,7 +44,6 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 import org.apache.phoenix.util.SchemaUtil;
@@ -628,10 +627,6 @@ public class ScanRanges {
     }
 
     public boolean hasEqualityConstraint(int pkPosition) {
-        if (isPointLookup) {
-            return true;
-        }
-        
         int pkOffset = 0;
         int nRanges = ranges.size();
 
