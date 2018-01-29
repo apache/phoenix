@@ -40,6 +40,7 @@ import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -110,6 +111,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         this.factory = factory;
         this.abortable = new CapturingAbortable(abortable);
         this.stopped = stop;
+        this.env = env;
     }
 
     @Override
@@ -226,7 +228,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         // if any of the tasks failed, then we need to propagate the failure
         if (failures.size() > 0) {
             // make the list unmodifiable to avoid any more synchronization concerns
-            throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures));
+            throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
+                    PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
         }
         return;
     }
