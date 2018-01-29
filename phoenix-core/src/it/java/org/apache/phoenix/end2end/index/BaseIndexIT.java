@@ -246,7 +246,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
                 assertTrue(table.getType() == PTableType.TABLE); // should be data table
                 boolean hasIndexData = iterator.hasNext();
-                assertFalse(hasIndexData); // should have no index data
+                assertFalse(hasIndexData && !transactional); // should have no index data
             }
         }
     }
