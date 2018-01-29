@@ -105,6 +105,10 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
     FakeTableFactory factory = new FakeTableFactory(tables);
@@ -161,6 +165,10 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
