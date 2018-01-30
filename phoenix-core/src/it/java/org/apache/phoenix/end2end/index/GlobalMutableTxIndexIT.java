@@ -20,8 +20,10 @@ package org.apache.phoenix.end2end.index;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.junit.Ignore;
 import org.junit.runners.Parameterized.Parameters;
 
+@Ignore
 public class GlobalMutableTxIndexIT extends BaseIndexIT {
 
     public GlobalMutableTxIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {

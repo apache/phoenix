@@ -67,6 +67,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
+@Ignore
 public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     
     private final String tableDDLOptions;

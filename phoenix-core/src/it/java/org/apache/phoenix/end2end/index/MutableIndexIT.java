@@ -92,11 +92,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     
 	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
+        // Temporarily disable transactional tests
         return Arrays.asList(new Boolean[][] { 
                 { false, false, false }, { false, false, true },
-                { false, true, false }, { false, true, true },
-                { true, false, false }, { true, false, true },
-                { true, true, false }, { true, true, true } });
+                //{ false, true, false }, { false, true, true },
+                { true, false, false }, { true, false, true } });
+                //{ true, true, false }, { true, true, true } });
     }
     
     @Test
