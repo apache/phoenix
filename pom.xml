@@ -67,7 +67,7 @@
 
     <!-- Hadoop Versions -->
     <hbase.version>2.0.0-beta-1</hbase.version>
-    <hadoop.version>3.0.0-beta1</hadoop.version>
+    <hadoop.version>3.0.0</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
@@ -109,6 +109,7 @@
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
+    <bouncycastle.version>1.46</bouncycastle.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
@@ -683,6 +684,12 @@
         <optional>true</optional>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-minicluster</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+      </dependency>
 
       <!-- Required for mini-cluster since hbase built against old version of hadoop -->
       <dependency>
@@ -972,6 +979,12 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${servlet.api.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk16</artifactId>
+        <version>${bouncycastle.version}</version>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
