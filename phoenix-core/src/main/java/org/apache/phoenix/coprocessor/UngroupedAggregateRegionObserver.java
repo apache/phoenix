@@ -53,22 +53,18 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.CoprocessorHConnection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -81,9 +77,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -92,13 +88,15 @@ import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -136,22 +134,19 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Predicate;
 import com.google.common.base.Throwables;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -205,6 +200,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private KeyValueBuilder kvBuilder;
     private Configuration upsertSelectConfig;
     private Configuration compactionConfig;
+    private Configuration indexWriteConfig;
+    private ReadOnlyProps indexWriteProps;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -234,6 +231,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         compactionConfig.setInt(HConstants.HBASE_CLIENT_PAUSE,
             e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRY_PAUSE,
                 QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRY_PAUSE));
+
+        // For retries of index write failures, use the same # of retries as the rebuilder
+        indexWriteConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
+        indexWriteConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+            e.getConfiguration().getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
+                QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER));
+        indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
     }
 
     private void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
@@ -254,7 +258,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
           }
       }
       // TODO: should we use the one that is all or none?
-      logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
+      logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
@@ -860,19 +864,63 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private void commit(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemStoreSize,
-            byte[] indexMaintainersPtr, byte[] txState, HTable targetHTable, boolean useIndexProto,
+    private void commit(final Region region, List<Mutation> mutations, byte[] indexUUID, final long blockingMemStoreSize,
+            byte[] indexMaintainersPtr, byte[] txState, final HTable targetHTable, boolean useIndexProto,
                         boolean isPKChanging)
             throws IOException {
-        List<Mutation> localRegionMutations = Lists.newArrayList();
-        List<Mutation> remoteRegionMutations = Lists.newArrayList();
+        final List<Mutation> localRegionMutations = Lists.newArrayList();
+        final List<Mutation> remoteRegionMutations = Lists.newArrayList();
         setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState, useIndexProto);
         separateLocalAndRemoteMutations(targetHTable, region, mutations, localRegionMutations, remoteRegionMutations,
             isPKChanging);
-        commitBatch(region, localRegionMutations, blockingMemStoreSize);
-        commitBatchWithHTable(targetHTable, remoteRegionMutations);
+        try {
+            commitBatch(region, localRegionMutations, blockingMemStoreSize);
+        } catch (IOException e) {
+            handleIndexWriteException(localRegionMutations, e, new MutateCommand() {
+                @Override
+                public void doMutation() throws IOException {
+                    commitBatch(region, localRegionMutations, blockingMemStoreSize);
+                }
+            });
+        }
+        try {
+            commitBatchWithHTable(targetHTable, remoteRegionMutations);
+        } catch (IOException e) {
+            handleIndexWriteException(remoteRegionMutations, e, new MutateCommand() {
+                @Override
+                public void doMutation() throws IOException {
+                    commitBatchWithHTable(targetHTable, remoteRegionMutations);
+                }
+            });
+        }
         localRegionMutations.clear();
         remoteRegionMutations.clear();
+    }
+
+    private void handleIndexWriteException(final List<Mutation> localRegionMutations, IOException origIOE,
+            MutateCommand mutateCommand) throws IOException {
+        long serverTimestamp = ServerUtil.parseTimestampFromRemoteException(origIOE);
+        SQLException inferredE = ServerUtil.parseLocalOrRemoteServerException(origIOE);
+        if (inferredE != null && inferredE.getErrorCode() == SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
+            // For an index write failure, the data table write succeeded,
+            // so when we retry we need to set REPLAY_WRITES
+            for (Mutation mutation : localRegionMutations) {
+                mutation.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                // use the server timestamp for index write retrys
+                KeyValueUtil.setTimestamp(mutation, serverTimestamp);
+            }
+            IndexWriteException iwe = PhoenixIndexFailurePolicy.getIndexWriteException(inferredE);
+            try (PhoenixConnection conn =
+                    QueryUtil.getConnectionOnServer(indexWriteConfig)
+                            .unwrap(PhoenixConnection.class)) {
+                PhoenixIndexFailurePolicy.doBatchWithRetries(mutateCommand, iwe, conn,
+                    indexWriteProps);
+            } catch (Exception e) {
+                throw new DoNotRetryIOException(e);
+            }
+        } else {
+            throw origIOE;
+        }
     }
 
     private void separateLocalAndRemoteMutations(HTable targetHTable, Region region, List<Mutation> mutations,

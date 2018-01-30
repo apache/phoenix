@@ -18,6 +18,8 @@
 package org.apache.phoenix.hbase.index.exception;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.client.Mutation;
 
@@ -27,6 +29,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 @SuppressWarnings("serial")
 public class SingleIndexWriteFailureException extends IndexWriteException {
 
+  public static final String FAILED_MSG = "Failed to make index update:";
   private String table;
 
   /**
@@ -45,10 +48,24 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
    * @param cause underlying reason for the failure
    */
   public SingleIndexWriteFailureException(String targetTableName, List<Mutation> mutations,
-      Exception cause) {
-    super("Failed to make index update:\n\t table: " + targetTableName + "\n\t edits: " + mutations
-        + "\n\tcause: " + cause == null ? "UNKNOWN" : cause.getMessage(), cause);
+      Exception cause, boolean disableIndexOnFailure) {
+    super(FAILED_MSG + "\n\t table: " + targetTableName + "\n\t edits: " + mutations
+        + "\n\tcause: " + cause == null ? "UNKNOWN" : cause.getMessage(), cause, disableIndexOnFailure);
     this.table = targetTableName;
+  }
+
+  /**
+   * This constructor used to rematerialize this exception when receiving
+   * an rpc exception from the server
+   * @param message detail message
+   */
+  public SingleIndexWriteFailureException(String msg) {
+      super(msg, IndexWriteException.parseDisableIndexOnFailure(msg));
+      Pattern pattern = Pattern.compile(FAILED_MSG + ".* table: ([\\S]*)\\s.*", Pattern.DOTALL);
+      Matcher m = pattern.matcher(msg);
+      if (m.find()) {
+          this.table = m.group(1);
+      }
   }
 
   /**
