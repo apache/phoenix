@@ -106,6 +106,7 @@
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.1</i18n-util.version>
+    <servlet.api.version>3.1.0</servlet.api.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
@@ -935,6 +936,11 @@
         <groupId>com.salesforce.i18n</groupId>
         <artifactId>i18n-util</artifactId>
         <version>${i18n-util.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>${servlet.api.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
