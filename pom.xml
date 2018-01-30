@@ -502,7 +502,7 @@
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
         <version>${project.version}</version>
-        <classifier>tests</classifier>
+        <type>test-jar</type>
         <scope>test</scope>
       </dependency>
       <dependency>
