@@ -27,12 +27,7 @@ public enum PIndexState {
     INACTIVE("i"),
     DISABLE("x"),
     REBUILD("r"),
-    PENDING_ACTIVE("p"),
-    // Used when disabling an index on write failure (PHOENIX-4130)
-    // When an index write fails, it is put in this state, and we let the client retry the mutation
-    // After retries are exhausted, the client should mark the index as disabled, but if that
-    // doesn't happen, then the index is considered disabled if it's been in this state too long
-    PENDING_DISABLE("w");
+    PENDING_ACTIVE("p");
 
     private final String serializedValue;
     private final byte[] serializedBytes;
