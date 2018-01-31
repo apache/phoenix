@@ -24,6 +24,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.Ignore;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore
 public class HiveTezIT extends HivePhoenixStoreIT {
 
     @BeforeClass

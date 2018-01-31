@@ -32,6 +32,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
+import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
 
 import java.io.File;
@@ -47,6 +48,7 @@ import static org.junit.Assert.fail;
  * Base class for all Hive Phoenix integration tests that may be run with Tez or MR mini cluster
  */
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore
 public class BaseHivePhoenixStoreIT {
 
     private static final Log LOG = LogFactory.getLog(BaseHivePhoenixStoreIT.class);
