@@ -163,14 +163,14 @@ public class IndexToolIT extends BaseTest {
 
             String stmtString2 =
                     String.format(
-                        "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME),8,'x')||'_xyz') ASYNC ",
+                        "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
                         (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
             conn.createStatement().execute(stmtString2);
 
             // verify rows are fetched from data table.
             String selectSql =
                     String.format(
-                        "SELECT ID FROM %s WHERE LPAD(UPPER(NAME),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
+                        "SELECT ID FROM %s WHERE LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
                         dataTableFullName);
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
@@ -178,7 +178,7 @@ public class IndexToolIT extends BaseTest {
             // assert we are pulling from data table.
             assertEquals(String.format(
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n"
-                        + "    SERVER FILTER BY (LPAD(UPPER(NAME), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
+                        + "    SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
                 dataTableFullName), actualExplainPlan);
 
             rs = stmt1.executeQuery(selectSql);
