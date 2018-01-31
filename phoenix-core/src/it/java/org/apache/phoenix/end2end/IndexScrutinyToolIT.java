@@ -68,6 +68,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -81,6 +82,7 @@ import org.junit.runners.Parameterized;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
+@Ignore
 public class IndexScrutinyToolIT extends BaseTest {
 
     private String dataTableDdl;
