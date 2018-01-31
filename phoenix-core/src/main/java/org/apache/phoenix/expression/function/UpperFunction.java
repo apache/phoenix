@@ -18,8 +18,11 @@
 
 package org.apache.phoenix.expression.function;
 
+import java.io.DataInput;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
@@ -27,18 +30,38 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
+
+import com.force.i18n.LocaleUtils;
+
 import org.apache.phoenix.schema.tuple.Tuple;
 
 @FunctionParseNode.BuiltInFunction(name=UpperFunction.NAME,  args={
-        @FunctionParseNode.Argument(allowedTypes={PVarchar.class})} )
+        @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),
+        @FunctionParseNode.Argument(allowedTypes={PVarchar.class}, defaultValue="null", isConstant=true)} )
 public class UpperFunction extends ScalarFunction {
     public static final String NAME = "UPPER";
+
+    private Locale locale;
 
     public UpperFunction() {
     }
 
     public UpperFunction(List<Expression> children) throws SQLException {
         super(children);
+        initialize();
+    }
+
+    private void initialize() {
+        if(children.size() > 1) {
+            String localeISOCode = getLiteralValue(1, String.class);
+            locale = LocaleUtils.get().getLocaleByIsoCode(localeISOCode);
+        }
+    }
+
+    @Override
+    public void readFields(DataInput input) throws IOException {
+        super.readFields(input);
+        initialize();
     }
 
     @Override
@@ -52,7 +75,9 @@ public class UpperFunction extends ScalarFunction {
             return true;
         }
 
-        ptr.set(PVarchar.INSTANCE.toBytes(sourceStr.toUpperCase()));
+        String resultStr = locale == null ? sourceStr.toUpperCase() : sourceStr.toUpperCase(locale);
+
+        ptr.set(PVarchar.INSTANCE.toBytes(resultStr));
         return true;
     }
 
