@@ -190,20 +190,4 @@ public class CollationKeyFunction extends ScalarFunction {
 		// TODO: Look into calling freeze() on them to be able return true here.
 		return false;
 	}
-
-	private <T> T getLiteralValue(int childIndex, Class<T> type) {
-		Expression expression = getChildren().get(childIndex);
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("child: " + childIndex + ", expression: " + expression);
-		}
-		// It's safe to assume expression is a LiteralExpression since
-		// only arguments marked as isConstant = true should be handled through
-		// this method.
-		return type.cast(((LiteralExpression) expression).getValue());
-	}
-
-	@Override
-	public boolean isNullable() {
-		return getChildren().get(0).isNullable();
-	}
 }
