@@ -74,7 +74,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     
     @Parameters(name="transactional = {0}")
     public static Collection<Boolean> data() {
-        return Arrays.asList(new Boolean[] { false, true });
+        // return Arrays.asList(new Boolean[] { false, true });
+        return Arrays.asList(new Boolean[] { false });
     }
     
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
