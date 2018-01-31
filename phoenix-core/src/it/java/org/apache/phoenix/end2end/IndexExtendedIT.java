@@ -131,7 +131,7 @@ public class IndexExtendedIT extends BaseTest {
             IndexToolIT.upsertRow(stmt1, id++);
             conn.commit();
             
-            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME)) ASYNC ", indexTableName,dataTableFullName));
+            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME, 'en_US')) ASYNC ", indexTableName,dataTableFullName));
             
             //update a row 
             stmt1.setInt(1, 1);
@@ -141,13 +141,13 @@ public class IndexExtendedIT extends BaseTest {
             conn.commit();  
             
             //verify rows are fetched from data table.
-            String selectSql = String.format("SELECT ID FROM %s WHERE UPPER(NAME) ='UNAME2'",dataTableFullName);
+            String selectSql = String.format("SELECT ID FROM %s WHERE UPPER(NAME, 'en_US') ='UNAME2'",dataTableFullName);
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             
             //assert we are pulling from data table.
             assertEquals(String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n" +
-                    "    SERVER FILTER BY UPPER(NAME) = 'UNAME2'",dataTableFullName),actualExplainPlan);
+                    "    SERVER FILTER BY UPPER(NAME, 'en_US') = 'UNAME2'",dataTableFullName),actualExplainPlan);
             
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
