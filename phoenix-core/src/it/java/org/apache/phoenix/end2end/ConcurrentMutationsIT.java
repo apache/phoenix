@@ -55,6 +55,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @RunWith(RunUntilFailure.class)
+@Ignore
 public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     private static final Random RAND = new Random(5);
     private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";  

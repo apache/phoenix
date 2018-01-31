@@ -68,6 +68,7 @@ import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -77,6 +78,7 @@ import com.google.common.collect.Maps;
 
 @SuppressWarnings("deprecation")
 @RunWith(RunUntilFailure.class)
+@Ignore
 public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     private static final Logger LOG = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
     private static final Random RAND = new Random(5);
