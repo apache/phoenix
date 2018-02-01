@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 
 /**
@@ -40,7 +41,7 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
    * @param failures the tables to which the index write did not succeed
    */
   public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures, boolean disableIndexOnFailure) {
-    super(FAILURE_MSG + failures, disableIndexOnFailure);
+    super(disableIndexOnFailure);
     this.failures = failures;
   }
 
@@ -50,7 +51,7 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
    * @param message detail message
    */
   public MultiIndexWriteFailureException(String message) {
-      super(message, IndexWriteException.parseDisableIndexOnFailure(message));
+      super(IndexWriteException.parseDisableIndexOnFailure(message));
       Pattern p = Pattern.compile(FAILURE_MSG + "\\[(.*)\\]");
       Matcher m = p.matcher(message);
       if (m.find()) {
@@ -66,4 +67,13 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
   public List<HTableInterfaceReference> getFailedTables() {
     return this.failures;
   }
+
+  public void setFailedTables(List<HTableInterfaceReference> failedTables) {
+      this.failures = failedTables;
+  }
+
+  @Override
+    public String getMessage() {
+        return Objects.firstNonNull(super.getMessage(),"") + " " + FAILURE_MSG + failures;
+    }
 }

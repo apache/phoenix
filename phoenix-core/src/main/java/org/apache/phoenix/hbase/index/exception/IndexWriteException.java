@@ -22,6 +22,8 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.phoenix.query.QueryServicesOptions;
 
+import com.google.common.base.Objects;
+
 /**
  * Generic {@link Exception} that an index write has failed
  */
@@ -33,7 +35,7 @@ public class IndexWriteException extends HBaseIOException {
      * server side.
      */
     private static final String DISABLE_INDEX_ON_FAILURE_MSG = "disableIndexOnFailure=";
-    private boolean disableIndexOnFailure;
+    private boolean disableIndexOnFailure = QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
 
   public IndexWriteException() {
     super();
@@ -49,18 +51,14 @@ public class IndexWriteException extends HBaseIOException {
       super(message, cause);
   }
 
-  public IndexWriteException(String message, Throwable cause, boolean disableIndexOnFailure) {
-    super(prependDisableIndexMsg(message, disableIndexOnFailure), cause);
-  }
-
-  public IndexWriteException(String message, boolean disableIndexOnFailure) {
-    super(prependDisableIndexMsg(message, disableIndexOnFailure));
+  public IndexWriteException(Throwable cause, boolean disableIndexOnFailure) {
+    super(cause);
     this.disableIndexOnFailure = disableIndexOnFailure;
   }
 
-  private static String prependDisableIndexMsg(String message, boolean disableIndexOnFailure) {
-    return DISABLE_INDEX_ON_FAILURE_MSG + disableIndexOnFailure + " " + message;
-}
+  public IndexWriteException(boolean disableIndexOnFailure) {
+    this.disableIndexOnFailure = disableIndexOnFailure;
+  }
 
 public IndexWriteException(Throwable cause) {
     super(cause);
@@ -80,5 +78,10 @@ public IndexWriteException(Throwable cause) {
 
     public boolean isDisableIndexOnFailure() {
         return disableIndexOnFailure;
+    }
+
+    @Override
+    public String getMessage() {
+        return Objects.firstNonNull(super.getMessage(), "") + " " + DISABLE_INDEX_ON_FAILURE_MSG + disableIndexOnFailure + ",";
     }
 }
