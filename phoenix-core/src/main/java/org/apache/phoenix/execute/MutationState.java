@@ -51,11 +51,14 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
@@ -984,6 +987,8 @@ public class MutationState implements SQLCloseable {
                 long mutationCommitTime = 0;
                 long numFailedMutations = 0;;
                 long startTime = 0;
+                boolean shouldRetryIndexedMutation = false;
+                IndexWriteException iwe = null;
                 do {
                     TableRef origTableRef = tableInfo.getOrigTableRef();
                     PTable table = origTableRef.getTable();
@@ -1017,8 +1022,25 @@ public class MutationState implements SQLCloseable {
                         startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
                         List<List<Mutation>> mutationBatchList = getMutationBatchList(batchSize, batchSizeBytes, mutationList);
-                        for (List<Mutation> mutationBatch : mutationBatchList) {
-                            hTable.batch(mutationBatch);
+                        for (final List<Mutation> mutationBatch : mutationBatchList) {
+                            if (shouldRetryIndexedMutation) {
+                                // if there was an index write failure, retry the mutation in a loop
+                                final HTableInterface finalHTable = hTable;
+                                PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
+                                    @Override
+                                    public void doMutation() throws IOException {
+                                        try {
+                                            finalHTable.batch(mutationBatch);
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                            throw new IOException(e);
+                                        }
+                                    }}, iwe,
+                                    connection, connection.getQueryServices().getProps());
+                            } else {
+                                hTable.batch(mutationBatch);
+                            }
+
                             batchCount++;
                             if (logger.isDebugEnabled()) logger.debug("Sent batch of " + mutationBatch.size() + " for " + Bytes.toString(htableName));
                         }
@@ -1055,6 +1077,19 @@ public class MutationState implements SQLCloseable {
                                 child = Tracing.child(span,"Failed batch, attempting retry");
 
                                 continue;
+                            } else if (inferredE.getErrorCode() == SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
+                                iwe = PhoenixIndexFailurePolicy.getIndexWriteException(inferredE);
+                                if (iwe != null && !shouldRetryIndexedMutation) {
+                                    // For an index write failure, the data table write succeeded,
+                                    // so when we retry we need to set REPLAY_WRITES
+                                    for (Mutation m : mutationList) {
+                                        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES, BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES);
+                                        KeyValueUtil.setTimestamp(m, serverTimestamp);
+                                    }
+                                    shouldRetry = true;
+                                    shouldRetryIndexedMutation = true;
+                                    continue;
+                                }
                             }
                             e = inferredE;
                         }

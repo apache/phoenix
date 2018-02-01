@@ -493,6 +493,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 new ReadOnlyProps(config.iterator()));
 
         logger.info("Starting Tracing-Metrics Systems");
+        this.blockWriteRebuildIndex  = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE,
+                        QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
@@ -536,22 +538,27 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 return;
             }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
-            long disableIndexTimestamp = table.getIndexDisableTimestamp();
-            long minNonZerodisableIndexTimestamp = disableIndexTimestamp > 0 ? disableIndexTimestamp : Long.MAX_VALUE;
-            for (PTable index : table.getIndexes()) {
-                disableIndexTimestamp = index.getIndexDisableTimestamp();
-                if (disableIndexTimestamp > 0 && (index.getIndexState() == PIndexState.ACTIVE || index.getIndexState() == PIndexState.PENDING_ACTIVE) && disableIndexTimestamp < minNonZerodisableIndexTimestamp) {
-                    minNonZerodisableIndexTimestamp = disableIndexTimestamp;
+            builder.setMutationTime(currentTime);
+            if (blockWriteRebuildIndex) {
+                long disableIndexTimestamp = table.getIndexDisableTimestamp();
+                long minNonZerodisableIndexTimestamp = disableIndexTimestamp > 0 ? disableIndexTimestamp : Long.MAX_VALUE;
+                for (PTable index : table.getIndexes()) {
+                    disableIndexTimestamp = index.getIndexDisableTimestamp();
+                    if (disableIndexTimestamp > 0
+                            && (index.getIndexState() == PIndexState.ACTIVE
+                                    || index.getIndexState() == PIndexState.PENDING_ACTIVE
+                                    || index.getIndexState() == PIndexState.PENDING_DISABLE)
+                            && disableIndexTimestamp < minNonZerodisableIndexTimestamp) {
+                        minNonZerodisableIndexTimestamp = disableIndexTimestamp;
+                    }
                 }
-            }
-            // Freeze time for table at min non-zero value of INDEX_DISABLE_TIMESTAMP
-            // This will keep the table consistent with index as the table has had one more
-            // batch applied to it.
-            if (minNonZerodisableIndexTimestamp == Long.MAX_VALUE) {
-                builder.setMutationTime(currentTime);
-            } else {
-                // Subtract one because we add one due to timestamp granularity in Windows
-                builder.setMutationTime(minNonZerodisableIndexTimestamp - 1);
+                // Freeze time for table at min non-zero value of INDEX_DISABLE_TIMESTAMP
+                // This will keep the table consistent with index as the table has had one more
+                // batch applied to it.
+                if (minNonZerodisableIndexTimestamp != Long.MAX_VALUE) {
+                    // Subtract one because we add one due to timestamp granularity in Windows
+                    builder.setMutationTime(minNonZerodisableIndexTimestamp - 1);
+                }
             }
 
             if (table.getTimeStamp() != tableTimeStamp) {
@@ -912,6 +919,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // the value in those versions) since the client won't have this index state in its enum.
         if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < PhoenixDatabaseMetaData.MIN_PENDING_ACTIVE_INDEX) {
             indexState = PIndexState.ACTIVE;
+        }
+        // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
+        // since the client won't have this index state in its enum.
+        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < PhoenixDatabaseMetaData.MIN_PENDING_DISABLE_INDEX) {
+            // note: for older clients, we have to rely on the rebuilder to transition PENDING_DISABLE -> DISABLE
+            indexState = PIndexState.DISABLE;
         }
         Cell immutableRowsKv = tableKeyValues[IMMUTABLE_ROWS_INDEX];
         boolean isImmutableRows =
@@ -3509,6 +3522,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // Timestamp of INDEX_STATE gets updated with each call
                 long actualTimestamp = currentStateKV.getTimestamp();
                 long curTimeStampVal = 0;
+                long newDisableTimeStamp = 0;
                 if ((currentDisableTimeStamp != null && currentDisableTimeStamp.getValueLength() > 0)) {
                     curTimeStampVal = (Long) PLong.INSTANCE.toObject(currentDisableTimeStamp.getValueArray(),
                             currentDisableTimeStamp.getValueOffset(), currentDisableTimeStamp.getValueLength());
@@ -3525,7 +3539,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             done.run(builder.build());
                             return;
                         }
-                        long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
+                        newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
                                 newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
                         // We use the sign of the INDEX_DISABLE_TIMESTAMP to differentiate the keep-index-active (negative)
                         // from block-writes-to-data-table case. In either case, we want to keep the oldest timestamp to
@@ -3534,7 +3548,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         // We do legitimately move the INDEX_DISABLE_TIMESTAMP to be newer when we're rebuilding the
                         // index in which case the state will be INACTIVE or PENDING_ACTIVE.
                         if (curTimeStampVal != 0 
-                                && (newState == PIndexState.DISABLE || newState == PIndexState.PENDING_ACTIVE) 
+                                && (newState == PIndexState.DISABLE || newState == PIndexState.PENDING_ACTIVE || newState == PIndexState.PENDING_DISABLE)
                                 && Math.abs(curTimeStampVal) < Math.abs(newDisableTimeStamp)) {
                             // do not reset disable timestamp as we want to keep the min
                             newKVs.remove(disableTimeStampKVIndex);
@@ -3562,6 +3576,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // Done building, but was disable before that, so that in disabled state
                     if (newState == PIndexState.ACTIVE) {
                         newState = PIndexState.DISABLE;
+                    }
+                    // Can't transition from DISABLE to PENDING_DISABLE
+                    if (newState == PIndexState.PENDING_DISABLE) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
                     }
                 }
 

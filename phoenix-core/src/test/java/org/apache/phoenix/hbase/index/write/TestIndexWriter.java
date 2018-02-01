@@ -105,6 +105,10 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    HRegion mockRegion = Mockito.mock(HRegion.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
     FakeTableFactory factory = new FakeTableFactory(tables);
@@ -145,7 +149,6 @@ public class TestIndexWriter {
   }
 
   /**
-<<<<<<< HEAD
    * Index updates can potentially be queued up if there aren't enough writer threads. If a running
    * index write fails, then we should early exit the pending indexupdate, when it comes up (if the
    * pool isn't already shutdown).
@@ -231,8 +234,6 @@ public class TestIndexWriter {
   }
 
   /**
-=======
->>>>>>> 3687939... PHOENIX-3815 Only disable indexes on which write failures occurred (Vincent Poon)
    * Test that if we get an interruption to to the thread while doing a batch (e.g. via shutdown),
    * that we correctly end the task
    * @throws Exception on failure
@@ -249,6 +250,10 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    HRegion mockRegion = Mockito.mock(HRegion.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
