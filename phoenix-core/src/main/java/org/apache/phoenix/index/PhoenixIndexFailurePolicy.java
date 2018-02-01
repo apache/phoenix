@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
@@ -53,6 +54,7 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.DelegateIndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -69,6 +71,9 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 /**
@@ -206,6 +211,19 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                     && MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDesc())) {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
+                }
+                // client disables the index, so we pass the index names in the thrown exception
+                if (cause instanceof MultiIndexWriteFailureException) {
+                    List<HTableInterfaceReference> failedLocalIndexes =
+                            Lists.newArrayList(Iterables.transform(indexTableNames.entrySet(),
+                                new Function<Map.Entry<String, Long>, HTableInterfaceReference>() {
+                                    @Override
+                                    public HTableInterfaceReference apply(Entry<String, Long> input) {
+                                        return new HTableInterfaceReference(new ImmutableBytesPtr(
+                                                Bytes.toBytes(input.getKey())));
+                                    }
+                                }));
+                    ((MultiIndexWriteFailureException) cause).setFailedTables(failedLocalIndexes);
                 }
             } else {
                 indexTableNames.put(ref.getTableName(), minTimeStamp);

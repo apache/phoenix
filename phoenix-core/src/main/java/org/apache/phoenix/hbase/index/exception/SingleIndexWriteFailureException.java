@@ -23,6 +23,8 @@ import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.client.Mutation;
 
+import com.google.common.base.Objects;
+
 /**
  * Exception thrown if we cannot successfully write to an index table.
  */
@@ -31,6 +33,7 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
 
   public static final String FAILED_MSG = "Failed to make index update:";
   private String table;
+  private String mutationsMsg;
 
   /**
    * Cannot reach the index, but not sure of the table or the mutations that caused the failure
@@ -49,9 +52,9 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
    */
   public SingleIndexWriteFailureException(String targetTableName, List<Mutation> mutations,
       Exception cause, boolean disableIndexOnFailure) {
-    super(FAILED_MSG + "\n\t table: " + targetTableName + "\n\t edits: " + mutations
-        + "\n\tcause: " + cause == null ? "UNKNOWN" : cause.getMessage(), cause, disableIndexOnFailure);
+    super(cause, disableIndexOnFailure);
     this.table = targetTableName;
+    this.mutationsMsg = mutations.toString();
   }
 
   /**
@@ -60,7 +63,7 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
    * @param message detail message
    */
   public SingleIndexWriteFailureException(String msg) {
-      super(msg, IndexWriteException.parseDisableIndexOnFailure(msg));
+      super(IndexWriteException.parseDisableIndexOnFailure(msg));
       Pattern pattern = Pattern.compile(FAILED_MSG + ".* table: ([\\S]*)\\s.*", Pattern.DOTALL);
       Matcher m = pattern.matcher(msg);
       if (m.find()) {
@@ -75,4 +78,10 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
   public String getTableName() {
     return this.table;
   }
+
+  @Override
+    public String getMessage() {
+      return Objects.firstNonNull(super.getMessage(), "") + " " + FAILED_MSG + "\n\t table: " + this.table + "\n\t edits: " + mutationsMsg
+      + "\n\tcause: " + getCause() == null ? "UNKNOWN" : getCause().getMessage();
+    }
 }
