@@ -244,6 +244,11 @@ public final class QueryServer extends Configured implements Tool, Runnable {
 
         String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
         File keytab = new File(keytabPath);
+        String httpKeytabPath = getConf().get(QueryServices.QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB, null);
+        String httpPrincipal = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB, null);
+        File httpKeytab = null;
+        if (null != httpKeytabPath)
+          httpKeytab = new File(httpKeytabPath);
 
         String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
         String[] additionalAllowedRealms = null;
@@ -252,9 +257,15 @@ public final class QueryServer extends Configured implements Tool, Runnable {
         }
 
         // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
-        builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
-            .withAutomaticLogin(keytab)
-            .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+        if ((null != httpKeytabPath) && (null != httpPrincipal))
+          builder.withSpnego(httpPrincipal, additionalAllowedRealms)
+              .withAutomaticLogin(httpKeytab)
+              .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+        else
+          builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
+              .withAutomaticLogin(keytab)
+              .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+
 
       }
       setRemoteUserExtractorIfNecessary(builder, getConf());

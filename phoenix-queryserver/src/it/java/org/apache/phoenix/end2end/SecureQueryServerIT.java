@@ -76,6 +76,7 @@ public class SecureQueryServerIT {
     private static final List<File> USER_KEYTAB_FILES = new ArrayList<>();
 
     private static final String SPNEGO_PRINCIPAL = "HTTP/localhost";
+    private static final String PQS_PRINCIPAL = "phoenixqs/localhost";
     private static final String SERVICE_PRINCIPAL = "securecluster/localhost";
     private static File KEYTAB;
 
@@ -178,7 +179,7 @@ public class SecureQueryServerIT {
         //     use separate identies for HBase and HDFS results in a GSS initiate error. The quick
         //     solution is to just use a single "service" principal instead of "hbase" and "hdfs"
         //     (or "dn" and "nn") per usual.
-        KDC.createPrincipal(KEYTAB, SPNEGO_PRINCIPAL, SERVICE_PRINCIPAL);
+        KDC.createPrincipal(KEYTAB, SPNEGO_PRINCIPAL, PQS_PRINCIPAL, SERVICE_PRINCIPAL);
         // Start ZK by hand
         UTIL.startMiniZKCluster();
 
@@ -198,13 +199,15 @@ public class SecureQueryServerIT {
             TokenProvider.class.getName());
 
         // Secure Phoenix setup
-        conf.set("phoenix.queryserver.kerberos.principal", SPNEGO_PRINCIPAL);
+        conf.set("phoenix.queryserver.kerberos.http.principal", SPNEGO_PRINCIPAL + "@" + KDC.getRealm());
+        conf.set("phoenix.queryserver.http.keytab.file", KEYTAB.getAbsolutePath());
+        conf.set("phoenix.queryserver.kerberos.principal", PQS_PRINCIPAL + "@" + KDC.getRealm());
         conf.set("phoenix.queryserver.keytab.file", KEYTAB.getAbsolutePath());
         conf.setBoolean(QueryServices.QUERY_SERVER_DISABLE_KERBEROS_LOGIN, true);
         conf.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
         // Required so that PQS can impersonate the end-users to HBase
-        conf.set("hadoop.proxyuser.HTTP.groups", "*");
-        conf.set("hadoop.proxyuser.HTTP.hosts", "*");
+        conf.set("hadoop.proxyuser.phoenixqs.groups", "*");
+        conf.set("hadoop.proxyuser.phoenixqs.hosts", "*");
 
         // Clear the cached singletons so we can inject our own.
         InstanceResolver.clearSingletons();
@@ -239,8 +242,8 @@ public class SecureQueryServerIT {
 
     private static void startQueryServer() throws Exception {
         PQS = new QueryServer(new String[0], UTIL.getConfiguration());
-        // Get the SPNEGO ident for PQS to use
-        final UserGroupInformation ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(SPNEGO_PRINCIPAL, KEYTAB.getAbsolutePath());
+        // Get the PQS ident for PQS to use
+        final UserGroupInformation ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(PQS_PRINCIPAL, KEYTAB.getAbsolutePath());
         PQS_EXECUTOR = Executors.newSingleThreadExecutor();
         // Launch PQS, doing in the Kerberos login instead of letting PQS do it itself (which would
         // break the HBase/HDFS logins also running in the same test case).
