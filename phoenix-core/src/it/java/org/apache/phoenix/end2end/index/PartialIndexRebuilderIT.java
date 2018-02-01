@@ -1098,8 +1098,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                     conn.createStatement().execute("DELETE FROM " + fullTableName);
                     fail();
                 } catch (SQLException e) {
-                    // Expected
-                    assertEquals(SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode(), e.getErrorCode());
+                    // expected
                 }
                 assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, null));
             } finally {
