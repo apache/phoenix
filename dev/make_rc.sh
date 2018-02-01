@@ -77,7 +77,7 @@ phx_jars=$(find . -iwholename "./*/target/phoenix-*.jar")
 cp $phx_jars $DIR_REL_BIN_PATH;
 
 # Copy bin
-cp bin/* $DIR_BIN;
+cp -r bin/* $DIR_BIN;
 cp -R $DIR_PHERF_CONF $DIR_BIN;
 
 # Copy release docs
