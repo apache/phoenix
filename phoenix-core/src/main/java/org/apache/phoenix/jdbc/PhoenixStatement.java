@@ -24,6 +24,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQ
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.nio.file.Paths;
 import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -42,6 +43,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -907,10 +909,15 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     try {
                         FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
                         List<LiteralParseNode> jarPaths = getJarPaths();
-                        for (LiteralParseNode jarPath : jarPaths) {
-                            File f = new File((String) jarPath.getValue());
-                            fs.copyFromLocalFile(new Path(f.getAbsolutePath()), new Path(
-                                    dynamicJarsDir + f.getName()));
+                        for (LiteralParseNode jarPathNode : jarPaths) {
+                          String jarPathName = (String) jarPathNode.getValue();
+                          File f = new File(jarPathName);
+                          Path dynamicJarsDirPathWithJar = new Path(dynamicJarsDir + f.getName());
+                          // Copy the jar (can be local or on HDFS) to the hbase.dynamic.jars.dir directory.
+                          // Note that this does not support HDFS URIs without scheme and authority.
+                          Path jarPath = new Path(jarPathName);
+                          FileUtil.copy(jarPath.getFileSystem(conf), jarPath, fs, dynamicJarsDirPathWithJar,
+                            false, true, conf);
                         }
                     } catch(IOException e) {
                         throw new SQLException(e);

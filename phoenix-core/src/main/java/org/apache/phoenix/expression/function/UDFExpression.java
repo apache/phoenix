@@ -185,6 +185,7 @@ public class UDFExpression extends ScalarFunction {
                 parent = path.toString();
             }
         }
+        // jarPath is not provided, or it is provided and the jar is inside the configured hbase.dynamic.jars.dir
         if (jarPath == null || jarPath.isEmpty() || config.get(DYNAMIC_JARS_DIR_KEY) != null
                 && (parent != null && parent.equals(config.get(DYNAMIC_JARS_DIR_KEY)))) {
             cl = tenantIdSpecificCls.get(tenantId);
@@ -198,18 +199,26 @@ public class UDFExpression extends ScalarFunction {
             }
             return cl;
         } else {
-            cl = pathSpecificCls.get(jarPath);
-            if (cl == null) {
-                Configuration conf = HBaseConfiguration.create(config);
-                conf.set(DYNAMIC_JARS_DIR_KEY, parent);
-                cl = new DynamicClassLoader(conf, UDFExpression.class.getClassLoader());
+            String rawPath = new Path(config.get(DYNAMIC_JARS_DIR_KEY)).toUri().getRawPath();
+            // jarPath is provided as an HDFS URI without scheme and authority, but the jar is inside the configured hbase.dynamic.jars.dir
+            if(rawPath.equals(parent)) {
+                cl = pathSpecificCls.get(jarPath);
+                if (cl == null) {
+                    Configuration conf = HBaseConfiguration.create(config);
+                    conf.set(DYNAMIC_JARS_DIR_KEY, parent);
+                    cl = new DynamicClassLoader(conf, UDFExpression.class.getClassLoader());
+                }
+                // Cache class loader as a weak value, will be GC'ed when no reference left
+                DynamicClassLoader prev = pathSpecificCls.putIfAbsent(jarPath, cl);
+                if (prev != null) {
+                    cl = prev;
+                }
+                return cl;
+            } else {
+                // All other jarPaths where the jar is not inside the configured hbase.dynamic.jars.dir
+                throw new SecurityException("Cannot load jars from " + jarPath + ". Can only load from "
+                  + config.get(DYNAMIC_JARS_DIR_KEY));
             }
-            // Cache class loader as a weak value, will be GC'ed when no reference left
-            DynamicClassLoader prev = pathSpecificCls.putIfAbsent(jarPath, cl);
-            if (prev != null) {
-                cl = prev;
-            }
-            return cl;
         }
     }
     

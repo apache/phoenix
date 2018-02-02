@@ -27,15 +27,12 @@ import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PAR
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -53,6 +50,10 @@ import java.util.jar.Manifest;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
+import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -67,9 +68,11 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
+import org.junit.rules.TestName;
 
 public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     
@@ -190,6 +193,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     private static String GETY_CLASSNAME_PROGRAM = getProgram(GETY_CLASSNAME, GETY_EVALUATE_METHOD, "return PInteger.INSTANCE;");
     private static Properties EMPTY_PROPS = new Properties();
     
+    @Rule
+    public TestName name = new TestName();
 
     @Override
     @After
@@ -320,6 +325,99 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
         assertFalse(rs.next());
+    }
+
+    /**
+     * Test adding jars from an HDFS URI.
+     * @throws Exception
+     */
+    @Test
+    public void testAddJarsFromHDFS() throws Exception {
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 7);
+        Statement stmt = driver.connect(url, EMPTY_PROPS).createStatement();
+        // Note that we have already added all locally created UDF jars to the hbase.dynamic.jars.dir directory
+        ResultSet rs = stmt.executeQuery("list jars");
+        int count = 0;
+        while(rs.next()) {
+            count++;
+        }
+        Path destJarPathOnHDFS = copyJarsFromDynamicJarsDirToDummyHDFSDir("myjar7.jar");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar7.jar'");
+        stmt.execute("add jars '" + destJarPathOnHDFS.toString() + "'");
+        rs = stmt.executeQuery("list jars");
+        int finalCount = 0;
+        while(rs.next()) {
+            finalCount++;
+        }
+        assertEquals(count, finalCount);
+        // Restore original number of jars loaded
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar7.jar'");
+    }
+
+    /**
+     * Test creating functions using any HDFS URI which is not hbase.dynamic.jars.dir
+     * @throws Exception
+     */
+    @Test
+    public void testCreateFunctionRandomURI() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        String tableName = "table" + name.getMethodName();
+
+        conn.createStatement().execute("create table " + tableName + "(tenant_id varchar not null, k integer not null, "
+          + "firstname varchar, lastname varchar constraint pk primary key(tenant_id,k)) MULTI_TENANT=true");
+        String tenantId = "tenId" + name.getMethodName();
+        Connection tenantConn = driver.connect(url + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId, EMPTY_PROPS);
+        Statement stmtTenant = tenantConn.createStatement();
+        stmtTenant.execute("upsert into " + tableName + " values(1,'foo','jock')");
+        tenantConn.commit();
+
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 8);
+        Path destJarPathOnHDFS = copyJarsFromDynamicJarsDirToDummyHDFSDir("myjar8.jar");
+        // Delete the original jar, but don't add the newly created copied jar from the random HDFS directory.
+        stmtTenant.execute("delete jar '" + util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY) + "/" + "myjar8.jar'");
+
+        stmtTenant.execute("create function myfunction(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end." + MY_REVERSE_CLASS_NAME
+          + "' using jar '" + destJarPathOnHDFS.toString() + "'");
+        // Should throw a SecurityException since we do not allow loading from any URI other than hbase.dynamic.jars.dir
+        try {
+            stmtTenant.executeQuery("select myfunction(firstname) from " + tableName);
+            fail("SecurityException should be thrown");
+        } catch (Exception e) {
+            assertTrue(ExceptionUtils.getRootCause(e) instanceof SecurityException);
+        } finally {
+            stmtTenant.execute("drop function myfunction");
+        }
+    }
+
+    /**
+     * Test creating functions using a raw jar path which does not contain the scheme or authority
+     * @throws Exception
+     */
+    @Test
+    public void testCreateFunctionRawJarPath() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        String tableName = "table" + name.getMethodName();
+
+        conn.createStatement().execute("create table " + tableName + "(tenant_id varchar not null, k integer not null, "
+          + "firstname varchar, lastname varchar constraint pk primary key(tenant_id,k)) MULTI_TENANT=true");
+        String tenantId = "tenId" + name.getMethodName();
+        Connection tenantConn = driver.connect(url + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId, EMPTY_PROPS);
+        Statement stmtTenant = tenantConn.createStatement();
+        stmtTenant.execute("upsert into " + tableName + " values(1,'foo','jock')");
+        tenantConn.commit();
+
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 9);
+        // We pass in the jar path without the scheme and authority. We also added the jar, so there should be no exceptions.
+        String rawPath = new Path(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)).toUri().getRawPath();
+        stmtTenant.execute("create function myreverseRawJarPath(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end." +MY_REVERSE_CLASS_NAME +
+          "' using jar '" + rawPath + "/myjar9.jar'" );
+        ResultSet rs = stmtTenant.executeQuery("select myreverseRawJarPath(firstname) from " + tableName);
+        assertTrue(rs.next());
+        assertEquals("oof", rs.getString(1));
+        assertFalse(rs.next());
+        stmtTenant.execute("drop function myreverseRawJarPath");
+        // Restore original number of jars loaded
+        stmtTenant.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar9.jar'");
     }
 
     @Test
@@ -1112,4 +1210,18 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         }
     }
 
+    /**
+    * Move the jars from the hbase.dynamic.jars.dir to some dummy HDFS directory
+    * @param jarName
+    * @return The destination jar file path.
+    * @throws IOException
+    */
+    private Path copyJarsFromDynamicJarsDirToDummyHDFSDir(String jarName) throws IOException {
+        Path srcPath = new Path(util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/" + jarName);
+        FileSystem srcFs = srcPath.getFileSystem(util.getConfiguration());
+        Path destPath = new Path(util.getDataTestDirOnTestFS().toString() + "/" + jarName);
+        FileSystem destFs = destPath.getFileSystem(util.getConfiguration());
+        FileUtil.copy(srcFs, srcPath, destFs, destPath, false, true, util.getConfiguration());
+        return destPath;
+    }
 }
