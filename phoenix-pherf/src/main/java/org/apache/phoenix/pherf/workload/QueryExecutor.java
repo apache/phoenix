@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.result.*;
+import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ public class QueryExecutor implements Workload {
     private final PhoenixUtil util;
     private final WorkloadExecutor workloadExecutor;
     private final boolean writeRuntimeResults;
+    private RulesApplier ruleApplier;
 
     public QueryExecutor(XMLConfigParser parser, PhoenixUtil util,
             WorkloadExecutor workloadExecutor) {
@@ -64,6 +66,7 @@ public class QueryExecutor implements Workload {
         this.util = util;
         this.workloadExecutor = workloadExecutor;
         this.writeRuntimeResults = writeRuntimeResults;
+        this.ruleApplier = new RulesApplier(parser);
     }
 
     @Override
@@ -143,17 +146,6 @@ public class QueryExecutor implements Workload {
                         ScenarioResult scenarioResult = new ScenarioResult(scenario);
                         scenarioResult.setPhoenixProperties(phoenixProperty);
                         dataModelResult.getScenarioResult().add(scenarioResult);
-                        WriteParams writeParams = scenario.getWriteParams();
-
-                        if (writeParams != null) {
-                            int writerThreadCount = writeParams.getWriterThreadCount();
-                            for (int i = 0; i < writerThreadCount; i++) {
-                                logger.debug("Inserting write workload ( " + i + " ) of ( "
-                                        + writerThreadCount + " )");
-                                Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
-                                workloadExecutor.add(writes);
-                            }
-                        }
 
                         for (QuerySet querySet : scenario.getQuerySet()) {
                             QuerySetResult querySetResult = new QuerySetResult(querySet);
@@ -161,14 +153,14 @@ public class QueryExecutor implements Workload {
 
                             util.executeQuerySetDdls(querySet);
                             if (querySet.getExecutionType() == ExecutionType.SERIAL) {
-                                executeQuerySetSerial(dataModelResult, querySet, querySetResult);
+                                executeQuerySetSerial(dataModelResult, querySet, querySetResult, scenario);
                             } else {
-                                executeQuerySetParallel(dataModelResult, querySet, querySetResult);
+                                executeQuerySetParallel(dataModelResult, querySet, querySetResult, scenario);
                             }
                         }
-                        resultManager.write(dataModelResult);
+                        resultManager.write(dataModelResult, ruleApplier);
                     }
-                    resultManager.write(dataModelResults);
+                    resultManager.write(dataModelResults, ruleApplier);
                     resultManager.flush();
                 } catch (Exception e) {
                     logger.warn("", e);
@@ -183,10 +175,11 @@ public class QueryExecutor implements Workload {
      * @param dataModelResult
      * @param querySet
      * @param querySetResult
+     * @param scenario 
      * @throws InterruptedException
      */
     protected void executeQuerySetSerial(DataModelResult dataModelResult, QuerySet querySet,
-            QuerySetResult querySetResult) throws InterruptedException {
+            QuerySetResult querySetResult, Scenario scenario) throws InterruptedException {
         for (Query query : querySet.getQuery()) {
             QueryResult queryResult = new QueryResult(query);
             querySetResult.getQueryResults().add(queryResult);
@@ -200,7 +193,7 @@ public class QueryExecutor implements Workload {
                     Runnable
                             thread =
                             executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
-                                    querySetResult);
+                                    querySetResult, scenario);
                     threads.add(workloadExecutor.getPool().submit(thread));
                 }
 
@@ -224,7 +217,7 @@ public class QueryExecutor implements Workload {
      * @throws InterruptedException
      */
     protected void executeQuerySetParallel(DataModelResult dataModelResult, QuerySet querySet,
-            QuerySetResult querySetResult) throws InterruptedException {
+            QuerySetResult querySetResult, Scenario scenario) throws InterruptedException {
         for (int cr = querySet.getMinConcurrency(); cr <= querySet.getMaxConcurrency(); cr++) {
             List<Future> threads = new ArrayList<>();
             for (int i = 0; i < cr; i++) {
@@ -235,7 +228,7 @@ public class QueryExecutor implements Workload {
                     Runnable
                             thread =
                             executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
-                                    querySetResult);
+                                    querySetResult, scenario);
                     threads.add(workloadExecutor.getPool().submit(thread));
                 }
 
@@ -257,10 +250,11 @@ public class QueryExecutor implements Workload {
      * @param dataModelResult
      * @param queryResult
      * @param querySet
+     * @param scenario 
      * @return
      */
     protected Runnable executeRunner(String name, DataModelResult dataModelResult,
-            QueryResult queryResult, QuerySet querySet) {
+            QueryResult queryResult, QuerySet querySet, Scenario scenario) {
         ThreadTime threadTime = new ThreadTime();
         queryResult.getThreadTimes().add(threadTime);
         threadTime.setThreadName(name);
@@ -271,7 +265,7 @@ public class QueryExecutor implements Workload {
             thread =
                     new MultiThreadedRunner(threadTime.getThreadName(), queryResult,
                             dataModelResult, threadTime, querySet.getNumberOfExecutions(),
-                            querySet.getExecutionDurationInMs(), writeRuntimeResults);
+                            querySet.getExecutionDurationInMs(), writeRuntimeResults, ruleApplier, scenario, workloadExecutor, parser);
         } else {
             thread =
                     new MultithreadedDiffer(threadTime.getThreadName(), queryResult, threadTime,

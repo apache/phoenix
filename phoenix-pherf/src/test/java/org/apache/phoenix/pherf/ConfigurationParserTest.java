@@ -71,8 +71,8 @@ public class ConfigurationParserTest extends ResultBaseTest {
             assertTrue("Could not load the data columns from xml.",
                     (dataMappingColumns != null) && (dataMappingColumns.size() > 0));
             assertTrue("Could not load the data DataValue list from xml.",
-                    (dataMappingColumns.get(6).getDataValues() != null)
-                            && (dataMappingColumns.get(6).getDataValues().size() > 0));
+                    (dataMappingColumns.get(8).getDataValues() != null)
+                            && (dataMappingColumns.get(8).getDataValues().size() > 0));
 
             assertDateValue(dataMappingColumns);
             assertCurrentDateValue(dataMappingColumns);
