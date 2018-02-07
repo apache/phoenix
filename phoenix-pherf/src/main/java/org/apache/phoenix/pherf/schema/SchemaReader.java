@@ -62,7 +62,7 @@ public class SchemaReader {
     public void applySchema() throws Exception {
         Connection connection = null;
         try {
-            connection = pUtil.getConnection();
+            connection = pUtil.getConnection(null);
             for (Path file : resourceList) {
                 logger.info("\nApplying schema to file: " + file);
                 pUtil.executeStatement(resourceToString(file), connection);

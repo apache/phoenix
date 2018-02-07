@@ -28,10 +28,14 @@ import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.ResultManager;
 import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
+import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.WriteParams;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 class MultiThreadedRunner implements Runnable {
@@ -45,6 +49,11 @@ class MultiThreadedRunner implements Runnable {
     private long executionDurationInMs;
     private static long lastResultWritten = System.currentTimeMillis() - 1000;
     private final ResultManager resultManager;
+    private final RulesApplier ruleApplier;
+    private final Scenario scenario;
+    private final WorkloadExecutor workloadExecutor;
+    private final XMLConfigParser parser;
+    
 
     /**
      * MultiThreadedRunner
@@ -55,16 +64,21 @@ class MultiThreadedRunner implements Runnable {
      * @param threadTime
      * @param numberOfExecutions
      * @param executionDurationInMs
+     * @param ruleRunner 
      */
     MultiThreadedRunner(String threadName, Query query, DataModelResult dataModelResult,
-            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs, boolean writeRuntimeResults) {
+            ThreadTime threadTime, long numberOfExecutions, long executionDurationInMs, boolean writeRuntimeResults, RulesApplier ruleApplier, Scenario scenario, WorkloadExecutor workloadExecutor, XMLConfigParser parser) {
         this.query = query;
         this.threadName = threadName;
         this.threadTime = threadTime;
         this.dataModelResult = dataModelResult;
         this.numberOfExecutions = numberOfExecutions;
         this.executionDurationInMs = executionDurationInMs;
+        this.ruleApplier = ruleApplier;
+        this.scenario = scenario;
        	this.resultManager = new ResultManager(dataModelResult.getName(), writeRuntimeResults);
+       	this.workloadExecutor = workloadExecutor;
+       	this.parser = parser;
     }
 
     /**
@@ -81,7 +95,7 @@ class MultiThreadedRunner implements Runnable {
                 synchronized (resultManager) {
                     timedQuery();
                     if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
-                        resultManager.write(dataModelResult);
+                        resultManager.write(dataModelResult, ruleApplier);
                         lastResultWritten = System.currentTimeMillis();
                     }
                 }
@@ -108,7 +122,7 @@ class MultiThreadedRunner implements Runnable {
     private void timedQuery() throws Exception {
         boolean
                 isSelectCountStatement =
-                query.getStatement().toUpperCase().trim().contains("COUNT(*)") ? true : false;
+                query.getStatement().toUpperCase().trim().contains("COUNT(") ? true : false;
 
         Connection conn = null;
         PreparedStatement statement = null;
@@ -119,8 +133,17 @@ class MultiThreadedRunner implements Runnable {
         long resultRowCount = 0;
 
         try {
-            conn = pUtil.getConnection(query.getTenantId());
-            statement = conn.prepareStatement(query.getStatement());
+            conn = pUtil.getConnection(query.getTenantId(), scenario.getPhoenixProperties());
+            conn.setAutoCommit(true);
+            final String statementString = query.getDynamicStatement(ruleApplier, scenario);
+            statement = conn.prepareStatement(statementString);
+            logger.info("Executing: " + statementString);
+            
+            if (scenario.getWriteParams() != null) {
+            	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, scenario, GeneratePhoenixStats.NO);
+            	workloadExecutor.add(writes);
+            }
+            
             boolean isQuery = statement.execute();
             if (isQuery) {
                 rs = statement.getResultSet();
