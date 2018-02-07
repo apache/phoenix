@@ -25,6 +25,8 @@ import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
 import org.apache.phoenix.pherf.result.DataLoadThreadTime;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
+import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.util.GoogleChartGenerator.Node;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +35,7 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
@@ -50,6 +53,7 @@ public class PhoenixUtil {
     private static String queryServerUrl;
     private static final String ASYNC_KEYWORD = "ASYNC";
     private static final int ONE_MIN_IN_MS = 60000;
+    private static String CurrentSCN = null;
 
     private PhoenixUtil() {
         this(false);
@@ -86,10 +90,14 @@ public class PhoenixUtil {
     }
 
     public Connection getConnection(String tenantId) throws Exception {
-        return getConnection(tenantId, testEnabled);
+        return getConnection(tenantId, testEnabled, null);
+    }
+    
+    public Connection getConnection(String tenantId, Map<String, String> phoenixProperty) throws Exception {
+        return getConnection(tenantId, testEnabled, phoenixProperty);
     }
 
-    private Connection getConnection(String tenantId, boolean testEnabled) throws Exception {
+    public Connection getConnection(String tenantId, boolean testEnabled, Map<String, String> phoenixProperty) throws Exception {
         if (useThinDriver) {
             if (null == queryServerUrl) {
                 throw new IllegalArgumentException("QueryServer URL must be set before" +
@@ -112,6 +120,16 @@ public class PhoenixUtil {
                 props.setProperty("TenantId", tenantId);
                 logger.debug("\nSetting tenantId to " + tenantId);
             }
+            
+            if (phoenixProperty != null) {
+            	for (Map.Entry<String, String> phxProperty: phoenixProperty.entrySet()) {
+            		props.setProperty(phxProperty.getKey(), phxProperty.getValue());
+					System.out.println("Setting connection property "
+							+ phxProperty.getKey() + " to "
+							+ phxProperty.getValue());
+            	}
+            }
+            
             String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
             return DriverManager.getConnection(url, props);
         }
@@ -232,7 +250,7 @@ public class PhoenixUtil {
     public ResultSet getColumnsMetaData(String schemaName, String tableName, Connection connection)
             throws SQLException {
         DatabaseMetaData dbmd = connection.getMetaData();
-        ResultSet resultSet = dbmd.getColumns(null, schemaName, tableName, null);
+        ResultSet resultSet = dbmd.getColumns(null, schemaName.toUpperCase(), tableName.toUpperCase(), null);
         return resultSet;
     }
 
@@ -245,7 +263,7 @@ public class PhoenixUtil {
             while (resultSet.next()) {
                 Column column = new Column();
                 column.setName(resultSet.getString("COLUMN_NAME"));
-                column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME")));
+                column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME").replace(" ", "_")));
                 column.setLength(resultSet.getInt("COLUMN_SIZE"));
                 columnList.add(column);
             }
@@ -392,21 +410,35 @@ public class PhoenixUtil {
         executeStatement("UPDATE STATISTICS " + tableName, scenario);
     }
 
+    public String getExplainPlan(Query query) throws SQLException {
+    	return getExplainPlan(query, null, null);
+    }
+    
     /**
      * Get explain plan for a query
      *
      * @param query
+     * @param ruleApplier 
+     * @param scenario 
      * @return
      * @throws SQLException
      */
-    public String getExplainPlan(Query query) throws SQLException {
+    public String getExplainPlan(Query query, Scenario scenario, RulesApplier ruleApplier) throws SQLException {
         Connection conn = null;
         ResultSet rs = null;
         PreparedStatement statement = null;
         StringBuilder buf = new StringBuilder();
         try {
             conn = getConnection(query.getTenantId());
-            statement = conn.prepareStatement("EXPLAIN " + query.getStatement());
+            String explainQuery;
+            if (scenario != null && ruleApplier != null) {
+            	explainQuery = query.getDynamicStatement(ruleApplier, scenario);
+            }
+            else {
+            	explainQuery = query.getStatement();
+            }
+            
+            statement = conn.prepareStatement("EXPLAIN " + explainQuery);
             rs = statement.executeQuery();
             while (rs.next()) {
                 buf.append(rs.getString(1).trim().replace(",", "-"));

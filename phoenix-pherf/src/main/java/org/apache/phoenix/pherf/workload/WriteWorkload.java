@@ -19,10 +19,12 @@
 package org.apache.phoenix.pherf.workload;
 
 import java.math.BigDecimal;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -33,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.Column;
@@ -108,20 +111,26 @@ public class WriteWorkload implements Workload {
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
-
+        int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
+        
         // Overwrite defaults properties with those given in the configuration. This indicates the
         // scenario is a R/W mixed workload.
         if (scenario != null) {
             this.scenario = scenario;
             writeParams = scenario.getWriteParams();
-            threadSleepDuration = writeParams.getThreadSleepDuration();
+            if (writeParams != null) {
+            	threadSleepDuration = writeParams.getThreadSleepDuration();
+            	size = writeParams.getWriterThreadCount();
+            }
+            else {
+            	threadSleepDuration = 0;
+            }
+            	
         } else {
             writeParams = null;
             this.scenario = null;
             threadSleepDuration = 0;
         }
-
-        int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
 
         // Should addBatch/executeBatch be used? Default: false
         this.useBatchApi = Boolean.getBoolean(USE_BATCH_API_PROPERTY);
@@ -381,15 +390,48 @@ public class WriteWorkload implements Workload {
                     statement.setInt(count, Integer.parseInt(dataValue.getValue()));
                 }
                 break;
+            case UNSIGNED_LONG:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.LONGVARCHAR);
+                } else {
+                    statement.setLong(count, Long.parseLong(dataValue.getValue()));
+                }
+                break;
             case DATE:
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.DATE);
                 } else {
                     Date
                             date =
-                            new java.sql.Date(
-                                    simpleDateFormat.parse(dataValue.getValue()).getTime());
+                            new java.sql.Date(simpleDateFormat.parse(dataValue.getValue()).getTime());
                     statement.setDate(count, date);
+                }
+                break;
+            case VARCHAR_ARRAY:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.ARRAY);
+                } else {
+                    Array
+                            arr =
+                            statement.getConnection().createArrayOf("VARCHAR", dataValue.getValue().split(","));
+                    statement.setArray(count, arr);
+                }
+            	break;
+            case VARBINARY:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARBINARY);
+                } else {
+                    statement.setBytes(count, dataValue.getValue().getBytes());
+                }
+                break;
+            case TIMESTAMP:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.TIMESTAMP);
+                } else {
+                    java.sql.Timestamp
+                            ts =
+                            new java.sql.Timestamp(simpleDateFormat.parse(dataValue.getValue()).getTime());
+                    statement.setTimestamp(count, ts);
                 }
                 break;
             default:

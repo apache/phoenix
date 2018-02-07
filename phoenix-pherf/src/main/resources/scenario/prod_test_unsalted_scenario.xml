@@ -349,8 +349,6 @@
 
         </scenario>
         <scenario tableName="PHERF.PHERF_PROD_TEST_UNSALTED" rowCount="10">
-            <!-- Scenario level rule overrides will be unsupported in V1.
-                    You can use the general datamappings in the mean time-->
             <dataOverride>
                 <column>
                     <type>VARCHAR</type>
@@ -370,8 +368,20 @@
                     <name>TENANT_ID</name>
                 </column>
             </dataOverride>
+
+            <!--  Pre and post scenario indexes -->
+            <preScenarioDdls>
+                <ddl>CREATE INDEX IDX_DIVISION ON PHERF.PHERF_PROD_TEST_UNSALTED (DIVISION)</ddl>
+            </preScenarioDdls>
+
+            <postScenarioDdls>
+                <ddl>CREATE INDEX IDX_OLDVAL_STRING ON PHERF.PHERF_PROD_TEST_UNSALTED (OLDVAL_STRING)</ddl>
+                <ddl>CREATE INDEX IDX_CONNECTION_ID ON PHERF.PHERF_PROD_TEST_UNSALTED (CONNECTION_ID)</ddl>
+            </postScenarioDdls>
+
             <!--Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first -->
             <querySet concurrency="1" executionType="PARALLEL" executionDurationInMs="60000" numberOfExecutions="100">
+                <query statement="select count(*) from PHERF.PHERF_PROD_TEST_UNSALTED WHERE TENANT_ID=[TENANT_ID] AND TENANT_ID=[TENANT_ID]"/>
                 <!--  Aggregate queries on a per tenant basis -->
                 <query tenantId="00Dxx0000001gER"
                        ddl="CREATE VIEW IF NOT EXISTS PHERF.PHERF_TEST_VIEW_UNSALTED AS SELECT * FROM PHERF.PHERF_PROD_TEST_UNSALTED"
