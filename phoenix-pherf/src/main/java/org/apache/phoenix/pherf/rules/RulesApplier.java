@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
     private static final Logger logger = LoggerFactory.getLogger(RulesApplier.class);
-    private static final AtomicLong COUNTER = new AtomicLong(100);
+    private static final AtomicLong COUNTER = new AtomicLong(0);
 
     // Used to bail out of random distribution if it takes too long
     // This should never happen when distributions add up to 100
@@ -51,6 +51,9 @@ public class RulesApplier {
 
     private final XMLConfigParser parser;
     private final List<Map> modelList;
+    private final Map<String, Column> columnMap;
+    private String cachedScenarioOverrideName;
+    private Map<DataTypeMapping, List> scenarioOverrideMap;
 
 
     public RulesApplier(XMLConfigParser parser) {
@@ -60,14 +63,38 @@ public class RulesApplier {
     public RulesApplier(XMLConfigParser parser, long seed) {
         this.parser = parser;
         this.modelList = new ArrayList<Map>();
+        this.columnMap = new HashMap<String, Column>();
         this.rndNull = new Random(seed);
         this.rndVal = new Random(seed);
         this.randomDataGenerator = new RandomDataGenerator();
+        this.cachedScenarioOverrideName = null;
         populateModelList();
     }
 
     public List<Map> getModelList() {
         return Collections.unmodifiableList(this.modelList);
+    }
+    
+    private Map<DataTypeMapping, List> getCachedScenarioOverrides(Scenario scenario) {
+    	if (this.cachedScenarioOverrideName == null || this.cachedScenarioOverrideName != scenario.getName()) {
+    		this.cachedScenarioOverrideName = scenario.getName();
+    		this.scenarioOverrideMap = new HashMap<DataTypeMapping, List>();
+
+    	       if (scenario.getDataOverride() != null) {
+				for (Column column : scenario.getDataOverride().getColumn()) {
+					List<Column> cols;
+					DataTypeMapping type = column.getType();
+					if (this.scenarioOverrideMap.containsKey(type)) {
+						this.scenarioOverrideMap.get(type).add(column);
+					} else {
+						cols = new LinkedList<Column>();
+						cols.add(column);
+						this.scenarioOverrideMap.put(type, cols);
+					}
+				}
+			}
+    	}
+		return scenarioOverrideMap;
     }
 
 
@@ -84,11 +111,26 @@ public class RulesApplier {
      */
     public DataValue getDataForRule(Scenario scenario, Column phxMetaColumn) throws Exception {
         // TODO Make a Set of Rules that have already been applied so that so we don't generate for every value
-
+    	
         List<Scenario> scenarios = parser.getScenarios();
         DataValue value = null;
         if (scenarios.contains(scenario)) {
             logger.debug("We found a correct Scenario");
+            
+            Map<DataTypeMapping, List> overrideRuleMap = this.getCachedScenarioOverrides(scenario);
+            
+            if (overrideRuleMap != null) {
+	            List<Column> overrideRuleList = this.getCachedScenarioOverrides(scenario).get(phxMetaColumn.getType());
+	            
+				if (overrideRuleList != null && overrideRuleList.contains(phxMetaColumn)) {
+					logger.debug("We found a correct override column rule");
+					Column columnRule = getColumnForRuleOverride(overrideRuleList, phxMetaColumn);
+					if (columnRule != null) {
+						return getDataValue(columnRule);
+					}
+				}
+            }
+            
             // Assume the first rule map
             Map<DataTypeMapping, List> ruleMap = modelList.get(0);
             List<Column> ruleList = ruleMap.get(phxMetaColumn.getType());
@@ -107,6 +149,7 @@ public class RulesApplier {
             }
 
         }
+        
         return value;
     }
 
@@ -140,6 +183,8 @@ public class RulesApplier {
 
         switch (column.getType()) {
             case VARCHAR:
+            case VARBINARY:
+            case CHAR:
                 // Use the specified data values from configs if they exist
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
@@ -152,18 +197,17 @@ public class RulesApplier {
                     }
                 }
                 break;
-            case CHAR:
-                if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
-                    data = pickDataValueFromList(dataValues);
-                } else {
-                    Preconditions.checkArgument(length > 0, "length needs to be > 0");
-                    if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
-                        data = getSequentialDataValue(column);
-                    } else {
-                        data = getRandomDataValue(column);
-                    }
-                }
-                break;
+            case VARCHAR_ARRAY:
+            	//only list datavalues are supported
+            	String arr = "";
+            	for (DataValue dv : dataValues) {
+            		arr += "," + dv.getValue();
+            	}
+            	if (arr.startsWith(",")) {
+            		arr = arr.replaceFirst(",", "");
+            	}
+            	data = new DataValue(column.getType(), arr);
+            	break;
             case DECIMAL:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
@@ -171,8 +215,8 @@ public class RulesApplier {
                     int precision = column.getPrecision();
                     double minDbl = column.getMinValue();
                     Preconditions.checkArgument((precision > 0) && (precision <= 18), "Precision must be between 0 and 18");
-                    Preconditions.checkArgument(minDbl >= 0, "minvalue must be set in configuration");
-                    Preconditions.checkArgument(column.getMaxValue() > 0, "maxValue must be set in configuration");
+                    Preconditions.checkArgument(minDbl >= 0, "minvalue must be set in configuration for decimal");
+                    Preconditions.checkArgument(column.getMaxValue() > 0, "maxValue must be set in configuration decimal");
                     StringBuilder maxValueStr = new StringBuilder();
 
                     for (int i = 0; i < precision; i++) {
@@ -188,22 +232,34 @@ public class RulesApplier {
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
-                    int minInt = column.getMinValue();
-                    int maxInt = column.getMaxValue();
-                    Preconditions.checkArgument((minInt > 0) && (maxInt > 0), "min and max values need to be set in configuration");
+                    int minInt = (int) column.getMinValue();
+                    int maxInt = (int) column.getMaxValue();
+                    Preconditions.checkArgument((minInt > 0) && (maxInt > 0), "min and max values need to be set in configuration for integers " + column.getName());
                     int intVal = RandomUtils.nextInt(minInt, maxInt);
                     data = new DataValue(column.getType(), String.valueOf(intVal));
                 }
                 break;
+            case UNSIGNED_LONG:
+                if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
+                    data = pickDataValueFromList(dataValues);
+                } else {
+                    long minLong = column.getMinValue();
+                    long maxLong = column.getMaxValue();
+                    Preconditions.checkArgument((minLong > 0) && (maxLong > 0), "min and max values need to be set in configuration for unsigned_longs " + column.getName());
+                    long longVal = RandomUtils.nextLong(minLong, maxLong);
+                    data = new DataValue(column.getType(), String.valueOf(longVal));
+                }
+                break;
             case DATE:
+            case TIMESTAMP:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                     // Check if date has right format or not
                     data.setValue(checkDatePattern(data.getValue()));
                 } else if (column.getUseCurrentDate() != true){
-                    int minYear = column.getMinValue();
-                    int maxYear = column.getMaxValue();
-                    Preconditions.checkArgument((minYear > 0) && (maxYear > 0), "min and max values need to be set in configuration");
+                    int minYear = (int) column.getMinValue();
+                    int maxYear = (int) column.getMaxValue();
+                    Preconditions.checkArgument((minYear > 0) && (maxYear > 0), "min and max values need to be set in configuration for date/timestamps " + column.getName());
 
                     String dt = generateRandomDate(minYear, maxYear);
                     data = new DataValue(column.getType(), dt);
@@ -353,13 +409,15 @@ public class RulesApplier {
         if (!modelList.isEmpty()) {
             return;
         }
-
+        
         // Support for multiple models, but rules are only relevant each model
         for (DataModel model : parser.getDataModels()) {
 
             // Step 1
             final Map<DataTypeMapping, List> ruleMap = new HashMap<DataTypeMapping, List>();
             for (Column column : model.getDataMappingColumns()) {
+            	columnMap.put(column.getName(), column);
+            	
                 List<Column> cols;
                 DataTypeMapping type = column.getType();
                 if (ruleMap.containsKey(type)) {
@@ -382,7 +440,33 @@ public class RulesApplier {
         List<Column> ruleList = ruleMap.get(phxMetaColumn.getType());
         return getColumnForRule(ruleList, phxMetaColumn);
     }
+    
+    public Column getRule(String columnName) {
+    	return getRule(columnName, null);
+    }
+    
+    public Column getRule(String columnName, Scenario scenario) {
+    	if (null != scenario && null != scenario.getDataOverride()) {
+    		for (Column column: scenario.getDataOverride().getColumn()) {
+    			if (column.getName().equals(columnName)) {
+    				return column;
+    			}
+    		}
+    	}
 
+    	return columnMap.get(columnName);
+    }
+
+    private Column getColumnForRuleOverride(List<Column> ruleList, Column phxMetaColumn) {
+        for (Column columnRule : ruleList) {
+            if (columnRule.getName().equals(phxMetaColumn.getName())) {
+                return new Column(columnRule);
+            }
+        }
+
+       	return null;
+    }
+    
     private Column getColumnForRule(List<Column> ruleList, Column phxMetaColumn) {
 
         // Column pointer to head of list
@@ -400,7 +484,7 @@ public class RulesApplier {
             ruleAppliedColumn.mutate(columnRule);
         }
 
-        return ruleAppliedColumn;
+       	return ruleAppliedColumn;
     }
 
     /**
@@ -414,10 +498,12 @@ public class RulesApplier {
         DataValue data = null;
         long inc = COUNTER.getAndIncrement();
         String strInc = String.valueOf(inc);
-        String varchar = RandomStringUtils.randomAlphanumeric(column.getLength() - strInc.length());
-        varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc + varchar :
-                strInc + varchar;
-
+		int paddedLength = column.getLengthExcludingPrefix();
+		String strInc1 = StringUtils.leftPad(strInc, paddedLength, "0");
+		String strInc2 = StringUtils.right(strInc1, column.getLengthExcludingPrefix());
+        String varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc2:
+                strInc2;
+        
         // Truncate string back down if it exceeds length
         varchar = StringUtils.left(varchar,column.getLength());
         data = new DataValue(column.getType(), varchar);

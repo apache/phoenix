@@ -18,6 +18,9 @@
 
 package org.apache.phoenix.pherf;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.junit.Test;

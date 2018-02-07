@@ -19,7 +19,9 @@
 package org.apache.phoenix.pherf.result;
 
 import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.util.DateUtil;
 
@@ -99,7 +101,7 @@ public class QueryResult extends Query {
         return totalRunTime / getThreadTimes().size();
     }
 
-    public List<ResultValue> getCsvRepresentation(ResultUtil util) {
+    public List<ResultValue> getCsvRepresentation(ResultUtil util, Scenario scenario, RulesApplier ruleApplier) {
         List<ResultValue> rowValues = new ArrayList<>();
         rowValues.add(new ResultValue(util.convertNull(getStartTimeText())));
         rowValues.add(new ResultValue(util.convertNull(this.getQueryGroup())));
@@ -109,14 +111,14 @@ public class QueryResult extends Query {
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getAvgRunTimeInMs()))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getAvgMinRunTimeInMs()))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getRunCount()))));
-        rowValues.add(new ResultValue(util.convertNull(String.valueOf(getExplainPlan()))));
+        rowValues.add(new ResultValue(util.convertNull(String.valueOf(getExplainPlan(scenario, ruleApplier)))));
         rowValues.add(new ResultValue(util.convertNull(String.valueOf(getResultRowCount()))));
         return rowValues;
     }
     
-    private String getExplainPlan() {
+    private String getExplainPlan(Scenario scenario, RulesApplier ruleApplier) {
     	try {
-			return pUtil.getExplainPlan(this);
+			return pUtil.getExplainPlan(this, scenario, ruleApplier);
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
