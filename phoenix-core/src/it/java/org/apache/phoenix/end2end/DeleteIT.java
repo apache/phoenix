@@ -710,6 +710,41 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     public void testClientSideDeleteAutoCommitOn() throws Exception {
         testDeleteCount(true, 1000);
     }
+
+    @Test
+    public void testPointDeleteWithMultipleImmutableIndexes() throws Exception {
+        testPointDeleteWithMultipleImmutableIndexes(false);
+    }
+
+    @Test
+    public void testPointDeleteWithMultipleImmutableIndexesAfterAlter() throws Exception {
+        testPointDeleteWithMultipleImmutableIndexes(true);
+    }
+
+    private void testPointDeleteWithMultipleImmutableIndexes(boolean alterTable) throws Exception {
+        String tableName = generateUniqueName();
+        String commands = "CREATE TABLE IF NOT EXISTS " + tableName
+                + " (ID INTEGER PRIMARY KEY,double_id DOUBLE,varchar_id VARCHAR (30)) "
+                + (alterTable ? ";ALTER TABLE " + tableName + " set " : "") + "IMMUTABLE_ROWS=true;"
+                + "CREATE INDEX IF NOT EXISTS index_column_varchar_id ON " + tableName + "(varchar_id);"
+                + "CREATE INDEX IF NOT EXISTS index_column_double_id ON " + tableName + "(double_id);" + "UPSERT INTO "
+                + tableName + " VALUES (9000000,0.5,'Sample text extra');" ;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            Statement stm = conn.createStatement();
+            for (String sql : commands.split(";")) {
+                stm.execute(sql);
+            }
+            ResultSet rs = stm.executeQuery("select id,varchar_id,double_id from " + tableName + " WHERE ID=9000000");
+            assertTrue(rs.next());
+            assertEquals(9000000, rs.getInt(1));
+            assertEquals("Sample text extra", rs.getString(2));
+            assertEquals(0.5, rs.getDouble(3),0.01);
+            stm.execute("DELETE FROM " + tableName + " WHERE ID=9000000");
+            assertDeleted(conn, tableName, "index_column_varchar_id", "index_column_double_id", null);
+            stm.close();
+        }
+    }
     
     private void testDeleteCount(boolean autoCommit, Integer limit) throws Exception {
         String tableName = generateUniqueName();
@@ -735,6 +770,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         }
 
     }
+    
 
     @Test
     public void testClientSideDeleteShouldNotFailWhenSameColumnPresentInMultipleIndexes()
