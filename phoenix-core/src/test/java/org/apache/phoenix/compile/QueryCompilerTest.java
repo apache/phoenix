@@ -4161,4 +4161,230 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
         }
     }
+    
+    @Test
+    public void testSingleColLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,C)");
+            String query = "SELECT * FROM T WHERE A = 'B' and C='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("A", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scan.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testMultiColLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A = 'C' and B = 'X' and D='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("C", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals("E", Bytes.toString(scan.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testSkipScanLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A IN ('A','G') and B = 'A' and D = 'D'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(2, outerScans.size());
+            List<Scan> innerScans1 = outerScans.get(0);
+            assertEquals(1, innerScans1.size());
+            Scan scan1 = innerScans1.get(0);
+            assertEquals("A", Bytes.toString(scan1.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scan1.getStopRow()).trim());
+            List<Scan> innerScans2 = outerScans.get(1);
+            assertEquals(1, innerScans2.size());
+            Scan scan2 = innerScans2.get(0);
+            assertEquals("G", Bytes.toString(scan2.getStartRow()).trim());
+            assertEquals("I", Bytes.toString(scan2.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testRVCLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A='I' and (B,D) IN (('A','D'),('B','I'))";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("I", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals(0, scan.getStopRow().length);
+        }
+    }
+
+    @Test
+    public void testRVCLocalIndexPruning2() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B VARCHAR,\n" + 
+                    "    C VARCHAR,\n" + 
+                    "    D VARCHAR,\n" + 
+                    "    E VARCHAR,\n" + 
+                    "    F VARCHAR,\n" + 
+                    "    G VARCHAR,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D,\n" + 
+                    "        E,\n" + 
+                    "        F,\n" + 
+                    "        G\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,C,F,G)");
+            String query = "SELECT * FROM T WHERE (A,B,C,D) IN (('I','D','F','X'),('I','I','G','Y')) and F='X' and G='Y'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("I", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals(0, scan.getStopRow().length);
+        }
+    }
+
+    @Test
+    public void testMinMaxRangeLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A = 'C' and (A,B,D) > ('C','B','X') and D='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("C", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals("E", Bytes.toString(scan.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testNoLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(C)");
+            String query = "SELECT * FROM T WHERE C='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(6, outerScans.size());
+        }
+    }
 }
