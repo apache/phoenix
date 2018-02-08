@@ -93,7 +93,7 @@ public class PhoenixTxnIndexMutationGenerator {
         IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
 
         boolean isRollback = txRollbackAttribute!=null;
-        boolean isImmutable = maintainer.isImmutableRows();
+        boolean isImmutable = index.isImmutableRows();
         ResultScanner currentScanner = null;
         HTableInterface txTable = null;
         // Collect up all mutations in batch
