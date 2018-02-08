@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -103,6 +104,10 @@ public class TupleProjectionCompiler {
                     for (PColumn column : parentTableRef.getTable().getColumnFamily(familyName).getColumns()) {
                         NODE_FACTORY.column(null, '"' + IndexUtil.getIndexColumnName(column) + '"', null).accept(visitor);
                     }
+                }else{
+                    for (PColumn column : table.getColumnFamily(familyName).getColumns()) {
+                        NODE_FACTORY.column(TableName.create(null, familyName), '"' + column.getName().getString() + '"', null).accept(visitor);
+                    }
                 }
                 families.add(familyName);
             } else {
@@ -125,16 +130,22 @@ public class TupleProjectionCompiler {
                     position++, sourceColumn.isNullable(), sourceColumnRef, null);
             projectedColumns.add(column);
         }
+
+        List<ColumnRef> nonPkColumnRefList = new ArrayList<ColumnRef>(visitor.nonPkColumnRefSet);
         for (PColumn sourceColumn : table.getColumns()) {
             if (SchemaUtil.isPKColumn(sourceColumn))
                 continue;
             ColumnRef sourceColumnRef = new ColumnRef(tableRef, sourceColumn.getPosition());
             if (!isWildcard 
-                    && !visitor.columnRefSet.contains(sourceColumnRef)
+                    && !visitor.nonPkColumnRefSet.contains(sourceColumnRef)
                     && !families.contains(sourceColumn.getFamilyName().getString()))
                 continue;
-            PColumn column = new ProjectedColumn(sourceColumn.getName(), sourceColumn.getFamilyName(), 
-                    position++, sourceColumn.isNullable(), sourceColumnRef, sourceColumn.getColumnQualifierBytes());
+
+            PColumn column = new ProjectedColumn(sourceColumn.getName(), sourceColumn.getFamilyName(),
+                    visitor.nonPkColumnRefSet.contains(sourceColumnRef)
+                            ? position + nonPkColumnRefList.indexOf(sourceColumnRef) : position++,
+                    sourceColumn.isNullable(), sourceColumnRef, sourceColumn.getColumnQualifierBytes());
+
             projectedColumns.add(column);
             // Wildcard or FamilyWildcard will be handled by ProjectionCompiler.
             if (!isWildcard && !families.contains(sourceColumn.getFamilyName())) {
@@ -142,6 +153,7 @@ public class TupleProjectionCompiler {
             }
         }
         // add LocalIndexDataColumnRef
+        position = projectedColumns.size();
         for (LocalIndexDataColumnRef sourceColumnRef : visitor.localIndexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 
@@ -192,19 +204,23 @@ public class TupleProjectionCompiler {
     // For extracting column references from single select statement
     private static class ColumnRefVisitor extends StatelessTraverseAllParseNodeVisitor {
         private final StatementContext context;
-        private final Set<ColumnRef> columnRefSet;
-        private final Set<LocalIndexDataColumnRef> localIndexColumnRefSet;
+        private final LinkedHashSet<ColumnRef> nonPkColumnRefSet;
+        private final LinkedHashSet<LocalIndexDataColumnRef> localIndexColumnRefSet;
         
         private ColumnRefVisitor(StatementContext context) {
             this.context = context;
-            this.columnRefSet = new HashSet<ColumnRef>();
-            this.localIndexColumnRefSet = new HashSet<LocalIndexDataColumnRef>();
+            this.nonPkColumnRefSet = new LinkedHashSet<ColumnRef>();
+            this.localIndexColumnRefSet = new LinkedHashSet<LocalIndexDataColumnRef>();
         }
 
         @Override
         public Void visit(ColumnParseNode node) throws SQLException {
             try {
-                columnRefSet.add(context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName()));
+                ColumnRef resolveColumn = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(),
+                        node.getName());
+                if (!SchemaUtil.isPKColumn(resolveColumn.getColumn())) {
+                    nonPkColumnRefSet.add(resolveColumn);
+                }
             } catch (ColumnNotFoundException e) {
                 if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
                     try {
