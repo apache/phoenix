@@ -88,17 +88,17 @@ public class AggregatePlan extends BaseQueryPlan {
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
-            ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having) throws SQLException {
+            ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having, QueryPlan dataPlan) throws SQLException {
         this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
-                null);
+                null, dataPlan);
     }
 
     private AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
-            Expression dynamicFilter) throws SQLException {
+            Expression dynamicFilter, QueryPlan dataPlan) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
-                orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
+                orderBy, groupBy, parallelIteratorFactory, dynamicFilter, dataPlan);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
         boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
@@ -223,8 +223,8 @@ public class AggregatePlan extends BaseQueryPlan {
             }
         }
         BaseResultIterators iterators = isSerial
-                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false, caches);
+                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches, dataPlan)
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false, caches, dataPlan);
         estimatedRows = iterators.getEstimatedRowCount();
         estimatedSize = iterators.getEstimatedByteCount();
         estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();

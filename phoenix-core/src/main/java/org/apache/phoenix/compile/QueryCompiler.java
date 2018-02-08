@@ -104,16 +104,13 @@ public class QueryCompiler {
     private final boolean projectTuples;
     private final boolean useSortMergeJoin;
     private final boolean noChildParentJoinOptimization;
+    private final QueryPlan dataPlan;
     
-    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
-        this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement), true);
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, boolean projectTuples, QueryPlan dataPlan) throws SQLException {
+        this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement), projectTuples, dataPlan);
     }
 
-    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, boolean projectTuples) throws SQLException {
-        this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement), projectTuples);
-    }
-    
-    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples) throws SQLException {
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, QueryPlan dataPlan) throws SQLException {
         this.statement = statement;
         this.select = select;
         this.resolver = resolver;
@@ -133,10 +130,11 @@ public class QueryCompiler {
         scan.setCaching(statement.getFetchSize());
 
         this.originalScan = ScanUtil.newScan(scan);
+        this.dataPlan = dataPlan;
     }
 
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager) throws SQLException {
-        this(statement, select, resolver, targetColumns, parallelIteratorFactory, sequenceManager, true);
+        this(statement, select, resolver, targetColumns, parallelIteratorFactory, sequenceManager, true, null);
     }
 
     /**
@@ -495,7 +493,7 @@ public class QueryCompiler {
         }
         int maxRows = this.statement.getMaxRows();
         this.statement.setMaxRows(pushDownMaxRows ? maxRows : 0); // overwrite maxRows to avoid its impact on inner queries.
-        QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver, false).compile();
+        QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver, false, dataPlan).compile();
         plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
         this.statement.setMaxRows(maxRows); // restore maxRows.
         return plan;
@@ -581,14 +579,14 @@ public class QueryCompiler {
         QueryPlan plan = innerPlan;
         if (plan == null) {
             ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
-           plan = select.getFrom() == null
-                   ? new LiteralResultIterationPlan(context, select, tableRef, projector, limit, offset, orderBy,
-                           parallelIteratorFactory)
-                   : (select.isAggregate() || select.isDistinct()
-                           ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
-                                   parallelIteratorFactory, groupBy, having)
-                           : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
-                                   parallelIteratorFactory, allowPageFilter));
+            plan = select.getFrom() == null
+                    ? new LiteralResultIterationPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                            parallelIteratorFactory)
+                    : (select.isAggregate() || select.isDistinct()
+                            ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
+                                    parallelIteratorFactory, groupBy, having, dataPlan)
+                            : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                                    parallelIteratorFactory, allowPageFilter, dataPlan));
         }
         if (!subqueries.isEmpty()) {
             int count = subqueries.size();
