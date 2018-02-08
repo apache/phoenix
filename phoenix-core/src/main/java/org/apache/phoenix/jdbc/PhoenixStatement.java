@@ -473,7 +473,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 select = StatementNormalizer.normalize(transformedSelect, resolver);
             }
 
-            QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true).compile();
+            QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true, null).compile();
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
         }

@@ -487,7 +487,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                 return null;
             }
             
-        }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()), context.getScan(), false, null);
+        }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()), context.getScan(), false, null, null);
         List<KeyRange> keyRanges = parallelIterators.getSplits();
         return keyRanges;
     }
