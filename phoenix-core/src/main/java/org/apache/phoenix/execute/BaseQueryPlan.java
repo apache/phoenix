@@ -63,8 +63,6 @@ import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -114,6 +112,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
      * immediately before creating the ResultIterator.
      */
     protected final Expression dynamicFilter;
+    protected final QueryPlan dataPlan;
     protected Long estimatedRows;
     protected Long estimatedSize;
     protected Long estimateInfoTimestamp;
@@ -124,7 +123,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
-            Expression dynamicFilter) {
+            Expression dynamicFilter, QueryPlan dataPlan) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
@@ -137,6 +136,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
         this.dynamicFilter = dynamicFilter;
+        this.dataPlan = dataPlan;
     }
 
 	@Override
