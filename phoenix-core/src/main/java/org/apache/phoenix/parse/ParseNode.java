@@ -56,6 +56,30 @@ public abstract class ParseNode {
         toSQL(null, buf);
         return buf.toString();
     }
-    
+
+    /**
+     * Returns whether this ParseNode is a SubqueryParseNode
+     * or contains any SubqueryParseNode descendant.
+     */
+    public boolean hasSubquery() {
+        SubqueryFinder finder = new SubqueryFinder();
+        try {
+            this.accept(finder);
+        } catch (SQLException e) {
+            // Not possible.
+        }
+        return finder.hasSubquery;
+    }
+
     public abstract void toSQL(ColumnResolver resolver, StringBuilder buf);
+
+    private static class SubqueryFinder extends StatelessTraverseAllParseNodeVisitor {
+        private boolean hasSubquery = false;
+
+        @Override
+        public Void visit(SubqueryParseNode node) throws SQLException {
+            hasSubquery = true;
+            return null;
+        }
+    }
 }
