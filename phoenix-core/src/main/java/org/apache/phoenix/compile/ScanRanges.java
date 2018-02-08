@@ -147,8 +147,10 @@ public class ScanRanges {
             scanRange = KeyRange.getKeyRange(minKey, maxKey);
         }
         if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
-            minMaxRange = ScanUtil.convertToInclusiveExclusiveRange(minMaxRange, schema, new ImmutableBytesWritable());
-            scanRange = scanRange.intersect(minMaxRange);
+            // Intersect using modified min/max range, but keep original range to ensure it
+            // can still be decomposed into it's parts
+            KeyRange inclusiveExclusiveMinMaxRange = ScanUtil.convertToInclusiveExclusiveRange(minMaxRange, schema, new ImmutableBytesWritable());
+            scanRange = scanRange.intersect(inclusiveExclusiveMinMaxRange);
         }
         
         if (scanRange == KeyRange.EMPTY_RANGE) {
@@ -573,7 +575,7 @@ public class ScanRanges {
     }
 
     public int getBoundPkColumnCount() {
-        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : Math.max(getBoundPkSpan(ranges, slotSpan), getBoundMinMaxSlotCount());
+        return Math.max(getBoundPkSpan(ranges, slotSpan), getBoundMinMaxSlotCount());
     }
 
     private int getBoundMinMaxSlotCount() {
@@ -624,6 +626,10 @@ public class ScanRanges {
 
     public int[] getSlotSpans() {
         return slotSpan;
+    }
+    
+    public KeyRange getScanRange() {
+        return scanRange;
     }
 
     public boolean hasEqualityConstraint(int pkPosition) {

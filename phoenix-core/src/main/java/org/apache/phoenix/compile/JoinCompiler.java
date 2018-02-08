@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -80,8 +80,6 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
-import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
@@ -1175,7 +1173,7 @@ public class JoinCompiler {
         }
         JoinTable join = compile(statement, select, resolver);
         if (groupByTableRef != null || orderByTableRef != null) {
-            QueryCompiler compiler = new QueryCompiler(statement, select, resolver, false);
+            QueryCompiler compiler = new QueryCompiler(statement, select, resolver, false, null);
             List<Object> binds = statement.getParameters();
             StatementContext ctx = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
             QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false, false, null);
@@ -1197,6 +1195,10 @@ public class JoinCompiler {
             List<ParseNode> groupBy = tableRef.equals(groupByTableRef) ? select.getGroupBy() : null;
             List<OrderByNode> orderBy = tableRef.equals(orderByTableRef) ? select.getOrderBy() : null;
             SelectStatement stmt = getSubqueryForOptimizedPlan(select.getHint(), table.getDynamicColumns(), table.getTableSamplingRate(), tableRef, join.getColumnRefs(), table.getPreFiltersCombined(), groupBy, orderBy, table.isWildCardSelect(), select.hasSequence(), select.getUdfParseNodes());
+            // TODO: As port of PHOENIX-4585, we need to make sure this plan has a pointer to the data plan
+            // when an index is used instead of the data table, and that this method returns that
+            // state for downstream processing.
+            // TODO: It seems inefficient to be recompiling the statement again and again inside of this optimize call
             QueryPlan plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
             if (!plan.getTableRef().equals(tableRef)) {
                 replacement.put(tableRef, plan.getTableRef());

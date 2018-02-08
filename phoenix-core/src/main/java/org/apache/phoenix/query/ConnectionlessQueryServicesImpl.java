@@ -82,6 +82,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -240,7 +241,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
             boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException {
-        if (splits != null) {
+        if (tableType == PTableType.INDEX && IndexUtil.isLocalIndexFamily(Bytes.toString(families.iterator().next().getFirst()))) {
+            Object dataTableName = tableProps.get(PhoenixDatabaseMetaData.DATA_TABLE_NAME);
+            List<HRegionLocation> regionLocations = tableSplits.get(dataTableName);
+            byte[] tableName = getTableName(tableMetaData, physicalName);
+            tableSplits.put(Bytes.toString(tableName), regionLocations);
+        } else if (splits != null) {
             byte[] tableName = getTableName(tableMetaData, physicalName);
             tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
         }

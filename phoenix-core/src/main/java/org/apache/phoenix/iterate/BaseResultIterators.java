@@ -37,6 +37,7 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
@@ -93,6 +94,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
@@ -101,9 +103,11 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
@@ -157,6 +161,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Scan scan;
     private final boolean useStatsForParallelization;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
+    private final QueryPlan dataPlan;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -473,13 +478,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
     }
     
-    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, QueryPlan dataPlan) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
                 plan.getStatement().getHint(), QueryUtil.getOffsetLimit(plan.getLimit(), plan.getOffset()), offset);
         this.plan = plan;
         this.scan = scan;
         this.caches = caches;
         this.scanGrouper = scanGrouper;
+        this.dataPlan = dataPlan;
         StatementContext context = plan.getContext();
         // Clone MutationState as the one on the connection will change if auto commit is on
         // yet we need the original one with the original transaction from TableResultIterator.
@@ -681,6 +687,173 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         private long rowsEstimate;
     }
 
+    private int computeColumnsInCommon() {
+        PTable dataTable;
+        if ((dataTable=dataPlan.getTableRef().getTable()).getBucketNum() != null) { // unable to compute prefix range for salted data table
+            return 0;
+        }
+
+        PTable table = getTable();
+        int nColumnsOffset = dataTable.isMultiTenant() ? 1 :0;
+        int nColumnsInCommon = nColumnsOffset;
+        List<PColumn> dataPKColumns = dataTable.getPKColumns();
+        List<PColumn> indexPKColumns = table.getPKColumns();
+        int nIndexPKColumns = indexPKColumns.size();
+        int nDataPKColumns = dataPKColumns.size();
+        // Skip INDEX_ID and tenant ID columns
+        for (int i = 1 + nColumnsInCommon; i < nIndexPKColumns; i++) {
+            PColumn indexColumn = indexPKColumns.get(i);
+            String indexColumnName = indexColumn.getName().getString();
+            String cf = IndexUtil.getDataColumnFamilyName(indexColumnName);
+            if (cf.length() != 0) {
+                break;
+            }
+            if (i > nDataPKColumns) {
+                break;
+            }
+            PColumn dataColumn = dataPKColumns.get(i-1);
+            String dataColumnName = dataColumn.getName().getString();
+            // Ensure both name and type are the same. Because of the restrictions we have
+            // on PK column types (namely that you can only have a fixed width nullable
+            // column as your last column), the type check is more of a sanity check
+            // since it wouldn't make sense to have an index with every column in common.
+            if (indexColumn.getDataType() == dataColumn.getDataType() 
+                    && dataColumnName.equals(IndexUtil.getDataColumnName(indexColumnName))) {
+                nColumnsInCommon++;
+                continue;
+            }
+            break;
+        }
+        return nColumnsInCommon;
+    }
+     
+    // public for testing
+    public static ScanRanges computePrefixScanRanges(ScanRanges dataScanRanges, int nColumnsInCommon) {
+        if (nColumnsInCommon == 0) {
+            return ScanRanges.EVERYTHING;
+        }
+        
+        int offset = 0;
+        List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(nColumnsInCommon);
+        int[] slotSpan = new int[nColumnsInCommon];
+        boolean useSkipScan = false;
+        boolean hasRange = false;
+        List<List<KeyRange>> rangesList = dataScanRanges.getRanges();
+        int rangesListSize = rangesList.size();
+        while (offset < nColumnsInCommon && offset < rangesListSize) {
+            List<KeyRange> ranges = rangesList.get(offset);
+            // We use a skip scan if we have multiple ranges or if
+            // we have a non single key range before the last range.
+            useSkipScan |= ranges.size() > 1 || hasRange;
+            cnf.add(ranges);
+            int rangeSpan = 1 + dataScanRanges.getSlotSpans()[offset];
+            if (offset + rangeSpan > nColumnsInCommon) {
+                rangeSpan = nColumnsInCommon - offset;
+                // trim range to only be rangeSpan in length
+                ranges = Lists.newArrayListWithExpectedSize(cnf.get(cnf.size()-1).size());
+                for (KeyRange range : cnf.get(cnf.size()-1)) {
+                    range = clipRange(dataScanRanges.getSchema(), offset, rangeSpan, range);
+                    // trim range to be only rangeSpan in length
+                    ranges.add(range);
+                }
+                cnf.set(cnf.size()-1, ranges);
+            }
+            for (KeyRange range : ranges) {
+                if (!range.isSingleKey()) {
+                    hasRange = true;
+                }
+            }
+            slotSpan[offset] = rangeSpan - 1;
+            offset = offset + rangeSpan;
+        }
+        useSkipScan &= dataScanRanges.useSkipScanFilter();
+        KeyRange minMaxRange = 
+                clipRange(dataScanRanges.getSchema(), 0, nColumnsInCommon, dataScanRanges.getMinMaxRange());
+        slotSpan = slotSpan.length == cnf.size() ? slotSpan : Arrays.copyOf(slotSpan, cnf.size());
+        ScanRanges commonScanRanges = ScanRanges.create(dataScanRanges.getSchema(), cnf, slotSpan, minMaxRange, null, useSkipScan, -1);
+        return commonScanRanges;
+    }
+        
+    /**
+     * Truncates range to be a max of rangeSpan fields
+     * @param schema row key schema
+     * @param fieldIndex starting index of field with in the row key schema
+     * @param rangeSpan maximum field length
+     * @return the same range if unchanged and otherwise a new range
+     */
+    public static KeyRange clipRange(RowKeySchema schema, int fieldIndex, int rangeSpan, KeyRange range) {
+        if (range == KeyRange.EVERYTHING_RANGE) {
+            return range;
+        }
+        if (range == KeyRange.EMPTY_RANGE) {
+            return range;
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        boolean newRange = false;
+        boolean lowerUnbound = range.lowerUnbound();
+        boolean lowerInclusive = range.isLowerInclusive();
+        byte[] lowerRange = range.getLowerRange();
+        if (!lowerUnbound && lowerRange.length > 0) {
+            if (clipKeyRangeBytes(schema, fieldIndex, rangeSpan, lowerRange, ptr, true)) {
+                // Make lower range inclusive since we're decreasing the range by chopping the last part off
+                lowerInclusive = true;
+                lowerRange = ptr.copyBytes();
+                newRange = true;
+            }
+        }
+        boolean upperUnbound = range.upperUnbound();
+        boolean upperInclusive = range.isUpperInclusive();
+        byte[] upperRange = range.getUpperRange();
+        if (!upperUnbound && upperRange.length > 0) {
+            if (clipKeyRangeBytes(schema, fieldIndex, rangeSpan, upperRange, ptr, false)) {
+                // Make lower range inclusive since we're decreasing the range by chopping the last part off
+                upperInclusive = true;
+                upperRange = ptr.copyBytes();
+                newRange = true;
+            }
+        }
+        
+        return newRange ? KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive) : range;
+    }
+
+    private static boolean clipKeyRangeBytes(RowKeySchema schema, int fieldIndex, int rangeSpan, byte[] rowKey, ImmutableBytesWritable ptr, boolean trimTrailingNulls) {
+        int position = 0;
+        int maxOffset = schema.iterator(rowKey, ptr);
+        byte[] newRowKey = new byte[rowKey.length];
+        int offset = 0;
+        int trailingNullsToTrim = 0;
+        do {
+            if (schema.next(ptr, fieldIndex, maxOffset) == null) {
+                break;
+            }
+            System.arraycopy(ptr.get(), ptr.getOffset(), newRowKey, offset, ptr.getLength());
+            offset += ptr.getLength();
+            Field field =  schema.getField(fieldIndex);
+            if (field.getDataType().isFixedWidth()) {
+                trailingNullsToTrim = 0;
+            } else {
+                boolean isNull = ptr.getLength() == 0;
+                byte sepByte = SchemaUtil.getSeparatorByte(true, isNull, field);
+                newRowKey[offset++] = sepByte;
+                if (isNull) {
+                    if (trimTrailingNulls) {
+                        trailingNullsToTrim++;
+                    } else {
+                        trailingNullsToTrim = 0;
+                    }
+                } else {
+                    // So that last zero separator byte is always trimmed
+                    trailingNullsToTrim = 1;
+                }
+            }
+            fieldIndex++;
+        } while (++position < rangeSpan);
+        // remove trailing nulls
+        ptr.set(newRowKey, 0, offset - trailingNullsToTrim);
+        // return true if we've clipped the rowKey
+        return maxOffset != offset;
+    }
+    
     /**
      * Compute the list of parallel scans to run for a given query. The inner scans
      * may be concatenated together directly, while the other ones may need to be
@@ -702,26 +875,43 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // case we generate an empty guide post with the byte estimate being set as guide post
         // width. 
         boolean emptyGuidePost = gps.isEmptyGuidePost();
+        byte[] startRegionBoundaryKey = startKey;
+        byte[] stopRegionBoundaryKey = stopKey;
+        int columnsInCommon = 0;
+        ScanRanges prefixScanRanges = ScanRanges.EVERYTHING;
         boolean traverseAllRegions = isSalted || isLocalIndex;
-        if (!traverseAllRegions) {
+        if (isLocalIndex) {
+            // TODO: when implementing PHOENIX-4585, we should change this to an assert
+            // as we should always have a data plan when a local index is being used.
+            if (dataPlan != null && dataPlan.getTableRef().getTable().getType() != PTableType.INDEX) { // Sanity check
+                prefixScanRanges = computePrefixScanRanges(dataPlan.getContext().getScanRanges(), columnsInCommon=computeColumnsInCommon());
+                KeyRange prefixRange = prefixScanRanges.getScanRange();
+                if (!prefixRange.lowerUnbound()) {
+                    startRegionBoundaryKey = prefixRange.getLowerRange();
+                }
+                if (!prefixRange.upperUnbound()) {
+                    stopRegionBoundaryKey = prefixRange.getUpperRange();
+                }
+            }
+        } else if (!traverseAllRegions) {
             byte[] scanStartRow = scan.getStartRow();
             if (scanStartRow.length != 0 && Bytes.compareTo(scanStartRow, startKey) > 0) {
-                startKey = scanStartRow;
+                startRegionBoundaryKey = startKey = scanStartRow;
             }
             byte[] scanStopRow = scan.getStopRow();
             if (stopKey.length == 0
                     || (scanStopRow.length != 0 && Bytes.compareTo(scanStopRow, stopKey) < 0)) {
-                stopKey = scanStopRow;
+                stopRegionBoundaryKey = stopKey = scanStopRow;
             }
         }
         
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
-        if (startKey.length > 0) {
-            regionIndex = getIndexContainingInclusive(regionBoundaries, startKey);
+        if (startRegionBoundaryKey.length > 0) {
+            regionIndex = getIndexContainingInclusive(regionBoundaries, startRegionBoundaryKey);
         }
-        if (stopKey.length > 0) {
-            stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopKey));
+        if (stopRegionBoundaryKey.length > 0) {
+            stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopRegionBoundaryKey));
             if (isLocalIndex) {
                 stopKey = regionLocations.get(stopIndex).getRegion().getEndKey();
             }
@@ -771,15 +961,29 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
                 RegionInfo regionInfo = regionLocation.getRegion();
                 byte[] currentGuidePostBytes = currentGuidePost.copyBytes();
-                byte[] endKey, endRegionKey = EMPTY_BYTE_ARRAY;
+                byte[] endKey;
                 if (regionIndex == stopIndex) {
                     endKey = stopKey;
                 } else {
                     endKey = regionBoundaries.get(regionIndex);
                 }
                 if (isLocalIndex) {
-                    endRegionKey = regionInfo.getEndKey();
-                    keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
+                    // Only attempt further pruning if the prefix range is using
+                    // a skip scan since we've already pruned the range of regions
+                    // based on the start/stop key.
+                    if (columnsInCommon > 0 && prefixScanRanges.useSkipScanFilter()) {
+                        byte[] regionStartKey = regionInfo.getStartKey();
+                        ImmutableBytesWritable ptr = context.getTempPtr();
+                        clipKeyRangeBytes(prefixScanRanges.getSchema(), 0, columnsInCommon, regionStartKey, ptr, false);
+                        regionStartKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        // Prune this region if there's no intersection
+                        if (!prefixScanRanges.intersectRegion(regionStartKey, regionInfo.getEndKey(), false)) {
+                            currentKeyBytes = endKey;
+                            regionIndex++;
+                            continue;
+                        }
+                    }
+                    keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), regionInfo.getEndKey());
                 }
                 byte[] initialKeyBytes = currentKeyBytes;
                 while (intersectWithGuidePosts && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {

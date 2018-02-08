@@ -232,7 +232,7 @@ public class QueryOptimizer {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
                 indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected);
+                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, dataPlan);
                 
                 QueryPlan plan = compiler.compile();
                 // If query doesn't have where clause and some of columns to project are missing
@@ -301,7 +301,7 @@ public class QueryOptimizer {
                         query = SubqueryRewriter.transform(query, queryResolver, statement.getConnection());
                         queryResolver = FromCompiler.getResolverForQuery(query, statement.getConnection());
                         query = StatementNormalizer.normalize(query, queryResolver);
-                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected).compile();
+                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, dataPlan).compile();
                         return plan;
                     }
                 }

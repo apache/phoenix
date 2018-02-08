@@ -283,7 +283,7 @@ public class PostDDLCompiler {
                                 continue;
                             }
                             QueryPlan plan = new AggregatePlan(context, select, tableRef, projector, null, null,
-                                    OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                                    OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, null);
                             try {
                                 ResultIterator iterator = plan.iterator();
                                 try {
