@@ -49,7 +49,11 @@ class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Serializable {
 
     // Save it
     phxRDD.saveAsNewAPIHadoopFile(
-      "",
+      Option(
+        conf.get("mapreduce.output.fileoutputformat.outputdir")
+      ).getOrElse(
+        Option(conf.get("mapred.output.dir")).getOrElse("")
+      ),
       classOf[NullWritable],
       classOf[PhoenixRecordWritable],
       classOf[PhoenixOutputFormat[PhoenixRecordWritable]],
