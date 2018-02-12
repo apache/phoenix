@@ -56,7 +56,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -262,18 +261,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
-    
-    private void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, boolean useIndexProto) {
+
+    private void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, byte[] clientVersionBytes, boolean useIndexProto) {
         for (Mutation m : mutations) {
-            if (indexMaintainersPtr != null) {
-                m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-            }
-            if (txState != null) {
-                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-            }
-            if (indexUUID != null) {
-                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-            }
+           if (indexMaintainersPtr != null) {
+               m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+           }
+           if (indexUUID != null) {
+             m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+           }
+           if (txState != null) {
+               m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+           }
+           if (clientVersionBytes != null) {
+               m.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, clientVersionBytes);
+           }
         }
     }
 
@@ -512,6 +514,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
             useIndexProto = false;
         }
+
+        byte[] clientVersionBytes = scan.getAttribute(PhoenixIndexCodec.CLIENT_VERSION);
         boolean acquiredLock = false;
         boolean incrScanRefCount = false;
         final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
@@ -750,13 +754,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         }
                         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
-                                txState, targetHTable, useIndexProto, isPKChanging);
+                                txState, targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
                         if (ServerUtil.readyToCommit(indexMutations.size(), indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            setIndexAndTransactionProperties(indexMutations, indexUUID, indexMaintainersPtr, txState, useIndexProto);
+                            setIndexAndTransactionProperties(indexMutations, indexUUID, indexMaintainersPtr, txState, clientVersionBytes, useIndexProto);
                             commitBatch(region, indexMutations, blockingMemStoreSize);
                             indexMutations.clear();
                         }
@@ -770,7 +774,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
                     commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
-                        targetHTable, useIndexProto, isPKChanging);
+                        targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
                     mutations.clear();
                 }
 
@@ -873,11 +877,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     private void commit(final HRegion region, List<Mutation> mutations, byte[] indexUUID, final long blockingMemStoreSize,
             byte[] indexMaintainersPtr, byte[] txState, final HTable targetHTable, boolean useIndexProto,
-            boolean isPKChanging)
+                        boolean isPKChanging, byte[] clientVersionBytes)
             throws IOException {
         final List<Mutation> localRegionMutations = Lists.newArrayList();
         final List<Mutation> remoteRegionMutations = Lists.newArrayList();
-        setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState, useIndexProto);
+        setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState, clientVersionBytes, useIndexProto);
         separateLocalAndRemoteMutations(targetHTable, region, mutations, localRegionMutations, remoteRegionMutations,
             isPKChanging);
         try {
@@ -1011,6 +1015,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             useProto = false;
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
+        byte[] clientVersionBytes = scan.getAttribute(PhoenixIndexCodec.CLIENT_VERSION);
         boolean hasMore;
         int rowCount = 0;
         try {
@@ -1035,6 +1040,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                     put.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                                    put.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(put);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
                                     put.setDurability(Durability.SKIP_WAL);
@@ -1046,6 +1052,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                     del.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                                    del.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(del);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
                                     del.setDurability(Durability.SKIP_WAL);
