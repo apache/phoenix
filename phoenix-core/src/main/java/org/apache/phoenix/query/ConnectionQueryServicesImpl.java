@@ -176,7 +176,6 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
-import org.apache.phoenix.index.PhoenixTransactionalIndexer;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -850,19 +849,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
-                    if (!descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                        descriptor.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
-                    }
                     // For alter table, remove non transactional index coprocessor
                     if (descriptor.hasCoprocessor(Indexer.class.getName())) {
                         descriptor.removeCoprocessor(Indexer.class.getName());
                     }
                 } else {
                     if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
-                        // If exception on alter table to transition back to non transactional
-                        if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                            descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
-                        }
                         Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                         opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                         Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
