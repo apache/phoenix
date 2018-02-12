@@ -258,7 +258,9 @@ public class DeleteCompiler {
                     connection.getMutationState().send();
                     mutations.clear();
                     if (otherMutations != null) {
-                        otherMutations.clear();
+                        for(MultiRowMutationState multiRowMutationState: otherMutations) {
+                            multiRowMutationState.clear();
+                        }
                     }
                 }
             }

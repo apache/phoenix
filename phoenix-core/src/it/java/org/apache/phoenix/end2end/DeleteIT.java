@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -33,7 +34,10 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -794,6 +798,38 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             conn.setAutoCommit(false);
             try {
                 conn.createStatement().execute("DELETE FROM " + tableName + " WHERE pk1 > 0");
+            } catch (Exception e) {
+                fail("Should not throw any exception");
+            }
+        }
+    }
+
+    @Test
+    public void testDeleteShouldNotFailWhenTheRowsMoreThanMaxMutationSize() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName1 = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS "
+                        + tableName
+                        + " (pk1 DECIMAL NOT NULL, v1 VARCHAR, v2 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))"
+                        + " IMMUTABLE_ROWS=true";
+        String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,Integer.toString(10));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(idx1);
+            Statement stmt = conn.createStatement();
+            for(int i = 0; i < 20; i++) {
+                stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES ("+i+",'value"+i+"', 'value2')");
+                if (i % 10 == 0) {
+                    conn.commit();
+                }
+            }
+            conn.commit();
+            conn.setAutoCommit(true);
+            try {
+                conn.createStatement().execute("DELETE FROM " + tableName);
             } catch (Exception e) {
                 fail("Should not throw any exception");
             }
