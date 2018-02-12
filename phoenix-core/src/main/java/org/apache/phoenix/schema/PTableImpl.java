@@ -1038,32 +1038,21 @@ public class PTableImpl implements PTable {
         @Override
         public void delete() {
             newMutations();
-            // we're using the Tephra column family delete marker here to prevent the translation 
-            // of deletes to puts by the Tephra's TransactionProcessor
-            if (PTableImpl.this.isTransactional()) {
-                Put put = new Put(key);
-                if (families.isEmpty()) {
-                    put.add(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker(), ts,
-                            HConstants.EMPTY_BYTE_ARRAY);
-                } else {
-                    for (PColumnFamily colFamily : families) {
-                        put.add(colFamily.getName().getBytes(), TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker(), ts,
-                                HConstants.EMPTY_BYTE_ARRAY);
-                    }
-                }
-                deleteRow = put;                
+            Delete delete = new Delete(key);
+            if (families.isEmpty()) {
+                delete.deleteFamily(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), ts);
             } else {
-                Delete delete = new Delete(key);
                 for (PColumnFamily colFamily : families) {
-                	delete.deleteFamily(colFamily.getName().getBytes(), ts);
+                    delete.deleteFamily(colFamily.getName().getBytes(), ts);
                 }
-                deleteRow = delete;
             }
+
+            deleteRow = delete;
+
             if (isWALDisabled()) {
                 deleteRow.setDurability(Durability.SKIP_WAL);
             }
         }
-        
     }
 
     @Override
