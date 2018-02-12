@@ -71,6 +71,8 @@ import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.LocalIndexDataColumnRef;
@@ -124,6 +126,8 @@ public class JoinCompiler {
     private final ColumnResolver origResolver;
     private final boolean useStarJoin;
     private final Map<ColumnRef, ColumnRefType> columnRefs;
+    private final boolean useSortMergeJoin;
+    private final boolean costBased;
 
 
     private JoinCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) {
@@ -132,6 +136,9 @@ public class JoinCompiler {
         this.origResolver = resolver;
         this.useStarJoin = !select.getHint().hasHint(Hint.NO_STAR_JOIN);
         this.columnRefs = new HashMap<ColumnRef, ColumnRefType>();
+        this.useSortMergeJoin = select.getHint().hasHint(Hint.USE_SORT_MERGE_JOIN);
+        this.costBased = statement.getConnection().getQueryServices().getProps().getBoolean(
+                QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
     }
 
     public static JoinTable compile(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
@@ -362,6 +369,42 @@ public class JoinCompiler {
                 filtersCombined.addAll(table.getPostFilters());
             }
             return JoinCompiler.compilePostFilterExpression(context, filtersCombined);
+        }
+
+        /**
+         * Return a list of all applicable join strategies. The order of the strategies in the
+         * returned list is based on the static rule below. However, the caller can decide on
+         * an optimal join strategy by evaluating and comparing the costs.
+         * 1. If hint USE_SORT_MERGE_JOIN is specified,
+         *    return a singleton list containing only SORT_MERGE.
+         * 2. If 1) matches pattern "A LEFT/INNER/SEMI/ANTI JOIN B"; or
+         *       2) matches pattern "A LEFT/INNER/SEMI/ANTI JOIN B (LEFT/INNER/SEMI/ANTI JOIN C)+"
+         *          and hint NO_STAR_JOIN is not specified,
+         *    add BUILD_RIGHT to the returned list.
+         * 3. If matches pattern "A RIGHT/INNER JOIN B", where B is either a named table reference
+         *    or a flat sub-query,
+         *    add BUILD_LEFT to the returned list.
+         * 4. add SORT_MERGE to the returned list.
+         */
+        public List<Strategy> getApplicableJoinStrategies() {
+            List<Strategy> strategies = Lists.newArrayList();
+            if (useSortMergeJoin) {
+                strategies.add(Strategy.SORT_MERGE);
+            } else {
+                if (getStarJoinVector() != null) {
+                    strategies.add(Strategy.HASH_BUILD_RIGHT);
+                }
+                JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
+                JoinType type = lastJoinSpec.getType();
+                if ((type == JoinType.Right || type == JoinType.Inner)
+                        && lastJoinSpec.getJoinTable().getJoinSpecs().isEmpty()
+                        && lastJoinSpec.getJoinTable().getTable().isFlat()) {
+                    strategies.add(Strategy.HASH_BUILD_LEFT);
+                }
+                strategies.add(Strategy.SORT_MERGE);
+            }
+
+            return strategies;
         }
 
         /**
