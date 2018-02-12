@@ -45,7 +45,7 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
     }
 
     @Override
-    public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk, boolean useProtoForIndexMaintainer) throws SQLException {
+    public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk, boolean useProtoForIndexMaintainer, final int clientVersion) throws SQLException {
         // just use the standard keyvalue builder - this doesn't really need to be fast
         
         final List<IndexMaintainer> maintainers = 
@@ -71,6 +71,11 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
             @Override
             public PhoenixTransactionContext getTransactionContext() {
                 return txnContext;
+            }
+
+            @Override
+            public int getClientVersion() {
+                return clientVersion;
             }
         };
     }

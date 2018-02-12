@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.cache.ServerCacheClient;
@@ -60,6 +61,8 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         if (md != null) {
             final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md, useProto);
             final PhoenixTransactionContext txnContext = TransactionFactory.getTransactionFactory().getTransactionContext(txState);
+            byte[] clientVersionBytes = attributes.get(PhoenixIndexCodec.CLIENT_VERSION);
+            final int clientVersion = clientVersionBytes == null ? IndexMetaDataCache.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
             return new IndexMetaDataCache() {
 
                 @Override
@@ -73,6 +76,11 @@ public class PhoenixIndexMetaData implements IndexMetaData {
                 @Override
                 public PhoenixTransactionContext getTransactionContext() {
                     return txnContext;
+                }
+
+                @Override
+                public int getClientVersion() {
+                    return clientVersion;
                 }
 
             };
@@ -125,6 +133,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
 
     public Map<String, byte[]> getAttributes() {
         return attributes;
+    }
+    
+    public int getClientVersion() {
+        return indexMetaDataCache.getClientVersion();
     }
     
     @Override

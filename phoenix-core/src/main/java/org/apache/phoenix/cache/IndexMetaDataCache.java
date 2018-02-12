@@ -23,10 +23,12 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
 public interface IndexMetaDataCache extends Closeable {
+    public static int UNKNOWN_CLIENT_VERSION = VersionUtil.encodeVersion(4, 4, 0);
     public static final IndexMetaDataCache EMPTY_INDEX_META_DATA_CACHE = new IndexMetaDataCache() {
 
         @Override
@@ -43,7 +45,13 @@ public interface IndexMetaDataCache extends Closeable {
             return null;
         }
         
+        @Override
+        public int getClientVersion() {
+            return UNKNOWN_CLIENT_VERSION;
+        }
+        
     };
     public List<IndexMaintainer> getIndexMaintainers();
     public PhoenixTransactionContext getTransactionContext();
+    public int getClientVersion();
 }
