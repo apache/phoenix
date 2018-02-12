@@ -239,7 +239,9 @@ public class DeleteCompiler {
                     connection.getMutationState().send();
                     mutations.clear();
                     if (indexMutations != null) {
-                        indexMutations.clear();
+                        for (Map<ImmutableBytesPtr, RowMutationState> multiRowMutationState : indexMutations) {
+                            multiRowMutationState.clear();
+                        }
                     }
                 }
             }
