@@ -34,6 +34,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -110,6 +111,10 @@ public class UnionPlan implements QueryPlan {
         if (iterators == null)
             return null;
         return iterators.getScans();
+    }
+
+    public List<QueryPlan> getSubPlans() {
+        return plans;
     }
 
     @Override
@@ -230,7 +235,12 @@ public class UnionPlan implements QueryPlan {
         return false;
     }
 
-	@Override
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
+    }
+
+    @Override
 	public Operation getOperation() {
 		return statement.getOperation();
 	}
