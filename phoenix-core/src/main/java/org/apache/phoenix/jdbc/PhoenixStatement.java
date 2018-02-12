@@ -86,6 +86,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
@@ -729,6 +730,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 @Override
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
+                }
+
+                @Override
+                public <T> T accept(QueryPlanVisitor<T> visitor) {
+                    return visitor.defaultReturn(this);
                 }
 
                 @Override

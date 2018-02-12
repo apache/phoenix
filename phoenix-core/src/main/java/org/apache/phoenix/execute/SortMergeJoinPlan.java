@@ -46,6 +46,8 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.MappedByteBufferQueue;
@@ -171,12 +173,7 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public Cost getCost() {
-        Long byteCount = null;
-        try {
-            byteCount = getEstimatedBytesToScan();
-        } catch (SQLException e) {
-            // ignored.
-        }
+        Double byteCount = this.accept(new ByteCountVisitor());
 
         if (byteCount == null) {
             return Cost.UNKNOWN;
@@ -255,7 +252,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return false;
     }
-    
+
+    public JoinType getJoinType() {
+        return type;
+    }
+
     private static SQLException closeIterators(ResultIterator lhsIterator, ResultIterator rhsIterator) {
         SQLException e = null;
         try {
@@ -714,6 +715,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     @Override
     public boolean useRoundRobinIterator() {
         return false;
+    }
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override
