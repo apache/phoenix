@@ -30,6 +30,7 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -78,6 +79,11 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
     @Override
     public boolean useRoundRobinIterator() throws SQLException {
         return false;
+    }
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override
