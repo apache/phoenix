@@ -28,6 +28,9 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
+import org.apache.phoenix.execute.visitor.RowCountVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.optimize.Cost;
@@ -202,19 +205,18 @@ public class CorrelatePlan extends DelegateQueryPlan {
     }
 
     @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
+    }
+
+    public QueryPlan getRhsPlan() {
+        return rhs;
+    }
+
+    @Override
     public Cost getCost() {
-        Long lhsByteCount = null;
-        try {
-            lhsByteCount = delegate.getEstimatedBytesToScan();
-        } catch (SQLException e) {
-            // ignored.
-        }
-        Long rhsRowCount = null;
-        try {
-            rhsRowCount = rhs.getEstimatedRowsToScan();
-        } catch (SQLException e) {
-            // ignored.
-        }
+        Double lhsByteCount = delegate.accept(new ByteCountVisitor());
+        Double rhsRowCount = rhs.accept(new RowCountVisitor());
 
         if (lhsByteCount == null || rhsRowCount == null) {
             return Cost.UNKNOWN;
