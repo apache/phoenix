@@ -75,6 +75,7 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
+    private final boolean transactional;
     private final String tableDDLOptions;
 
     private volatile boolean stopThreads = false;
@@ -86,6 +87,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     public ImmutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         this.localIndex = localIndex;
+        this.transactional = transactional;
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
                 optionBuilder.append(",");
@@ -250,7 +252,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         Iterator<Pair<byte[], List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
         assertTrue(iterator.hasNext());
         iterator.next();
-        assertEquals(!localIndex, iterator.hasNext());
+        assertEquals((!localIndex || transactional), iterator.hasNext());
     }
 
     // This test is know to flap. We need PHOENIX-2582 to be fixed before enabling this back.
