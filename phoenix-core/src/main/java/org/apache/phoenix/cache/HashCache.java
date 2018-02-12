@@ -34,5 +34,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 @Immutable
 public interface HashCache extends Closeable {
+    public int getClientVersion();
     public List<Tuple> get(ImmutableBytesPtr hashKey) throws IOException;
 }

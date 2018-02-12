@@ -71,6 +71,7 @@ message AddServerCacheRequest {
   required ServerCacheFactory cacheFactory = 4;
   optional bytes txState = 5;
   optional bool hasProtoBufIndexMaintainer = 6;
+  optional int32 clientVersion = 7;
 }
 
 message AddServerCacheResponse {
