@@ -25,7 +25,11 @@ public enum DataTypeMapping {
     CHAR("CHAR", Types.CHAR),
     DECIMAL("DECIMAL", Types.DECIMAL),
     INTEGER("INTEGER", Types.INTEGER),
-    DATE("DATE", Types.DATE);
+    DATE("DATE", Types.DATE),
+    UNSIGNED_LONG("UNSIGNED_LONG", Types.LONGVARCHAR),
+    VARCHAR_ARRAY("VARCHAR ARRAY", Types.ARRAY),
+    VARBINARY("VARBINARY", Types.VARBINARY),
+    TIMESTAMP("TIMESTAMP", Types.TIMESTAMP);
 
     private final String sType;
 

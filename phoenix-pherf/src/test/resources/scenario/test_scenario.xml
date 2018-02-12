@@ -33,6 +33,18 @@
             <name>GENERAL_CHAR</name>
         </column>
         <column>
+            <type>TIMESTAMP</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <minValue>2020</minValue>
+            <maxValue>2025</maxValue>
+            <name>GENERAL_TIMESTAMP</name>
+        </column>
+        <column>
             <type>DATE</type>
             <!--SEQUENTIAL is unsupported for DATE -->
             <dataSequence>RANDOM</dataSequence>
@@ -150,9 +162,22 @@
             <type>VARCHAR</type>
             <length>15</length>
             <userDefined>true</userDefined>
-            <dataSequence>RANDOM</dataSequence>
+            <dataSequence>SEQUENTIAL</dataSequence>
             <name>NEWVAL_STRING</name>
-            <prefix>TSTPRFX</prefix>
+            <prefix>0F90000000000X</prefix>
+        </column>
+        <column>
+            <type>VARCHAR_ARRAY</type>
+            <userDefined>true</userDefined>
+            <name>VAR_ARRAY</name>
+            <valuelist>
+                <datavalue>
+                    <value>Foo</value>
+                </datavalue>
+                <datavalue>
+                    <value>Bar</value>
+                </datavalue>
+            </valuelist>
         </column>
         <column>
             <type>CHAR</type>
@@ -181,6 +206,21 @@
             <name>OTHER_ID</name>
             <prefix>z0Oxx00</prefix>
         </column>
+        <column>
+            <type>VARBINARY</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>8</length>
+            <name>VAR_BIN</name>
+            <prefix>VBOxx00</prefix>
+        </column>
+        <column>
+           <type>VARCHAR</type>
+           <userDefined>true</userDefined>
+           <dataSequence>SEQUENTIAL</dataSequence>
+           <length>1</length>
+           <name>FIELD</name>
+       </column>
     </datamapping>
     <scenarios>
         <scenario tableName="PHERF.TEST_TABLE" rowCount="100" name="testScenarioRW">
@@ -191,7 +231,7 @@
                     <type>VARCHAR</type>
                     <userDefined>true</userDefined>
                     <dataSequence>RANDOM</dataSequence>
-                    <length>10</length>
+                    <length>5</length>
                     <name>FIELD</name>
                 </column>
             </dataOverride>
@@ -219,7 +259,7 @@
             </writeParams>
             <querySet concurrency="1" executionType="PARALLEL" executionDurationInMs="10000">
                 <query id="q3" statement="select count(*) from PHERF.TEST_TABLE"/>
-                <query id="q4" statement="select sum(DIVISION) from PHERF.TEST_TABLE"/>
+                <query id="q4" statement="select sum(SOME_INT) from PHERF.TEST_TABLE"/>
             </querySet>
 
         </scenario>

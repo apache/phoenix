@@ -24,8 +24,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -245,6 +247,87 @@ public class RuleGeneratorTest {
                 testSet.size() == (threadCount * increments));
     }
 
+	@Test
+    public void testTimestampRule() throws Exception {
+    	SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    	SimpleDateFormat df = new SimpleDateFormat("yyyy");
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+        Scenario scenario = parser.getScenarios().get(0);
+
+        Column simPhxCol = new Column();
+        simPhxCol.setName("TS_DATE");
+        simPhxCol.setType(DataTypeMapping.TIMESTAMP);
+
+        // Run this 10 times gives a reasonable chance that all the values will appear at least once
+        for (int i = 0; i < 10; i++) {
+            DataValue value = rulesApplier.getDataForRule(scenario, simPhxCol);
+            Date dt = simpleDateFormat.parse(value.getValue());
+            int year = Integer.parseInt(df.format(dt));
+            assertTrue("Got unexpected TS value" + value.getValue(), year >= 2020 && year <= 2025);
+        }
+    }
+	
+    @Test
+    public void testVarcharArray() throws Exception {
+
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+        
+        // Run this 15 times gives a reasonable chance that all the values will appear at least once
+        for (int i = 0; i < 15; i++) {
+        	Column c = rulesApplier.getRule("VAR_ARRAY");
+            DataValue value = rulesApplier.getDataValue(c);
+            assertTrue("Got a value not in the list for the rule. :" + value.getValue(), value.getValue().equals("Foo,Bar"));
+        }
+    }	
+
+    @Test
+    public void testVarBinary() throws Exception {
+        List<String> expectedValues = new ArrayList();
+        for (int i=0; i<10; i++) {
+            expectedValues.add("VBOxx00" + i);
+        }
+
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+        
+        for (int i = 0; i < 5; i++) {
+        	Column c = rulesApplier.getRule("VAR_BIN");
+            DataValue value = rulesApplier.getDataValue(c);
+            System.out.println(value.getValue());
+            assertTrue("Got a value not in the list for the rule. :" + value.getValue(), expectedValues.contains(value.getValue()));
+        }
+    }    
+
+    @Test
+    public void testPrefixSequence() throws Exception {
+        List<String> expectedValues = new ArrayList();
+        expectedValues.add("0F90000000000X0");
+        expectedValues.add("0F90000000000X1");
+        expectedValues.add("0F90000000000X2");
+        expectedValues.add("0F90000000000X3");
+        expectedValues.add("0F90000000000X4");
+        expectedValues.add("0F90000000000X5");
+        expectedValues.add("0F90000000000X6");
+        expectedValues.add("0F90000000000X7");
+        expectedValues.add("0F90000000000X8");
+        expectedValues.add("0F90000000000X9");
+
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+        
+        // Run this 15 times gives a reasonable chance that all the values will appear at least once
+        for (int i = 0; i < 15; i++) {
+            DataValue value = rulesApplier.getDataValue(rulesApplier.getRule("NEWVAL_STRING"));
+            assertTrue("Got a value not in the list for the rule. :" + value.getValue(), expectedValues.contains(value.getValue()));
+        }
+    }
+	
     @Test
     public void testValueListRule() throws Exception {
         List<String> expectedValues = new ArrayList();
@@ -301,12 +384,30 @@ public class RuleGeneratorTest {
         assertEquals("Did not find the matching rule type.", rule.getType(), simPhxCol.getType());
         assertEquals("Rule contains incorrect length.", rule.getLength(), 10);
         assertEquals("Rule contains incorrect prefix.", rule.getPrefix(), "MYPRFX");
-
+        
         value = rulesApplier.getDataForRule(scenario, simPhxCol);
-        assertEquals("Value returned does not match rule.", value.getValue().length(), 10);
-        assertTrue("Value returned start with prefix.",
+        assertEquals("Value returned does not match rule.", 10, value.getValue().length());
+        assertTrue("Value returned start with prefix. " + value.getValue(),
                 StringUtils.startsWith(value.getValue(), rule.getPrefix()));
+        
     }
+    
+    
+    @Test
+    public void testScenarioLevelRuleOverride() throws Exception {
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+        Scenario scenario = parser.getScenarios().get(0);
+        
+        // Test scenario level overridden rule
+    	Column simPhxCol = new Column();
+        simPhxCol.setName("FIELD");
+        simPhxCol.setType(DataTypeMapping.VARCHAR);
+        DataValue value = rulesApplier.getDataForRule(scenario, simPhxCol);
+        assertEquals("Override rule should contain field length of 5", 5, value.getValue().length());
+    }
+    
 
     /**
      * Asserts that the value field is between the min/max value fields
