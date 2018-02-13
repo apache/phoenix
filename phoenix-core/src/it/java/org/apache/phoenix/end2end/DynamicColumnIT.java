@@ -106,7 +106,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 "    A.F1v1 varchar," +
                 "    A.F1v2 varchar," +
                 "    B.F2v1 varchar" +
-                "    CONSTRAINT pk PRIMARY KEY (entry))");
+                "    CONSTRAINT pk PRIMARY KEY (entry)) COLUMN_ENCODED_BYTES=NONE");
             }
 
         }
