@@ -18,6 +18,8 @@
 package org.apache.phoenix.mapreduce.util;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -37,12 +39,18 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -610,4 +618,44 @@ public final class PhoenixConfigurationUtil {
         boolean split = configuration.getBoolean(MAPREDUCE_SPLIT_BY_STATS, DEFAULT_SPLIT_BY_STATS);
         return split;
     }
+
+	public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table) {
+	    Boolean useStats = table.useStatsForParallelization();
+	    if (useStats != null) {
+	        return useStats;
+	    }
+	    /*
+	     * For a view index, we use the property set on view. For indexes on base table, whether
+	     * global or local, we use the property set on the base table. Null check needed when
+	     * dropping local indexes.
+	     */
+	    PName tenantId = conn.getTenantId();
+	    int retryCount = 0;
+	    while (retryCount++<2) {
+		    if (table.getType() == PTableType.INDEX && table.getParentName() != null) {
+		        String parentTableName = table.getParentName().getString();
+				try {
+		            PTable parentTable =
+		                    conn.getTable(new PTableKey(tenantId, parentTableName));
+		            useStats = parentTable.useStatsForParallelization();
+		            if (useStats != null) {
+		                return useStats;
+		            }
+				} catch (TableNotFoundException e) {
+					// try looking up the table without the tenant id (for
+					// global tables)
+					if (tenantId != null) {
+						tenantId = null;
+					} else {
+						BaseResultIterators.logger.warn(
+								"Unable to find parent table \"" + parentTableName + "\" of table \""
+										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",
+								e);
+					}
+				}
+		    }
+	    }
+	    return conn.getQueryServices().getConfiguration()
+	            .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
+	}
 }
