@@ -23,8 +23,6 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STAR
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -83,8 +81,8 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.HashCacheClient;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -101,11 +99,9 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
@@ -142,7 +138,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
-	private static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
+	public static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
     private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "98", "12");
     private final List<List<Scan>> scans;
@@ -501,7 +497,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        this.useStatsForParallelization = getStatsForParallelizationProp(context, table);
+        this.useStatsForParallelization = PhoenixConfigurationUtil.getStatsForParallelizationProp(context.getConnection(), table);
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -1437,37 +1433,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     public Long getEstimateInfoTimestamp() {
         return this.estimateInfoTimestamp;
-    }
-
-    private boolean getStatsForParallelizationProp(StatementContext context, PTable table) {
-        Boolean useStats = table.useStatsForParallelization();
-        if (useStats != null) {
-            return useStats;
-        }
-        /*
-         * For a view index, we use the property set on view. For indexes on base table, whether
-         * global or local, we use the property set on the base table. Null check needed when
-         * dropping local indexes.
-         */
-        if (table.getType() == PTableType.INDEX && table.getParentName() != null) {
-            PhoenixConnection conn = context.getConnection();
-            String parentTableName = table.getParentName().getString();
-            try {
-                PTable parentTable =
-                        conn.getTable(new PTableKey(conn.getTenantId(), parentTableName));
-                useStats = parentTable.useStatsForParallelization();
-                if (useStats != null) {
-                    return useStats;
-                }
-            } catch (TableNotFoundException e) {
-                logger.warn("Unable to find parent table \"" + parentTableName + "\" of table \""
-                        + table.getName().getString()
-                        + "\" to determine USE_STATS_FOR_PARALLELIZATION",
-                    e);
-            }
-        }
-        return context.getConnection().getQueryServices().getConfiguration()
-                .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
     }
 
 }
