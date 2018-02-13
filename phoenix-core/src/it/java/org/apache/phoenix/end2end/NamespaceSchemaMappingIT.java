@@ -35,9 +35,9 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -54,7 +54,7 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
     @Test
     public void testBackWardCompatibility() throws Exception {
 
-        String namespace = "TEST_SCHEMA";
+        String namespace = generateUniqueName();
         String schemaName = namespace;
         String tableName = generateUniqueName();
 
@@ -72,24 +72,24 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
         Table phoenixSchematable = admin.getConnection().getTable(TableName.valueOf(phoenixFullTableName));
         phoenixSchematable.put(put);
-        phoenixSchematable.close();
         put = new Put(PVarchar.INSTANCE.toBytes(hbaseFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-        phoenixSchematable.close();
         Table namespaceMappedtable = admin.getConnection().getTable(TableName.valueOf(hbaseFullTableName));
         namespaceMappedtable.put(put);
-        namespaceMappedtable.close();
-        Properties props = new Properties();
-        props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table " + phoenixFullTableName + "(tableName varchar primary key)";
+        String ddl = "create table " + phoenixFullTableName + "(tableName varchar primary key) COLUMN_ENCODED_BYTES=NONE";
         conn.createStatement().execute(ddl);
         String query = "select tableName from " + phoenixFullTableName;
 
         ResultSet rs = conn.createStatement().executeQuery(query);
+        TestUtil.dumpTable(namespaceMappedtable);
+        TestUtil.dumpTable(phoenixSchematable);
         assertTrue(rs.next());
         assertEquals(phoenixFullTableName, rs.getString(1));
+        namespaceMappedtable.close();
+        phoenixSchematable.close();
 
         Table metatable = admin.getConnection().getTable(
                 SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
@@ -105,9 +105,6 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(hbaseFullTableName, rs.getString(1));
-        admin.disableTable(TableName.valueOf(phoenixFullTableName));
-        admin.deleteTable(TableName.valueOf(phoenixFullTableName));
-        conn.createStatement().execute("DROP TABLE " + phoenixFullTableName);
         admin.close();
         conn.close();
     }

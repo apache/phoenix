@@ -116,7 +116,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
      */
     private void createPhoenixTable(String tableName) throws SQLException {
         String ddl = "create table IF NOT EXISTS " + tableName+ " (" + " id varchar NOT NULL primary key,"
-                + " \"cf1\".\"q1\" varchar" + " ) ";
+                + " \"cf1\".\"q1\" varchar" + " ) COLUMN_ENCODED_BYTES=NONE";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
