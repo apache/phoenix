@@ -113,7 +113,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -134,7 +133,6 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -2223,27 +2221,8 @@ public class MetaDataClient {
                  * partitioned by the virtue of indexId present in the row key. As such, different shared indexes can use
                  * potentially overlapping column qualifiers.
                  * 
-                 * If the hbase table already exists, then possibly encoded or non-encoded column qualifiers were used. 
-                 * In this case we pursue ahead with non-encoded column qualifier scheme. If the phoenix metadata for this table already exists 
-                 * then we rely on the PTable, with appropriate storage scheme, returned in the MetadataMutationResult to be updated 
-                 * in the client cache. If the phoenix table metadata already doesn't exist then the non-encoded column qualifier scheme works
-                 * because we cannot control the column qualifiers that were used when populating the hbase table.
                  */
-                
-                byte[] tableNameBytes = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-                boolean tableExists = true;
-                try {
-                    HTableDescriptor tableDescriptor = connection.getQueryServices().getTableDescriptor(tableNameBytes);
-                    if (tableDescriptor == null) { // for connectionless
-                        tableExists = false;
-                    }
-                } catch (org.apache.phoenix.schema.TableNotFoundException e) {
-                    tableExists = false;
-                }
-                if (tableExists) {
-                    encodingScheme = NON_ENCODED_QUALIFIERS;
-                    immutableStorageScheme = ONE_CELL_PER_COLUMN;
-                } else if (parent != null) {
+                if (parent != null) {
                     encodingScheme = parent.getEncodingScheme();
                     immutableStorageScheme = parent.getImmutableStorageScheme();
                 } else {
