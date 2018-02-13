@@ -2533,9 +2533,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 for (TableProperty tableProp : TableProperty.values()) {
                     Cell tablePropertyCell = tablePropertyCellMap.get(tableProp);
                     if ( tablePropertyCell != null) {
-                        // set this table property on the view if it is not mutable on a view (which means the property is always the same as the base table)
-                        // or if it is mutable on a view and the property value is the same as the base table property (which means it wasn't changed on the view)
-                        if (!tableProp.isMutableOnView() || tableProp.getPTableValue(view).equals(tableProp.getPTableValue(basePhysicalTable))) {
+						// set this table property on the view :
+						// 1. if it is not mutable on a view (which means the property is always the same as the base table)
+						// 2. or if it is mutable on a view and if it doesn't exist on the view
+						// 3. or if it is mutable on a view and the property value is the same as the base table property (which means it wasn't changed on the view)
+                        Object viewProp = tableProp.getPTableValue(view);
+						if (!tableProp.isMutableOnView() || viewProp==null || viewProp.equals(tableProp.getPTableValue(basePhysicalTable))) {
                             viewHeaderRowPut.add(CellUtil.createCell(viewKey, CellUtil.cloneFamily(tablePropertyCell),
                                 CellUtil.cloneQualifier(tablePropertyCell), clientTimeStamp, tablePropertyCell.getTypeByte(),
                                 CellUtil.cloneValue(tablePropertyCell)));
