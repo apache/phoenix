@@ -49,10 +49,14 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.FilterList.Operator;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
+import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -77,6 +81,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.schema.ColumnRef;
 import org.junit.Test;
 
 public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
@@ -2143,6 +2148,236 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId), PDouble.INSTANCE.toBytes(2.0, SortOrder.DESC), PChar.INSTANCE.toBytes("04", SortOrder.DESC));
         assertArrayEquals(stopRow, scan.getStopRow());
+    }
+
+    @Test
+    public void testOrExpressionNonLeadingPKPushToScanBug4602() throws Exception {
+        Connection conn = null;
+        try {
+            conn= DriverManager.getConnection(getUrl());
+            String testTableName="OR_NO_LEADING_PK4602";
+            String sql="CREATE TABLE "+ testTableName +"("+
+                    "PK1 INTEGER NOT NULL,"+
+                    "PK2 INTEGER NOT NULL,"+
+                    "PK3 INTEGER NOT NULL,"+
+                    "DATA INTEGER, "+
+                    "CONSTRAINT TEST_PK PRIMARY KEY (PK1,PK2,PK3))";
+            conn.createStatement().execute(sql);
+
+            //case 1: pk1 is equal,pk2 is multiRange
+            sql="select * from "+testTableName+" t where (t.pk1 = 2) and ((t.pk2 >= 4 and t.pk2 <6) or (t.pk2 >= 8 and t.pk2 <9))";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            Scan scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof SkipScanFilter);
+            List<List<KeyRange>> rowKeyRanges = ((SkipScanFilter)(scan.getFilter())).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(KeyRange.POINT.apply(PInteger.INSTANCE.toBytes(2))),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true, PInteger.INSTANCE.toBytes(6), false),
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true, PInteger.INSTANCE.toBytes(9), false)
+                                )
+                            ),
+                     rowKeyRanges
+                    );
+
+            assertArrayEquals(scan.getStartRow(), ByteUtil.concat(PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(4)));
+            assertArrayEquals(scan.getStopRow(), ByteUtil.concat(PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(9)));
+
+            //case 2: pk1 is range,pk2 is multiRange
+            sql="select * from "+testTableName+" t where (t.pk1 >=2 and t.pk1<5) and ((t.pk2 >= 4 and t.pk2 <6) or (t.pk2 >= 8 and t.pk2 <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(scan.getFilter())).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(2), true, PInteger.INSTANCE.toBytes(5), false)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true, PInteger.INSTANCE.toBytes(6), false),
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true, PInteger.INSTANCE.toBytes(9), false)
+                                )
+                            ),
+                     rowKeyRanges
+                    );
+            assertArrayEquals(scan.getStartRow(), ByteUtil.concat(PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(4)));
+            assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(5));
+
+             //case 3 : pk1 has multiRange,,pk2 is multiRange
+            sql="select * from "+testTableName+" t where ((t.pk1 >=2 and t.pk1<5) or (t.pk1 >=7 and t.pk1 <9)) and ((t.pk2 >= 4 and t.pk2 <6) or (t.pk2 >= 8 and t.pk2 <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(scan.getFilter())).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(2), true, PInteger.INSTANCE.toBytes(5), false),
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(7), true, PInteger.INSTANCE.toBytes(9), false)
+                                ),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true, PInteger.INSTANCE.toBytes(6), false),
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true, PInteger.INSTANCE.toBytes(9), false)
+                                )
+                            ),
+                     rowKeyRanges
+                    );
+            assertArrayEquals(scan.getStartRow(), ByteUtil.concat(PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(4)));
+            assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(9));
+
+            //case4 : only pk1 and pk3, no pk2
+            sql="select * from "+testTableName+" t where ((t.pk1 >=2 and t.pk1<5) or (t.pk1 >=7 and t.pk1 <9)) and ((t.pk3 >= 4 and t.pk3 <6) or (t.pk3 >= 8 and t.pk3 <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof FilterList);
+            FilterList filterList = (FilterList)scan.getFilter();
+
+            assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
+            assertEquals(filterList.getFilters().size(),2);
+            assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(filterList.getFilters().get(0))).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(2), true, PInteger.INSTANCE.toBytes(5), false),
+                                KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(7), true, PInteger.INSTANCE.toBytes(9), false)
+                                ),
+                       Arrays.asList(KeyRange.EVERYTHING_RANGE),
+                       Arrays.asList(
+                               KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true, PInteger.INSTANCE.toBytes(6), false),
+                               KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true, PInteger.INSTANCE.toBytes(9), false)
+                               )
+                            ),
+                     rowKeyRanges
+                    );
+            assertArrayEquals(scan.getStartRow(), PInteger.INSTANCE.toBytes(2));
+            assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(9));
+
+            assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
+            RowKeyComparisonFilter rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
+            Expression pk3Expression =  new ColumnRef(queryPlan.getTableRef(), queryPlan.getTableRef().getTable().getColumnForColumnName("PK3").getPosition()).newColumnExpression();
+            assertEquals(
+                      TestUtil.rowKeyFilter(
+                            TestUtil.or(
+                                    TestUtil.and(
+                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk3Expression, 4),
+                                            TestUtil.constantComparison(CompareOp.LESS,pk3Expression, 6)),
+                                    TestUtil.and(
+                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk3Expression, 8),
+                                            TestUtil.constantComparison(CompareOp.LESS,pk3Expression, 9))
+                                    )
+                              ),
+                     rowKeyComparisonFilter);
+
+            //case 5: pk1 or data column
+            sql="select * from "+testTableName+" t where ((t.pk1 >=2) or (t.data >= 4 and t.data <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof SingleCQKeyValueComparisonFilter);
+            Expression pk1Expression =  new ColumnRef(queryPlan.getTableRef(), queryPlan.getTableRef().getTable().getColumnForColumnName("PK1").getPosition()).newColumnExpression();
+            Expression dataExpression =  new ColumnRef(queryPlan.getTableRef(), queryPlan.getTableRef().getTable().getColumnForColumnName("DATA").getPosition()).newColumnExpression();
+            assertEquals(
+                    TestUtil.singleKVFilter(
+                        TestUtil.or(
+                                TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL, pk1Expression, 2),
+                                TestUtil.and(
+                                        TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL, dataExpression, 4),
+                                        TestUtil.constantComparison(CompareOp.LESS, dataExpression, 9)
+                                        )
+                                )
+                    ),
+                    scan.getFilter());
+            assertArrayEquals(scan.getStartRow(), HConstants.EMPTY_START_ROW);
+            assertArrayEquals(scan.getStopRow(), HConstants.EMPTY_END_ROW);
+
+            //case 6: pk1 or pk2,but pk2 is empty range
+            sql ="select * from "+testTableName+" t where (t.pk1 >=2 and t.pk1<5) or ((t.pk2 >= 4 and t.pk2 <6) and (t.pk2 >= 8 and t.pk2 <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertNull(scan.getFilter());
+            assertArrayEquals(scan.getStartRow(), PInteger.INSTANCE.toBytes(2));
+            assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(5));
+
+            //case 7: pk1 or pk2,but pk2 is all range
+            sql ="select * from "+testTableName+" t where (t.pk1 >=2 and t.pk1<5) or (t.pk2 >=7 or t.pk2 <9)";
+            queryPlan= TestUtil.getOptimizeQueryPlan(conn, sql);
+
+            Expression pk2Expression =  new ColumnRef(queryPlan.getTableRef(), queryPlan.getTableRef().getTable().getColumnForColumnName("PK2").getPosition()).newColumnExpression();
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof RowKeyComparisonFilter);
+            assertEquals(
+                      TestUtil.rowKeyFilter(
+                            TestUtil.or(
+                                    TestUtil.and(
+                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk1Expression, 2),
+                                            TestUtil.constantComparison(CompareOp.LESS,pk1Expression, 5)),
+                                    TestUtil.or(
+                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk2Expression, 7),
+                                            TestUtil.constantComparison(CompareOp.LESS,pk2Expression, 9))
+                                    )
+                              ),
+                     scan.getFilter());
+            assertArrayEquals(scan.getStartRow(), HConstants.EMPTY_START_ROW);
+            assertArrayEquals(scan.getStopRow(), HConstants.EMPTY_END_ROW);
+
+            //case 8: pk1 and pk2, but pk1 has a or allRange
+            sql="select * from "+testTableName+" t where ((t.pk1 >=2 and t.pk1<5) or (t.pk1 >=7 or t.pk1 <9)) and ((t.pk2 >= 4 and t.pk2 <6) or (t.pk2 >= 8 and t.pk2 <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof RowKeyComparisonFilter);
+            assertEquals(
+                      TestUtil.rowKeyFilter(
+                            TestUtil.or(
+                                    TestUtil.and(
+                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk2Expression, 4),
+                                            TestUtil.constantComparison(CompareOp.LESS,pk2Expression, 6)),
+                                    TestUtil.and(
+                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk2Expression, 8),
+                                            TestUtil.constantComparison(CompareOp.LESS,pk2Expression, 9))
+                                    )
+                              ),
+                     scan.getFilter());
+
+            assertArrayEquals(scan.getStartRow(), HConstants.EMPTY_START_ROW);
+            assertArrayEquals(scan.getStopRow(), HConstants.EMPTY_END_ROW);
+
+            //case 9:  pk1 and pk2, but pk2 has a or allRange
+            sql="select * from "+testTableName+" t where ((t.pk1 >= 4 and t.pk1 <6) or (t.pk1 >= 8 and t.pk1 <9)) and ((t.pk2 >=2 and t.pk2<5) or (t.pk2 >=7 or t.pk2 <9))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(scan.getFilter())).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                            Arrays.asList(
+                                    KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(4), true, PInteger.INSTANCE.toBytes(6), false),
+                                    KeyRange.getKeyRange(PInteger.INSTANCE.toBytes(8), true, PInteger.INSTANCE.toBytes(9), false)
+                                    ),
+                            Arrays.asList(KeyRange.EVERYTHING_RANGE)),
+                    rowKeyRanges);
+            assertArrayEquals(scan.getStartRow(), PInteger.INSTANCE.toBytes(4));
+            assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(9));
+
+            //case 10: only pk2
+            sql = "select * from "+testTableName+" t where (pk2 <=7 or pk2>9)";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            pk2Expression =  new ColumnRef(queryPlan.getTableRef(), queryPlan.getTableRef().getTable().getColumnForColumnName("PK2").getPosition()).newColumnExpression();
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof RowKeyComparisonFilter);
+                assertEquals(
+                      TestUtil.rowKeyFilter(
+                            TestUtil.or(
+                                    TestUtil.constantComparison(CompareOp.LESS_OR_EQUAL,pk2Expression, 7),
+                                    TestUtil.constantComparison(CompareOp.GREATER,pk2Expression, 9))),
+                     scan.getFilter());
+            assertArrayEquals(scan.getStartRow(), HConstants.EMPTY_START_ROW);
+            assertArrayEquals(scan.getStopRow(), HConstants.EMPTY_END_ROW);
+        }
+        finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
     }
 
 }
