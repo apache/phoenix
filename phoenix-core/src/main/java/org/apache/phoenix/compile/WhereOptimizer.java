@@ -661,6 +661,9 @@ public class WhereOptimizer {
         }
         
         private KeySlots andKeySlots(AndExpression andExpression, List<KeySlots> childSlots) {
+            if(childSlots.isEmpty()) {
+                return null;
+            }
             int nColumns = table.getPKColumns().size();
             KeySlot[] keySlot = new KeySlot[nColumns];
             KeyRange minMaxRange = KeyRange.EVERYTHING_RANGE;
@@ -759,31 +762,11 @@ public class WhereOptimizer {
                     	}
                     }
                 } else {
-                    boolean hasFirstSlot = true;
-                    boolean prevIsNull = false;
                     // TODO: Do the same optimization that we do for IN if the childSlots specify a fully qualified row key
                     for (KeySlot slot : childSlot) {
-                        if (hasFirstSlot) {
-                            // if the first slot is null, return null immediately
-                            if (slot == null) {
-                                return null;
-                            }
-                            // mark that we've handled the first slot
-                            hasFirstSlot = false;
-                        }
-
-                        // now if current slot is the first one, it must not be null
-                        // if not the first, then it might be null, so check if all the rest are null
                         if (slot == null) {
-                            prevIsNull = true;
                             continue;
-                        } else {
-                            // current slot is not null but prev one is null, cannot OR these together (PHOENIX-3328)
-                            if (prevIsNull) {
-                                return null;
-                            }
                         }
-
                         /*
                          * If we see a different PK column than before, we can't
                          * optimize it because our SkipScanFilter only handles
