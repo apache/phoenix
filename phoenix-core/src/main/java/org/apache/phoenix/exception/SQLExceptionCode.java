@@ -145,7 +145,6 @@ public enum SQLExceptionCode {
     }),
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed."),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !=."),
-    INVALID_NOT_NULL_CONSTRAINT(517, "42895", "Invalid not null constraint on non primary key column."),
 
     /**
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
@@ -203,14 +202,14 @@ public enum SQLExceptionCode {
     PRIMARY_KEY_WITH_FAMILY_NAME(1003, "42J01", "Primary key columns must not have a family name."),
     PRIMARY_KEY_OUT_OF_ORDER(1004, "42J02", "Order of columns in primary key constraint must match the order in which they're declared."),
     VARBINARY_IN_ROW_KEY(1005, "42J03", "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key."),
-    NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to a multi-part row key."),
+    NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to primary key."),
     VARBINARY_LAST_PK(1015, "42J04", "Cannot add column to table when the last PK column is of type VARBINARY or ARRAY."),
     NULLABLE_FIXED_WIDTH_LAST_PK(1023, "42J04", "Cannot add column to table when the last PK column is nullable and fixed width."),
     CANNOT_MODIFY_VIEW_PK(1036, "42J04", "Cannot modify the primary key of a VIEW if last PK column of parent is variable length."),
     BASE_TABLE_COLUMN(1037, "42J04", "Cannot modify columns of base table used by tenant-specific tables."),
     UNALLOWED_COLUMN_FAMILY(1090, "42J04", "Column family names should not contain local index column prefix: "+QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX),
     // Key/value column related errors
-    KEY_VALUE_NOT_NULL(1007, "42K01", "A key/value column may not be declared as not null."),
+    KEY_VALUE_NOT_NULL(1007, "42K01", "A non primary key column may only be declared as not null on tables with immutable rows."),
     // View related errors.
     VIEW_WITH_TABLE_CONFIG(1008, "42L01", "A view may not contain table configuration properties."),
     VIEW_WITH_PROPERTIES(1009, "42L02", "Properties may not be defined for a view."),
