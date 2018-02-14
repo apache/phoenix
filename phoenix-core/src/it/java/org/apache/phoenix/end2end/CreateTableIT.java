@@ -36,7 +36,6 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.GlobalPermissionOrBuilder;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -416,7 +415,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail(" Non pk column ENTRY_POINT_NAME has a NOT NULL constraint");
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
@@ -432,7 +431,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail(" Non pk column V has a NOT NULL constraint");
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
