@@ -72,6 +72,7 @@ import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -1023,6 +1024,13 @@ public class TestUtil {
     public static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
         int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
         return ByteUtil.compare(op, compareResult);
+    }
+
+    public static QueryPlan getOptimizeQueryPlan(Connection conn,String sql) throws SQLException {
+        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        QueryPlan queryPlan = statement.optimizeQuery(sql);
+        queryPlan.iterator();
+        return queryPlan;
     }
 
 }
