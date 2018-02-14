@@ -431,20 +431,20 @@ public class UpsertCompiler {
             targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
             Arrays.fill(columnIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
             Arrays.fill(pkSlotIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
-            BitSet pkColumnsSet = new BitSet(table.getPKColumns().size());
+            BitSet columnsBeingSet = new BitSet(table.getColumns().size());
             int i = 0;
             if (isSharedViewIndex) {
                 PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
-                columnIndexesToBe[i] = indexIdColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                columnsBeingSet.set(columnIndexesToBe[i] = indexIdColumn.getPosition());
+                pkSlotIndexesToBe[i] = i + posOffset;
                 targetColumns.set(i, indexIdColumn);
                 i++;
             }
             // Add tenant column directly, as we don't want to resolve it as this will fail
             if (isTenantSpecific) {
                 PColumn tenantColumn = table.getPKColumns().get(i + posOffset);
-                columnIndexesToBe[i] = tenantColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                columnsBeingSet.set(columnIndexesToBe[i] = tenantColumn.getPosition());
+                pkSlotIndexesToBe[i] = i + posOffset;
                 targetColumns.set(i, tenantColumn);
                 i++;
             }
@@ -459,18 +459,18 @@ public class UpsertCompiler {
                     overlapViewColumnsToBe.add(column);
                     addViewColumnsToBe.remove(column);
                 }
-                columnIndexesToBe[i] = ref.getColumnPosition();
+                columnsBeingSet.set(columnIndexesToBe[i] = ref.getColumnPosition());
                 targetColumns.set(i, column);
                 if (SchemaUtil.isPKColumn(column)) {
-                    pkColumnsSet.set(pkSlotIndexesToBe[i] = ref.getPKSlotPosition());
+                    pkSlotIndexesToBe[i] = ref.getPKSlotPosition();
                 }
                 i++;
             }
             for (PColumn column : addViewColumnsToBe) {
-                columnIndexesToBe[i] = column.getPosition();
+                columnsBeingSet.set(columnIndexesToBe[i] = column.getPosition());
                 targetColumns.set(i, column);
                 if (SchemaUtil.isPKColumn(column)) {
-                    pkColumnsSet.set(pkSlotIndexesToBe[i] = SchemaUtil.getPKPosition(table, column));
+                    pkSlotIndexesToBe[i] = SchemaUtil.getPKPosition(table, column);
                 }
                 i++;
             }
@@ -481,20 +481,18 @@ public class UpsertCompiler {
                 // Need to resize columnIndexesToBe and pkSlotIndexesToBe to include this extra column.
                 columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, columnIndexesToBe.length + 1);
                 pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, pkSlotIndexesToBe.length + 1);
-                columnIndexesToBe[i] = rowTimestampCol.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = table.getRowTimestampColPos());
+                columnsBeingSet.set(columnIndexesToBe[i] = rowTimestampCol.getPosition());
+                pkSlotIndexesToBe[i] = table.getRowTimestampColPos();
                 targetColumns.add(rowTimestampCol);
                 if (valueNodes != null && !valueNodes.isEmpty()) {
                     valueNodes.add(getNodeForRowTimestampColumn(rowTimestampCol));
                 }
                 nColumnsToSet++;
             }
-            for (i = posOffset; i < table.getPKColumns().size(); i++) {
-                PColumn pkCol = table.getPKColumns().get(i);
-                if (!pkColumnsSet.get(i)) {
-                    if (!pkCol.isNullable() && pkCol.getExpressionStr() == null) {
-                        throw new ConstraintViolationException(table.getName().getString() + "." + pkCol.getName().getString() + " may not be null");
-                    }
+            for (i = posOffset; i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (!columnsBeingSet.get(i) && !column.isNullable() && column.getExpressionStr() == null) {
+                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column.getFamilyName().getString(), column.getName().getString()) + " may not be null");
                 }
             }
         }
@@ -569,6 +567,12 @@ public class UpsertCompiler {
             nColumnsToSet = nValuesToSet;
             columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, nValuesToSet);
             pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, nValuesToSet);
+            for (int i = posOffset + nValuesToSet; i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (!column.isNullable() && column.getExpressionStr() == null) {
+                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column) + " may not be null");
+                }
+            }
         }
         
         if (nValuesToSet != nColumnsToSet) {

@@ -312,6 +312,12 @@ public class SchemaUtil {
         return getName(cf == null || cf.isEmpty() ? null : cf, cq, false);
     }
     
+    public static String getColumnDisplayName(PColumn column) {
+        PName columnName = column.getFamilyName();
+        String cf = columnName == null ? null : columnName.getString();
+        return getName(cf == null || cf.isEmpty() ? null : cf, column.getName().getString(), false);
+    }
+    
     public static String getCaseSensitiveColumnDisplayName(String cf, String cq) {
         return getName(cf == null || cf.isEmpty() ? null : cf, cq, true);
     }
