@@ -476,7 +476,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 stmt.execute();
                 fail("Should have failed since altering a table by adding a non-nullable column is not allowed.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_ADD_NOT_NULLABLE_COLUMN.getErrorCode(), e.getErrorCode());
+                assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(), e.getErrorCode());
             } finally {
                 closeStatement(stmt);
             }

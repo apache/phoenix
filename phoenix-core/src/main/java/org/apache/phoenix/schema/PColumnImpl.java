@@ -138,11 +138,7 @@ public class PColumnImpl implements PColumn {
 
     @Override
     public boolean isNullable() {
-        // Only PK columns can be NOT NULL. We prevent this in the
-        // CREATE TABLE statement now (PHOENIX-1266), but this extra
-        // check for familyName != null will ensure that for existing
-        // tables we never treat key value columns as NOT NULL.
-        return nullable || familyName != null;
+        return nullable;
     }
 
     @Override

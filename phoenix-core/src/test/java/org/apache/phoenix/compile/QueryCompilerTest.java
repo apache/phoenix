@@ -236,10 +236,27 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
+    }
+
+    @Test
+    public void testImmutableRowsPK() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            String query = "CREATE IMMUTABLE TABLE foo (pk integer not null, col1 decimal, col2 decimal)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.execute();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
+        }
+        String query = "CREATE IMMUTABLE TABLE foo (k1 integer not null, k2 decimal not null, col1 decimal not null, constraint pk primary key (k1,k2))";
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.execute();
+        conn.close();
     }
 
     @Test
@@ -1033,6 +1050,25 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } catch (SQLException e) { // expected
             assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
+    }
+
+    @Test
+    public void testAlterNotNull() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("ALTER TABLE atable ADD xyz VARCHAR NOT NULL");
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("CREATE IMMUTABLE TABLE foo (K1 VARCHAR PRIMARY KEY)");
+        try {
+            conn.createStatement().execute("ALTER TABLE foo ADD xyz VARCHAR NOT NULL PRIMARY KEY");
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("ALTER TABLE FOO ADD xyz VARCHAR NOT NULL");
     }
 
     @Test
@@ -2668,6 +2704,66 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testNotNullKeyValueColumnSalted() throws Exception {
+        testNotNullKeyValueColumn(3);
+    }
+    @Test
+    public void testNotNullKeyValueColumnUnsalted() throws Exception {
+        testNotNullKeyValueColumn(0);
+    }
+    
+    private void testNotNullKeyValueColumn(int saltBuckets) throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, v bigint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+            conn.createStatement().execute("UPSERT INTO t1 VALUES(0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t2 (k integer not null primary key, v1 bigint not null, v2 varchar, v3 tinyint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+            conn.createStatement().execute("UPSERT INTO t2(k, v3) VALUES(0,0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t3 (k integer not null primary key, v1 bigint not null, v2 varchar, v3 tinyint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+            conn.createStatement().execute("UPSERT INTO t3(k, v1) VALUES(0,0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("CREATE TABLE t4 (k integer not null primary key, v1 bigint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+        conn.createStatement().execute("UPSERT INTO t4 VALUES(0,0)");
+        conn.createStatement().execute("CREATE TABLE t5 (k integer not null primary key, v1 bigint not null default 0) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+        conn.createStatement().execute("UPSERT INTO t5 VALUES(0)");
+        conn.close();
+    }
+
+    @Test
+    public void testAlterAddNotNullKeyValueColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, v1 bigint not null) IMMUTABLE_ROWS=true");
+        try {
+            conn.createStatement().execute("ALTER TABLE t1 ADD k2 bigint not null primary key");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("ALTER TABLE t1 ADD v2 bigint not null");
+        try {
+            conn.createStatement().execute("UPSERT INTO t1(k, v1) VALUES(0,0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0,0)");
+        conn.createStatement().execute("UPSERT INTO t1(v1,k,v2) VALUES(0,0,0)");
+    }
+    
     @Test
     public void testOnDupKeyForImmutableTable() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());

@@ -415,7 +415,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail(" Non pk column ENTRY_POINT_NAME has a NOT NULL constraint");
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
@@ -431,7 +431,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail(" Non pk column V has a NOT NULL constraint");
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
