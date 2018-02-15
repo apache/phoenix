@@ -3238,6 +3238,7 @@ public class MetaDataClient {
                         changingPhoenixTableProperty = true;
                     }
                 }
+                boolean willBeImmutableRows = Boolean.TRUE.equals(isImmutableRows) || (isImmutableRows == null && table.isImmutableRows());
                 Boolean multiTenant = null;
                 if (multiTenantProp != null) {
                     if (multiTenantProp.booleanValue() != table.isMultiTenant()) {
@@ -3350,7 +3351,7 @@ public class MetaDataClient {
                                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
                                     .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                                 // changing to immutable or already immutable
-                                } else if (Boolean.TRUE.equals(isImmutableRows) || (isImmutableRows == null && table.isImmutableRows())) {
+                                } else if (!willBeImmutableRows) {
                                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
                                     .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                                 }
@@ -3395,7 +3396,7 @@ public class MetaDataClient {
                                 .setSchemaName(schemaName)
                                 .setTableName(tableName).build().buildException();
                             }
-                            PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, isImmutableRows);
+                            PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, willBeImmutableRows);
                             columns.add(column);
                             String pkName = null;
                             Short keySeq = null;
