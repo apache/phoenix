@@ -183,8 +183,9 @@ public class TupleProjectionCompiler {
                       SchemaUtil.getColumnName(table.getName().getString(), colName) 
                     : SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
             PName familyName =  SchemaUtil.isPKColumn(sourceColumn) ? (retainPKColumns ? null : PNameFactory.newName(VALUE_COLUMN_FAMILY)) : sourceColumn.getFamilyName();
+            // If we're not retaining the PK columns, then we should switch columns to be nullable
             PColumn column = new ProjectedColumn(PNameFactory.newName(aliasedName), familyName, 
-                    position++, sourceColumn.isNullable(), sourceColumnRef, sourceColumn.getColumnQualifierBytes());
+                    position++, sourceColumn.isNullable() || familyName != null, sourceColumnRef, sourceColumn.getColumnQualifierBytes());
             projectedColumns.add(column);
         }
         EncodedCQCounter cqCounter = EncodedCQCounter.NULL_COUNTER;
