@@ -3350,7 +3350,7 @@ public class MetaDataClient {
                                 if(colDef.isPK()) {
                                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
                                     .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
-                                } else if (!isImmutableRows) {
+                                } else if (Boolean.TRUE.equals(isImmutableRows) || (isImmutableRows == null && table.isImmutableRows())) {
                                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
                                     .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                                 }
