@@ -43,7 +43,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
@@ -72,8 +71,6 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.protobuf.ServiceException;
 
 
 public class MetaDataUtil {
@@ -532,7 +529,7 @@ public class MetaDataUtil {
 
         try {
             hcon = (ClusterConnection)ConnectionFactory.createConnection(conf);
-            List<HRegionLocation> locations = ((ClusterConnection)hcon).locateRegions(
+            List<HRegionLocation> locations = hcon.locateRegions(
                 org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
 
             for (HRegionLocation loc : locations) {
@@ -540,10 +537,10 @@ public class MetaDataUtil {
                     ServerName sn = loc.getServerName();
                     if (sn == null) continue;
 
-                    AdminService.BlockingInterface admin = ((ClusterConnection) hcon).getAdmin(sn);
+                    AdminService.BlockingInterface admin = hcon.getAdmin(sn);
                     HBaseRpcController controller = hcon.getRpcControllerFactory().newController();
                     org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.getRegionInfo(controller,
-                        (AdminService.BlockingInterface) admin, loc.getRegion().getRegionName());
+                        admin, loc.getRegion().getRegionName());
                 } catch (RemoteException e) {
                     logger.debug("Cannot get region " + loc.getRegion().getEncodedName() + " info due to error:" + e);
                     return false;
