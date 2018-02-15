@@ -487,7 +487,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private static final PDatum EXPLAIN_PLAN_DATUM = new PDatum() {
         @Override
         public boolean isNullable() {
-            return false;
+            return true;
         }
         @Override
         public PDataType getDataType() {
@@ -512,7 +512,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public static final String EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS = "EST_BYTES_READ";
     private static final PColumnImpl EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_BYTES_ESTIMATE),
-                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 1,
+                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 1,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
                     EXPLAIN_PLAN_BYTES_ESTIMATE);
 
@@ -522,7 +522,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public static final String EXPLAIN_PLAN_ROWS_COLUMN_ALIAS = "EST_ROWS_READ";
     private static final PColumnImpl EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ROWS_ESTIMATE),
-                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 2,
+                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 2,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
                     EXPLAIN_PLAN_ROWS_ESTIMATE);
 
@@ -532,7 +532,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS = "EST_INFO_TS";
     private static final PColumnImpl EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ESTIMATE_INFO_TS),
-                PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 3,
+                PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 3,
                 SortOrder.getDefault(), 0, null, false, null, false, false,
                 EXPLAIN_PLAN_ESTIMATE_INFO_TS);
 
