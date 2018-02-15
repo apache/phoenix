@@ -58,6 +58,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -934,8 +935,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                     "ALTER TABLE " + tableName + " ADD z_string varchar not null primary key");
                 fail();
             } catch (SQLException e) {
-                assertTrue(e.getMessage(), e.getMessage().contains(
-                    "ERROR 1006 (42J04): Only nullable columns may be added to a multi-part row key."));
+                assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
             }
             conn1.createStatement().executeUpdate(
                 "ALTER TABLE " + tableName + " ADD z_string varchar primary key");

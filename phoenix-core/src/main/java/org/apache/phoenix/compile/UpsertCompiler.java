@@ -488,7 +488,7 @@ public class UpsertCompiler {
             for (i = posOffset; i < table.getColumns().size(); i++) {
                 PColumn column = table.getColumns().get(i);
                 if (!columnsBeingSet.get(i) && !column.isNullable() && column.getExpressionStr() == null) {
-                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column.getFamilyName().getString(), column.getName().getString()) + " may not be null");
+                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column) + " may not be null");
                 }
             }
         }
