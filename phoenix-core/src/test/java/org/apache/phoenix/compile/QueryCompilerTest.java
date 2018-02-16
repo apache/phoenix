@@ -43,6 +43,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
+import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -51,12 +52,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.execute.AggregatePlan;
-import org.apache.phoenix.execute.ClientScanPlan;
-import org.apache.phoenix.execute.HashJoinPlan;
-import org.apache.phoenix.execute.ScanPlan;
-import org.apache.phoenix.execute.SortMergeJoinPlan;
-import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.*;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -88,6 +85,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -4481,6 +4479,183 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             plan.iterator();
             List<List<Scan>> outerScans = plan.getScans();
             assertEquals(6, outerScans.size());
+        }
+    }
+
+    @Test
+    public void testLocalIndexPruningInSortMergeJoin() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT /*+ USE_SORT_MERGE_JOIN*/ *\n" +
+                "FROM T1 JOIN T2 ON T1.A = T2.A\n" +
+                "WHERE T1.A = 'B' and T1.C='C' and T2.A IN ('A','G') and T2.B = 'A' and T2.D = 'D'");
+    }
+
+    @Ignore("Blocked by PHOENIX-4614")
+    @Test
+    public void testLocalIndexPruningInLeftOrInnerHashJoin() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT *\n" +
+                "FROM T1 JOIN T2 ON T1.A = T2.A\n" +
+                "WHERE T1.A = 'B' and T1.C='C' and T2.A IN ('A','G') and T2.B = 'A' and T2.D = 'D'");
+    }
+
+    @Ignore("Blocked by PHOENIX-4614")
+    @Test
+    public void testLocalIndexPruningInRightHashJoin() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT *\n" +
+                "FROM (\n" +
+                "    SELECT A, B, C, D FROM T2 WHERE T2.A IN ('A','G') and T2.B = 'A' and T2.D = 'D'\n" +
+                ") T2\n" +
+                "RIGHT JOIN T1 ON T2.A = T1.A\n" +
+                "WHERE T1.A = 'B' and T1.C='C'");
+    }
+
+    @Test
+    public void testLocalIndexPruningInUinon() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT A, B, C FROM T1\n" +
+                "WHERE A = 'B' and C='C'\n" +
+                "UNION ALL\n" +
+                "SELECT A, B, C FROM T2\n" +
+                "WHERE A IN ('A','G') and B = 'A' and D = 'D'");
+    }
+
+    private void verifyLocalIndexPruningWithMultipleTables(String query) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T1 (\n" +
+                    "    A CHAR(1) NOT NULL,\n" +
+                    "    B CHAR(1) NOT NULL,\n" +
+                    "    C CHAR(1) NOT NULL,\n" +
+                    "    CONSTRAINT PK PRIMARY KEY (\n" +
+                    "        A,\n" +
+                    "        B,\n" +
+                    "        C\n" +
+                    "    )\n" +
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX1 ON T1(A,C)");
+            conn.createStatement().execute("CREATE TABLE T2 (\n" +
+                    "    A CHAR(1) NOT NULL,\n" +
+                    "    B CHAR(1) NOT NULL,\n" +
+                    "    C CHAR(1) NOT NULL,\n" +
+                    "    D CHAR(1) NOT NULL,\n" +
+                    "    CONSTRAINT PK PRIMARY KEY (\n" +
+                    "        A,\n" +
+                    "        B,\n" +
+                    "        C,\n" +
+                    "        D\n" +
+                    "    )\n" +
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX2 ON T2(A,B,D)");
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            List<QueryPlan> childPlans = plan.accept(new MultipleChildrenExtractor());
+            assertEquals(2, childPlans.size());
+            // Check left child
+            assertEquals("IDX1", childPlans.get(0).getContext().getCurrentTable().getTable().getName().getString());
+            childPlans.get(0).iterator();
+            List<List<Scan>> outerScansL = childPlans.get(0).getScans();
+            assertEquals(1, outerScansL.size());
+            List<Scan> innerScansL = outerScansL.get(0);
+            assertEquals(1, innerScansL.size());
+            Scan scanL = innerScansL.get(0);
+            assertEquals("A", Bytes.toString(scanL.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scanL.getStopRow()).trim());
+            // Check right child
+            assertEquals("IDX2", childPlans.get(1).getContext().getCurrentTable().getTable().getName().getString());
+            childPlans.get(1).iterator();
+            List<List<Scan>> outerScansR = childPlans.get(1).getScans();
+            assertEquals(2, outerScansR.size());
+            List<Scan> innerScansR1 = outerScansR.get(0);
+            assertEquals(1, innerScansR1.size());
+            Scan scanR1 = innerScansR1.get(0);
+            assertEquals("A", Bytes.toString(scanR1.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scanR1.getStopRow()).trim());
+            List<Scan> innerScansR2 = outerScansR.get(1);
+            assertEquals(1, innerScansR2.size());
+            Scan scanR2 = innerScansR2.get(0);
+            assertEquals("G", Bytes.toString(scanR2.getStartRow()).trim());
+            assertEquals("I", Bytes.toString(scanR2.getStopRow()).trim());
+        }
+    }
+
+    private static class MultipleChildrenExtractor implements QueryPlanVisitor<List<QueryPlan>> {
+
+        @Override
+        public List<QueryPlan> defaultReturn(QueryPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(AggregatePlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(ScanPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(ClientAggregatePlan plan) {
+            return plan.getDelegate().accept(this);
+        }
+
+        @Override
+        public List<QueryPlan> visit(ClientScanPlan plan) {
+            return plan.getDelegate().accept(this);
+        }
+
+        @Override
+        public List<QueryPlan> visit(LiteralResultIterationPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(TupleProjectionPlan plan) {
+            return plan.getDelegate().accept(this);
+        }
+
+        @Override
+        public List<QueryPlan> visit(HashJoinPlan plan) {
+            List<QueryPlan> children = new ArrayList<QueryPlan>(plan.getSubPlans().length + 1);
+            children.add(plan.getDelegate());
+            for (HashJoinPlan.SubPlan subPlan : plan.getSubPlans()) {
+                children.add(subPlan.getInnerPlan());
+            }
+            return children;
+        }
+
+        @Override
+        public List<QueryPlan> visit(SortMergeJoinPlan plan) {
+            return Lists.newArrayList(plan.getLhsPlan(), plan.getRhsPlan());
+        }
+
+        @Override
+        public List<QueryPlan> visit(UnionPlan plan) {
+            return plan.getSubPlans();
+        }
+
+        @Override
+        public List<QueryPlan> visit(UnnestArrayPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(CorrelatePlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(CursorFetchPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(ListJarsQueryPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(TraceQueryPlan plan) {
+            return Collections.emptyList();
         }
     }
 }
