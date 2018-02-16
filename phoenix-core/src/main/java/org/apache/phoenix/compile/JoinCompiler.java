@@ -1199,7 +1199,8 @@ public class JoinCompiler {
         return AndExpression.create(expressions);
     }
 
-    public static SelectStatement optimize(PhoenixStatement statement, SelectStatement select, final ColumnResolver resolver) throws SQLException {
+    public static Pair<SelectStatement, Map<TableRef, QueryPlan>> optimize(
+            PhoenixStatement statement, SelectStatement select, final ColumnResolver resolver) throws SQLException {
         TableRef groupByTableRef = null;
         TableRef orderByTableRef = null;
         if (select.getGroupBy() != null && !select.getGroupBy().isEmpty()) {
@@ -1226,7 +1227,7 @@ public class JoinCompiler {
             QueryCompiler compiler = new QueryCompiler(statement, select, resolver, false, null);
             List<Object> binds = statement.getParameters();
             StatementContext ctx = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
-            QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false, false, null);
+            QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false, false, null, Collections.<TableRef, QueryPlan>emptyMap());
             TableRef table = plan.getTableRef();
             if (groupByTableRef != null && !groupByTableRef.equals(table)) {
                 groupByTableRef = null;
@@ -1236,7 +1237,8 @@ public class JoinCompiler {
             }
         }
 
-        final Map<TableRef, TableRef> replacement = new HashMap<TableRef, TableRef>();
+        Map<TableRef, TableRef> replacementMap = null;
+        Map<TableRef, QueryPlan> dataPlanMap = null;
 
         for (Table table : join.getTables()) {
             if (table.isSubselect())
@@ -1245,19 +1247,30 @@ public class JoinCompiler {
             List<ParseNode> groupBy = tableRef.equals(groupByTableRef) ? select.getGroupBy() : null;
             List<OrderByNode> orderBy = tableRef.equals(orderByTableRef) ? select.getOrderBy() : null;
             SelectStatement stmt = getSubqueryForOptimizedPlan(select.getHint(), table.getDynamicColumns(), table.getTableSamplingRate(), tableRef, join.getColumnRefs(), table.getPreFiltersCombined(), groupBy, orderBy, table.isWildCardSelect(), select.hasSequence(), select.getUdfParseNodes());
-            // TODO: As port of PHOENIX-4585, we need to make sure this plan has a pointer to the data plan
-            // when an index is used instead of the data table, and that this method returns that
-            // state for downstream processing.
             // TODO: It seems inefficient to be recompiling the statement again and again inside of this optimize call
-            QueryPlan plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, stmt);
-            if (!plan.getTableRef().equals(tableRef)) {
-                replacement.put(tableRef, plan.getTableRef());
+            QueryPlan dataPlan =
+                    new QueryCompiler(
+                            statement, stmt,
+                            FromCompiler.getResolverForQuery(stmt, statement.getConnection()),
+                            false, null)
+                    .compile();
+            QueryPlan plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, dataPlan);
+            TableRef newTableRef = plan.getTableRef();
+            if (!newTableRef.equals(tableRef)) {
+                if (replacementMap == null) {
+                    replacementMap = new HashMap<TableRef, TableRef>();
+                    dataPlanMap = new HashMap<TableRef, QueryPlan>();
+                }
+                replacementMap.put(tableRef, newTableRef);
+                dataPlanMap.put(newTableRef, dataPlan);
             }
         }
 
-        if (replacement.isEmpty())
-            return select;
+        if (replacementMap == null)
+            return new Pair<SelectStatement, Map<TableRef, QueryPlan>>(
+                    select, Collections.<TableRef, QueryPlan> emptyMap());
 
+        final Map<TableRef, TableRef> replacement = replacementMap;
         TableNode from = select.getFrom();
         TableNode newFrom = from.accept(new TableNodeVisitor<TableNode>() {
             private TableRef resolveTable(String alias, TableName name) throws SQLException {
@@ -1319,7 +1332,7 @@ public class JoinCompiler {
             // replace expressions with corresponding matching columns for functional indexes
             indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(indexTableRef.getTable(), indexTableRef.getTableAlias(), statement.getConnection(), indexSelect.getUdfParseNodes()));
         } 
-        return indexSelect;
+        return new Pair<SelectStatement, Map<TableRef, QueryPlan>>(indexSelect, dataPlanMap);
     }
 
     private static SelectStatement getSubqueryForOptimizedPlan(HintNode hintNode, List<ColumnDef> dynamicCols, Double tableSamplingRate, TableRef tableRef, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where, List<ParseNode> groupBy,
