@@ -440,8 +440,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
                         "    CLIENT SORTED BY [BUCKET, \"TIMESTAMP\"]\n" +
-                        "CLIENT SORTED BY [E.BUCKET, E.TIMESTAMP]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
+                        "CLIENT SORTED BY [E.TIMESTAMP, E.BUCKET]\n" +
+                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.TIMESTAMP, E.BUCKET]"
                         :
                         "SORT-MERGE-JOIN (INNER) TABLES\n" +
                         "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + eventCountTableName + " [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
@@ -456,8 +456,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
-                        "CLIENT SORTED BY [E.BUCKET, E.TIMESTAMP]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
+                        "CLIENT SORTED BY [E.TIMESTAMP, E.BUCKET]\n" +
+                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.TIMESTAMP, E.BUCKET]";
                 
                 ResultSet rs = conn.createStatement().executeQuery("explain " + q);
                 assertEquals(p, QueryUtil.getExplainPlan(rs));

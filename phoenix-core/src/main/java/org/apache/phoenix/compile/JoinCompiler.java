@@ -561,6 +561,10 @@ public class JoinCompiler {
                 }
                 compiled.add(new Pair<Expression, Expression>(left, right));
             }
+            // TODO PHOENIX-4618:
+            // For Stategy.SORT_MERGE, we probably need to re-order the join keys based on the
+            // specific ordering required by the join's parent, or re-order the following way
+            // to align with group-by expressions' re-ordering.
             if (strategy != Strategy.SORT_MERGE) {
                 Collections.sort(compiled, new Comparator<Pair<Expression, Expression>>() {
                     @Override
