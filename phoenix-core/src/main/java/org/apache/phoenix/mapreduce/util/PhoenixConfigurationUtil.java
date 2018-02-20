@@ -26,6 +26,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -146,6 +147,8 @@ public final class PhoenixConfigurationUtil {
     public static final String SNAPSHOT_NAME_KEY = "phoenix.mapreduce.snapshot.name";
 
     public static final String RESTORE_DIR_KEY = "phoenix.tableSnapshot.restore.dir";
+
+    public static final String MAPREDUCE_TENANT_ID = "phoenix.mapreduce.tenantid";
 
     public enum SchemaType {
         TABLE,
@@ -343,7 +346,12 @@ public final class PhoenixConfigurationUtil {
         }
         final String tableName = getInputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        final Connection connection = ConnectionUtil.getInputConnection(configuration);
+        Properties props = new Properties();
+        String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
+        if (tenantId != null) {
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
+        final Connection connection = ConnectionUtil.getInputConnection(configuration, props);
         final List<String> selectColumnList = getSelectColumnList(configuration);
         columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
         // we put the encoded column infos in the Configuration for re usability.
@@ -658,4 +666,9 @@ public final class PhoenixConfigurationUtil {
 	    return conn.getQueryServices().getConfiguration()
 	            .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
 	}
+
+    public static void setTenantId(Configuration configuration, String tenantId){
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_TENANT_ID, tenantId);
+    }
 }
