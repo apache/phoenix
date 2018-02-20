@@ -30,11 +30,13 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.sql.*;
+import java.util.Properties;
 
 import static org.junit.Assert.*;
 
@@ -50,11 +52,18 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
             " STOCK_NAME VARCHAR NOT NULL , RECORDING_YEAR  INTEGER NOT  NULL,  RECORDINGS_QUARTER " +
             " DOUBLE array[] CONSTRAINT pk PRIMARY KEY ( STOCK_NAME, RECORDING_YEAR ))";
 
+    private static final String CREATE_STOCK_VIEW = "CREATE VIEW IF NOT EXISTS %s (v1 VARCHAR) AS "
+        + " SELECT * FROM %s WHERE RECORDING_YEAR = 2008";
+
     private static final String MAX_RECORDING = "MAX_RECORDING";
     private  String CREATE_STOCK_STATS_TABLE =
             "CREATE TABLE IF NOT EXISTS %s(STOCK_NAME VARCHAR NOT NULL , "
                     + " MAX_RECORDING DOUBLE CONSTRAINT pk PRIMARY KEY (STOCK_NAME ))";
+
+
     private String UPSERT = "UPSERT into %s values (?, ?, ?)";
+
+    private String TENANT_ID = "1234567890";
 
     @Before
     public void setupTables() throws Exception {
@@ -63,22 +72,28 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNoConditionsOnSelect() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String stockTableName = generateUniqueName();
-        String stockStatsTableName = generateUniqueName();
-        conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
-        conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
-        conn.commit();
-        final Configuration conf = getUtility().getConfiguration();
-        Job job = Job.getInstance(conf);
-        PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockTableName, null,
-                STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
-        testJob(job, stockTableName, stockStatsTableName, 91.04);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createAndTestJob(conn, null, 91.04, null);
+        }
     }
 
     @Test
     public void testConditionsOnSelect() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createAndTestJob(conn, RECORDING_YEAR + "  < 2009", 81.04, null);
+        }
+    }
+
+    @Test
+    public void testWithTenantId() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())){
+            //tenant view will perform the same filter as the select conditions do in testConditionsOnSelect
+            createAndTestJob(conn, null, 81.04, TENANT_ID);
+        }
+
+    }
+
+    private void createAndTestJob(Connection conn, String s, double v, String tenantId) throws SQLException, IOException, InterruptedException, ClassNotFoundException {
         String stockTableName = generateUniqueName();
         String stockStatsTableName = generateUniqueName();
         conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
@@ -86,14 +101,33 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         conn.commit();
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockTableName, RECORDING_YEAR+"  < 2009",
+        if (tenantId != null) {
+            setInputForTenant(job, tenantId, stockTableName, s);
+
+        } else {
+            PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockTableName, s,
                 STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
-        testJob(job, stockTableName, stockStatsTableName, 81.04);
+        }
+        testJob(conn, job, stockTableName, stockStatsTableName, v);
+
     }
 
-    private void testJob(Job job, String stockTableName, String stockStatsTableName, double expectedMax)
+    private void setInputForTenant(Job job, String tenantId, String stockTableName, String s) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, TENANT_ID);
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)){
+            PhoenixMapReduceUtil.setTenantId(job, tenantId);
+            String stockViewName = generateUniqueName();
+            tenantConn.createStatement().execute(String.format(CREATE_STOCK_VIEW, stockViewName, stockTableName));
+            tenantConn.commit();
+            PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockViewName, s,
+                STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+        }
+    }
+
+    private void testJob(Connection conn, Job job, String stockTableName, String stockStatsTableName, double expectedMax)
             throws SQLException, InterruptedException, IOException, ClassNotFoundException {
-        upsertData(stockTableName);
+        upsertData(conn, stockTableName);
 
         // only run locally, rather than having to spin up a MiniMapReduce cluster and lets us use breakpoints
         job.getConfiguration().set("mapreduce.framework.name", "local");
@@ -135,8 +169,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         job.setOutputFormatClass(PhoenixOutputFormat.class);
     }
 
-    private void upsertData(String stockTableName) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+    private void upsertData(Connection conn, String stockTableName) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, stockTableName));
         upsertData(stmt, "AAPL", 2009, new Double[]{85.88, 91.04, 88.5, 90.3});
         upsertData(stmt, "AAPL", 2008, new Double[]{75.88, 81.04, 78.5, 80.3});

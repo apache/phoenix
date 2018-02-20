@@ -147,7 +147,6 @@ public final class PhoenixMapReduceUtil {
     /**
      *
      * @param job
-     * @param outputClass
      * @param tableName  Output table
      * @param columns    List of columns separated by ,
      */
@@ -162,7 +161,6 @@ public final class PhoenixMapReduceUtil {
     /**
      *
      * @param job
-     * @param outputClass
      * @param tableName  Output table
      * @param fieldNames fields
      */
@@ -183,5 +181,8 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setOutputCluster(configuration, quorum);
     }
 
+    public static void setTenantId(final Job job, final String tenantId) {
+        PhoenixConfigurationUtil.setTenantId(job.getConfiguration(), tenantId);
+    }
 
 }
