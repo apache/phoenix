@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -188,42 +189,15 @@ public class PhoenixKeyValueUtil {
      * @param mutations map from table to row to RowMutationState
      * @return estimated row size
      */
-    public static long
-            getEstimatedRowSize(TableRef tableRef, Map<ImmutableBytesPtr, RowMutationState> mutations) {
+    public static long getEstimatedRowMutationSize(
+            Map<TableRef, MultiRowMutationState> tableMutationMap) {
         long size = 0;
-        PTable table = tableRef.getTable();
-        // iterate over rows
-        for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : mutations.entrySet()) {
-            int rowLength = rowEntry.getKey().getLength();
-            Map<PColumn, byte[]> colValueMap = rowEntry.getValue().getColumnValues();
-            switch (table.getImmutableStorageScheme()) {
-            case ONE_CELL_PER_COLUMN:
-                // iterate over columns
-                for (Entry<PColumn, byte[]> colValueEntry : colValueMap.entrySet()) {
-                    PColumn pColumn = colValueEntry.getKey();
-                    size +=
-                            KeyValue.getKeyValueDataStructureSize(rowLength,
-                                pColumn.getFamilyName().getBytes().length,
-                                pColumn.getColumnQualifierBytes().length,
-                                colValueEntry.getValue().length);
-                }
-                break;
-            case SINGLE_CELL_ARRAY_WITH_OFFSETS:
-                // we store all the column values in a single key value that contains all the
-                // column values followed by an offset array
-                size +=
-                        PArrayDataTypeEncoder.getEstimatedByteSize(table, rowLength,
-                            colValueMap);
-                break;
+        // iterate over table
+        for (Entry<TableRef, MultiRowMutationState> tableEntry : tableMutationMap.entrySet()) {
+            // iterate over rows
+            for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : tableEntry.getValue().entrySet()) {
+                size += calculateRowMutationSize(rowEntry);
             }
-            // count the empty key value
-            Pair<byte[], byte[]> emptyKeyValueInfo =
-                    EncodedColumnsUtil.getEmptyKeyValueInfo(table);
-            size +=
-                    KeyValue.getKeyValueDataStructureSize(rowLength,
-                        SchemaUtil.getEmptyColumnFamilyPtr(table).getLength(),
-                        emptyKeyValueInfo.getFirst().length,
-                        emptyKeyValueInfo.getSecond().length);
         }
         return size;
     }
@@ -236,5 +210,11 @@ public class PhoenixKeyValueUtil {
             return (KeyValue) c;
         }
         return KeyValueUtil.copyToNewKeyValue(c);
+    }
+
+    private static long calculateRowMutationSize(Entry<ImmutableBytesPtr, RowMutationState> rowEntry) {
+        int rowLength = rowEntry.getKey().getLength();
+        long colValuesLength = rowEntry.getValue().calculateEstimatedSize();
+        return (rowLength + colValuesLength);
     }
 }
