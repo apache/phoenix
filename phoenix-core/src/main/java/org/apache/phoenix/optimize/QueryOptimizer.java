@@ -394,7 +394,8 @@ public class QueryOptimizer {
             }
         }
         final int boundRanges = nViewConstants;
-        final int comparisonOfDataVersusIndexTable = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE) ? -1 : 1;
+        final boolean useDataOverIndexHint = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE);
+        final int comparisonOfDataVersusIndexTable = useDataOverIndexHint ? -1 : 1;
         Collections.sort(bestCandidates, new Comparator<QueryPlan>() {
 
             @Override
@@ -415,8 +416,10 @@ public class QueryOptimizer {
                     }
                 }
                 // Use smaller table (table with fewest kv columns)
-                c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
-                if (c != 0) return c;
+                if (!useDataOverIndexHint || (table1.getType() == PTableType.INDEX && table2.getType() == PTableType.INDEX)) {
+                    c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
+                    if (c != 0) return c;
+                }
 
                 // If all things are equal, don't choose local index as it forces scan
                 // on every region (unless there's no start/stop key)
@@ -433,10 +436,10 @@ public class QueryOptimizer {
                 // All things being equal, just use the table based on the Hint.USE_DATA_OVER_INDEX_TABLE
 
                 if (table1.getType() == PTableType.INDEX && table2.getType() != PTableType.INDEX) {
-                    return comparisonOfDataVersusIndexTable;
+                    return -comparisonOfDataVersusIndexTable;
                 }
                 if (table2.getType() == PTableType.INDEX && table1.getType() != PTableType.INDEX) {
-                    return -comparisonOfDataVersusIndexTable;
+                    return comparisonOfDataVersusIndexTable;
                 }
                 return 0;
             }

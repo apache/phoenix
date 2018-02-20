@@ -37,6 +37,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
@@ -51,6 +53,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -68,6 +72,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -202,6 +207,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
             assertEquals(1,conn.createStatement().executeUpdate(dml));
+            assertNoClientSideIndexMutations(conn);
             conn.commit();
 
             String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
@@ -229,6 +235,19 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
+        }
+    }
+
+    private void assertNoClientSideIndexMutations(Connection conn) throws SQLException {
+        if (mutable) {
+            Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+            if (iterator.hasNext()) {
+                byte[] tableName = iterator.next().getFirst(); // skip data table mutations
+                PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
+                assertTrue(table.getType() == PTableType.TABLE); // should be data table
+                boolean hasIndexData = iterator.hasNext();
+                assertFalse(hasIndexData); // should have no index data
+            }
         }
     }
 
@@ -367,6 +386,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
             assertEquals(1,conn.createStatement().executeUpdate(dml));
+            assertNoClientSideIndexMutations(conn);
             conn.commit();
 
             // query the data table

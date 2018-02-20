@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -1028,7 +1029,52 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(MetaDataUtil.tableRegionsOnline(conf, table));
         }
     }
-    
+
+    //Tests that when we're updating an index from within the RS (e.g. UngruopedAggregateRegionObserver),
+    // if the index write fails the index gets disabled
+    @Test
+    public void testIndexFailureWithinRSDisablesIndex() throws Throwable {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        final String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try {
+                conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR) DISABLE_INDEX_ON_WRITE_FAILURE = TRUE");
+                conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
+                conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a','0', 't')");
+                conn.commit();
+                // Simulate write failure
+                TestUtil.addCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
+                conn.setAutoCommit(true);
+                try {
+                    conn.createStatement().execute("DELETE FROM " + fullTableName);
+                    fail();
+                } catch (CommitException|PhoenixIOException e) {
+                    // Expected
+                }
+                assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, null));
+                // reset the index state to ACTIVE
+                Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+                IndexUtil.updateIndexState(fullIndexName, 0, metaTable, PIndexState.INACTIVE);
+                IndexUtil.updateIndexState(fullIndexName, 0, metaTable, PIndexState.ACTIVE);
+                TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
+                conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a','0', 't')");
+                TestUtil.addCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
+                try {
+                    conn.createStatement().execute("DELETE FROM " + fullTableName + " WHERE v1='a'");
+                    fail();
+                } catch (CommitException|PhoenixIOException e) {
+                    // Expected
+                }
+                assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, null));
+            } finally {
+                TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
+            }
+        }
+    }
+
     public static class WriteFailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {

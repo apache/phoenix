@@ -106,6 +106,23 @@ public class DeleteCompiler {
         this.operation = operation;
     }
     
+    /**
+     * Handles client side deletion of rows for a DELETE statement. We determine the "best" plan to drive the query using
+     * our standard optimizer. The plan may be based on using an index, in which case we need to translate the index row
+     * key to get the data row key used to form the delete mutation. We always collect up the data table mutations, but we
+     * only collect and send the index mutations for global, immutable indexes. Local indexes and mutable indexes are always
+     * maintained on the server side.
+     * @param context StatementContext for the scan being executed
+     * @param iterator ResultIterator for the scan being executed
+     * @param bestPlan QueryPlan used to produce the iterator
+     * @param projectedTableRef TableRef containing all indexed and covered columns across all indexes on the data table
+     * @param otherTableRefs other TableRefs needed to be maintained apart from the one over which the scan is executing.
+     *  Might be other index tables (if we're driving off of the data table table), the data table (if we're driving off of
+     *  an index table), or a mix of the data table and additional index tables.
+     * @return MutationState representing the uncommitted data across the data table and indexes. Will be joined with the
+     *  MutationState on the connection over which the delete is occurring.
+     * @throws SQLException
+     */
     private static MutationState deleteRows(StatementContext context, ResultIterator iterator, QueryPlan bestPlan, TableRef projectedTableRef, List<TableRef> otherTableRefs) throws SQLException {
         RowProjector projector = bestPlan.getProjector();
         TableRef tableRef = bestPlan.getTableRef();
@@ -123,13 +140,14 @@ public class DeleteCompiler {
         final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         MultiRowMutationState mutations = new MultiRowMutationState(batchSize);
-        List<MultiRowMutationState> indexMutations = null;
-        // If indexTableRef is set, we're deleting the rows from both the index table and
-        // the data table through a single query to save executing an additional one.
+        List<MultiRowMutationState> otherMutations = null;
+        // If otherTableRefs is not empty, we're deleting the rows from both the index table and
+        // the data table through a single query to save executing an additional one (since we
+        // can always get the data table row key from an index row key).
         if (!otherTableRefs.isEmpty()) {
-            indexMutations = Lists.newArrayListWithExpectedSize(otherTableRefs.size());
+            otherMutations = Lists.newArrayListWithExpectedSize(otherTableRefs.size());
             for (int i = 0; i < otherTableRefs.size(); i++) {
-                indexMutations.add(new MultiRowMutationState(batchSize));
+                otherMutations.add(new MultiRowMutationState(batchSize));
             }
         }
         List<PColumn> pkColumns = table.getPKColumns();
@@ -207,22 +225,22 @@ public class DeleteCompiler {
                 // When issuing deletes, we do not care about the row time ranges. Also, if the table had a row timestamp column, then the
                 // row key will already have its value.
                 // Check for otherTableRefs being empty required when deleting directly from the index
-                if (otherTableRefs.isEmpty() || table.getIndexType() != IndexType.LOCAL) {
+                if (otherTableRefs.isEmpty() || (table.getIndexType() != IndexType.LOCAL && table.isImmutableRows())) {
                     mutations.put(rowKeyPtr, new RowMutationState(PRow.DELETE_MARKER, 0, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 }
                 for (int i = 0; i < otherTableRefs.size(); i++) {
                     PTable otherTable = otherTableRefs.get(i).getTable();
-                    ImmutableBytesPtr indexPtr = new ImmutableBytesPtr(); // allocate new as this is a key in a Map
+                    ImmutableBytesPtr otherRowKeyPtr = new ImmutableBytesPtr(); // allocate new as this is a key in a Map
                     // Translate the data table row to the index table row
                     if (table.getType() == PTableType.INDEX) {
-                        indexPtr.set(scannedIndexMaintainer.buildDataRowKey(rowKeyPtr, viewConstants));
+                        otherRowKeyPtr.set(scannedIndexMaintainer.buildDataRowKey(rowKeyPtr, viewConstants));
                         if (otherTable.getType() == PTableType.INDEX) {
-                            indexPtr.set(maintainers[i].buildRowKey(getter, indexPtr, null, null, HConstants.LATEST_TIMESTAMP));                        
+                            otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP));
                         }
                     } else {
-                        indexPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP));
+                        otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP));
                     }
-                    indexMutations.get(i).put(indexPtr, new RowMutationState(PRow.DELETE_MARKER, 0, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
+                    otherMutations.get(i).put(otherRowKeyPtr, new RowMutationState(PRow.DELETE_MARKER, 0, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 }
                 if (mutations.size() > maxSize) {
                     throw new IllegalArgumentException("MutationState size of " + mutations.size() + " is bigger than max allowed size of " + maxSize);
@@ -250,7 +268,7 @@ public class DeleteCompiler {
             int nCommittedRows = isAutoCommit ? (rowCount / batchSize * batchSize) : 0;
             MutationState state = new MutationState(tableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
             for (int i = 0; i < otherTableRefs.size(); i++) {
-                MutationState indexState = new MutationState(otherTableRefs.get(i), indexMutations.get(i), 0, maxSize, maxSizeBytes, connection);
+                MutationState indexState = new MutationState(otherTableRefs.get(i), otherMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                 state.join(indexState);
             }
             return state;
@@ -877,6 +895,8 @@ public class DeleteCompiler {
         public MutationState execute() throws SQLException {
             ResultIterator iterator = bestPlan.iterator();
             try {
+                // If we're not doing any pre or post processing, we can produce the delete mutations directly
+                // in the parallel threads executed for the scan
                 if (!hasPreOrPostProcessing) {
                     Tuple tuple;
                     long totalRowCount = 0;
@@ -891,16 +911,29 @@ public class DeleteCompiler {
                     }
                     // Return total number of rows that have been deleted from the table. In the case of auto commit being off
                     // the mutations will all be in the mutation state of the current connection. We need to divide by the
-                    // total number of tables we updated as otherwise the client will get an unexpected result
-                    MutationState state = new MutationState(maxSize, maxSizeBytes, connection,
-                            totalRowCount /
-                                    ((bestPlan.getTableRef().getTable().getIndexType() == IndexType.LOCAL && !otherTableRefs.isEmpty() ? 0 : 1) + otherTableRefs.size()));
+                    // total number of tables we updated as otherwise the client will get an inflated result.
+                    int totalTablesUpdateClientSide = 1; // data table is always updated
+                    PTable bestTable = bestPlan.getTableRef().getTable();
+                    // global immutable tables are also updated client side (but don't double count the data table)
+                    if (bestPlan != dataPlan && bestTable.getIndexType() == IndexType.GLOBAL && bestTable.isImmutableRows()) {
+                        totalTablesUpdateClientSide++;
+                    }
+                    for (TableRef otherTableRef : otherTableRefs) {
+                        PTable otherTable = otherTableRef.getTable();
+                        // Don't double count the data table here (which morphs when it becomes a projected table, hence this check)
+                        if (projectedTableRef != otherTableRef && otherTable.getIndexType() == IndexType.GLOBAL && otherTable.isImmutableRows()) {
+                            totalTablesUpdateClientSide++;
+                        }
+                    }
+                    MutationState state = new MutationState(maxSize, maxSizeBytes, connection, totalRowCount/totalTablesUpdateClientSide);
 
                     // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
                     state.setReadMetricQueue(context.getReadMetricsQueue());
 
                     return state;
                 } else {
+                    // Otherwise, we have to execute the query and produce the delete mutations in the single thread
+                    // producing the query results.
                     return deleteRows(context, iterator, bestPlan, projectedTableRef, otherTableRefs);
                 }
             } finally {
