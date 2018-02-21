@@ -446,7 +446,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             appendConjunction(buf);
             buf.append(" TENANT_ID LIKE '" + StringUtil.escapeStringConstant(tenantIdPattern) + "' ");
             if (tenantId != null) {
-                buf.append(" and TENANT_ID + = '" + StringUtil.escapeStringConstant(tenantId.getString()) + "' ");
+                buf.append(" and TENANT_ID = '" + StringUtil.escapeStringConstant(tenantId.getString()) + "' ");
             }
         }
     }

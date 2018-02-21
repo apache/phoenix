@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -109,6 +110,32 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testMetadataTenantSpecific() throws SQLException {
+    	// create multi-tenant table
+    	String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        	String baseTableDdl = "CREATE TABLE %s (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, V VARCHAR CONSTRAINT PK PRIMARY KEY(K1, K2)) MULTI_TENANT=true";
+        	conn.createStatement().execute(String.format(baseTableDdl, tableName));
+        }
+    	
+        // create tenant specific view and execute metdata data call with tenant specific connection
+        String tenantId = generateUniqueName();
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+        	String viewName = generateUniqueName();
+        	String viewDdl = "CREATE VIEW %s AS SELECT * FROM %s";
+        	tenantConn.createStatement().execute(String.format(viewDdl, viewName, tableName));
+        	DatabaseMetaData dbmd = tenantConn.getMetaData();
+        	ResultSet rs = dbmd.getTables(tenantId, "", viewName, null);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_NAME"), viewName);
+            assertEquals(PTableType.VIEW.toString(), rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
+        }
+    }
+    
     @Test
     public void testTableMetadataScan() throws SQLException {
         String tableAName = generateUniqueName() + "TABLE";
