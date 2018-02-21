@@ -251,13 +251,13 @@ public class DeleteCompiler {
                     MutationState state = new MutationState(tableRef, mutations, 0, maxSize, maxSizeBytes, connection);
                     connection.getMutationState().join(state);
                     for (int i = 0; i < otherTableRefs.size(); i++) {
-                        MutationState indexState = new MutationState(otherTableRefs.get(i), indexMutations.get(i), 0, maxSize, maxSizeBytes, connection);
+                        MutationState indexState = new MutationState(otherTableRefs.get(i), otherMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                         connection.getMutationState().join(indexState);
                     }
                     connection.getMutationState().send();
                     mutations.clear();
-                    if (indexMutations != null) {
-                        for (MultiRowMutationState multiRowMutationState : indexMutations) {
+                    if (otherMutations != null) {
+                        for (MultiRowMutationState multiRowMutationState : otherMutations) {
                             multiRowMutationState.clear();
                         }
                     }
