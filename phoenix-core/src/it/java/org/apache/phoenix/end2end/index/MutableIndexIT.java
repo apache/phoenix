@@ -42,16 +42,23 @@ import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.PartialScannerResultsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -809,6 +816,54 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
               upsertRow(dml, tenantConn, 2);
               tenantConn.commit();
           }
+      }
+  }
+
+  // Tests that if major compaction is run on a table with a disabled index,
+  // deleted cells are kept
+  @Test
+  public void testCompactDisabledIndex() throws Exception {
+      try (Connection conn = getConnection()) {
+          String schemaName = generateUniqueName();
+          String dataTableName = generateUniqueName() + "_DATA";
+          String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+          String indexTableName = generateUniqueName() + "_IDX";
+          String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+          conn.createStatement().execute(
+              String.format(PartialScannerResultsDisabledIT.TEST_TABLE_DDL, dataTableFullName));
+          conn.createStatement().execute(String.format(PartialScannerResultsDisabledIT.INDEX_1_DDL,
+              indexTableName, dataTableFullName));
+
+          //insert a row, and delete it
+          PartialScannerResultsDisabledIT.writeSingleBatch(conn, 1, 1, dataTableFullName);
+          conn.createStatement().execute("DELETE FROM " + dataTableFullName);
+          conn.commit();
+
+          // disable the index, simulating an index write failure
+          PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+          IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.DISABLE,
+              EnvironmentEdgeManager.currentTimeMillis());
+
+          // major compaction should not remove the deleted row
+          List<HRegion> regions = getUtility().getHBaseCluster().getRegions(TableName.valueOf(dataTableFullName));
+          HRegion hRegion = regions.get(0);
+          hRegion.flush(true);
+          HStore store = (HStore) hRegion.getStore(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+          store.triggerMajorCompaction();
+          store.compactRecentForTestingAssumingDefaultPolicy(1);
+          HTableInterface dataHTI = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(dataTableFullName));
+          assertEquals(1, TestUtil.getRawRowCount(dataHTI));
+
+          // reenable the index
+          IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.INACTIVE,
+              EnvironmentEdgeManager.currentTimeMillis());
+          IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.ACTIVE, 0L);
+
+          // now major compaction should remove the deleted row
+          store.triggerMajorCompaction();
+          store.compactRecentForTestingAssumingDefaultPolicy(1);
+          dataHTI = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(dataTableFullName));
+          assertEquals(0, TestUtil.getRawRowCount(dataHTI));
       }
   }
 
