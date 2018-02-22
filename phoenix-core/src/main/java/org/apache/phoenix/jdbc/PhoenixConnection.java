@@ -1236,7 +1236,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     public void addIteratorForLeaseRenewal(@Nonnull TableResultIterator itr) {
-        if (services.supportsFeature(Feature.RENEW_LEASE)) {
+        if (services.isRenewingLeasesEnabled()) {
             checkNotNull(itr);
             scannerQueue.add(new WeakReference<TableResultIterator>(itr));
         }
