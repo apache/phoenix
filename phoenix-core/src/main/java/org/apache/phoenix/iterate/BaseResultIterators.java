@@ -591,9 +591,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return context.getConnection().getQueryServices().getTableStats(key);
     }
 
+    private static void updateEstimates(GuidePostsInfo gps, int guideIndex, GuidePostEstimate estimate) {
+        estimate.rowsEstimate += gps.getRowCounts()[guideIndex];
+        estimate.bytesEstimate += gps.getByteCounts()[guideIndex];
+        /*
+         * It is possible that the timestamp of guideposts could be different.
+         * So we report the time at which stats information was collected as the
+         * minimum of timestamp of the guideposts that we will be going over.
+         */
+        estimate.lastUpdated =
+                Math.min(estimate.lastUpdated,
+                    gps.getGuidePostTimestamps()[guideIndex]);
+    }
+    
     private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan,
-            byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation,
-            GuidePostEstimate estimate, Long gpsRows, Long gpsBytes) {
+            byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
             if (regionLocation.getServerName() != null) {
@@ -601,12 +613,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
             if (useStatsForParallelization || crossedRegionBoundary) {
                 scans.add(scan);
-            }
-            if (estimate != null && gpsRows != null) {
-                estimate.rowsEstimate += gpsRows;
-            }
-            if (estimate != null && gpsBytes != null) {
-                estimate.bytesEstimate += gpsBytes;
             }
         }
         if (startNewScan && !scans.isEmpty()) {
@@ -669,7 +675,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     newScan.setStopRow(regionInfo.getEndKey());
                 }
             }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation, null, null, null);
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
             regionIndex++;
         }
         if (!scans.isEmpty()) { // Add any remaining scans
@@ -681,6 +687,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private static class GuidePostEstimate {
         private long bytesEstimate;
         private long rowsEstimate;
+        private long lastUpdated = Long.MAX_VALUE;
     }
 
     private int computeColumnsInCommon() {
@@ -854,6 +861,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * Compute the list of parallel scans to run for a given query. The inner scans
      * may be concatenated together directly, while the other ones may need to be
      * merge sorted, depending on the query.
+     * Also computes an estimated bytes scanned, rows scanned, and last update time
+     * of statistics. To compute correctly, we need to handle a couple of edge cases:
+     * 1) if a guidepost is equal to the start key of the scan.
+     * 2) If a guidepost is equal to the end region key.
+     * In both cases, we set a flag (delayAddingEst) which indicates that the previous
+     * gp should be use in our stats calculation. The normal case is that a gp is
+     * encountered which is in the scan range in which case it is simply added to
+     * our calculation.
+     * For the last update time, we use the min timestamp of the gp that are in
+     * range of the scans that will be issued. If we find no gp in the range, we use
+     * the gp in the first or last region of the scan. If we encounter a region with
+     * no gp, then we return a null value as an indication that we don't know with
+     * certainty when the stats were updated last. This handles the case of a split
+     * occurring for a large ingest with stats never having been calculated for the
+     * new region.
      * @return list of parallel scans to run for a given query.
      * @throws SQLException
      */
@@ -902,9 +924,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
         
         int regionIndex = 0;
+        int startRegionIndex = 0;
         int stopIndex = regionBoundaries.size();
         if (startRegionBoundaryKey.length > 0) {
-            regionIndex = getIndexContainingInclusive(regionBoundaries, startRegionBoundaryKey);
+            startRegionIndex = regionIndex = getIndexContainingInclusive(regionBoundaries, startRegionBoundaryKey);
         }
         if (stopRegionBoundaryKey.length > 0) {
             stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopRegionBoundaryKey));
@@ -927,31 +950,55 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         PrefixByteDecoder decoder = null;
         int guideIndex = 0;
         GuidePostEstimate estimates = new GuidePostEstimate();
-        long estimateTs = Long.MAX_VALUE;
-        long minGuidePostTimestamp = Long.MAX_VALUE;
+        boolean gpsForFirstRegion = false;
+        boolean intersectWithGuidePosts = true;
+        // Maintain min ts for gps in first or last region outside of
+        // gps that are in the scan range. We'll use this if we find
+        // no gps in range.
+        long fallbackTs = Long.MAX_VALUE;
+        // Determination of whether of not we found a guidepost in
+        // every region between the start and stop key. If not, then
+        // we cannot definitively say at what time the guideposts
+        // were collected.
+        boolean gpsAvailableForAllRegions = true;
         try {
+            boolean delayAddingEst = false;
+            ImmutableBytesWritable firstRegionStartKey = null;
             if (gpsSize > 0) {
                 stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
                 input = new DataInputStream(stream);
                 decoder = new PrefixByteDecoder(gps.getMaxLength());
+                firstRegionStartKey = new ImmutableBytesWritable(regionLocations.get(regionIndex).getRegionInfo().getStartKey());
                 try {
-                    while (currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input)) >= 0
-                            && currentKey.getLength() != 0) {
-                        minGuidePostTimestamp = Math.min(estimateTs,
-                            gps.getGuidePostTimestamps()[guideIndex]);
+                    int c;
+                    // Continue walking guideposts until we get past the currentKey
+                    while ((c=currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input))) >= 0) {
+                        // Detect if we found a guidepost that might be in the first region. This
+                        // is for the case where the start key may be past the only guidepost in
+                        // the first region.
+                        if (!gpsForFirstRegion && firstRegionStartKey.compareTo(currentGuidePost) <= 0) {
+                            gpsForFirstRegion = true;
+                        }
+                        // While we have gps in the region (but outside of start/stop key), track
+                        // the min ts as a fallback for the time at which stas were calculated.
+                        if (gpsForFirstRegion) {
+                            fallbackTs =
+                                    Math.min(fallbackTs,
+                                        gps.getGuidePostTimestamps()[guideIndex]);
+                        }
+                        // Special case for gp == startKey in which case we want to
+                        // count this gp (if it's in range) though we go past it.
+                        delayAddingEst = (c == 0);
                         guideIndex++;
                     }
                 } catch (EOFException e) {
                     // expected. Thrown when we have decoded all guide posts.
+                    intersectWithGuidePosts = false;
                 }
             }
+            byte[] endRegionKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
             byte[] currentKeyBytes = currentKey.copyBytes();
-            boolean intersectWithGuidePosts = guideIndex < gpsSize;
-            if (!intersectWithGuidePosts) {
-                // If there are no guide posts within the query range, we use the estimateInfoTimestamp
-                // as the minimum time across all guideposts
-                estimateTs = minGuidePostTimestamp;
-            }
+            intersectWithGuidePosts &= guideIndex < gpsSize;
             // Merge bisect with guideposts for all but the last region
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
@@ -982,36 +1029,41 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), regionInfo.getEndKey());
                 }
                 byte[] initialKeyBytes = currentKeyBytes;
-                while (intersectWithGuidePosts && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
+                int gpsComparedToEndKey = -1;
+                boolean everNotDelayed = false;
+                while (intersectWithGuidePosts && (endKey.length == 0 || (gpsComparedToEndKey=currentGuidePost.compareTo(endKey)) <= 0)) {
                     Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                         false);
                     if (newScan != null) {
                         ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
                             regionInfo.getStartKey(), regionInfo.getEndKey(),
                             newScan.getStartRow(), newScan.getStopRow());
+                        // If we've delaying adding estimates, add the previous
+                        // gp estimates now that we know they are in range.
+                        if (delayAddingEst) {
+                            updateEstimates(gps, guideIndex-1, estimates);
+                        }
+                        // If we're not delaying adding estimates, add the
+                        // current gp estimates.
+                        if (! (delayAddingEst = gpsComparedToEndKey == 0) ) {
+                            updateEstimates(gps, guideIndex, estimates);
+                        }
+                    } else {
+                        delayAddingEst = false;
                     }
-                    scans =
-                            addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false,
-                                regionLocation, estimates, gps.getRowCounts()[guideIndex],
-                                gps.getByteCounts()[guideIndex]);
+                    everNotDelayed |= !delayAddingEst;
+                    scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePostBytes;
                     try {
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();
-                        /*
-                         * It is possible that the timestamp of guideposts could be different.
-                         * So we report the time at which stats information was collected as the
-                         * minimum of timestamp of the guideposts that we will be going over.
-                         */
-                        estimateTs =
-                                Math.min(estimateTs,
-                                    gps.getGuidePostTimestamps()[guideIndex]);
                         guideIndex++;
                     } catch (EOFException e) {
                         // We have read all guide posts
                         intersectWithGuidePosts = false;
                     }
                 }
+                boolean gpsInThisRegion = initialKeyBytes != currentKeyBytes;
                 if (!useStatsForParallelization) {
                     /*
                      * If we are not using stats for generating parallel scans, we need to reset the
@@ -1023,15 +1075,40 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 if(newScan != null) {
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                         regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
+                    // Boundary case of no GP in region after delaying adding of estimates
+                    if (!gpsInThisRegion && delayAddingEst) {
+                        updateEstimates(gps, guideIndex-1, estimates);
+                        gpsInThisRegion = true;
+                        delayAddingEst = false;
+                    }
+                } else if (!gpsInThisRegion) {
+                    delayAddingEst = false;
                 }
-                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation, null, null, null);
+                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
                 currentKeyBytes = endKey;
+                // We have a guide post in the region if the above loop was entered
+                // or if the current key is less than the region end key (since the loop
+                // may not have been entered if our scan end key is smaller than the
+                // first guide post in that region).
+                boolean gpsAfterStopKey = false;
+                gpsAvailableForAllRegions &= 
+                    ( gpsInThisRegion && everNotDelayed) || // GP in this region
+                    ( regionIndex == startRegionIndex && gpsForFirstRegion ) || // GP in first region (before start key)
+                    ( gpsAfterStopKey = ( regionIndex == stopIndex && intersectWithGuidePosts && // GP in last region (after stop key)
+                            ( endRegionKey.length == 0 || // then check if gp is in the region
+                            currentGuidePost.compareTo(endRegionKey) < 0)  ) );            
+                if (gpsAfterStopKey) {
+                    // If gp after stop key, but still in last region, track min ts as fallback 
+                    fallbackTs =
+                            Math.min(fallbackTs,
+                                gps.getGuidePostTimestamps()[guideIndex]);
+                }
                 regionIndex++;
             }
             if (scanRanges.isPointLookup()) {
                 this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
                 this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
-                this.estimateInfoTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                this.estimateInfoTimestamp = computeMinTimestamp(gpsAvailableForAllRegions, estimates, fallbackTs);
             } else if (emptyGuidePost) {
                 // In case of an empty guide post, we estimate the number of rows scanned by
                 // using the estimated row size
@@ -1041,7 +1118,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } else if (hasGuidePosts) {
                 this.estimatedRows = estimates.rowsEstimate;
                 this.estimatedSize = estimates.bytesEstimate;
-                this.estimateInfoTimestamp = estimateTs;
+                this.estimateInfoTimestamp = computeMinTimestamp(gpsAvailableForAllRegions, estimates, fallbackTs);
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
@@ -1055,6 +1132,20 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
         sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
         return parallelScans;
+    }
+
+    private static Long computeMinTimestamp(boolean gpsAvailableForAllRegions, 
+            GuidePostEstimate estimates,
+            long fallbackTs) {
+        if (gpsAvailableForAllRegions) {
+            if (estimates.lastUpdated < Long.MAX_VALUE) {
+                return estimates.lastUpdated;
+            }
+            if (fallbackTs < Long.MAX_VALUE) {
+                return fallbackTs;
+            }
+        }
+        return null;
     }
 
     /**
