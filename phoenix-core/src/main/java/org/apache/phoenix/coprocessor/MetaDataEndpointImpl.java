@@ -236,7 +236,6 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -462,6 +461,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private RegionCoprocessorEnvironment env;
+    private boolean blockWriteRebuildIndex;
+    private int maxIndexesPerTable;
+    private boolean isTablesMappingEnabled;
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -480,6 +482,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         } else {
             throw new CoprocessorException("Must be loaded on a table region!");
         }
+        Configuration config = env.getConfiguration();
+        this.blockWriteRebuildIndex  = config.getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
+            QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
+        this.maxIndexesPerTable = config.getInt(QueryServices.MAX_INDEXES_PER_TABLE,
+            QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
+        this.isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
+            new ReadOnlyProps(config.iterator()));
         logger.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -562,8 +571,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             PTable oldTable = (PTable)metaDataCache.getIfPresent(cacheKey);
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP-1 : oldTable.getTimeStamp();
             PTable newTable;
-            boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
-                    QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
             newTable = getTable(scanner, clientTimeStamp, tableTimeStamp, clientVersion);
             if (newTable == null) {
                 return null;
@@ -1437,7 +1444,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             return;
                         }
                         // make sure we haven't gone over our threshold for indexes on this table.
-                        if (execeededIndexQuota(tableType, parentTable, env.getConfiguration())) {
+                        if (execeededIndexQuota(tableType, parentTable)) {
                             builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
                             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                             done.run(builder.build());
@@ -1657,11 +1664,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
     }
 
-    @VisibleForTesting
-    static boolean execeededIndexQuota(PTableType tableType, PTable parentTable, Configuration configuration) {
-        return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= configuration
-            .getInt(QueryServices.MAX_INDEXES_PER_TABLE,
-                QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
+    private boolean execeededIndexQuota(PTableType tableType, PTable parentTable) {
+        return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
     }
 
     private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
@@ -3141,8 +3145,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
          * from getting rebuilt too often.
          */
         final boolean wasLocked = (rowLock != null);
-        boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
-                QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         if (!wasLocked) {
             rowLock = region.getRowLock(key, false);
             if (rowLock == null) {
@@ -3438,8 +3440,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
         GetVersionResponse.Builder builder = GetVersionResponse.newBuilder();
         Configuration config = env.getConfiguration();
-        boolean isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
-                new ReadOnlyProps(config.iterator()));
         if (isTablesMappingEnabled
                 && PhoenixDatabaseMetaData.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
             logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
