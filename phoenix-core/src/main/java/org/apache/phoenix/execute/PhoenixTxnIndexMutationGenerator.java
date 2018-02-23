@@ -15,56 +15,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.index;
-
-import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDEX_WRITER_RPC_PAUSE;
-import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER;
-import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_PAUSE;
-import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
+package org.apache.phoenix.execute;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.MultiMutation;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -75,193 +59,34 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.write.IndexWriter;
-import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
-import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
-import org.apache.phoenix.transaction.PhoenixTransactionalTable;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Longs;
 
-/**
- * Do all the work of managing index updates for a transactional table from a single coprocessor. Since the transaction
- * manager essentially time orders writes through conflict detection, the logic to maintain a secondary index is quite a
- * bit simpler than the non transactional case. For example, there's no need to muck with the WAL, as failure scenarios
- * are handled by aborting the transaction.
- */
-public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoprocessor {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixTransactionalIndexer.class);
+public class PhoenixTxnIndexMutationGenerator {
 
-    // Hack to get around not being able to save any state between
-    // coprocessor calls. TODO: remove after HBASE-18127 when available
-    private static class BatchMutateContext {
-        public Collection<Pair<Mutation, byte[]>> indexUpdates = Collections.emptyList();
-    }
-    
-    private ThreadLocal<BatchMutateContext> batchMutateContext =
-            new ThreadLocal<BatchMutateContext>();
-    
-    private PhoenixIndexCodec codec;
-    private IndexWriter writer;
-    private boolean stopped;
-    
-    @Override
-    public Optional<RegionObserver> getRegionObserver() {
-      return Optional.of(this);
-    }
-    
-    @Override
-    public void start(CoprocessorEnvironment e) throws IOException {
-        final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)e;
-        String serverName = env.getServerName().getServerName();
-        codec = new PhoenixIndexCodec();
-        codec.initialize(env);
-        // Clone the config since it is shared
-        Configuration clonedConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
-        /*
-         * Set the rpc controller factory so that the HTables used by IndexWriter would
-         * set the correct priorities on the remote RPC calls.
-         */
-        clonedConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
-                InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
-        // lower the number of rpc retries.  We inherit config from HConnectionManager#setServerSideHConnectionRetries,
-        // which by default uses a multiplier of 10.  That is too many retries for our synchronous index writes
-        clonedConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
-            env.getConfiguration().getInt(INDEX_WRITER_RPC_RETRIES_NUMBER,
-                DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER));
-        clonedConfig.setInt(HConstants.HBASE_CLIENT_PAUSE, env.getConfiguration()
-            .getInt(INDEX_WRITER_RPC_PAUSE, DEFAULT_INDEX_WRITER_RPC_PAUSE));
-        DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
-        // setup the actual index writer
-        // For transactional tables, we keep the index active upon a write failure
-        // since we have the all versus none behavior for transactions. Also, we
-        // fail on any write exception since this will end up failing the transaction.
-        this.writer = new IndexWriter(IndexWriter.getCommitter(indexWriterEnv, ParallelWriterIndexCommitter.class),
-                new LeaveIndexActiveFailurePolicy(), indexWriterEnv, serverName + "-tx-index-writer");
-    }
+    private static final Log LOG = LogFactory.getLog(PhoenixTxnIndexMutationGenerator.class);
 
-    @Override
-    public void stop(CoprocessorEnvironment e) throws IOException {
-        if (this.stopped) { return; }
-        this.stopped = true;
-        String msg = "TxIndexer is being stopped";
-        this.writer.stop(msg);
-    }
+    private final PhoenixConnection connection;
+    private final PhoenixTransactionContext phoenixTransactionContext;
 
-    private static Iterator<Mutation> getMutationIterator(final MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-        return new Iterator<Mutation>() {
-            private int i = 0;
-            
-            @Override
-            public boolean hasNext() {
-                return i < miniBatchOp.size();
-            }
-
-            @Override
-            public Mutation next() {
-                return miniBatchOp.getOperation(i++);
-            }
-
-            @Override
-            public void remove() {
-                throw new UnsupportedOperationException();
-            }
-            
-        };
-    }
-    
-    @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-            MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-
-        Mutation m = miniBatchOp.getOperation(0);
-        if (!codec.isEnabled(m)) {
-            return;
-        }
-
-        BatchMutateContext context = new BatchMutateContext();
-        setBatchMutateContext(c, context);
-        
-        Map<String,byte[]> updateAttributes = m.getAttributesMap();
-        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(c.getEnvironment(),updateAttributes);
-        if (indexMetaData.getClientVersion() >= PhoenixDatabaseMetaData.MIN_TX_CLIENT_SIDE_MAINTENANCE) {
-            return;
-        }
-        byte[] txRollbackAttribute = m.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY);
-        Collection<Pair<Mutation, byte[]>> indexUpdates = null;
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-        try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-            Span current = scope.getSpan();
-            if (current == null) {
-                current = NullSpan.INSTANCE;
-            }
-
-            // get the index updates for all elements in this batch
-            context.indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), txRollbackAttribute);
-
-            current.addTimelineAnnotation("Built index updates, doing preStep");
-            TracingUtils.addAnnotation(current, "index update count", context.indexUpdates.size());
-        } catch (Throwable t) {
-            String msg = "Failed to update index with entries:" + indexUpdates;
-            LOG.error(msg, t);
-            ServerUtil.throwIOException(msg, t);
-        }
-    }
-
-    @Override
-    public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
-        MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
-        BatchMutateContext context = getBatchMutateContext(c);
-        if (context == null || context.indexUpdates == null) {
-            return;
-        }
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-        try (TraceScope scope = Trace.startSpan("Starting to write index updates")) {
-            Span current = scope.getSpan();
-            if (current == null) {
-                current = NullSpan.INSTANCE;
-            }
-
-            if (success) { // if miniBatchOp was successfully written, write index updates
-                if (!context.indexUpdates.isEmpty()) {
-                    this.writer.write(context.indexUpdates, true);
-                }
-                current.addTimelineAnnotation("Wrote index updates");
-            }
-        } catch (Throwable t) {
-            String msg = "Failed to write index updates:" + context.indexUpdates;
-            LOG.error(msg, t);
-            ServerUtil.throwIOException(msg, t);
-         } finally {
-             removeBatchMutateContext(c);
-         }
-    }
-
-    private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
-        this.batchMutateContext.set(context);
-    }
-    
-    private BatchMutateContext getBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c) {
-        return this.batchMutateContext.get();
-    }
-    
-    private void removeBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c) {
-        this.batchMutateContext.remove();
+    PhoenixTxnIndexMutationGenerator(PhoenixConnection connection, PhoenixTransactionContext phoenixTransactionContext) {
+        this.phoenixTransactionContext = phoenixTransactionContext;
+        this.connection = connection;
     }
 
     private static void addMutation(Map<ImmutableBytesPtr, MultiMutation> mutations, ImmutableBytesPtr row, Mutation m) {
@@ -273,16 +98,23 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         }
         stored.addAll(m);
     }
-    
-    private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, byte[] txRollbackAttribute) throws IOException {
-        PhoenixTransactionContext txnContext = indexMetaData.getTransactionContext();
-        if (txnContext == null) {
-            throw new NullPointerException("Expected to find transaction in metadata for " + env.getRegionInfo().getTable().getNameAsString());
+
+    public List<Mutation> getIndexUpdates(final PTable table, PTable index, List<Mutation> dataMutations) throws IOException, SQLException {
+
+        if (dataMutations.isEmpty()) {
+            return new ArrayList<Mutation>();
         }
+
+        Map<String,byte[]> updateAttributes = dataMutations.get(0).getAttributesMap();
+        boolean replyWrite = (BaseScannerRegionObserver.ReplayWrite.fromBytes(updateAttributes.get(BaseScannerRegionObserver.REPLAY_WRITES)) != null);
+        byte[] txRollbackAttribute = updateAttributes.get(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY);
+
+        IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+
         boolean isRollback = txRollbackAttribute!=null;
-        boolean isImmutable = indexMetaData.isImmutableRows();
+        boolean isImmutable = index.isImmutableRows();
         ResultScanner currentScanner = null;
-        PhoenixTransactionalTable txTable = null;
+        Table txTable = null;
         // Collect up all mutations in batch
         Map<ImmutableBytesPtr, MultiMutation> mutations =
                 new HashMap<ImmutableBytesPtr, MultiMutation>();
@@ -295,30 +127,28 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         // Collect the set of mutable ColumnReferences so that we can first
         // run a scan to get the current state. We'll need this to delete
         // the existing index rows.
-        List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
-        int estimatedSize = indexMaintainers.size() * 10;
+        int estimatedSize = 10;
         Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(estimatedSize);
-        for (IndexMaintainer indexMaintainer : indexMaintainers) {
-            // For transactional tables, we use an index maintainer
-            // to aid in rollback if there's a KeyValue column in the index. The alternative would be
-            // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
-            // client side.
-            Set<ColumnReference> allColumns = indexMaintainer.getAllColumns();
-            mutableColumns.addAll(allColumns);
-        }
+        // For transactional tables, we use an index maintainer
+        // to aid in rollback if there's a KeyValue column in the index. The alternative would be
+        // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
+        // client side.
+        Set<ColumnReference> allColumns = maintainer.getAllColumns();
+        mutableColumns.addAll(allColumns);
 
-        while(mutationIterator.hasNext()) {
-            Mutation m = mutationIterator.next();
+        for(final Mutation m : dataMutations) {
             // add the mutation to the batch set
             ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
             // if we have no non PK columns, no need to find the prior values
-            if (mutations != findPriorValueMutations && indexMetaData.requiresPriorRowState(m)) {
+
+            boolean requiresPriorRowState =  !isImmutable || (maintainer.isRowDeleted(m) && !maintainer.getIndexedColumns().isEmpty());
+            if (mutations != findPriorValueMutations && requiresPriorRowState) {
                 addMutation(findPriorValueMutations, row, m);
             }
             addMutation(mutations, row, m);
         }
         
-        Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(mutations.size() * 2 * indexMaintainers.size());
+        List<Mutation> indexUpdates = new ArrayList<Mutation>(mutations.size() * 2);
         try {
             // Track if we have row keys with Delete mutations (or Puts that are
             // Tephra's Delete marker). If there are none, we don't need to do the scan for
@@ -340,30 +170,28 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                  * supporting new indexes over existing data tables to have a different storage scheme than the data
                  * table.
                  */
-                byte[] emptyKeyValueQualifier = indexMaintainers.get(0).getEmptyKeyValueQualifier();
+                byte[] emptyKeyValueQualifier = maintainer.getEmptyKeyValueQualifier();
                 
                 // Project empty key value column
-                scan.addColumn(indexMaintainers.get(0).getDataEmptyKeyValueCF(), emptyKeyValueQualifier);
+                scan.addColumn(maintainer.getDataEmptyKeyValueCF(), emptyKeyValueQualifier);
                 ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true, -1);
                 scanRanges.initializeScan(scan);
-                TableName tableName = env.getRegion().getRegionInfo().getTable();
-                Table htable = env.getConnection().getTable(tableName);
-                txTable = TransactionFactory.getTransactionFactory().getTransactionalTable(txnContext, htable);
+                txTable =  connection.getQueryServices().getTable(table.getPhysicalName().getBytes());
                 // For rollback, we need to see all versions, including
                 // the last committed version as there may be multiple
                 // checkpointed versions.
                 SkipScanFilter filter = scanRanges.getSkipScanFilter();
                 if (isRollback) {
                     filter = new SkipScanFilter(filter,true);
-                    txnContext.setVisibilityLevel(PhoenixVisibilityLevel.SNAPSHOT_ALL);
+                    phoenixTransactionContext.setVisibilityLevel(PhoenixVisibilityLevel.SNAPSHOT_ALL);
                 }
                 scan.setFilter(filter);
                 currentScanner = txTable.getScanner(scan);
             }
             if (isRollback) {
-                processRollback(env, indexMetaData, txRollbackAttribute, currentScanner, txnContext, mutableColumns, indexUpdates, mutations);
+                processRollback(maintainer, txRollbackAttribute, currentScanner, mutableColumns, indexUpdates, mutations, replyWrite, table);
             } else {
-                processMutation(env, indexMetaData, txRollbackAttribute, currentScanner, txnContext, mutableColumns, indexUpdates, mutations, findPriorValueMutations);
+                processMutation(maintainer, txRollbackAttribute, currentScanner, mutableColumns, indexUpdates, mutations, findPriorValueMutations, replyWrite, table);
             }
         } finally {
             if (txTable != null) txTable.close();
@@ -372,47 +200,50 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         return indexUpdates;
     }
 
-    private void processMutation(RegionCoprocessorEnvironment env,
-            PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
+    private void processMutation(IndexMaintainer maintainer,
+            byte[] txRollbackAttribute,
             ResultScanner scanner,
-            PhoenixTransactionContext txnContext, 
-            Set<ColumnReference> upsertColumns, 
-            Collection<Pair<Mutation, byte[]>> indexUpdates,
+            Set<ColumnReference> upsertColumns,
+            Collection<Mutation> indexUpdates,
             Map<ImmutableBytesPtr, MultiMutation> mutations,
-            Map<ImmutableBytesPtr, MultiMutation> mutationsToFindPreviousValue) throws IOException {
+            Map<ImmutableBytesPtr, MultiMutation> mutationsToFindPreviousValue,
+            boolean replyWrite,
+            final PTable table) throws IOException, SQLException {
         if (scanner != null) {
             Result result;
-            ColumnReference emptyColRef = new ColumnReference(indexMetaData.getIndexMaintainers().get(0)
-                    .getDataEmptyKeyValueCF(), indexMetaData.getIndexMaintainers().get(0).getEmptyKeyValueQualifier());
+            ColumnReference emptyColRef = new ColumnReference(maintainer
+                    .getDataEmptyKeyValueCF(), maintainer.getEmptyKeyValueQualifier());
             // Process existing data table rows by removing the old index row and adding the new index row
             while ((result = scanner.next()) != null) {
                 Mutation m = mutationsToFindPreviousValue.remove(new ImmutableBytesPtr(result.getRow()));
-                TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), txnContext.getWritePointer(), m, emptyColRef, result);
-                generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
-                generatePuts(indexMetaData, indexUpdates, state);
+                TxTableState state = new TxTableState(upsertColumns, phoenixTransactionContext.getWritePointer(), m, emptyColRef, result);
+                generateDeletes(indexUpdates, txRollbackAttribute, state, maintainer, replyWrite, table);
+                generatePuts(indexUpdates, state, maintainer, replyWrite, table);
             }
         }
         // Process new data table by adding new index rows
         for (Mutation m : mutations.values()) {
-            TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), txnContext.getWritePointer(), m);
-            generatePuts(indexMetaData, indexUpdates, state);
-            generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
+            TxTableState state = new TxTableState(upsertColumns, phoenixTransactionContext.getWritePointer(), m);
+            generatePuts(indexUpdates, state, maintainer, replyWrite, table);
+            generateDeletes(indexUpdates, txRollbackAttribute, state, maintainer, replyWrite, table);
         }
     }
 
-    private void processRollback(RegionCoprocessorEnvironment env,
-            PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
+    private void processRollback(IndexMaintainer maintainer,
+            byte[] txRollbackAttribute,
             ResultScanner scanner,
-            PhoenixTransactionContext tx, Set<ColumnReference> mutableColumns,
-            Collection<Pair<Mutation, byte[]>> indexUpdates,
-            Map<ImmutableBytesPtr, MultiMutation> mutations) throws IOException {
+            Set<ColumnReference> mutableColumns,
+            Collection<Mutation> indexUpdates,
+            Map<ImmutableBytesPtr, MultiMutation> mutations,
+            boolean replyWrite,
+            final PTable table) throws IOException, SQLException {
         if (scanner != null) {
             Result result;
             // Loop through last committed row state plus all new rows associated with current transaction
             // to generate point delete markers for all index rows that were added. We don't have Tephra
             // manage index rows in change sets because we don't want to be hit with the additional
             // memory hit and do not need to do conflict detection on index rows.
-            ColumnReference emptyColRef = new ColumnReference(indexMetaData.getIndexMaintainers().get(0).getDataEmptyKeyValueCF(), indexMetaData.getIndexMaintainers().get(0).getEmptyKeyValueQualifier());
+            ColumnReference emptyColRef = new ColumnReference(maintainer.getDataEmptyKeyValueCF(), maintainer.getEmptyKeyValueQualifier());
             while ((result = scanner.next()) != null) {
                 Mutation m = mutations.remove(new ImmutableBytesPtr(result.getRow()));
                 // Sort by timestamp, type, cf, cq so we can process in time batches from oldest to newest
@@ -430,12 +261,12 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                         if (c != 0) return c;
                         return Bytes.compareTo(o1.getQualifierArray(), o1.getQualifierOffset(), o1.getQualifierLength(), o1.getQualifierArray(), o1.getQualifierOffset(), o1.getQualifierLength());
                     }
-                    
+
                 });
                 int i = 0;
                 int nCells = cells.size();
                 Result oldResult = null, newResult;
-                long readPtr = tx.getReadPointer();
+                long readPtr = phoenixTransactionContext.getReadPointer();
                 do {
                     boolean hasPuts = false;
                     LinkedList<Cell> singleTimeCells = Lists.newLinkedList();
@@ -452,16 +283,16 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                             // still want to add Cells in the expected order for each time
                             // bound as otherwise we won't find it in our old state.
                             it.add(cell);
-                        } while (++i < nCells && (cell=cells.get(i)).getTimestamp() == writePtr);
+                        } while (++i < nCells && (cell = cells.get(i)).getTimestamp() == writePtr);
                     } while (i < nCells && cell.getTimestamp() <= readPtr);
-                    
+
                     // Generate point delete markers for the prior row deletion of the old index value.
                     // The write timestamp is the next timestamp, not the current timestamp,
                     // as the earliest cells are the current values for the row (and we don't
                     // want to delete the current row).
                     if (oldResult != null) {
-                        TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), writePtr, m, emptyColRef, oldResult);
-                        generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
+                        TxTableState state = new TxTableState(mutableColumns, writePtr, m, emptyColRef, oldResult);
+                        generateDeletes(indexUpdates, txRollbackAttribute, state, maintainer, replyWrite, table);
                     }
                     // Generate point delete markers for the new index value.
                     // If our time batch doesn't have Puts (i.e. we have only Deletes), then do not
@@ -472,8 +303,8 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                         newResult = Result.create(singleTimeCells);
                         // First row may represent the current state which we don't want to delete
                         if (writePtr > readPtr) {
-                            TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), writePtr, m, emptyColRef, newResult);
-                            generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
+                            TxTableState state = new TxTableState(mutableColumns, writePtr, m, emptyColRef, newResult);
+                            generateDeletes(indexUpdates, txRollbackAttribute, state, maintainer, replyWrite, table);
                         }
                         oldResult = newResult;
                     } else {
@@ -484,29 +315,91 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         }
     }
 
-    private void generateDeletes(PhoenixIndexMetaData indexMetaData,
-            Collection<Pair<Mutation, byte[]>> indexUpdates,
-            byte[] attribValue, TxTableState state) throws IOException {
-        Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
+    private Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMaintainer maintainer, boolean replyWrite, final PTable table) throws IOException, SQLException {
+        if (maintainer.isRowDeleted(state.getPendingUpdate())) {
+            return Collections.emptyList();
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        ptr.set(state.getCurrentRowKey());
+        List<IndexUpdate> indexUpdates = Lists.newArrayList();
+        Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), replyWrite, false, null);
+        ValueGetter valueGetter = statePair.getFirst();
+        IndexUpdate indexUpdate = statePair.getSecond();
+        indexUpdate.setTable(maintainer.isLocalIndex() ? table.getName().getBytes() : maintainer.getIndexTableName());
+
+        byte[] regionStartKey = null;
+        byte[] regionEndkey = null;
+        if(maintainer.isLocalIndex()) {
+            HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), state.getCurrentRowKey());
+            regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+            regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+        }
+
+        Put put = maintainer.buildUpdateMutation(PhoenixIndexCodec.KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(), regionStartKey, regionEndkey);
+        indexUpdate.setUpdate(put);
+        indexUpdates.add(indexUpdate);
+
+        return indexUpdates;
+    }
+
+    private Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMaintainer maintainer, boolean replyWrite, final PTable table) throws IOException, SQLException {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        ptr.set(state.getCurrentRowKey());
+        List<IndexUpdate> indexUpdates = Lists.newArrayList();
+        // For transactional tables, we use an index maintainer
+        // to aid in rollback if there's a KeyValue column in the index. The alternative would be
+        // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
+        // client side.
+        Set<ColumnReference> cols = Sets.newHashSet(maintainer.getAllColumns());
+        cols.add(new ColumnReference(maintainer.getDataEmptyKeyValueCF(), maintainer.getEmptyKeyValueQualifier()));
+        Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(cols, replyWrite, true, null);
+        ValueGetter valueGetter = statePair.getFirst();
+        if (valueGetter!=null) {
+            IndexUpdate indexUpdate = statePair.getSecond();
+            indexUpdate.setTable(maintainer.isLocalIndex() ? table.getName().getBytes() : maintainer.getIndexTableName());
+
+            byte[] regionStartKey = null;
+            byte[] regionEndkey = null;
+            if(maintainer.isLocalIndex()) {
+                HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), state.getCurrentRowKey());
+                regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+            }
+
+            Delete delete = maintainer.buildDeleteMutation(PhoenixIndexCodec.KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
+                    state.getCurrentTimestamp(), regionStartKey, regionEndkey);
+            indexUpdate.setUpdate(delete);
+            indexUpdates.add(indexUpdate);
+        }
+        return indexUpdates;
+    }
+
+    private void generateDeletes(Collection<Mutation> indexUpdates,
+            byte[] attribValue,
+            TxTableState state,
+            IndexMaintainer maintainer,
+            boolean replyWrite,
+            final PTable table) throws IOException, SQLException {
+        Iterable<IndexUpdate> deletes = getIndexDeletes(state, maintainer, replyWrite, table);
         for (IndexUpdate delete : deletes) {
             if (delete.isValid()) {
                 delete.getUpdate().setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, attribValue);
-                indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
+                indexUpdates.add(delete.getUpdate());
             }
         }
     }
 
-    private boolean generatePuts(
-            PhoenixIndexMetaData indexMetaData,
-            Collection<Pair<Mutation, byte[]>> indexUpdates,
-            TxTableState state)
-            throws IOException {
+    private boolean generatePuts(Collection<Mutation> indexUpdates,
+            TxTableState state,
+            IndexMaintainer maintainer,
+            boolean replyWrite,
+            final PTable table) throws IOException, SQLException {
         state.applyMutation();
-        Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData);
+        Iterable<IndexUpdate> puts = getIndexUpserts(state, maintainer, replyWrite, table);
         boolean validPut = false;
         for (IndexUpdate put : puts) {
             if (put.isValid()) {
-                indexUpdates.add(new Pair<Mutation, byte[]>(put.getUpdate(),put.getTableName()));
+                indexUpdates.add(put.getUpdate());
                 validPut = true;
             }
         }
@@ -517,17 +410,13 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
     private static class TxTableState implements TableState {
         private final Mutation mutation;
         private final long currentTimestamp;
-        private final RegionCoprocessorEnvironment env;
-        private final Map<String, byte[]> attributes;
         private final List<Cell> pendingUpdates;
         private final Set<ColumnReference> indexedColumns;
         private final Map<ColumnReference, ImmutableBytesWritable> valueMap;
         
-        private TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation mutation) {
-            this.env = env;
+        private TxTableState(Set<ColumnReference> indexedColumns, long currentTimestamp, Mutation mutation) {
             this.currentTimestamp = currentTimestamp;
             this.indexedColumns = indexedColumns;
-            this.attributes = attributes;
             this.mutation = mutation;
             int estimatedSize = indexedColumns.size();
             this.valueMap = Maps.newHashMapWithExpectedSize(estimatedSize);
@@ -535,15 +424,16 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
             try {
                 CellScanner scanner = mutation.cellScanner();
                 while (scanner.advance()) {
-                    pendingUpdates.add(scanner.current());
+                    Cell cell = scanner.current();
+                    pendingUpdates.add(PhoenixKeyValueUtil.maybeCopyCell(cell));
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e); // Impossible
             }
         }
-        
-        public TxTableState(RegionCoprocessorEnvironment env, Set<ColumnReference> indexedColumns, Map<String, byte[]> attributes, long currentTimestamp, Mutation m, ColumnReference emptyColRef, Result r) {
-            this(env, indexedColumns, attributes, currentTimestamp, m);
+
+        public TxTableState(Set<ColumnReference> indexedColumns, long currentTimestamp, Mutation m, ColumnReference emptyColRef, Result r) {
+            this(indexedColumns, currentTimestamp, m);
 
             for (ColumnReference ref : indexedColumns) {
                 Cell cell = r.getColumnLatestCell(ref.getFamily(), ref.getQualifier());
@@ -554,17 +444,16 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                 }
             }
         }
-        
+
         @Override
         public RegionCoprocessorEnvironment getEnvironment() {
-            return env;
+            return null;
         }
 
         @Override
         public long getCurrentTimestamp() {
             return currentTimestamp;
         }
-
 
         @Override
         public byte[] getCurrentRowKey() {

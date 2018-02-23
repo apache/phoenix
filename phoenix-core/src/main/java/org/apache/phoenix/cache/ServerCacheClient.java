@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.coprocessor.generated.ServerCacheFactoryProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.AddServerCacheRequest;
@@ -492,6 +493,7 @@ public class ServerCacheClient {
                             svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
                             builder.setCacheFactory(svrCacheFactoryBuider.build());
                             builder.setTxState(ByteStringer.wrap(txState));
+                            builder.setClientVersion(MetaDataProtocol.PHOENIX_VERSION);
                             instance.addServerCache(controller, builder.build(), rpcCallback);
                             if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                             return rpcCallback.get();

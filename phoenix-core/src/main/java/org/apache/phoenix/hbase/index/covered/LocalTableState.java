@@ -15,7 +15,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
@@ -204,11 +203,6 @@ public class LocalTableState implements TableState {
             }
         }
         return true;
-    }
-
-    @Override
-    public Map<String, byte[]> getUpdateAttributes() {
-        return this.update.getAttributesMap();
     }
 
     @Override

@@ -44,7 +44,8 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_PROTO_MD = "IdxProtoMD";
     public static final String INDEX_UUID = "IdxUUID";
     public static final String INDEX_MAINTAINERS = "IndexMaintainers";
-    private static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
+    public static final String CLIENT_VERSION = "_ClientVersion";
+    public static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
 
     private RegionCoprocessorEnvironment env;
 

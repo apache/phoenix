@@ -51,11 +51,6 @@ public interface TableState {
   public long getCurrentTimestamp();
 
   /**
-   * @return the attributes attached to the current update (e.g. {@link Mutation}).
-   */
-  public Map<String, byte[]> getUpdateAttributes();
-
-  /**
    * Get a getter interface for the state of the index row
    * @param indexedColumns list of indexed columns.
  * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful

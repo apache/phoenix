@@ -51,6 +51,7 @@ import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -135,6 +136,7 @@ public class MutationState implements SQLCloseable {
     private Map<TableRef, MultiRowMutationState> txMutations = Collections.emptyMap();
 
     final PhoenixTransactionContext phoenixTransactionContext;
+    final PhoenixTxnIndexMutationGenerator phoenixTxnIndexMutationGenerator;
 
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
@@ -188,6 +190,8 @@ public class MutationState implements SQLCloseable {
             // as it is not thread safe, so we use the tx member variable
             phoenixTransactionContext = TransactionFactory.getTransactionFactory().getTransactionContext(txContext, connection, subTask);
         }
+
+        phoenixTxnIndexMutationGenerator = new PhoenixTxnIndexMutationGenerator(connection, phoenixTransactionContext);
     }
 
     public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset, long maxSize, long maxSizeBytes, PhoenixConnection connection)  throws SQLException {
@@ -488,14 +492,14 @@ public class MutationState implements SQLCloseable {
     }
     
     private Iterator<Pair<PName,List<Mutation>>> addRowMutations(final TableRef tableRef, final MultiRowMutationState values,
-            final long mutationTimestamp, final long serverTimestamp, boolean includeAllIndexes, final boolean sendAll) { 
+            final long mutationTimestamp, final long serverTimestamp, boolean includeAllIndexes, final boolean sendAll) {
         final PTable table = tableRef.getTable();
         final Iterator<PTable> indexes = // Only maintain tables with immutable rows through this client-side mechanism
-                 includeAllIndexes ?
-                     IndexMaintainer.maintainedIndexes(table.getIndexes().iterator()) :
-                         table.isImmutableRows() ?
-                            IndexMaintainer.maintainedGlobalIndexes(table.getIndexes().iterator()) :
-                                Collections.<PTable>emptyIterator();
+                (includeAllIndexes  || table.isTransactional()) ?
+                         IndexMaintainer.maintainedIndexes(table.getIndexes().iterator()) :
+                             (table.isImmutableRows()) ?
+                                IndexMaintainer.maintainedGlobalIndexes(table.getIndexes().iterator()) :
+                                    Collections.<PTable>emptyIterator();
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
         generateMutations(tableRef, mutationTimestamp, serverTimestamp, values, mutationList, mutationsPertainingToIndex);
@@ -516,9 +520,14 @@ public class MutationState implements SQLCloseable {
                 PTable index = indexes.next();
                 List<Mutation> indexMutations;
                 try {
-                    indexMutations =
-                    		IndexUtil.generateIndexData(table, index, values, mutationsPertainingToIndex,
+                    if ((table.isImmutableRows() && (index.getIndexType() != IndexType.LOCAL)) || !table.isTransactional()) {
+                        indexMutations =
+                            IndexUtil.generateIndexData(table, index, values, mutationsPertainingToIndex,
                                 connection.getKeyValueBuilder(), connection);
+                    } else {
+                        indexMutations = phoenixTxnIndexMutationGenerator.getIndexUpdates(table, index, mutationsPertainingToIndex);
+                    }
+
                     // we may also have to include delete mutations for immutable tables if we are not processing all the tables in the mutations map
                     if (!sendAll) {
                         TableRef key = new TableRef(index);
@@ -529,7 +538,7 @@ public class MutationState implements SQLCloseable {
                             indexMutations.addAll(deleteMutations);
                         }
                     }
-                } catch (SQLException e) {
+                } catch (SQLException | IOException e) {
                     throw new IllegalDataException(e);
                 }
                 return new Pair<PName,List<Mutation>>(index.getPhysicalName(),indexMutations);
@@ -584,7 +593,7 @@ public class MutationState implements SQLCloseable {
                 // Row deletes for index tables are processed by running a re-written query
                 // against the index table (as this allows for flexibility in being able to
                 // delete rows).
-                rowMutationsPertainingToIndex = Collections.emptyList();
+                rowMutationsPertainingToIndex = rowMutations;
             } else {
                 for (Map.Entry<PColumn, byte[]> valueEntry : rowEntry.getValue().getColumnValues()
                         .entrySet()) {
@@ -1169,6 +1178,7 @@ public class MutationState implements SQLCloseable {
             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
             if (attribValue != null) {
                 mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
+                mutation.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, Bytes.toBytes(MetaDataProtocol.PHOENIX_VERSION));
                 if (txState.length > 0) {
                     mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                 }
