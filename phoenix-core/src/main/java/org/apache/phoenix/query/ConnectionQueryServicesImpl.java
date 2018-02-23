@@ -2643,11 +2643,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (TableAlreadyExistsException e) {
                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                 sysCatalogTableName = e.getTable().getPhysicalName().getString();
-                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP
-                        && (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp, mutexRowKey))) {
-                    snapshotName = getSysCatalogSnapshotName(currentServerSideTableTimeStamp);
-                    createSnapshot(snapshotName, sysCatalogTableName);
-                    snapshotCreated = true;
+                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP) {
+                    // Ensure that the SYSTEM.MUTEX table has been created prior
+                    // to attempting to acquire the upgrade mutex. If namespace
+                    // mapping is enabled, we've already done this earlier in the
+                    // upgrade, so no need for a bunch of wasted RPCs.
+                    if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_10_0 &&
+                            !SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+                                    ConnectionQueryServicesImpl.this.getProps())) {
+                        try (Admin admin = getAdmin()) {
+                            createSysMutexTable(admin, this.getProps());
+                        }
+                    }
+                    if (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp, mutexRowKey)) {
+                        snapshotName = getSysCatalogSnapshotName(currentServerSideTableTimeStamp);
+                        createSnapshot(snapshotName, sysCatalogTableName);
+                        snapshotCreated = true;
+                    }
                 }
                 String columnsToAdd = "";
                 // This will occur if we have an older SYSTEM.CATALOG and we need to update it to
@@ -3196,6 +3208,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Try acquiring a lock in SYSMUTEX table before migrating the tables since it involves disabling the table
             // If we cannot acquire lock, it means some old client is either migrating SYSCAT or trying to upgrade the
             // schema of SYSCAT table and hence it should not be interrupted
+            // Create mutex if not already created
+            if (!tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
+                TableName mutexName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props);
+                if (PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME.equals(mutexName) || !tableNames.contains(mutexName)) {
+                    createSysMutexTable(admin, props);
+                }
+            }
             acquiredMutexLock = acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP, mutexRowKey);
             if(acquiredMutexLock) {
                 logger.debug("Acquired lock in SYSMUTEX table for migrating SYSTEM tables to SYSTEM namespace");
