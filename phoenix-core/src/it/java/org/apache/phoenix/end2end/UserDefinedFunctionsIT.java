@@ -27,15 +27,12 @@ import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PAR
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.LOCALHOST;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -53,6 +50,10 @@ import java.util.jar.Manifest;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
+import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -66,13 +67,15 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
+import org.junit.rules.TestName;
 
 public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
-    
     protected static final String TENANT_ID = "ZZTop";
     private static String url;
     private static PhoenixTestDriver driver;
@@ -190,10 +193,36 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     private static String GETY_CLASSNAME_PROGRAM = getProgram(GETY_CLASSNAME, GETY_EVALUATE_METHOD, "return PInteger.INSTANCE;");
     private static Properties EMPTY_PROPS = new Properties();
     
+    @Rule
+    public TestName name = new TestName();
 
     @Override
     @After
-    public void cleanUpAfterTest() throws Exception {}
+    public void cleanUpAfterTest() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("list jars");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar7.jar'");
+        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar8.jar'");
+        conn.commit();
+        conn.close();
+    }
+
+    @Before
+    public void doSetupBeforeTest() throws Exception {
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
+        compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
+        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 4);
+        compileTestClass(GETX_CLASSNAME, GETX_CLASSNAME_PROGRAM, 5);
+        compileTestClass(GETY_CLASSNAME, GETY_CLASSNAME_PROGRAM, 6);
+    }
 
     private static String getProgram(String className, String evaluateMethod, String returnType) {
         return new StringBuffer()
@@ -263,12 +292,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         props.put(QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB, "true");
         props.put(QueryServices.DYNAMIC_JARS_DIR_KEY,string+"/hbase/tmpjars/");
         driver = initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
-        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 1);
-        compileTestClass(MY_SUM_CLASS_NAME, MY_SUM_PROGRAM, 2);
-        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 3);
-        compileTestClass(MY_ARRAY_INDEX_CLASS_NAME, MY_ARRAY_INDEX_PROGRAM, 4);
-        compileTestClass(GETX_CLASSNAME, GETX_CLASSNAME_PROGRAM, 5);
-        compileTestClass(GETY_CLASSNAME, GETY_CLASSNAME_PROGRAM, 6);
     }
     
     @Test
@@ -282,6 +305,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
         assertTrue(rs.next());
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertTrue(rs.next());
+        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar", rs.getString("jar_location"));
         assertTrue(rs.next());
         assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
         assertTrue(rs.next());
@@ -1052,6 +1077,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
 
     /**
      * Compiles the test class with bogus code into a .class file.
+     * Upon finish, the bogus jar will be left at dynamic.jar.dir location
      */
     private static void compileTestClass(String className, String program, int counter) throws Exception {
         String javaFileName = className+".java";
@@ -1112,4 +1138,79 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         }
     }
 
+    /**
+     * Test creating functions using hbase.dynamic.jars.dir
+     * @throws Exception
+     */
+    @Test
+    public void testCreateFunctionDynamicJarDir() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        String tableName = "table" + name.getMethodName();
+
+        conn.createStatement().execute("create table " + tableName + "(tenant_id varchar not null, k integer not null, "
+                + "firstname varchar, lastname varchar constraint pk primary key(tenant_id,k)) MULTI_TENANT=true");
+        String tenantId = "tenId" + name.getMethodName();
+        Connection tenantConn = driver.connect(url + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId, EMPTY_PROPS);
+        Statement stmtTenant = tenantConn.createStatement();
+        stmtTenant.execute("upsert into " + tableName + " values(1,'foo','jock')");
+        tenantConn.commit();
+
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 7);
+
+        String sql="create function myfunction(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end." + MY_REVERSE_CLASS_NAME
+                + "' using jar '" + util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY).toString() + "'";
+        stmtTenant.execute(sql);
+        ResultSet rs = stmtTenant.executeQuery("select myfunction(firstname) from " + tableName);
+        assertTrue(rs.next());
+        assertEquals("oof",rs.getString(1));
+    }
+
+
+    /**
+     * Test creating functions using dir otherthan hbase.dynamic.jars.dir
+     * @throws Exception
+     */
+    @Test
+    public void testCreateFunctionNonDynamicJarDir() throws Exception {
+        Connection conn = driver.connect(url, EMPTY_PROPS);
+        String tableName = "table" + name.getMethodName();
+
+        conn.createStatement().execute("create table " + tableName + "(tenant_id varchar not null, k integer not null, "
+                + "firstname varchar, lastname varchar constraint pk primary key(tenant_id,k)) MULTI_TENANT=true");
+        String tenantId = "tenId" + name.getMethodName();
+        Connection tenantConn = driver.connect(url + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId, EMPTY_PROPS);
+        Statement stmtTenant = tenantConn.createStatement();
+        tenantConn.commit();
+
+        compileTestClass(MY_REVERSE_CLASS_NAME, MY_REVERSE_PROGRAM, 8);
+        Path destJarPathOnHDFS = copyJarsFromDynamicJarsDirToDummyHDFSDir("myjar8.jar");
+
+        try {
+            String sql =
+                    "create function myfunction(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end."
+                            + MY_REVERSE_CLASS_NAME + "' using jar '" + destJarPathOnHDFS.toString()
+                            + "'";
+            stmtTenant.execute(sql);
+            ResultSet rs = stmtTenant.executeQuery("select myfunction(firstname) from " + tableName);
+            fail("expecting java.lang.SecurityException");
+        }catch(Exception e){
+            assertTrue(ExceptionUtils.getRootCause(e) instanceof SecurityException);
+        }finally {
+            stmtTenant.execute("drop function myfunction");
+        }
+    }
+    /**
+    * Move the jars from the hbase.dynamic.jars.dir to data test directory
+    * @param jarName
+    * @return The destination jar file path.
+    * @throws IOException
+    */
+    private Path copyJarsFromDynamicJarsDirToDummyHDFSDir(String jarName) throws IOException {
+        Path srcPath = new Path(util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/" + jarName);
+        FileSystem srcFs = srcPath.getFileSystem(util.getConfiguration());
+        Path destPath = new Path(util.getDataTestDirOnTestFS().toString() + "/" + jarName);
+        FileSystem destFs = destPath.getFileSystem(util.getConfiguration());
+        FileUtil.copy(srcFs, srcPath, destFs, destPath, false, true, util.getConfiguration());
+        return destPath;
+    }
 }

@@ -185,8 +185,9 @@ public class UDFExpression extends ScalarFunction {
                 parent = path.toString();
             }
         }
-        if (jarPath == null || jarPath.isEmpty() || config.get(DYNAMIC_JARS_DIR_KEY) != null
-                && (parent != null && parent.equals(config.get(DYNAMIC_JARS_DIR_KEY)))) {
+        // The case jarPath is not provided, or it is provided and the jar is inside hbase.dynamic.jars.dir
+        if (jarPath == null || jarPath.isEmpty()
+                || config.get(DYNAMIC_JARS_DIR_KEY) != null && (parent != null && parent.equals(config.get(DYNAMIC_JARS_DIR_KEY)))) {
             cl = tenantIdSpecificCls.get(tenantId);
             if (cl == null) {
                 cl = new DynamicClassLoader(config, UDFExpression.class.getClassLoader());
@@ -198,18 +199,9 @@ public class UDFExpression extends ScalarFunction {
             }
             return cl;
         } else {
-            cl = pathSpecificCls.get(jarPath);
-            if (cl == null) {
-                Configuration conf = HBaseConfiguration.create(config);
-                conf.set(DYNAMIC_JARS_DIR_KEY, parent);
-                cl = new DynamicClassLoader(conf, UDFExpression.class.getClassLoader());
-            }
-            // Cache class loader as a weak value, will be GC'ed when no reference left
-            DynamicClassLoader prev = pathSpecificCls.putIfAbsent(jarPath, cl);
-            if (prev != null) {
-                cl = prev;
-            }
-            return cl;
+            //The case jarPath is provided as not part of DYNAMIC_JARS_DIR_KEY
+            //As per PHOENIX-4231, DYNAMIC_JARS_DIR_KEY is the only place where loading a udf jar is allowed
+            throw new SecurityException("Loading jars from " + jarPath + " is not allowed. The only location that is allowed is "+ config.get(DYNAMIC_JARS_DIR_KEY));
         }
     }
     
