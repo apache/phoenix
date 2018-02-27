@@ -1163,9 +1163,7 @@ public class MetaDataClient {
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs, boolean checkLastStatsUpdateTime) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
-                        props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
-                                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
+                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
