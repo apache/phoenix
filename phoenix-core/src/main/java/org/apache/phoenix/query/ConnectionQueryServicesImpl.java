@@ -135,6 +135,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -2485,7 +2486,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         setUpgradeRequired();
                                     }
                                 } catch (PhoenixIOException e) {
-                                    if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
+                                    boolean foundAccessDeniedException = false;
+                                    // when running spark/map reduce jobs the ADE might be wrapped
+                                    // in a RemoteException
+                                    for (Throwable t : Throwables.getCausalChain(e)) {
+                                        if (t instanceof AccessDeniedException
+                                                || (t instanceof RemoteException
+                                                        && ((RemoteException) t).getClassName()
+                                                                .equals(AccessDeniedException.class
+                                                                        .getName()))) {
+                                            foundAccessDeniedException = true;
+                                            break;
+                                        }
+                                    }
+                                    if (foundAccessDeniedException) {
                                         // Pass
                                         logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
