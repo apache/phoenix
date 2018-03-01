@@ -49,10 +49,10 @@ public class ConnectionQueryServicesImplTest {
         when(cqs.createSchema(any(List.class), anyString())).thenCallRealMethod();
         doCallRealMethod().when(cqs).ensureSystemTablesMigratedToSystemNamespace(any(ReadOnlyProps.class));
         // Do nothing for this method, just check that it was invoked later
-        doNothing().when(cqs).createSysMutexTable(any(Admin.class), any(ReadOnlyProps.class));
+        doNothing().when(cqs).createSysMutexTableIfNotExists(any(Admin.class), any(ReadOnlyProps.class));
 
         // Spoof out this call so that ensureSystemTablesUpgrade() will return-fast.
-        when(cqs.getSystemTableNames(any(Admin.class))).thenReturn(Collections.<TableName> emptyList());
+        when(cqs.getSystemTableNamesInDefaultNamespace(any(Admin.class))).thenReturn(Collections.<TableName> emptyList());
 
         // Throw a special exception to check on later
         doThrow(PHOENIX_IO_EXCEPTION).when(cqs).ensureNamespaceCreated(anyString());
@@ -64,7 +64,7 @@ public class ConnectionQueryServicesImplTest {
 
         // Should be called after upgradeSystemTables()
         // Proves that execution proceeded
-        verify(cqs).getSystemTableNames(any(Admin.class));
+        verify(cqs).getSystemTableNamesInDefaultNamespace(any(Admin.class));
 
         try {
             // Verifies that the exception is propagated back to the caller
