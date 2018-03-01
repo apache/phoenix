@@ -371,7 +371,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
           s.close();
       }
       ScanInfo scanInfo = ScanInfoUtil.cloneScanInfoWithKeepDeletedCells(store.getScanInfo());
-      return new StoreScanner(store, scanInfo, scan, targetCols,
+      return ScanInfoUtil.createStoreScanner(store, scanInfo, scan, targetCols,
           c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel()));
     }
 }
