@@ -197,5 +197,91 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
                 "    SERVER 1 ROW LIMIT\n" + 
                 "CLIENT 1 ROW LIMIT",QueryUtil.getExplainPlan(rs));
     }
-    
+
+    @Test
+    public void testReverseScanRowTimestampBug4630() throws Exception {
+        Connection conn = null;
+        try
+        {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            String sql = "create table "+tableName+" ( "+
+                    " app_tag varchar not null,"+
+                    " timestamp date not null,"+
+                    " log varchar "+
+                    "constraint pk primary key(app_tag, timestamp row_timestamp))";
+
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("upsert into " + tableName + " values ('test',to_date('2018-02-28 01:02:31'),'test1')");
+            conn.createStatement().execute("upsert into " + tableName + " values ('test',to_date('2018-02-28 01:02:33'),'test3')");
+            conn.createStatement().execute("upsert into " + tableName + " values ('test',to_date('2018-02-28 01:02:34'),'test4')");
+            conn.createStatement().execute("upsert into " + tableName + " values ('test',to_date('2018-02-28 01:02:35'),'test5')");
+            conn.createStatement().execute("upsert into " + tableName + " values ('test',to_date('2018-02-28 01:02:37'),'test7')");
+            conn.commit();
+
+            sql = "SELECT app_tag,log FROM " + tableName + " where app_tag = 'test' and timestamp between to_date('2018-02-28 01:02:30') and to_date('2018-02-28 01:02:36') order by timestamp desc";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals("test5", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test4", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test3", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test1", rs.getString(2));
+            assertTrue(!rs.next());
+
+            sql = "SELECT app_tag,log FROM " + tableName + " where app_tag = 'test' and timestamp between to_date('2018-02-28 01:02:32') and to_date('2018-02-28 01:02:38') order by timestamp desc";
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals("test7", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test5", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test4", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test3", rs.getString(2));
+            assertTrue(!rs.next());
+
+            sql = "SELECT app_tag,log FROM " + tableName + " where app_tag = 'test' and timestamp between to_date('2018-02-28 01:02:31') and to_date('2018-02-28 01:02:37') order by timestamp desc";
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals("test7", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test5", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test4", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test3", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test1", rs.getString(2));
+            assertTrue(!rs.next());
+
+            sql = "SELECT app_tag,log FROM " + tableName + " where app_tag = 'test' and timestamp between to_date('2018-02-28 01:02:32') and to_date('2018-02-28 01:02:36') order by timestamp desc";
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals("test5", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test4", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("test3", rs.getString(2));
+            assertTrue(!rs.next());
+
+            sql = "SELECT app_tag,log FROM " + tableName + " where app_tag = 'test' and timestamp between to_date('2018-02-28 01:02:38') and to_date('2018-02-28 01:02:39') order by timestamp desc";
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(!rs.next());
+
+            sql = "SELECT app_tag,log FROM " + tableName + " where app_tag = 'test' and timestamp between to_date('2018-02-28 01:02:28') and to_date('2018-02-28 01:02:30') order by timestamp desc";
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(!rs.next());
+        }
+        finally {
+            if(conn != null) {
+                conn.close();
+            }
+
+        }
+    }
+
 }

@@ -17,7 +17,11 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
+import java.io.IOException;
+import java.util.NavigableSet;
+
 import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.client.Scan;
 
 public class ScanInfoUtil {
     private ScanInfoUtil() {
@@ -31,5 +35,13 @@ public class ScanInfoUtil {
         return new ScanInfo(scanInfo.getConfiguration(), scanInfo.getFamily(), Math.max(scanInfo.getMinVersions(), 1),
                     scanInfo.getMaxVersions(), scanInfo.getTtl(), KeepDeletedCells.TRUE,
                     scanInfo.getTimeToPurgeDeletes(), scanInfo.getComparator());
+    }
+
+    public static StoreScanner createStoreScanner(Store store, ScanInfo scanInfo, Scan scan, final NavigableSet<byte[]> columns,long readPt) throws IOException {
+        if(!scan.isReversed()) {
+            return new StoreScanner(store, scanInfo, scan, columns,readPt);
+        } else {
+            return new ReversedStoreScanner(store, scanInfo, scan, columns,readPt);
+        }
     }
 }
