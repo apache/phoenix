@@ -154,7 +154,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
 
         // Adding Localization
 
-        HConnection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf));
+        try (HConnection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf))) {
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(table);
 
         for (List<Scan> scans : qplan.getScans()) {
@@ -205,6 +205,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
                 psplits.add(inputSplit);
             }
         }
+		}
 
         return psplits;
     }
