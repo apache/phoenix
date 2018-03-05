@@ -118,6 +118,11 @@ public class CollationKeyFunction extends ScalarFunction {
 		if (LOG.isTraceEnabled()) {
 			LOG.trace("CollationKey inputString: " + inputString);
 		}
+
+		if (inputString == null) {
+			return true;
+		}
+
 		byte[] collationKeyByteArray = collator.getCollationKey(inputString).toByteArray();
 
 		if (LOG.isTraceEnabled()) {

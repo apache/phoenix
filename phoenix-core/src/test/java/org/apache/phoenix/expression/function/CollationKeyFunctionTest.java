@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.text.Collator;
@@ -118,6 +119,12 @@ public class CollationKeyFunctionTest {
 	@Test
 	public void testUpperCaseCollationKeyBytes() throws Exception {
 		testCollationKeysEqual(new String[] { "abcdef", "ABCDEF", "aBcDeF" }, "en", Boolean.TRUE, null, null);
+	}
+	
+	@Test
+	public void testNullCollationKey() throws Exception {		
+		List<ByteArrayAndInteger> collationKeys = calculateCollationKeys(new String[] { null }, "en", null, null, null);
+		assertNull(collationKeys.get(0).byteArray);
 	}
 
 	@Test
