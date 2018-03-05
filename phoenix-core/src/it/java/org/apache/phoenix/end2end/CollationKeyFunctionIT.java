@@ -41,7 +41,10 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 			// (0-6) chinese characters
 			"\u963f", "\u55c4", "\u963e", "\u554a", "\u4ec8", "\u3d9a", "\u9f51",
 			// (7-13) western characters, some with accent
-			"a", "b", "ä", "A", "a", "ä", "A" };
+			"a", "b", "ä", "A", "a", "ä", "A",
+		    // null for null-input tests 
+			null
+		};
 
 	@Before
 	public void initAndPopulateTable() throws Exception {
@@ -69,27 +72,27 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testZhSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh", 0, 6, new Integer[] { 3, 0, 1, 6, 5, 4, 2 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh", false, 0, 6, new Integer[] { 3, 0, 1, 6, 5, 4, 2 });
 	}
 
 	@Test
 	public void testZhTwSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW", 0, 6, new Integer[] { 0, 3, 4, 1, 5, 2, 6 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW", false, 0, 6, new Integer[] { 0, 3, 4, 1, 5, 2, 6 });
 	}
 
 	@Test
 	public void testZhTwStrokeSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW_STROKE", 0, 6, new Integer[] { 4, 2, 0, 3, 1, 6, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW_STROKE", false, 0, 6, new Integer[] { 4, 2, 0, 3, 1, 6, 5 });
 	}
 
 	@Test
 	public void testZhStrokeSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__STROKE", 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__STROKE", false, 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
 	}
 
 	@Test
 	public void testZhPinyinSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__PINYIN", 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__PINYIN", false, 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
 	}
 
 	@Test
@@ -120,6 +123,18 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 		queryWithCollKeyWithStrengthWithExpectedOrder("en", Collator.TERTIARY, true, 7, 13,
 				new Integer[] { 8, 12, 9, 13, 10, 11, 7 });
 	}
+	
+	// Null before anything else when doing ascending sort
+	@Test
+	public void testSortWithNullInputAsc() throws Exception {
+		queryWithCollKeyDefaultArgsWithExpectedOrder("en", false, 13, 14, new Integer[] {14, 13});
+	}
+	
+	// Null before anything else when doing descending sort (same behavior when doing order by without collation_key)
+	@Test
+	public void testSortWithNullInputDesc() throws Exception {
+		queryWithCollKeyDefaultArgsWithExpectedOrder("en", true, 13, 14, new Integer[] {14, 13});
+	}
 
 	
 	/**
@@ -132,14 +147,16 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 	 *            This is the same as the ID column
 	 * @throws SQLException
 	 */
-	private void queryWithCollKeyDefaultArgsWithExpectedOrder(String localeString, Integer beginIndex, Integer endIndex,
+	private void queryWithCollKeyDefaultArgsWithExpectedOrder(String localeString, boolean isDescending, Integer beginIndex, Integer endIndex,
 			Integer[] expectedIndexOrder) throws Exception {
+		String sortOrder = isDescending ? "DESC" : "";
+
 		String query = String.format(
-				"SELECT id, data FROM %s WHERE ID BETWEEN %d AND %d ORDER BY COLLATION_KEY(data, '%s')", tableName,
-				beginIndex, endIndex, localeString);
+				"SELECT id, data FROM %s WHERE ID BETWEEN %d AND %d ORDER BY COLLATION_KEY(data, '%s') %s", tableName,
+				beginIndex, endIndex, localeString, sortOrder);
 		queryWithExpectedOrder(query, expectedIndexOrder);
 	}
-
+	
 	/**
 	 * Same as above, except the upperCase collator argument is set to true
 	 */

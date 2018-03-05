@@ -118,6 +118,11 @@ public class CollationKeyFunction extends ScalarFunction {
 		if (LOG.isTraceEnabled()) {
 			LOG.trace("CollationKey inputString: " + inputString);
 		}
+
+		if (inputString == null) {
+			return true;
+		}
+
 		byte[] collationKeyByteArray = collator.getCollationKey(inputString).toByteArray();
 
 		if (LOG.isTraceEnabled()) {
@@ -195,5 +200,10 @@ public class CollationKeyFunction extends ScalarFunction {
 		// only arguments marked as isConstant = true should be handled through
 		// this method.
 		return type.cast(((LiteralExpression) expression).getValue());
+	}
+
+	@Override
+	public boolean isNullable() {
+		return getChildren().get(0).isNullable();
 	}
 }
