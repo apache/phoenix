@@ -37,11 +37,11 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexOnParentViewWithTenantSpecificConnection() throws Exception {
-        final String baseTableName = generateUniqueName();
-        final String globalViewName = generateUniqueName();
-        final String globalViewIdxName = generateUniqueName();
-        final String tenantViewName1 = generateUniqueName();
-        final String tenantViewName2 = generateUniqueName();
+        final String baseTableName = "BT_" + generateUniqueName();
+        final String globalViewName = "GV_" + generateUniqueName();
+        final String globalViewIdxName = "GVI_" + generateUniqueName();
+        final String tenantViewName1 = "TV1_" + generateUniqueName();
+        final String tenantViewName2 = "TV2_" + generateUniqueName();
 
         // Set up props with TenantId
         Properties props  = new Properties();
