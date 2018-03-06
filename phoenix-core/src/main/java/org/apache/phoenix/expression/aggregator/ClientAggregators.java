@@ -50,7 +50,7 @@ public class ClientAggregators extends Aggregators {
     }
     
     @Override
-    public void aggregate(Aggregator[] aggregators, Tuple result) {
+    public long aggregate(Aggregator[] aggregators, Tuple result) {
         TupleUtil.getAggregateValue(result, ptr);
         tempValueSet.clear();
         tempValueSet.or(ptr);
@@ -64,6 +64,7 @@ public class ClientAggregators extends Aggregators {
             }
             i++;
         }
+        return 0;
     }
     
     @Override

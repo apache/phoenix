@@ -52,6 +52,7 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
     private static final int FIXED_COPY_THRESHOLD = SizedUtil.ARRAY_SIZE * 2;
 
     private int compressThreshold;
+    private int heapSize = 0;
     private byte[] buffer = null;
     protected Map<ImmutableBytesPtr, Integer> valueVsCount = new HashMap<ImmutableBytesPtr, Integer>();
 
@@ -75,6 +76,9 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
         Integer count = this.valueVsCount.get(key);
         if (count == null) {
             this.valueVsCount.put(key, 1);
+            heapSize += SizedUtil.MAP_ENTRY_SIZE + // entry
+                    Bytes.SIZEOF_INT + // key size
+                    key.getLength() + SizedUtil.ARRAY_SIZE; // value size
         } else {
             this.valueVsCount.put(key, ++count);
         }
@@ -130,20 +134,7 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
 
     // The heap size which will be taken by the count map.
     private int countMapHeapSize() {
-        int size = 0;
-        if (this.valueVsCount.size() > 0) {
-            for (ImmutableBytesPtr key : this.valueVsCount.keySet()) {
-                size += SizedUtil.MAP_ENTRY_SIZE + // entry
-                        Bytes.SIZEOF_INT + // key size
-                        key.getLength() + SizedUtil.ARRAY_SIZE; // value size
-            }
-        } else {
-            // Initially when the getSize() is called, we dont have any entries in the map so as to
-            // tell the exact heap need. Let us approximate the #entries
-            SizedUtil.sizeOfMap(DEFAULT_ESTIMATED_DISTINCT_VALUES,
-                    SizedUtil.IMMUTABLE_BYTES_PTR_SIZE, Bytes.SIZEOF_INT);
-        }
-        return size;
+        return heapSize;
     }
 
     @Override
@@ -154,6 +145,7 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
     @Override
     public void reset() {
         valueVsCount = new HashMap<ImmutableBytesPtr, Integer>();
+        heapSize = 0;
         buffer = null;
         super.reset();
     }
