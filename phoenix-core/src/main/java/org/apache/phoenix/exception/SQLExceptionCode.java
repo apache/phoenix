@@ -432,14 +432,15 @@ public enum SQLExceptionCode {
     SCHEMA_NOT_ALLOWED(724, "43M07", "Schema name not allowed!!"),
     CREATE_SCHEMA_NOT_ALLOWED(725, "43M08", "Cannot create schema because config "
             + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " for enabling name space mapping isn't enabled."),
-    INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES(726, "43M10", " Inconsistent namespace mapping properties.."),
-    ASYNC_NOT_ALLOWED(727, "43M11", " ASYNC option is not allowed.. "),
+    INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES(726, "43M10", " Inconsistent namespace mapping properties."),
+    ASYNC_NOT_ALLOWED(727, "43M11", " ASYNC option is not allowed."),
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
     
     MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
     MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes"), 
+    INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found");
 
     private final int errorCode;

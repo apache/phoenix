@@ -230,7 +230,6 @@ public class TestUtil {
     public static final String STABLE_NAME = "STABLE";
     public static final String STABLE_PK_NAME = "ID";
     public static final String STABLE_SCHEMA_NAME = "";
-    public static final String GROUPBYTEST_NAME = "GROUPBYTEST";
     public static final String CUSTOM_ENTITY_DATA_FULL_NAME = "CORE.CUSTOM_ENTITY_DATA";
     public static final String CUSTOM_ENTITY_DATA_NAME = "CUSTOM_ENTITY_DATA";
     public static final String CUSTOM_ENTITY_DATA_SCHEMA_NAME = "CORE";

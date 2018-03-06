@@ -80,7 +80,9 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
@@ -98,6 +100,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.HashJoinInfo;
+import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -516,7 +519,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] clientVersionBytes = scan.getAttribute(PhoenixIndexCodec.CLIENT_VERSION);
         boolean acquiredLock = false;
         boolean incrScanRefCount = false;
-        try {
+        final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
+        try (MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
             if(needToWrite) {
                 synchronized (lock) {
                     if (isRegionClosingOrSplitting) {
@@ -529,6 +533,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             region.startRegionOperation();
             acquiredLock = true;
+            long size = 0;
             synchronized (innerScanner) {
                 do {
                     List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) : new ArrayList<Cell>();
@@ -760,7 +765,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             commitBatch(region, indexMutations, blockingMemStoreSize);
                             indexMutations.clear();
                         }
-                        aggregators.aggregate(rowAggregators, result);
+                        size += aggregators.aggregate(rowAggregators, result);
+                        while(size > em.getSize()) {
+                            logger.info("Request: {}, resizing {} by 1024*1024", size, em.getSize());
+                            em.resize(em.getSize() + 1024*1024);
+                        }
                         hasAny = true;
                     }
                 } while (hasMore);

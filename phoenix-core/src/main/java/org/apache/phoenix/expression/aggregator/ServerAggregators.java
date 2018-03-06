@@ -52,13 +52,17 @@ public class ServerAggregators extends Aggregators {
     }
     
     @Override
-    public void aggregate(Aggregator[] aggregators, Tuple result) {
+    public long aggregate(Aggregator[] aggregators, Tuple result) {
+        long dsize = 0;
         for (int i = 0; i < expressions.length; i++) {
             if (expressions[i].evaluate(result, ptr) && ptr.getLength() != 0) {
+                dsize -= aggregators[i].getSize();
                 aggregators[i].aggregate(result, ptr);
+                dsize += aggregators[i].getSize();
             }
             expressions[i].reset();
         }
+        return dsize;
     }
     
     /**

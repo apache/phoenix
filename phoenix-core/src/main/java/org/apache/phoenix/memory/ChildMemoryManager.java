@@ -19,6 +19,8 @@ package org.apache.phoenix.memory;
 
 import org.apache.http.annotation.GuardedBy;
 import org.apache.http.annotation.ThreadSafe;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 
 /**
  * 
@@ -54,7 +56,10 @@ public class ChildMemoryManager extends DelegatingMemoryManager {
         long availBytes = getAvailableMemory();
         // Check if this memory managers percentage of allocated bytes exceeds its allowed maximum
         if (minBytes > availBytes) {
-            throw new InsufficientMemoryException("Attempt to allocate more memory than the max allowed of " + maxPercOfTotal + "%");
+            throw new InsufficientMemoryException(
+                    new SQLExceptionInfo.Builder(SQLExceptionCode.INSUFFICIENT_MEMORY)
+                    .setMessage("Attempt to allocate more memory than the max allowed of " + maxPercOfTotal + "%")
+                    .build().buildException());
         }
         // Revise reqBytes down to available memory if necessary
         return Math.min(reqBytes,availBytes);
