@@ -17,12 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -33,6 +33,7 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -54,8 +55,10 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
     
     // covers: COUNT, COUNT(DISTINCT) SUM, AVG, MIN, MAX 
     private static String GROUPBY1 = "select "
-            + "count(*), count(distinct uri), sum(appcpu), avg(appcpu), uri, min(id), max(id) from "
-            + GROUPBYTEST_NAME + " group by uri";
+            + "count(*), count(distinct uri), sum(appcpu), avg(appcpu), uri, min(id), max(id) from %s "
+            + "group by uri";
+    
+    private static String GROUPBY2 = "select count(distinct uri) from %s";
     
     private int id;
 
@@ -84,10 +87,10 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         createGroupByTestTable(conn, tableName);
     }
 
-    private void loadData(Connection conn) throws SQLException {
+    private void loadData(Connection conn, String tableName) throws SQLException {
         int groupFactor = NUM_ROWS_INSERTED / 2;
         for (int i = 0; i < NUM_ROWS_INSERTED; i++) {
-            insertRow(conn, Integer.toString(i % (groupFactor)), 10);
+            insertRow(conn, tableName, Integer.toString(i % (groupFactor)), 10);
 
             if ((i % 1000) == 0) {
                 conn.commit();
@@ -96,10 +99,21 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         conn.commit();
     }
 
-    private void insertRow(Connection conn, String uri, int appcpu)
+    private void loadUniqueURIData(Connection conn, String tableName, int rowsToInsert) throws SQLException {
+        for (int i = 0; i < rowsToInsert; i++) {
+            insertRow(conn, tableName, Integer.toString(i), 10);
+
+            if ((i % 1000) == 0) {
+                conn.commit();
+            }
+        }
+        conn.commit();
+    }
+
+    private void insertRow(Connection conn, String tableName, String uri, int appcpu)
             throws SQLException {
         PreparedStatement statement = conn.prepareStatement("UPSERT INTO "
-                + GROUPBYTEST_NAME + "(id, uri, appcpu) values (?,?,?)");
+                + tableName + "(id, uri, appcpu) values (?,?,?)");
         statement.setString(1, String.valueOf(id));
         statement.setString(2, uri);
         statement.setInt(3, appcpu);
@@ -110,14 +124,14 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
     
     @Test
     public void testScanUri() throws Exception {
-        SpillableGroupByIT spGpByT = new SpillableGroupByIT();
+        String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        createTable(conn, GROUPBYTEST_NAME);
-        spGpByT.loadData(conn);
+        createTable(conn, tableName);
+        loadData(conn, tableName);
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery(GROUPBY1);
+        ResultSet rs = stmt.executeQuery(String.format(GROUPBY1, tableName));
 
         int count = 0;
         while (rs.next()) {
@@ -135,14 +149,14 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         assertEquals(NUM_ROWS_INSERTED / 2, count);
         
         conn.createStatement();
-        rs = stmt.executeQuery("SELECT appcpu FROM " + GROUPBYTEST_NAME + " group by appcpu limit 1");
+        rs = stmt.executeQuery("SELECT appcpu FROM " + tableName + " group by appcpu limit 1");
 
         assertTrue(rs.next());
         assertEquals(10,rs.getInt(1));
         assertFalse(rs.next());
         
         stmt = conn.createStatement();
-        rs = stmt.executeQuery("SELECT to_number(uri) FROM " + GROUPBYTEST_NAME + " group by to_number(uri) limit 100");
+        rs = stmt.executeQuery("SELECT to_number(uri) FROM " + tableName + " group by to_number(uri) limit 100");
         count = 0;
         while (rs.next()) {
             count++;
@@ -152,24 +166,44 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
 
     @Test
     public void testStatisticsAreNotWritten() throws SQLException {
+        String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE T1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
-        stmt.execute("UPSERT INTO T1 VALUES (1, 'NAME1')");
-        stmt.execute("UPSERT INTO T1 VALUES (2, 'NAME2')");
-        stmt.execute("UPSERT INTO T1 VALUES (3, 'NAME3')");
+        stmt.execute("CREATE TABLE " + tableName + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
+        stmt.execute("UPSERT INTO " + tableName + " VALUES (1, 'NAME1')");
+        stmt.execute("UPSERT INTO " + tableName + " VALUES (2, 'NAME2')");
+        stmt.execute("UPSERT INTO " + tableName + " VALUES (3, 'NAME3')");
         conn.commit();
-        stmt.execute("UPDATE STATISTICS T1");
+        stmt.execute("UPDATE STATISTICS " + tableName);
         ResultSet rs = stmt.executeQuery("SELECT * FROM \"SYSTEM\".STATS");
         assertFalse(rs.next());
         rs.close();
         stmt.close();
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM T1");
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName);
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER T1",
+                "CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + tableName,
                 explainPlan);
        conn.close();
+    }
+    
+    @Test
+    public void testDistinctCountFails() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        createTable(conn, tableName);
+        loadUniqueURIData(conn, tableName, 1000);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery(String.format(GROUPBY2, tableName));
+        try {
+            rs.next();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.INSUFFICIENT_MEMORY.getErrorCode(),e.getErrorCode());
+        }
+
     }
 }
