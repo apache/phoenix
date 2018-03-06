@@ -29,6 +29,7 @@ import org.apache.phoenix.expression.function.ArrayFillFunction;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.ArrayPrependFunction;
+import org.apache.phoenix.expression.function.ArrayRemoveFunction;
 import org.apache.phoenix.expression.function.ArrayToStringFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
@@ -46,9 +47,12 @@ import org.apache.phoenix.expression.function.CollationKeyFunction;
 import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.DayOfMonthFunction;
+import org.apache.phoenix.expression.function.DayOfWeekFunction;
+import org.apache.phoenix.expression.function.DayOfYearFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DefaultValueExpression;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.DistinctCountHyperLogLogAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
@@ -129,9 +133,6 @@ import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
-import org.apache.phoenix.expression.function.DayOfWeekFunction;
-import org.apache.phoenix.expression.function.DayOfYearFunction;
-import org.apache.phoenix.expression.function.DistinctCountHyperLogLogAggregateFunction;
 
 import com.google.common.collect.Maps;
 
@@ -296,7 +297,8 @@ public enum ExpressionType {
     FirstValuesFunction(FirstValuesFunction.class),
     LastValuesFunction(LastValuesFunction.class),
     DistinctCountHyperLogLogAggregateFunction(DistinctCountHyperLogLogAggregateFunction.class),
-    CollationKeyFunction(CollationKeyFunction.class);
+    CollationKeyFunction(CollationKeyFunction.class),
+    ArrayRemoveFunction(ArrayRemoveFunction.class);
 
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
