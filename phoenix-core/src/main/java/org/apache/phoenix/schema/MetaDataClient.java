@@ -594,66 +594,111 @@ public class MetaDataClient {
         int tryCount = 0;
         MetaDataMutationResult result;
 
-        do {
-            final byte[] schemaBytes = PVarchar.INSTANCE.toBytes(schemaName);
-            final byte[] tableBytes = PVarchar.INSTANCE.toBytes(tableName);
-            ConnectionQueryServices queryServices = connection.getQueryServices();
-            result = queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, resolvedTimestamp);
-            // if the table was assumed to be transactional, but is actually not transactional then re-resolve as of the right timestamp (and vice versa)
-            if (table==null && result.getTable()!=null && result.getTable().isTransactional()!=isTransactional) {
-                result = queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, TransactionUtil.getResolvedTimestamp(connection, result.getTable().isTransactional(), HConstants.LATEST_TIMESTAMP));
+        // if we are looking up an index on a child view that is inherited from its
+        // parent, then we need to resolve the parent of the child view which will also
+        // load any of its indexes instead of trying to load the inherited view index
+        // which doesn't exist in SYSTEM.CATALOG
+        if (tableName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            String parentViewName =
+                    SchemaUtil.getSchemaNameFromFullName(tableName,
+                        QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            // recursively look up the parent view as we could have inherited this index from an ancestor
+            // view(V) with Index (VIndex) -> child view (V1) -> grand child view (V2)
+            // the view index name will be V2#V1#VIndex
+            result =
+                    updateCache(origTenantId, SchemaUtil.getSchemaNameFromFullName(parentViewName),
+                        SchemaUtil.getTableNameFromFullName(parentViewName), alwaysHitServer,
+                        resolvedTimestamp);
+            if (result.getTable() != null) {
+                try {
+                    tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
+                    table = tableRef.getTable();
+                    return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
+                            QueryConstants.UNSET_TIMESTAMP, table);
+                } catch (TableNotFoundException e) {
+                    // reset the result as we looked up the parent view 
+                    return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
+                        QueryConstants.UNSET_TIMESTAMP, null);
+                }
             }
+        }
+        else {
+            do {
+                final byte[] schemaBytes = PVarchar.INSTANCE.toBytes(schemaName);
+                final byte[] tableBytes = PVarchar.INSTANCE.toBytes(tableName);
+                ConnectionQueryServices queryServices = connection.getQueryServices();
+                result =
+                        queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp,
+                            resolvedTimestamp);
+                // if the table was assumed to be transactional, but is actually not transactional
+                // then re-resolve as of the right timestamp (and vice versa)
+                if (table == null && result.getTable() != null
+                        && result.getTable().isTransactional() != isTransactional) {
+                    result =
+                            queryServices.getTable(tenantId, schemaBytes, tableBytes,
+                                tableTimestamp,
+                                TransactionUtil.getResolvedTimestamp(connection,
+                                    result.getTable().isTransactional(),
+                                    HConstants.LATEST_TIMESTAMP));
+                }
 
-            if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
-                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS && result.getTable() == null) {
-                    result.setTable(table);
-                }
-                return result;
-            }
-            MutationCode code = result.getMutationCode();
-            PTable resultTable = result.getTable();
-            // We found an updated table, so update our cache
-            if (resultTable != null) {
-                // Cache table, even if multi-tenant table found for null tenant_id
-                // These may be accessed by tenant-specific connections, as the
-                // tenant_id will always be added to mask other tenants data.
-                // Otherwise, a tenant would be required to create a VIEW first
-                // which is not really necessary unless you want to filter or add
-                // columns
-                addTableToCache(result);
-                return result;
-            } else {
-                // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
-                // TODO: No table exists at the clientTimestamp, but a newer one exists.
-                // Since we disallow creation or modification of a table earlier than the latest
-                // timestamp, we can handle this such that we don't ask the
-                // server again.
-                if (table != null) {
-                    // Ensures that table in result is set to table found in our cache.
-                    if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
+                    if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS
+                            && result.getTable() == null) {
                         result.setTable(table);
-                        // Although this table is up-to-date, the parent table may not be.
-                        // In this case, we update the parent table which may in turn pull
-                        // in indexes to add to this table.
-                        long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                        if (addIndexesFromParentTable(result, resolvedTimestamp)) {
-                            connection.addTable(result.getTable(), resolvedTime);
-                        }
-                        else {
-                            // if we aren't adding the table, we still need to update the resolved time of the table
-                            connection.updateResolvedTimestamp(table, resolvedTime);
-                        }
-                        return result;
                     }
-                    // If table was not found at the current time stamp and we have one cached, remove it.
-                    // Otherwise, we're up to date, so there's nothing to do.
-                    if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
-                        connection.removeTable(origTenantId, fullTableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
+                    return result;
+                }
+                MutationCode code = result.getMutationCode();
+                PTable resultTable = result.getTable();
+                // We found an updated table, so update our cache
+                if (resultTable != null) {
+                    // Cache table, even if multi-tenant table found for null tenant_id
+                    // These may be accessed by tenant-specific connections, as the
+                    // tenant_id will always be added to mask other tenants data.
+                    // Otherwise, a tenant would be required to create a VIEW first
+                    // which is not really necessary unless you want to filter or add
+                    // columns
+                    addTableToCache(result);
+                    return result;
+                } else {
+                    // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
+                    // TODO: No table exists at the clientTimestamp, but a newer one exists.
+                    // Since we disallow creation or modification of a table earlier than the latest
+                    // timestamp, we can handle this such that we don't ask the
+                    // server again.
+                    if (table != null) {
+                        // Ensures that table in result is set to table found in our cache.
+                        if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                            result.setTable(table);
+                            // Although this table is up-to-date, the parent table may not be.
+                            // In this case, we update the parent table which may in turn pull
+                            // in indexes to add to this table.
+                            long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
+                            if (addIndexesFromParentTable(result, resolvedTimestamp)) {
+                                connection.addTable(result.getTable(), resolvedTime);
+                            } else {
+                                // if we aren't adding the table, we still need to update the
+                                // resolved time of the table
+                                connection.updateResolvedTimestamp(table, resolvedTime);
+                            }
+                            return result;
+                        }
+                        // If table was not found at the current time stamp and we have one cached,
+                        // remove it.
+                        // Otherwise, we're up to date, so there's nothing to do.
+                        if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
+                            connection
+                                    .removeTable(origTenantId, fullTableName,
+                                        table.getParentName() == null ? null
+                                                : table.getParentName().getString(),
+                                        table.getTimeStamp());
+                        }
                     }
                 }
-            }
-            tenantId = null; // Try again with global tenantId
-        } while (++tryCount < maxTryCount);
+                tenantId = null; // Try again with global tenantId
+            } while (++tryCount < maxTryCount);
+        }
 
         return result;
     }
@@ -850,11 +895,11 @@ public class MetaDataClient {
             if (containsAllReqdCols) {
                 // Tack on view statement to index to get proper filtering for view
                 String viewStatement = IndexUtil.rewriteViewStatement(connection, index, parentTable, view.getViewStatement());
-                PName modifiedIndexName = PNameFactory.newName(index.getName().getString() 
-                    + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + view.getName().getString());
+                PName modifiedIndexName = PNameFactory.newName(view.getName().getString() 
+                    + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + index.getName().getString());
                 // add the index table with a new name so that it does not conflict with the existing index table
-                // also set update cache frequency to never since the renamed index is not present on the server
-                indexesToAdd.add(PTableImpl.makePTable(index, modifiedIndexName, viewStatement, Long.MAX_VALUE, view.getTenantId()));
+                // and set update cache frequency to that of the view
+                indexesToAdd.add(PTableImpl.makePTable(index, modifiedIndexName, viewStatement, view.getUpdateCacheFrequency(), view.getTenantId()));
             }
         }
         PTable allIndexesTable = PTableImpl.makePTable(view, view.getTimeStamp(), indexesToAdd);

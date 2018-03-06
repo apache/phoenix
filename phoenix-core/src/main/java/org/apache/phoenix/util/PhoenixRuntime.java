@@ -449,24 +449,14 @@ public class PhoenixRuntime {
         try {
             table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
-            // parent indexes on child view metadata rows are not present on the server
-            if (name.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-                String viewName =
-                        SchemaUtil.getTableNameFromFullName(name,
-                            QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-                // resolve the view which should also load any parent indexes
-                getTable(conn, viewName);
-                table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
-            } else {
-                String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-                String tableName = SchemaUtil.getTableNameFromFullName(name);
-                MetaDataMutationResult result =
-                        new MetaDataClient(pconn).updateCache(schemaName, tableName);
-                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                    throw e;
-                }
-                table = result.getTable();
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+            String tableName = SchemaUtil.getTableNameFromFullName(name);
+            MetaDataMutationResult result =
+                    new MetaDataClient(pconn).updateCache(schemaName, tableName);
+            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                throw e;
             }
+            table = result.getTable();
         }
         return table;
     }
