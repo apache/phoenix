@@ -159,7 +159,7 @@ public class PhoenixDriverIT extends BaseUniqueNamesOwnClusterIT {
             stmt.executeQuery(sql);
             PTable indexTable = stmt.getQueryPlan().getTableRef().getTable();
             String tableName = indexTable.getName().getString();
-            String expectedTableName = baseTableIndexName + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + viewName;
+            String expectedTableName = viewName + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + baseTableIndexName;
             assertEquals("Parent Index table is not used ", expectedTableName, tableName);
             
             // verify that we can look up the index using PhoenixRuntime from a different client
