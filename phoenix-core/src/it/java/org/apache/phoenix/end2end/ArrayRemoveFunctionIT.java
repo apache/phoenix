@@ -55,26 +55,6 @@ public class ArrayRemoveFunctionIT extends ParallelStatsDisabledIT {
         return tableName;
     }
 
-    private String initTablesDesc(Connection conn, String type, String val) throws Exception {
-        String tableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + tableName + " (pk " + type + " PRIMARY KEY DESC,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],chars2 CHAR(15)[], bools BOOLEAN[])";
-        conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + tableName + "(pk,varchars,integers,doubles,bigints,chars,chars2,bools) VALUES(" + val + "," +
-                "ARRAY['2345','46345','23234']," +
-                "ARRAY[2345,46345,23234,456]," +
-                "ARRAY[23.45,46.345,23.234,45.6,5.78]," +
-                "ARRAY[12,34,56,78,910]," +
-                "ARRAY['a','bbbb','c','ddd','e']," +
-                "ARRAY['a','bbbb','c','ddd','e','foo']," +
-                "ARRAY[true,false]" +
-                ")";
-        PreparedStatement stmt = conn.prepareStatement(dml);
-        stmt.execute();
-        conn.commit();
-        return tableName;
-
-    }
-
     @Test
     public void testEmptyArrayModification() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());

@@ -18,21 +18,19 @@
 
 package org.apache.phoenix.expression.function;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
+import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 import org.apache.phoenix.schema.types.PBinaryArray;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
-import org.apache.phoenix.schema.types.PhoenixArray;
 
 @FunctionParseNode.BuiltInFunction(name = ArrayRemoveFunction.NAME, args = {
 		@FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }),
@@ -58,38 +56,17 @@ public class ArrayRemoveFunction extends ArrayModifierFunction {
 			return true;
 		}
 
-		PhoenixArray array = (PhoenixArray) getDataType().toObject(arrayBytes, offset, length, getDataType(), sortOrder,
-				maxLength, null);
+		PArrayDataTypeEncoder arrayDataTypeEncoder = new PArrayDataTypeEncoder(baseType, sortOrder);
 
-		
-		Object toCompare = baseType.toObject(ptr, sortOrder);
-		
-		if(baseType.isFixedWidth()) {
-			toCompare = baseType.pad(toCompare, array.getMaxLength());
-		}
-
-		int dimensions = array.getDimensions();
-		List<Object> values = new ArrayList<>();
-		for (int i = 0; i < dimensions; i++) {
-			Object element = array.getElement(i);
-			if (element != null && element.equals(toCompare)
-					|| (element.getClass().isArray() && ArrayUtils.isEquals(element, toCompare))) {
-				if (getDataType().isFixedWidth()) {
-					values.add(null);
-				}
-			} else {
-				values.add(element);
+		for (int arrayIndex = 0; arrayIndex < arrayLength; arrayIndex++) {
+			ImmutableBytesWritable ptr2 = new ImmutableBytesWritable(arrayBytes, offset, length);
+			PArrayDataTypeDecoder.positionAtArrayElement(ptr2, arrayIndex, baseType, maxLength);
+			if (baseType.compareTo(ptr2, sortOrder, ptr, sortOrder, baseType) != 0) {
+				arrayDataTypeEncoder.appendValue(ptr2.get(), ptr2.getOffset(), ptr2.getLength());
 			}
 		}
 
-		PhoenixArray newArray = PArrayDataType.instantiatePhoenixArray(baseType,
-				values.toArray(new Object[values.size()]));
-
-		if (baseType.isFixedWidth() && maxLength != null && maxLength != newArray.getMaxLength()) {
-			newArray = new PhoenixArray(newArray, maxLength);
-		}
-
-		ptr.set(getDataType().toBytes(newArray, sortOrder));
+		ptr.set(arrayDataTypeEncoder.encode());
 
 		return true;
 	}
