@@ -18,6 +18,8 @@
 package org.apache.phoenix.memory;
 
 import org.apache.http.annotation.GuardedBy;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 /**
@@ -55,7 +57,6 @@ public class GlobalMemoryManager implements MemoryManager {
         return maxMemoryBytes;
     }
 
-
     // TODO: Work on fairness: One big memory request can cause all others to fail here.
     private long allocateBytes(long minBytes, long reqBytes) {
         if (minBytes < 0 || reqBytes < 0) {
@@ -63,15 +64,21 @@ public class GlobalMemoryManager implements MemoryManager {
                     + ") and requested bytes (" + reqBytes + ") must be greater than zero");
         }
         if (minBytes > maxMemoryBytes) {
-            throw new InsufficientMemoryException("Requested memory of " + minBytes
-                    + " bytes is larger than global pool of " + maxMemoryBytes + " bytes.");
+            throw new InsufficientMemoryException(
+                    new SQLExceptionInfo.Builder(SQLExceptionCode.INSUFFICIENT_MEMORY)
+                    .setMessage("Requested memory of " + minBytes
+                              + " bytes is larger than global pool of " + maxMemoryBytes + " bytes.")
+                    .build().buildException());
         }
         long nBytes;
         synchronized(sync) {
             if (usedMemoryBytes + minBytes > maxMemoryBytes) {
-                throw new InsufficientMemoryException("Requested memory of " + minBytes
-                        + " bytes could not be allocated. Using memory of " + usedMemoryBytes
-                        + " bytes from global pool of " + maxMemoryBytes);
+                throw new InsufficientMemoryException(
+                        new SQLExceptionInfo.Builder(SQLExceptionCode.INSUFFICIENT_MEMORY)
+                        .setMessage("Requested memory of " + minBytes
+                                + " bytes could not be allocated. Using memory of " + usedMemoryBytes
+                                + " bytes from global pool of " + maxMemoryBytes)
+                        .build().buildException());
             }
             // Allocate at most reqBytes, but at least minBytes
             nBytes = Math.min(reqBytes, maxMemoryBytes - usedMemoryBytes);
