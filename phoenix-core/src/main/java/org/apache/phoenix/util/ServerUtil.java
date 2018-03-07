@@ -242,7 +242,9 @@ public class ServerUtil {
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
-        locks.add(rowLock);
+        if (locks != null) {
+            locks.add(rowLock);
+        }
         return rowLock;
     }
 

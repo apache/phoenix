@@ -25,6 +25,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.Date;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +47,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.Mut
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -207,23 +209,31 @@ public class StatisticsWriter implements Closeable {
         }
     }
 
-    public void commitStats(List<Mutation> mutations, StatisticsCollector statsCollector) throws IOException {
-        commitLastStatsUpdatedTime(statsCollector);
-        if (mutations.size() > 0) {
-            byte[] row = mutations.get(0).getRow();
-            MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
-            for (Mutation m : mutations) {
-                mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
+    public void commitStats(final List<Mutation> mutations, final StatisticsCollector statsCollector)
+            throws IOException {
+        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+            @Override
+            public Void run() throws Exception {
+                commitLastStatsUpdatedTime(statsCollector);
+                if (mutations.size() > 0) {
+                    byte[] row = mutations.get(0).getRow();
+                    MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
+                    for (Mutation m : mutations) {
+                        mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
+                    }
+                    MutateRowsRequest mrm = mrmBuilder.build();
+                    CoprocessorRpcChannel channel = statsWriterTable.coprocessorService(row);
+                    MultiRowMutationService.BlockingInterface service = MultiRowMutationService
+                            .newBlockingStub(channel);
+                    try {
+                        service.mutateRows(null, mrm);
+                    } catch (ServiceException ex) {
+                        ProtobufUtil.toIOException(ex);
+                    }
+                }
+                return null;
             }
-            MutateRowsRequest mrm = mrmBuilder.build();
-            CoprocessorRpcChannel channel = statsWriterTable.coprocessorService(row);
-            MultiRowMutationService.BlockingInterface service = MultiRowMutationService.newBlockingStub(channel);
-            try {
-                service.mutateRows(null, mrm);
-            } catch (ServiceException ex) {
-                ProtobufUtil.toIOException(ex);
-            }
-        }
+        });
     }
 
     private Put getLastStatsUpdatedTimePut(long timeStamp) {

@@ -18,6 +18,7 @@
 package org.apache.phoenix.index;
 
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
@@ -39,6 +40,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -160,12 +162,12 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     }
 
     private long handleFailureWithExceptions(Multimap<HTableInterfaceReference, Mutation> attempted,
-            Exception cause) throws Throwable {
+            final Exception cause) throws Throwable {
         Set<HTableInterfaceReference> refs = attempted.asMap().keySet();
-        Map<String, Long> indexTableNames = new HashMap<String, Long>(refs.size());
+        final Map<String, Long> indexTableNames = new HashMap<String, Long>(refs.size());
         // start by looking at all the tables to which we attempted to write
         long timestamp = 0;
-        boolean leaveIndexActive = blockDataTableWritesOnFailure || !disableIndexOnFailure;
+        final boolean leaveIndexActive = blockDataTableWritesOnFailure || !disableIndexOnFailure;
         // if using TrackingParallelWriter, we know which indexes failed and only disable those
         Set<HTableInterfaceReference> failedTables = cause instanceof MultiIndexWriteFailureException 
                 ? new HashSet<HTableInterfaceReference>(((MultiIndexWriteFailureException)cause).getFailedTables())
@@ -209,55 +211,66 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             return timestamp;
         }
 
-        PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.PENDING_ACTIVE;
+        final PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.PENDING_ACTIVE;
+        final long fTimestamp = timestamp;
         // for all the index tables that we've found, try to disable them and if that fails, try to
-        for (Map.Entry<String, Long> tableTimeElement :indexTableNames.entrySet()){
-            String indexTableName = tableTimeElement.getKey();
-            long minTimeStamp = tableTimeElement.getValue();
-            // We need a way of differentiating the block writes to data table case from
-            // the leave index active case. In either case, we need to know the time stamp
-            // at which writes started failing so we can rebuild from that point. If we
-            // keep the index active *and* have a positive INDEX_DISABLE_TIMESTAMP_BYTES,
-            // then writes to the data table will be blocked (this is client side logic
-            // and we can't change this in a minor release). So we use the sign of the
-            // time stamp to differentiate.
-            if (!disableIndexOnFailure && !blockDataTableWritesOnFailure) {
-                minTimeStamp *= -1;
-            }
-            // Disable the index by using the updateIndexState method of MetaDataProtocol end point coprocessor.
-            try (Table systemTable = env.getConnection().getTable(SchemaUtil
-                    .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
-                MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
-                        systemTable, newState);
-                if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
-                    LOG.info("Index " + indexTableName + " has been dropped. Ignore uncommitted mutations");
-                    continue;
-                }
-                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                    if (leaveIndexActive) {
-                        LOG.warn("Attempt to update INDEX_DISABLE_TIMESTAMP " + " failed with code = "
-                                + result.getMutationCode());
-                        // If we're not disabling the index, then we don't want to throw as throwing
-                        // will lead to the RS being shutdown.
-                        if (blockDataTableWritesOnFailure) {
-                            throw new DoNotRetryIOException("Attempt to update INDEX_DISABLE_TIMESTAMP failed.");
+        return User.runAsLoginUser(new PrivilegedExceptionAction<Long>() {
+            @Override
+            public Long run() throws Exception {
+                for (Map.Entry<String, Long> tableTimeElement : indexTableNames.entrySet()) {
+                    String indexTableName = tableTimeElement.getKey();
+                    long minTimeStamp = tableTimeElement.getValue();
+                    // We need a way of differentiating the block writes to data table case from
+                    // the leave index active case. In either case, we need to know the time stamp
+                    // at which writes started failing so we can rebuild from that point. If we
+                    // keep the index active *and* have a positive INDEX_DISABLE_TIMESTAMP_BYTES,
+                    // then writes to the data table will be blocked (this is client side logic
+                    // and we can't change this in a minor release). So we use the sign of the
+                    // time stamp to differentiate.
+                    if (!disableIndexOnFailure && !blockDataTableWritesOnFailure) {
+                        minTimeStamp *= -1;
+                    }
+                    // Disable the index by using the updateIndexState method of MetaDataProtocol end point coprocessor.
+                    try (Table systemTable = env.getConnection().getTable(SchemaUtil.getPhysicalTableName(
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
+                        MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
+                                systemTable, newState);
+                        if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
+                            LOG.info("Index " + indexTableName + " has been dropped. Ignore uncommitted mutations");
+                            continue;
                         }
-                    } else {
-                        LOG.warn("Attempt to disable index " + indexTableName + " failed with code = "
-                                + result.getMutationCode() + ". Will use default failure policy instead.");
-                        throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
-                    } 
+                        if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                            if (leaveIndexActive) {
+                                LOG.warn("Attempt to update INDEX_DISABLE_TIMESTAMP " + " failed with code = "
+                                        + result.getMutationCode());
+                                // If we're not disabling the index, then we don't want to throw as throwing
+                                // will lead to the RS being shutdown.
+                                if (blockDataTableWritesOnFailure) { throw new DoNotRetryIOException(
+                                        "Attempt to update INDEX_DISABLE_TIMESTAMP failed."); }
+                            } else {
+                                LOG.warn("Attempt to disable index " + indexTableName + " failed with code = "
+                                        + result.getMutationCode() + ". Will use default failure policy instead.");
+                                throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
+                            }
+                        }
+                        if (leaveIndexActive)
+                            LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName
+                                    + " due to an exception while writing updates.", cause);
+                        else
+                            LOG.info("Successfully disabled index " + indexTableName
+                                    + " due to an exception while writing updates.", cause);
+                    } catch (Throwable t) {
+                        if (t instanceof Exception) {
+                            throw (Exception)t;
+                        } else {
+                            throw new Exception(t);
+                        }
+                    }
                 }
-                if (leaveIndexActive)
-                    LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName + " due to an exception while writing updates.",
-                            cause);
-                else
-                    LOG.info("Successfully disabled index " + indexTableName + " due to an exception while writing updates.",
-                            cause);
+                // Return the cell time stamp (note they should all be the same)
+                return fTimestamp;
             }
-        }
-        // Return the cell time stamp (note they should all be the same)
-        return timestamp;
+        });
     }
 
     private Collection<? extends String> getLocalIndexNames(HTableInterfaceReference ref,
