@@ -237,12 +237,14 @@ public abstract class BaseQueryPlan implements QueryPlan {
              scan = context.getScan();
          }
          
+         ScanRanges scanRanges = context.getScanRanges();
+
 		/*
 		 * For aggregate queries, we still need to let the AggregationPlan to
 		 * proceed so that we can give proper aggregates even if there are no
 		 * row to be scanned.
 		 */
-        if (context.getScanRanges() == ScanRanges.NOTHING && !getStatement().isAggregate()) {
+        if (scanRanges == ScanRanges.NOTHING && !getStatement().isAggregate()) {
         return getWrappedIterator(caches, ResultIterator.EMPTY_ITERATOR);
         }
         
@@ -269,11 +271,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
         }
         
-        if (statement.getHint().hasHint(Hint.SMALL)) {
+
+        PhoenixConnection connection = context.getConnection();
+        final int smallScanThreshold = connection.getQueryServices().getProps().getInt(QueryServices.SMALL_SCAN_THRESHOLD_ATTRIB,
+          QueryServicesOptions.DEFAULT_SMALL_SCAN_THRESHOLD);
+
+        if (statement.getHint().hasHint(Hint.SMALL) || (scanRanges.isPointLookup() && scanRanges.getPointLookupCount() < smallScanThreshold)) {
             scan.setSmall(true);
         }
         
-        PhoenixConnection connection = context.getConnection();
 
         // set read consistency
         if (table.getType() != PTableType.SYSTEM) {
@@ -282,7 +288,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // TODO fix this in PHOENIX-2415 Support ROW_TIMESTAMP with transactional tables
         if (!table.isTransactional()) {
 	                // Get the time range of row_timestamp column
-	        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+	        TimeRange rowTimestampRange = scanRanges.getRowTimestampRange();
 	        // Get the already existing time range on the scan.
 	        TimeRange scanTimeRange = scan.getTimeRange();
 	        Long scn = connection.getSCN();

@@ -330,6 +330,7 @@ public class QueryServicesOptions {
 
     //default update cache frequency
     public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
+    public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
