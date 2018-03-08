@@ -4483,4 +4483,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertEquals(6, outerScans.size());
         }
     }
+
+    @Test
+    public void testSmallScanForPointLookups() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        createTestTable(getUrl(), "CREATE TABLE FOO(\n" +
+                      "                a VARCHAR NOT NULL,\n" +
+                      "                b VARCHAR NOT NULL,\n" +
+                      "                c VARCHAR,\n" +
+                      "                CONSTRAINT pk PRIMARY KEY (a, b DESC, c)\n" +
+                      "              )");
+
+        props.put(QueryServices.SMALL_SCAN_THRESHOLD_ATTRIB, "2");
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String query = "select * from foo where a = 'a' and b = 'b' and c in ('x','y','z')";
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = stmt.optimizeQuery(query);
+            plan.iterator();
+            //Fail since we have 3 rows in pointLookup
+            assertFalse(plan.getContext().getScan().isSmall());
+            query = "select * from foo where a = 'a' and b = 'b' and c = 'c'";
+            plan = stmt.compileQuery(query);
+            plan.iterator();
+            //Should be small scan, query is for single row pointLookup
+            assertTrue(plan.getContext().getScan().isSmall());
+        }
+    }
+
 }
