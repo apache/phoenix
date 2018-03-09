@@ -36,7 +36,7 @@ public class ExpressionUtil {
         Object value = null;
         PDataType type = expression.getDataType();
         if (expression.evaluate(null, ptr) && ptr.getLength() != 0) {
-            value = type.toObject(ptr);
+            value = type.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), type, expression.getSortOrder(), expression.getMaxLength(), expression.getScale());
         }
         return LiteralExpression.newConstant(value, type, expression.getDeterminism());
     }
