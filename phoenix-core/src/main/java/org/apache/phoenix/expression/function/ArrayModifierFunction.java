@@ -176,9 +176,9 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
     public PDataType getDataType() {
         if (getLHSExpr().getDataType().isArrayType()) {
             // Use array of RHS type if we have a null constant since otherwise we'd use binary
-            return isNullArray ? PDataType.fromTypeId(getRHSExpr().getDataType().getSqlType() + PDataType.ARRAY_TYPE_BASE) : getLHSExpr().getDataType();
+            return isNullArray ? getRHSExpr().getDataType().isArrayType() ? getRHSExpr().getDataType() : PDataType.fromTypeId(getRHSExpr().getDataType().getSqlType() + PDataType.ARRAY_TYPE_BASE) : getLHSExpr().getDataType();
         } else {
-            return isNullArray ? PDataType.fromTypeId(getLHSExpr().getDataType().getSqlType() + PDataType.ARRAY_TYPE_BASE) : getRHSExpr().getDataType();
+            return isNullArray ? getLHSExpr().getDataType().isArrayType() ? getLHSExpr().getDataType() : PDataType.fromTypeId(getLHSExpr().getDataType().getSqlType() + PDataType.ARRAY_TYPE_BASE) : getRHSExpr().getDataType();
         }
     }
 
