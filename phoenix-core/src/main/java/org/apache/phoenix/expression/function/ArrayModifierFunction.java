@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.expression.function;
 
+import java.io.DataInput;
+import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -29,8 +31,10 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ExpressionUtil;
 
 public abstract class ArrayModifierFunction extends ScalarFunction {
+    private boolean isNullArray;
 
     public ArrayModifierFunction() {
     }
@@ -71,6 +75,16 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
                 && otherExpr.getScale() > arrayExpr.getScale()) {
             throw new DataExceedsCapacityException(baseDataType, arrayExpr.getMaxLength(),
                     arrayExpr.getScale());
+        }
+        init();
+    }
+
+    private void init() {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        if (getLHSExpr().getDataType().isArrayType()) {
+            isNullArray = ExpressionUtil.isNull(getLHSExpr(), ptr);
+        } else {
+            isNullArray = ExpressionUtil.isNull(getRHSExpr(), ptr);
         }
     }
 
@@ -142,7 +156,8 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
 
     public PDataType getLHSBaseType() {
         if (getLHSExpr().getDataType().isArrayType()) {
-            return PDataType.arrayBaseType(getLHSExpr().getDataType());
+            // Use RHS type if we have a null constant to get the correct array type
+            return isNullArray ? getRHSExpr().getDataType() : PDataType.arrayBaseType(getLHSExpr().getDataType());
         } else {
             return getLHSExpr().getDataType();
         }
@@ -150,7 +165,8 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
 
     public PDataType getRHSBaseType() {
         if (getRHSExpr().getDataType().isArrayType()) {
-            return PDataType.arrayBaseType(getRHSExpr().getDataType());
+            // Use LHS type if we have a null constant to get the correct array type
+            return isNullArray ? getLHSExpr().getDataType() : PDataType.arrayBaseType(getRHSExpr().getDataType());
         } else {
             return getRHSExpr().getDataType();
         }
@@ -159,29 +175,52 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
     @Override
     public PDataType getDataType() {
         if (getLHSExpr().getDataType().isArrayType()) {
-            return getLHSExpr().getDataType();
+            // Use array of RHS type if we have a null constant since otherwise we'd use binary
+            return isNullArray ? getRHSExpr().getDataType().isArrayType() ? getRHSExpr().getDataType() : PDataType.fromTypeId(getRHSExpr().getDataType().getSqlType() + PDataType.ARRAY_TYPE_BASE) : getLHSExpr().getDataType();
         } else {
-            return getRHSExpr().getDataType();
+            return isNullArray ? getLHSExpr().getDataType().isArrayType() ? getLHSExpr().getDataType() : PDataType.fromTypeId(getLHSExpr().getDataType().getSqlType() + PDataType.ARRAY_TYPE_BASE) : getRHSExpr().getDataType();
         }
     }
 
+    private Integer getMaxLength(Expression expression) {
+        PDataType type = expression.getDataType();
+        if (type.isFixedWidth() && type.getByteSize() != null) {
+            return type.getByteSize();
+        }
+        return expression.getMaxLength();
+    }
 
     @Override
     public Integer getMaxLength() {
         if (getLHSExpr().getDataType().isArrayType()) {
-            return getLHSExpr().getMaxLength();
+            // Use max length of RHS if we have a null constant since otherwise we'd use null (which breaks fixed types)
+            return getMaxLength(isNullArray ? getRHSExpr() : getLHSExpr());
         } else {
-            return getRHSExpr().getMaxLength();
+            return getMaxLength(isNullArray ? getLHSExpr() : getRHSExpr());
         }
     }
 
     @Override
     public SortOrder getSortOrder() {
         if (getLHSExpr().getDataType().isArrayType()) {
-            return getLHSExpr().getSortOrder();
+            return isNullArray ? getRHSExpr().getSortOrder() : getLHSExpr().getSortOrder();
         } else {
-            return getRHSExpr().getSortOrder();
+            return isNullArray ? getLHSExpr().getSortOrder() : getRHSExpr().getSortOrder();
         }
     }
 
+    @Override
+    public Integer getScale() {
+        if (getLHSExpr().getDataType().isArrayType()) {
+            return isNullArray ? getRHSExpr().getScale() : getLHSExpr().getScale();
+        } else {
+            return isNullArray ? getLHSExpr().getScale() : getRHSExpr().getScale();
+        }
+    }
+
+    @Override
+    public void readFields(DataInput input) throws IOException {
+        super.readFields(input);
+        init();
+    }
 }
