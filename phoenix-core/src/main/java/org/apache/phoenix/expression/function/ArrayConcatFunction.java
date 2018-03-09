@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.ArrayModifierParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -30,7 +31,7 @@ import org.apache.phoenix.schema.types.PBinaryArray;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayConcatFunction.NAME, args = {
+@FunctionParseNode.BuiltInFunction(name = ArrayConcatFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class}),
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class})})
 public class ArrayConcatFunction extends ArrayModifierFunction {
