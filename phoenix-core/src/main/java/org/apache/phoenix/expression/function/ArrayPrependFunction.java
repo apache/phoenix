@@ -22,11 +22,16 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.ArrayModifierParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayPrependFunction.NAME, args = {
+@FunctionParseNode.BuiltInFunction(name = ArrayPrependFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
         @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class})})
 public class ArrayPrependFunction extends ArrayModifierFunction {

@@ -90,6 +90,8 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
+import com.google.common.collect.Lists;
+
 
 
 /**
@@ -2138,6 +2140,48 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
         } finally {
             conn.createStatement().execute("DROP TABLE IF EXISTS t");
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testArrayAppendSingleArg() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
+            conn.createStatement().executeQuery("SELECT ARRAY_APPEND(arr2) from t");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(),e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testArrayPrependSingleArg() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
+            conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(arr2) from t");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(),e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testArrayConcatSingleArg() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
+            conn.createStatement().executeQuery("SELECT ARRAY_CAT(arr2) from t");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(),e.getErrorCode());
+        } finally {
             conn.close();
         }
     }

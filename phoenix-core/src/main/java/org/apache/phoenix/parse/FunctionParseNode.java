@@ -184,6 +184,10 @@ public class FunctionParseNode extends CompoundParseNode {
                     } else { // Use expression as is, since we already have the data type set
                         context.getBindManager().addParamMetaData(bindNode, child);
                     }
+                } else if (allowedTypes.length > 0) {
+                    // Switch null type with typed null
+                    children.set(i, LiteralExpression.newConstant(null, PDataTypeFactory.getInstance().instanceFromClass(
+                            allowedTypes[0]), Determinism.ALWAYS));
                 }
             } else {
                 validateFunctionArguement(info, i, child);
@@ -254,10 +258,14 @@ public class FunctionParseNode extends CompoundParseNode {
      */
     public Expression create(List<Expression> children, PFunction function, StatementContext context) throws SQLException {
         try {
+            Constructor<? extends FunctionExpression> fCtor = info.getFuncCtor();
+            if (fCtor == null) {
+                fCtor = getExpressionCtor(info.func, null);
+            }
             if(function == null) {
-                return info.getFuncCtor().newInstance(children);
+                return fCtor.newInstance(children);
             } else {
-                return info.getFuncCtor().newInstance(children, function);
+                return fCtor.newInstance(children, function);
             }
         } catch (InstantiationException e) {
             throw new SQLException(e);
