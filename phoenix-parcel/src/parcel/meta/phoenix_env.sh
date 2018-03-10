@@ -36,7 +36,7 @@ MYLIBDIR=${PARCELS_ROOT}/${PARCEL_DIRNAME}/lib/phoenix
     exit 1
 }
 
-APPENDSTRING=`echo ${MYLIBDIR}/*.jar | sed 's/ /:/g'`
+APPENDSTRING=`echo ${MYLIBDIR}/phoenix-*-server.jar | sed 's/ /:/g'`
 echo "appending '$APPENDSTRING' to HBASE_CLASSPATH"
 if [ -z $HBASE_CLASSPATH ] ; then
     export HBASE_CLASSPATH=$APPENDSTRING
