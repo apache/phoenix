@@ -74,6 +74,29 @@ public class AggregateIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testDuplicateTrailingAggExpr() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute("create table " + tableName +
+                "   (nam VARCHAR(20), address VARCHAR(20), id BIGINT "
+                + "constraint my_pk primary key (id))");
+        PreparedStatement statement = conn.prepareStatement("UPSERT INTO " + tableName + "(nam, address, id) values (?,?,?)");
+        statement.setString(1, "pulkit");
+        statement.setString(2, "badaun");
+        statement.setInt(3, 1);
+        statement.executeUpdate();
+        conn.commit();
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("select distinct 'harshit' as \"test_column\", trim(nam), trim(nam) from " + tableName);
+        assertTrue(rs.next());
+        assertEquals("harshit", rs.getString(1));
+        assertEquals("pulkit", rs.getString(2));
+        assertEquals("pulkit", rs.getString(3));
+        conn.close();
+    }
+
+    @Test
     public void testExpressionInGroupBy() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
