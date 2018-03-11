@@ -88,7 +88,7 @@ public class RowKeyValueAccessor implements Writable   {
         }
         // Remember this so that we don't bother looking for the null separator byte in this case
         this.isFixedLength = datum.getDataType().isFixedWidth();
-        this.hasSeparator = !isFixedLength && (datum != data.get(data.size()-1));
+        this.hasSeparator = !isFixedLength && iterator.hasNext();
     }
     
     RowKeyValueAccessor(int[] offsets, boolean isFixedLength, boolean hasSeparator) {
