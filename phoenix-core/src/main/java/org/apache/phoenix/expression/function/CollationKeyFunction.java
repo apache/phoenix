@@ -29,7 +29,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -190,4 +189,9 @@ public class CollationKeyFunction extends ScalarFunction {
 		// TODO: Look into calling freeze() on them to be able return true here.
 		return false;
 	}
+	
+    @Override
+    public boolean isNullable() {
+        return getChildren().get(0).isNullable();
+    }
 }
