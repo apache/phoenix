@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.ArrayModifierParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -32,9 +33,9 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayRemoveFunction.NAME, args = {
+@FunctionParseNode.BuiltInFunction(name = ArrayRemoveFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
 		@FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }),
-		@FunctionParseNode.Argument(allowedTypes = { PVarbinary.class }, defaultValue = "null") })
+		@FunctionParseNode.Argument(allowedTypes = { PVarbinary.class }) })
 public class ArrayRemoveFunction extends ArrayModifierFunction {
 
 	public static final String NAME = "ARRAY_REMOVE";

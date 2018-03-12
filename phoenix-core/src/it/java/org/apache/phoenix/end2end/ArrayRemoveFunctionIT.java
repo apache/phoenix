@@ -36,9 +36,9 @@ public class ArrayRemoveFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName
                 + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],"
-                + "chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], nullVarchar VARCHAR[], nullBigInt BIGINT[])";
+                + "chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], nullVarchar VARCHAR[], nullBigInt BIGINT[],double2 DOUBLE,integer1 INTEGER)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + tableName + "(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
+        String dml = "UPSERT INTO " + tableName + "(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2,double2,integer1) VALUES('SF Bay Area'," +
                 "ARRAY['2345','46345','23234']," +
                 "ARRAY[2345,46345,23234,456]," +
                 "ARRAY[23.45,46.345,23.234,45.6,5.78]," +
@@ -47,7 +47,9 @@ public class ArrayRemoveFunctionIT extends ParallelStatsDisabledIT {
                 "23.45," +
                 "'wert'," +
                 "NULL," +
-                "ARRAY['a','bbbb','c','ddd','e','foo']" +
+                "ARRAY['a','bbbb','c','ddd','e','foo']," +
+                "12,"+
+                "12"+
                 ")";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.execute();
@@ -118,6 +120,23 @@ public class ArrayRemoveFunctionIT extends ParallelStatsDisabledIT {
         assertEquals(array, rs.getArray(1));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testArrayRemoveFunctionDoubleWithInt() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_REMOVE(doubles,10) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
+
+        Double[] doubles = new Double[]{23.45,46.345,23.234,45.6,5.78};
+
+        Array array = conn.createArrayOf("DOUBLE", doubles);
+
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
 
     @Test
     public void testArrayRemoveFunctionBigint() throws Exception {
@@ -128,6 +147,38 @@ public class ArrayRemoveFunctionIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         Long[] longs = new Long[]{12l, 34l, 78l, 910l};
+
+        Array array = conn.createArrayOf("BIGINT", longs);
+
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testArrayRemoveFunctionBigintWithInteger() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_REMOVE(bigints,integer1) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
+
+        Long[] longs = new Long[]{34l,56l,78l,910l};
+
+        Array array = conn.createArrayOf("BIGINT", longs);
+
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test(expected=TypeMismatchException.class)
+    public void testArrayRemoveFunctionBigintWithDouble() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_REMOVE(bigints,double2) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
+
+        Long[] longs = new Long[]{34l,56l,78l,910l};
 
         Array array = conn.createArrayOf("BIGINT", longs);
 
