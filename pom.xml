@@ -104,7 +104,7 @@
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
-    <i18n-util.version>1.0.1</i18n-util.version>
+    <i18n-util.version>1.0.4</i18n-util.version>
     <servlet.api.version>3.1.0</servlet.api.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
