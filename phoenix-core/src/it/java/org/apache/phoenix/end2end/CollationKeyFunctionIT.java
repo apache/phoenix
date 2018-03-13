@@ -72,12 +72,12 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testZhSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh", false, 0, 6, new Integer[] { 3, 0, 1, 6, 5, 4, 2 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh", false, 0, 6, new Integer[] { 4, 3, 1, 5, 2, 0, 6 });
 	}
 
 	@Test
 	public void testZhTwSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW", false, 0, 6, new Integer[] { 0, 3, 4, 1, 5, 2, 6 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh_TW", false, 0, 6, new Integer[] { 4, 3, 1, 5, 2, 0, 6 });
 	}
 
 	@Test
@@ -87,7 +87,7 @@ public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testZhStrokeSort() throws Exception {
-		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__STROKE", false, 0, 6, new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
+		queryWithCollKeyDefaultArgsWithExpectedOrder("zh__STROKE", false, 0, 6, new Integer[] { 4, 2, 0, 3, 1, 6, 5 });
 	}
 
 	@Test
