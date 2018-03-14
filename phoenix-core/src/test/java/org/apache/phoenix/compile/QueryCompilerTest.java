@@ -4728,5 +4728,4 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             return Collections.emptyList();
         }
     }
->>>>>>> 11308c8aa... PHOENIX-4585 Prune local index regions used for join queries
 }
