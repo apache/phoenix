@@ -18,6 +18,15 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_REMOTE_RPC_CALLS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_NOT_SERVING_REGION_EXCEPTION;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_SCANNED_REGIONS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_RETRIES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_REMOTE_RPC_RETRIES;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -101,6 +110,17 @@ public class ScanningResultIterator implements ResultIterator {
                     scanMetricsMap.get(REMOTE_RPC_RETRIES_METRIC_NAME));
 
             GLOBAL_SCAN_BYTES.update(scanMetricsMap.get(GLOBAL_BYTES_IN_RESULTS_METRIC_NAME));
+
+            GLOBAL_HBASE_COUNT_RPC_CALLS.update(scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_REMOTE_RPC_CALLS.update(scanMetricsMap.get(REMOTE_RPC_CALLS_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.update(scanMetricsMap.get(MILLIS_BETWEEN_NEXTS_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_NOT_SERVING_REGION_EXCEPTION.update(scanMetricsMap.get(NOT_SERVING_REGION_EXCEPTION_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.update(scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS.update(scanMetricsMap.get(BYTES_IN_REMOTE_RESULTS_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_SCANNED_REGIONS.update(scanMetricsMap.get(REGIONS_SCANNED_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_RPC_RETRIES.update(scanMetricsMap.get(RPC_RETRIES_METRIC_NAME));
+            GLOBAL_HBASE_COUNT_REMOTE_RPC_RETRIES.update(scanMetricsMap.get(REMOTE_RPC_RETRIES_METRIC_NAME));
+
             scanMetricsUpdated = true;
         }
 
