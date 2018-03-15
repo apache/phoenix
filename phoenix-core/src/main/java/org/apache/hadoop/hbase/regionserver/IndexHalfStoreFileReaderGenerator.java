@@ -210,6 +210,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
             }
             if (repairScanner != null) {
+                if (s!=null) {
+                    s.close();
+                }
                 return repairScanner;
             } else {
                 return s;
@@ -226,6 +229,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             } else {
                 newScanners.add(((StoreFileScanner) scanner));
             }
+        }
+        if (s!=null) {
+            s.close();
         }
         return new StoreScanner(store, store.getScanInfo(), scan, newScanners,
             scanType, store.getSmallestReadPoint(), earliestPutTs);
@@ -311,6 +317,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 && store.hasReferences()) {
             final long readPt = c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel
                     ());
+            if (s!=null) {
+                s.close();
+            }
             if (!scan.isReversed()) {
                 return new StoreScanner(store, store.getScanInfo(), scan,
                         targetCols, readPt) {
