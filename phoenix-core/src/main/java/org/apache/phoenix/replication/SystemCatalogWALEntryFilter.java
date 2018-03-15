@@ -48,7 +48,7 @@ public class SystemCatalogWALEntryFilter implements WALEntryFilter {
 
     //if the WAL.Entry's table isn't System.Catalog, it auto-passes this filter
     //TODO: when Phoenix drops support for pre-1.3 versions of HBase, redo as a WALCellFilter
-    if (!SchemaUtil.isMetaTable(entry.getKey().getTablename().getName())){
+    if (!SchemaUtil.isMetaTable(entry.getKey().getTableName().getName())){
       return entry;
     }
 

@@ -105,7 +105,7 @@ public class TestPerRegionIndexWriteCache {
       Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
       Random rn = new Random();
       tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
-      WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, getClass().getSimpleName());
+      WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), getClass().getSimpleName());
       wal = walFactory.getWAL(RegionInfoBuilder.newBuilder(TableName.valueOf("logs")).build());
         TableDescriptor htd =
                 TableDescriptorBuilder

@@ -189,7 +189,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     CoveredColumnIndexSpecifierBuilder builder = new CoveredColumnIndexSpecifierBuilder();
     builder.addIndexGroup(fam1);
     builder.build(htd);
-    WALFactory walFactory = new WALFactory(this.conf, null, "localhost,1234");
+    WALFactory walFactory = new WALFactory(this.conf, "localhost,1234");
 
     WAL wal = createWAL(this.conf, walFactory);
     // create the region + its WAL
