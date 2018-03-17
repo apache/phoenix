@@ -105,7 +105,9 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
 	
 	@Test
     public void testIndexTableWriteFailure() throws Exception {
-        helpTestWriteFailure(true);
+	    if (!localIndex) { // We cannot fail the index write for local indexes because of the way they're written
+	        helpTestWriteFailure(true);
+	    }
 	}
 	
 	@Test
@@ -175,8 +177,6 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals("k3", rs.getString(1));
         assertEquals("v3", rs.getString(2));
         assertFalse(rs.next());
-        
-        conn.createStatement().execute("DROP TABLE " + dataTableFullName);
 	}
 	
 	

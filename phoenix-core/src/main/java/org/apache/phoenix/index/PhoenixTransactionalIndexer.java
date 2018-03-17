@@ -23,9 +23,11 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -40,6 +42,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
@@ -55,6 +58,7 @@ import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TransactionUtil;
 
 /**
  * Do all the work of managing local index updates for a transactional table from a single coprocessor. Since the transaction
@@ -177,8 +181,29 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     env.getRegionInfo().getEndKey());
             try (HTableInterface htable = env.getTable(env.getRegionInfo().getTable())) {
                 // get the index updates for all elements in this batch
-                context.indexUpdates = generator.getIndexUpdates(htable, getMutationIterator(miniBatchOp));
+                indexUpdates = generator.getIndexUpdates(htable, getMutationIterator(miniBatchOp));
             }
+            byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
+            Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
+            List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
+            while(indexUpdatesItr.hasNext()) {
+                Pair<Mutation, byte[]> next = indexUpdatesItr.next();
+                if (Bytes.compareTo(next.getSecond(), tableName) == 0) {
+                    // These mutations will not go through the preDelete hooks, so we
+                    // must manually convert them here.
+                    Mutation mutation = TransactionUtil.convertIfDelete(next.getFirst());
+                    localUpdates.add(mutation);
+                    indexUpdatesItr.remove();
+                }
+            }
+            if (!localUpdates.isEmpty()) {
+                miniBatchOp.addOperationsFromCP(0,
+                    localUpdates.toArray(new Mutation[localUpdates.size()]));
+            }
+            if (!indexUpdates.isEmpty()) {
+                context.indexUpdates = indexUpdates;
+            }
+
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", context.indexUpdates.size());
         } catch (Throwable t) {
@@ -204,7 +229,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
             if (success) { // if miniBatchOp was successfully written, write index updates
                 if (!context.indexUpdates.isEmpty()) {
-                    this.writer.write(context.indexUpdates, true);
+                    this.writer.write(context.indexUpdates, false);
                 }
                 current.addTimelineAnnotation("Wrote index updates");
             }
