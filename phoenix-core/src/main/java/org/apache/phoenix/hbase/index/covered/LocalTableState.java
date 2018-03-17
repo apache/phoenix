@@ -21,7 +21,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.data.IndexMemStore;
@@ -44,7 +43,6 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 public class LocalTableState implements TableState {
 
     private long ts;
-    private RegionCoprocessorEnvironment env;
     private KeyValueStore memstore;
     private LocalHBaseState table;
     private Mutation update;
@@ -54,8 +52,7 @@ public class LocalTableState implements TableState {
     private List<? extends IndexedColumnGroup> hints;
     private CoveredColumns columnSet;
 
-    public LocalTableState(RegionCoprocessorEnvironment environment, LocalHBaseState table, Mutation update) {
-        this.env = environment;
+    public LocalTableState(LocalHBaseState table, Mutation update) {
         this.table = table;
         this.update = update;
         this.memstore = new IndexMemStore();
@@ -101,11 +98,6 @@ public class LocalTableState implements TableState {
             return (KeyValue) c;
         }
         return KeyValueUtil.copyToNewKeyValue(c);
-    }
-
-    @Override
-    public RegionCoprocessorEnvironment getEnvironment() {
-        return this.env;
     }
 
     @Override

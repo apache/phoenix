@@ -22,7 +22,7 @@ import org.apache.phoenix.transaction.TransactionFactory;
 public class PhoenixTransactionalProcessor extends DelegateRegionObserver {
 
     public PhoenixTransactionalProcessor() {
-        super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoProcessor());
+        super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoprocessor());
     }
 
 }

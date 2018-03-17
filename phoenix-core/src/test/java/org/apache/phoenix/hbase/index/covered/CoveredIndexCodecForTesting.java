@@ -17,13 +17,12 @@
  */
 package org.apache.phoenix.hbase.index.covered;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
 
 /**
@@ -59,7 +58,7 @@ public class CoveredIndexCodecForTesting extends BaseIndexCodec {
     }
 
     @Override
-    public void initialize(RegionCoprocessorEnvironment env) throws IOException {
+    public void initialize(Configuration conf, byte[] regionStartKey, byte[] regionEndKey, byte[] tableName) {
         // noop
     }
 
