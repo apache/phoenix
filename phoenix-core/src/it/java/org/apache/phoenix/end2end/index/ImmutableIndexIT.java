@@ -252,8 +252,9 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         Iterator<Pair<byte[], List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
         assertTrue(iterator.hasNext());
         iterator.next();
-        assertEquals((!localIndex || transactional), iterator.hasNext());
+        assertEquals(!localIndex, iterator.hasNext());
     }
+    
 
     // This test is know to flap. We need PHOENIX-2582 to be fixed before enabling this back.
     @Ignore

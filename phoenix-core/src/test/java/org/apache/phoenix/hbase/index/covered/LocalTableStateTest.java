@@ -97,7 +97,7 @@ public class LocalTableStateTest {
 
 
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     //add the kvs from the mutation
     table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
 
@@ -143,7 +143,7 @@ public class LocalTableStateTest {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
 
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     //add the kvs from the mutation
     table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
 
@@ -180,7 +180,7 @@ public class LocalTableStateTest {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
 
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     //add the kvs from the mutation
     table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
 
@@ -222,7 +222,7 @@ public class LocalTableStateTest {
       }
     });
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     // add the kvs from the mutation
     KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
     kv.setSequenceId(0);
@@ -270,7 +270,7 @@ public class LocalTableStateTest {
     LocalHBaseState state = new LocalTable(env);
     Put pendingUpdate = new Put(row);
     pendingUpdate.add(fam, qual, ts, val);
-    LocalTableState table = new LocalTableState(env, state, pendingUpdate);
+    LocalTableState table = new LocalTableState(state, pendingUpdate);
 
     // do the lookup for the given column
     ColumnReference col = new ColumnReference(fam, qual);
