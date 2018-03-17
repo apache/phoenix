@@ -11,9 +11,9 @@ package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
 
 /**
@@ -23,16 +23,6 @@ import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
  * added to the codec, as well as potentially not haivng to implement some methods.
  */
 public interface IndexCodec {
-    /**
-     * Do any code initialization necessary
-     * 
-     * @param env
-     *            environment in which the codec is operating
-     * @throws IOException
-     *             if the codec cannot be initalized correctly
-     */
-    public void initialize(RegionCoprocessorEnvironment env) throws IOException;
-
     /**
      * Get the index cleanup entries. Currently, this must return just single row deletes (where just the row-key is
      * specified and no columns are returned) mapped to the table name. For instance, to you have an index 'myIndex'
@@ -89,4 +79,6 @@ public interface IndexCodec {
      * @throws IOException
      */
     public boolean isEnabled(Mutation m) throws IOException;
+
+    public void initialize(Configuration conf, byte[] startKey, byte[] endKey, byte[] tableName);
 }

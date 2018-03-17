@@ -20,16 +20,9 @@ package org.apache.phoenix.hbase.index.builder;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 
 public abstract class BaseIndexCodec implements IndexCodec {
-
-    @Override
-    public void initialize(RegionCoprocessorEnvironment env) throws IOException {
-        // noop
-    }
-
     /**
      * {@inheritDoc}
      * <p>

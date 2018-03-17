@@ -194,13 +194,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        Iterator<PTable> indexesItr = maintainedIndexes(indexes.iterator());
-        if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
-            indexesItr = maintainedLocalIndexes(indexesItr);
-            if (!indexesItr.hasNext()) {
-                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                return;
-            }
+        Iterator<PTable> indexesItr;
+        boolean onlyLocalIndexes = dataTable.isImmutableRows() || dataTable.isTransactional();
+        if (onlyLocalIndexes) {
+            indexesItr = maintainedLocalIndexes(indexes.iterator());
+        } else {
+            indexesItr = maintainedIndexes(indexes.iterator());
+        }
+        if (!indexesItr.hasNext()) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return;
         }
         int nIndexes = 0;
         while (indexesItr.hasNext()) {
@@ -214,9 +217,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
-            indexesItr =
-                    dataTable.isImmutableRows() ? maintainedLocalIndexes(indexes.iterator())
-                            : maintainedIndexes(indexes.iterator());
+            indexesItr = onlyLocalIndexes 
+                        ? maintainedLocalIndexes(indexes.iterator())
+                        : maintainedIndexes(indexes.iterator());
             while (indexesItr.hasNext()) {
                     org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(indexesItr.next().getIndexMaintainer(dataTable, connection));
                     byte[] protoBytes = proto.toByteArray();
