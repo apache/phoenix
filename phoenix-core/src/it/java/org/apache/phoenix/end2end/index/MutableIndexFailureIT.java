@@ -469,6 +469,7 @@ public class MutableIndexFailureIT extends BaseTest {
         // uncommitted data when the DELETE is executed.
         FailingRegionObserver.FAIL_WRITE = true;
         try {
+            FailingRegionObserver.FAIL_NEXT_WRITE = localIndex && transactional;
             conn.commit();
             if (commitShouldFail && (!localIndex || transactional) && this.throwIndexWriteFailure) {
                 fail();
@@ -504,13 +505,17 @@ public class MutableIndexFailureIT extends BaseTest {
 
     public static class FailingRegionObserver extends SimpleRegionObserver {
         public static volatile boolean FAIL_WRITE = false;
+        public static volatile boolean FAIL_NEXT_WRITE = false;
         public static final String FAIL_INDEX_NAME = "FAIL_IDX";
         public static final String FAIL_TABLE_NAME = "FAIL_TABLE";
 
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
             boolean throwException = false;
-            if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().endsWith("A_" + FAIL_INDEX_NAME)
+            if (FAIL_NEXT_WRITE) {
+                throwException = true;
+                FAIL_NEXT_WRITE = false;
+            } else if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().endsWith("A_" + FAIL_INDEX_NAME)
                     && FAIL_WRITE) {
                 throwException = true;
             } else {
