@@ -17,140 +17,24 @@
  */
 package org.apache.phoenix.transaction;
 
-import java.io.IOException;
-
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.tephra.TxConstants;
-
 public class TransactionFactory {
-
-    static private TransactionFactory transactionFactory = null;
-
-    private TransactionProcessor tp = TransactionProcessor.Tephra;
-
     enum TransactionProcessor {
         Tephra,
         Omid
     }
 
-    private TransactionFactory(TransactionProcessor tp) {
-        this.tp = tp;
-    }
-
-    static public void createTransactionFactory(TransactionProcessor tp) {
-        if (transactionFactory == null) {
-            transactionFactory = new TransactionFactory(tp);
-        }
-    }
-
-    static public TransactionFactory getTransactionFactory() {
-        if (transactionFactory == null) {
-            createTransactionFactory(TransactionProcessor.Tephra);
-        }
-
-        return transactionFactory;
-    }
-
-    public PhoenixTransactionContext getTransactionContext()  {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext();
-            break;
-        case Omid:
-            ctx = new OmidTransactionContext();
-            break;
-        default:
-            ctx = null;
-        }
-        
-        return ctx;
-    }
-
-    public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext(txnBytes);
-            break;
-        case Omid:
-//            ctx = new OmidTransactionContext(txnBytes);
-            break;
-        default:
-            ctx = null;
-        }
-        
-        return ctx;
+    static public TransactionProvider getTransactionProvider() {
+        return TephraTransactionProvider.getInstance();
     }
     
-    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
+    static public TransactionProvider getTransactionProvider(TransactionProcessor processor) {
+        switch (processor) {
         case Tephra:
-            ctx = new TephraTransactionContext(connection);
-            break;
+            return TephraTransactionProvider.getInstance();
         case Omid:
-//            ctx = new OmidTransactionContext(connection);
-            break;
+            return OmidTransactionProvider.getInstance();
         default:
-            ctx = null;
+            throw new IllegalArgumentException("Unknown transaction processor: " + processor);
         }
-        
-        return ctx;
-    }
-
-    public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask) {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext(contex, connection, subTask);
-            break;
-        case Omid:
-//            ctx = new OmidTransactionContext(contex, connection, subTask);
-            break;
-        default:
-            ctx = null;
-        }
-        
-        return ctx;
-    }
-
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, Table htable) {
-
-        PhoenixTransactionalTable table = null;
-
-        switch(tp) {
-        case Tephra:
-            table = new TephraTransactionTable(ctx,htable);
-            break;
-        case Omid:
-//            table = new OmidTransactionContext(contex, connection, subTask);
-            break;
-        default:
-            table = null;
-        }
-        
-        return table;
-    }
-    
-    public Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
-        return CellUtil.createCell(row, family, TxConstants.FAMILY_DELETE_QUALIFIER, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
-    }
-    
-    public Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp) {
-        return CellUtil.createCell(row, family, qualifier, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
     }
 }

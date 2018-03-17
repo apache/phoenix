@@ -52,11 +52,11 @@ public class TransactionUtil {
     }
     
     public static long convertToNanoseconds(long serverTimeStamp) {
-        return serverTimeStamp * TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
+        return serverTimeStamp * TransactionFactory.getTransactionProvider().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
     public static long convertToMilliseconds(long serverTimeStamp) {
-        return serverTimeStamp / TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
+        return serverTimeStamp / TransactionFactory.getTransactionProvider().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
     public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, Table htable, PTable pTable) {
@@ -107,7 +107,7 @@ public class TransactionUtil {
                         if (deleteMarker == null) {
                             deleteMarker = new Put(mutation.getRow());
                         }
-                        deleteMarker.add(TransactionFactory.getTransactionFactory().newDeleteFamilyMarker(
+                        deleteMarker.add(TransactionFactory.getTransactionProvider().newDeleteFamilyMarker(
                                 deleteMarker.getRow(), 
                                 family, 
                                 familyCells.get(0).getTimestamp()));
@@ -118,7 +118,7 @@ public class TransactionUtil {
                             if (deleteMarker == null) {
                                 deleteMarker = new Put(mutation.getRow());
                             }
-                            deleteMarker.add(TransactionFactory.getTransactionFactory().newDeleteColumnMarker(
+                            deleteMarker.add(TransactionFactory.getTransactionProvider().newDeleteColumnMarker(
                                     deleteMarker.getRow(),
                                     family,
                                     CellUtil.cloneQualifier(cell), 

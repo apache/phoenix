@@ -33,7 +33,7 @@ public class PhoenixTransactionalProcessor extends DelegateRegionObserver implem
     }
 
     public PhoenixTransactionalProcessor() {
-        super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoprocessor());
+        super(TransactionFactory.getTransactionProvider().getTransactionContext().getCoprocessor());
     }
 
     @Override

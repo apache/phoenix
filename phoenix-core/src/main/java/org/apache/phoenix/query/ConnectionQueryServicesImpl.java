@@ -404,7 +404,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void initTxServiceClient() {
-        txZKClientService = TransactionFactory.getTransactionFactory().getTransactionContext().setTransactionClient(config, props, connectionInfo);
+        txZKClientService = TransactionFactory.getTransactionProvider().getTransactionContext().setTransactionClient(config, props, connectionInfo);
     }
 
     private void openConnection() throws SQLException {

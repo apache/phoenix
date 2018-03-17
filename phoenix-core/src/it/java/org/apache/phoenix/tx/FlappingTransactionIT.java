@@ -227,9 +227,9 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         }
 
         PhoenixTransactionContext txContext =
-              TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
+              TransactionFactory.getTransactionProvider().getTransactionContext(pconn);
         PhoenixTransactionalTable txTable =
-              TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
+              TransactionFactory.getTransactionProvider().getTransactionalTable(txContext, htable);
 
         txContext.begin();
 
@@ -279,9 +279,9 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         
         // Repeat the same as above, but this time abort the transaction
         txContext =
-              TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
+              TransactionFactory.getTransactionProvider().getTransactionContext(pconn);
         txTable =
-              TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
+              TransactionFactory.getTransactionProvider().getTransactionalTable(txContext, htable);
 
         txContext.begin();
         

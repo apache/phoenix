@@ -415,15 +415,15 @@ public abstract class BaseTest {
     }
     
     private static void tearDownTxManager() throws SQLException {
-        TransactionFactory.getTransactionFactory().getTransactionContext().tearDownTxManager();
+        TransactionFactory.getTransactionProvider().getTransactionContext().tearDownTxManager();
     }
 
     protected static void setTxnConfigs() throws IOException {
-        TransactionFactory.getTransactionFactory().getTransactionContext().setTxnConfigs(config, tmpFolder.newFolder().getAbsolutePath(), DEFAULT_TXN_TIMEOUT_SECONDS);
+        TransactionFactory.getTransactionProvider().getTransactionContext().setTxnConfigs(config, tmpFolder.newFolder().getAbsolutePath(), DEFAULT_TXN_TIMEOUT_SECONDS);
     }
 
     protected static void setupTxManager() throws SQLException, IOException {
-        TransactionFactory.getTransactionFactory().getTransactionContext().setupTxManager(config, getUrl());
+        TransactionFactory.getTransactionProvider().getTransactionContext().setupTxManager(config, getUrl());
     }
 
     private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {

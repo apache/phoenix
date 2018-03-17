@@ -181,15 +181,15 @@ public class MutationState implements SQLCloseable {
                 : NoOpMutationMetricsQueue.NO_OP_MUTATION_METRICS_QUEUE;
         if (!subTask) {
             if (txContext == null) {
-                phoenixTransactionContext = TransactionFactory.getTransactionFactory().getTransactionContext(connection);
+                phoenixTransactionContext = TransactionFactory.getTransactionProvider().getTransactionContext(connection);
             } else {
                 isExternalTxContext = true;
-                phoenixTransactionContext = TransactionFactory.getTransactionFactory().getTransactionContext(txContext, connection, subTask);
+                phoenixTransactionContext = TransactionFactory.getTransactionProvider().getTransactionContext(txContext, connection, subTask);
             }
         } else {
             // this code path is only used while running child scans, we can't pass the txContext to child scans
             // as it is not thread safe, so we use the tx member variable
-            phoenixTransactionContext = TransactionFactory.getTransactionFactory().getTransactionContext(txContext, connection, subTask);
+            phoenixTransactionContext = TransactionFactory.getTransactionProvider().getTransactionContext(txContext, connection, subTask);
         }
     }
 
@@ -1190,7 +1190,7 @@ public class MutationState implements SQLCloseable {
     }
 
     public static PhoenixTransactionContext decodeTransaction(byte[] txnBytes) throws IOException {
-        return TransactionFactory.getTransactionFactory().getTransactionContext(txnBytes);
+        return TransactionFactory.getTransactionProvider().getTransactionContext(txnBytes);
     }
 
     private ServerCache setMetaDataOnMutations(TableRef tableRef, List<? extends Mutation> mutations,
