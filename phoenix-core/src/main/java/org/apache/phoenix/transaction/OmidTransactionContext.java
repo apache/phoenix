@@ -128,7 +128,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public BaseRegionObserver getCoProcessor() {
+    public BaseRegionObserver getCoprocessor() {
         // TODO Auto-generated method stub
         return null;
     }
