@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -140,9 +141,11 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
 
         // the following is called by PhoenixIndexCodec#getIndexUpserts() , getIndexDeletes()
         RegionInfo mockRegionInfo = Mockito.mock(RegionInfo.class);
+        Mockito.when(env.getRegionInfo()).thenReturn(mockRegionInfo);
         Mockito.when(mockRegion.getRegionInfo()).thenReturn(mockRegionInfo);
         Mockito.when(mockRegionInfo.getStartKey()).thenReturn(Bytes.toBytes("a"));
         Mockito.when(mockRegionInfo.getEndKey()).thenReturn(Bytes.toBytes("z"));
+        Mockito.when(mockRegionInfo.getTable()).thenReturn(TableName.valueOf(TEST_TABLE_STRING));
 
         mockIndexMetaData = Mockito.mock(PhoenixIndexMetaData.class);
         Mockito.when(mockIndexMetaData.requiresPriorRowState((Mutation)Mockito.any())).thenReturn(true);

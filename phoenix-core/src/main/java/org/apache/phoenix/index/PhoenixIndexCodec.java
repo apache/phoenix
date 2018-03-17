@@ -15,10 +15,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -46,13 +46,25 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_MAINTAINERS = "IndexMaintainers";
     public static final String CLIENT_VERSION = "_ClientVersion";
     public static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
+    
+    private byte[] regionStartKey;
+    private byte[] regionEndKey;
+    private byte[] tableName;
+    
+    public PhoenixIndexCodec() {
+        
+    }
 
-    private RegionCoprocessorEnvironment env;
+    public PhoenixIndexCodec(Configuration conf, byte[] regionStartKey, byte[] regionEndKey, byte[] tableName) {
+        initialize(conf, regionStartKey, regionEndKey, tableName);
+    }
+    
 
     @Override
-    public void initialize(RegionCoprocessorEnvironment env) throws IOException {
-        super.initialize(env);
-        this.env = env;
+    public void initialize(Configuration conf, byte[] regionStartKey, byte[] regionEndKey, byte[] tableName) {
+        this.regionStartKey = regionStartKey;
+        this.regionEndKey = regionEndKey;
+        this.tableName = tableName;
     }
 
     boolean hasIndexMaintainers(Map<String, byte[]> attributes) {
@@ -76,12 +88,9 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.getReplayWrite() != null, false, context);
             ValueGetter valueGetter = statePair.getFirst();
             IndexUpdate indexUpdate = statePair.getSecond();
-            indexUpdate
-                    .setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
-                            .getTableDescriptor().getTableName().getName() : maintainer
-                            .getIndexTableName());
-            Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(), env
-                    .getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
+            indexUpdate.setTable(maintainer.isLocalIndex() ? tableName : maintainer.getIndexTableName());
+            Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(),
+                    regionStartKey, regionEndKey);
             indexUpdate.setUpdate(put);
             indexUpdates.add(indexUpdate);
         }
@@ -106,11 +115,9 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             ValueGetter valueGetter = statePair.getFirst();
             if (valueGetter!=null) {
                 IndexUpdate indexUpdate = statePair.getSecond();
-                indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
-                        .getTableDescriptor().getTableName().getName() : maintainer
-                        .getIndexTableName());
+                indexUpdate.setTable(maintainer.isLocalIndex() ? tableName : maintainer.getIndexTableName());
                 Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
-                        state.getCurrentTimestamp(), env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
+                        state.getCurrentTimestamp(), regionStartKey, regionEndKey);
                 indexUpdate.setUpdate(delete);
                 indexUpdates.add(indexUpdate);
             }

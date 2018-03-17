@@ -227,7 +227,7 @@ public class DeleteCompiler {
                 // When issuing deletes, we do not care about the row time ranges. Also, if the table had a row timestamp column, then the
                 // row key will already have its value.
                 // Check for otherTableRefs being empty required when deleting directly from the index
-                if (otherTableRefs.isEmpty() || (table.getIndexType() != IndexType.LOCAL && table.isImmutableRows())) {
+                if (otherTableRefs.isEmpty() || isMaintainedOnClient(table)) {
                     mutations.put(rowKeyPtr, new RowMutationState(PRow.DELETE_MARKER, 0, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 }
                 for (int i = 0; i < otherTableRefs.size(); i++) {
@@ -312,12 +312,12 @@ public class DeleteCompiler {
         }
     }
     
-    private List<PTable> getNonDisabledGlobalImmutableIndexes(TableRef tableRef) {
+    private List<PTable> getClientSideMaintainedIndexes(TableRef tableRef) {
         PTable table = tableRef.getTable();
-        if (table.isImmutableRows() && !table.getIndexes().isEmpty()) {
+        if (!table.getIndexes().isEmpty()) {
             List<PTable> nonDisabledIndexes = Lists.newArrayListWithExpectedSize(table.getIndexes().size());
             for (PTable index : table.getIndexes()) {
-                if (index.getIndexState() != PIndexState.DISABLE && index.getIndexType() == IndexType.GLOBAL) {
+                if (index.getIndexState() != PIndexState.DISABLE && isMaintainedOnClient(index)) {
                     nonDisabledIndexes.add(index);
                 }
             }
@@ -460,8 +460,8 @@ public class DeleteCompiler {
            .setTableName(tableName).build().buildException();
         }
         
-        List<PTable> immutableIndexes = getNonDisabledGlobalImmutableIndexes(targetTableRef);
-        final boolean hasImmutableIndexes = !immutableIndexes.isEmpty();
+        List<PTable> clientSideIndexes = getClientSideMaintainedIndexes(targetTableRef);
+        final boolean hasClientSideIndexes = !clientSideIndexes.isEmpty();
 
         boolean isSalted = table.getBucketNum() != null;
         boolean isMultiTenant = connection.getTenantId() != null && table.isMultiTenant();
@@ -469,7 +469,7 @@ public class DeleteCompiler {
         int pkColumnOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
         final int pkColumnCount = table.getPKColumns().size() - pkColumnOffset;
         int selectColumnCount = pkColumnCount;
-        for (PTable index : immutableIndexes) {
+        for (PTable index : clientSideIndexes) {
             selectColumnCount += index.getPKColumns().size() - pkColumnCount;
         }
         Set<PColumn> projectedColumns = new LinkedHashSet<PColumn>(selectColumnCount + pkColumnOffset);
@@ -519,7 +519,7 @@ public class DeleteCompiler {
         // that is being upserted for conflict detection purposes.
         // If we have immutable indexes, we'd increase the number of bytes scanned by executing
         // separate queries against each index, so better to drive from a single table in that case.
-        boolean runOnServer = isAutoCommit && !hasPreOrPostProcessing && !table.isTransactional() && !hasImmutableIndexes;
+        boolean runOnServer = isAutoCommit && !hasPreOrPostProcessing && !table.isTransactional() && !hasClientSideIndexes;
         HintNode hint = delete.getHint();
         if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
             select = SelectStatement.create(select, HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE));
@@ -530,7 +530,7 @@ public class DeleteCompiler {
         QueryCompiler compiler = new QueryCompiler(statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe, new SequenceManager(statement));
         final QueryPlan dataPlan = compiler.compile();
         // TODO: the select clause should know that there's a sub query, but doesn't seem to currently
-        queryPlans = Lists.newArrayList(!immutableIndexes.isEmpty()
+        queryPlans = Lists.newArrayList(!clientSideIndexes.isEmpty()
                 ? optimizer.getApplicablePlans(dataPlan, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe)
                 : optimizer.getBestPlan(dataPlan, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe));
         // Filter out any local indexes that don't contain all indexed columns.
@@ -560,7 +560,7 @@ public class DeleteCompiler {
         // may have been optimized out. Instead, we check that there's a single SkipScanFilter
         // If we can generate a plan for every index, that means all the required columns are available in every index,
         // hence we can drive the delete from any of the plans.
-        noQueryReqd &= queryPlans.size() == 1 + immutableIndexes.size();
+        noQueryReqd &= queryPlans.size() == 1 + clientSideIndexes.size();
         int queryPlanIndex = 0;
         while (noQueryReqd && queryPlanIndex < queryPlans.size()) {
             QueryPlan plan = queryPlans.get(queryPlanIndex++);
@@ -579,7 +579,6 @@ public class DeleteCompiler {
             // from the data table, while the others will be for deleting rows from immutable indexes.
             List<MutationPlan> mutationPlans = Lists.newArrayListWithExpectedSize(queryPlans.size());
             for (final QueryPlan plan : queryPlans) {
-                final StatementContext context = plan.getContext();
                 mutationPlans.add(new SingleRowDeleteMutationPlan(plan, connection, maxSize, maxSizeBytes));
             }
             return new MultiRowDeleteMutationPlan(dataPlan, mutationPlans);
@@ -629,8 +628,8 @@ public class DeleteCompiler {
                 }
             }
             final QueryPlan bestPlan = bestPlanToBe;
-            final List<TableRef>otherTableRefs = Lists.newArrayListWithExpectedSize(immutableIndexes.size());
-            for (PTable index : immutableIndexes) {
+            final List<TableRef>otherTableRefs = Lists.newArrayListWithExpectedSize(clientSideIndexes.size());
+            for (PTable index : clientSideIndexes) {
                 if (!bestPlan.getTableRef().getTable().equals(index)) {
                     otherTableRefs.add(new TableRef(index, targetTableRef.getLowerBoundTimeStamp(), targetTableRef.getTimeStamp()));
                 }
@@ -918,13 +917,13 @@ public class DeleteCompiler {
                     int totalTablesUpdateClientSide = 1; // data table is always updated
                     PTable bestTable = bestPlan.getTableRef().getTable();
                     // global immutable tables are also updated client side (but don't double count the data table)
-                    if (bestPlan != dataPlan && bestTable.getIndexType() == IndexType.GLOBAL && bestTable.isImmutableRows()) {
+                    if (bestPlan != dataPlan && isMaintainedOnClient(bestTable)) {
                         totalTablesUpdateClientSide++;
                     }
                     for (TableRef otherTableRef : otherTableRefs) {
                         PTable otherTable = otherTableRef.getTable();
                         // Don't double count the data table here (which morphs when it becomes a projected table, hence this check)
-                        if (projectedTableRef != otherTableRef && otherTable.getIndexType() == IndexType.GLOBAL && otherTable.isImmutableRows()) {
+                        if (projectedTableRef != otherTableRef && isMaintainedOnClient(otherTable)) {
                             totalTablesUpdateClientSide++;
                         }
                     }
@@ -973,4 +972,11 @@ public class DeleteCompiler {
             return bestPlan;
         }
     }
+    
+    private static boolean isMaintainedOnClient(PTable table) {
+        // Test for not being local (rather than being GLOBAL) so that this doesn't fail
+        // when tested with our projected table.
+        return table.getIndexType() != IndexType.LOCAL && (table.isImmutableRows() || table.isTransactional());
+    }
+    
 }

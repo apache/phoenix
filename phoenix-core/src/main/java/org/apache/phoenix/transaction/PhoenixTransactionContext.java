@@ -168,7 +168,7 @@ public interface PhoenixTransactionContext {
      *
      * @return the coprocessor
      */
-    public RegionObserver getCoProcessor();
+    public RegionObserver getCoprocessor();
 
     /**
      * 

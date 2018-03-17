@@ -38,13 +38,6 @@ import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
  */
 public interface TableState {
 
-  // use this to get batch ids/ptable stuff
-  /**
-   * WARNING: messing with this can affect the indexing plumbing. Use with caution :)
-   * @return get the current environment in which this table lives.
-   */
-  public RegionCoprocessorEnvironment getEnvironment();
-
   /**
    * @return the current timestamp up-to-which we are releasing table state.
    */

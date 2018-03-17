@@ -102,7 +102,6 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
@@ -183,6 +182,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.index.PhoenixTransactionalIndexer;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -859,11 +859,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
+                    if (!newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
+                        builder.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
+                    }
                     // For alter table, remove non transactional index coprocessor
                     if(newDesc.hasCoprocessor(Indexer.class.getName())) {
                         builder.removeCoprocessor(Indexer.class.getName());
                     }
                 } else {
+                    // If exception on alter table to transition back to non transactional
+                    if (newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
+                        builder.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
+                    }
                     if (!newDesc.hasCoprocessor(Indexer.class.getName())) {
                         Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                         opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());

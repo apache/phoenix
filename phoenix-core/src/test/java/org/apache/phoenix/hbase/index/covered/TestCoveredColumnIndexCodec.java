@@ -176,7 +176,7 @@ public class TestCoveredColumnIndexCodec {
     p.add(kv);
 
     // check the codec for deletes it should send
-    LocalTableState state = new LocalTableState(env, table, p);
+    LocalTableState state = new LocalTableState(table, p);
     Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
     assertFalse("Found index updates without any existing kvs in table!", updates.iterator().next()
         .isValid());
@@ -204,7 +204,7 @@ public class TestCoveredColumnIndexCodec {
     // setup the next batch of 'current state', basically just ripping out the current state from
     // the last round
     table = new SimpleTableState(Result.create(kvs));
-    state = new LocalTableState(env, table, d);
+    state = new LocalTableState(table, d);
     state.setCurrentTimestamp(2);
     // check the cleanup of the current table, after the puts (mocking a 'next' update)
     updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
@@ -233,7 +233,7 @@ public class TestCoveredColumnIndexCodec {
   private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<Cell> currentState,
       Delete d) throws IOException {
     LocalHBaseState table = new SimpleTableState(Result.create(currentState));
-    LocalTableState state = new LocalTableState(env, table, d);
+    LocalTableState state = new LocalTableState(table, d);
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyCellMap().get(FAMILY));

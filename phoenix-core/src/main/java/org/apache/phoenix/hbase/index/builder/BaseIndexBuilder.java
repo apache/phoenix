@@ -58,9 +58,7 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
             Constructor<? extends IndexCodec> meth = codecClass.getDeclaredConstructor(new Class[0]);
             meth.setAccessible(true);
             this.codec = meth.newInstance();
-            this.codec.initialize(env);
-        } catch (IOException e) {
-            throw e;
+            this.codec.initialize(conf, env.getRegionInfo().getStartKey(), env.getRegionInfo().getEndKey(), env.getRegion().getRegionInfo().getTable().getName());
         } catch (Exception e) {
             throw new IOException(e);
         }

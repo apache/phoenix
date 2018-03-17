@@ -18,27 +18,15 @@
 package org.apache.phoenix.index;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
-import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ServerUtil;
 
 public class PhoenixIndexMetaData implements IndexMetaData {
     private final Map<String, byte[]> attributes;
@@ -46,61 +34,8 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     private final ReplayWrite replayWrite;
     private final boolean isImmutable;
     private final boolean hasNonPkColumns;
+    private final boolean hasLocalIndexes;
     
-    private static IndexMetaDataCache getIndexMetaData(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
-        if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
-        byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
-        if (uuid == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
-        boolean useProto = false;
-        byte[] md = attributes.get(PhoenixIndexCodec.INDEX_PROTO_MD);
-        useProto = md != null;
-        if (md == null) {
-            md = attributes.get(PhoenixIndexCodec.INDEX_MD);
-        }
-        byte[] txState = attributes.get(BaseScannerRegionObserver.TX_STATE);
-        if (md != null) {
-            final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md, useProto);
-            final PhoenixTransactionContext txnContext = TransactionFactory.getTransactionFactory().getTransactionContext(txState);
-            byte[] clientVersionBytes = attributes.get(PhoenixIndexCodec.CLIENT_VERSION);
-            final int clientVersion = clientVersionBytes == null ? IndexMetaDataCache.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
-            return new IndexMetaDataCache() {
-
-                @Override
-                public void close() throws IOException {}
-
-                @Override
-                public List<IndexMaintainer> getIndexMaintainers() {
-                    return indexMaintainers;
-                }
-
-                @Override
-                public PhoenixTransactionContext getTransactionContext() {
-                    return txnContext;
-                }
-
-                @Override
-                public int getClientVersion() {
-                    return clientVersion;
-                }
-
-            };
-        } else {
-            byte[] tenantIdBytes = attributes.get(PhoenixRuntime.TENANT_ID_ATTRIB);
-            ImmutableBytesPtr tenantId = tenantIdBytes == null ? null : new ImmutableBytesPtr(tenantIdBytes);
-            TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
-            IndexMetaDataCache indexCache = (IndexMetaDataCache)cache.getServerCache(new ImmutableBytesPtr(uuid));
-            if (indexCache == null) {
-                String msg = "key=" + ServerCacheClient.idToString(uuid) + " region=" + env.getRegion() + "host="
-                        + env.getServerName().getServerName();
-                SQLException e = new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_METADATA_NOT_FOUND).setMessage(msg)
-                        .build().buildException();
-                ServerUtil.throwIOException("Index update failed", e); // will not return
-            }
-            return indexCache;
-        }
-
-    }
-
     public static boolean isIndexRebuild(Map<String,byte[]> attributes) {
         return attributes.get(BaseScannerRegionObserver.REPLAY_WRITES) != null;
     }
@@ -109,18 +44,21 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         return ReplayWrite.fromBytes(attributes.get(BaseScannerRegionObserver.REPLAY_WRITES));
     }
     
-    public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
-        this.indexMetaDataCache = getIndexMetaData(env, attributes);
+    public PhoenixIndexMetaData(IndexMetaDataCache indexMetaDataCache, Map<String, byte[]> attributes) throws IOException {
+        this.indexMetaDataCache = indexMetaDataCache;
         boolean isImmutable = true;
         boolean hasNonPkColumns = false;
+        boolean hasLocalIndexes = false;
         for (IndexMaintainer maintainer : indexMetaDataCache.getIndexMaintainers()) {
             isImmutable &= maintainer.isImmutableRows();
             hasNonPkColumns |= !maintainer.getIndexedColumns().isEmpty();
+            hasLocalIndexes |= maintainer.isLocalIndex();
         }
         this.isImmutable = isImmutable;
         this.hasNonPkColumns = hasNonPkColumns;
         this.attributes = attributes;
         this.replayWrite = getReplayWrite(attributes);
+        this.hasLocalIndexes = hasLocalIndexes;
     }
     
     public PhoenixTransactionContext getTransactionContext() {
@@ -146,6 +84,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     
     public boolean isImmutableRows() {
         return isImmutable;
+    }
+    
+    public boolean hasLocalIndexes() {
+        return hasLocalIndexes;
     }
 
     @Override

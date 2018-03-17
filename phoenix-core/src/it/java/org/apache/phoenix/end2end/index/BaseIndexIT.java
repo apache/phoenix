@@ -239,15 +239,17 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     }
 
     private void assertNoClientSideIndexMutations(Connection conn) throws SQLException {
-        if (mutable) {
-            Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-            if (iterator.hasNext()) {
-                byte[] tableName = iterator.next().getFirst(); // skip data table mutations
-                PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
+        Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        if (iterator.hasNext()) {
+            byte[] tableName = iterator.next().getFirst(); // skip data table mutations
+            PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
+            boolean clientSideUpdate = !localIndex && (!mutable || transactional);
+            if (!clientSideUpdate) {
                 assertTrue(table.getType() == PTableType.TABLE); // should be data table
-                boolean hasIndexData = iterator.hasNext();
-                assertFalse(hasIndexData && !transactional); // should have no index data
             }
+            boolean hasIndexData = iterator.hasNext();
+            // global immutable and global transactional tables are processed client side
+            assertEquals(clientSideUpdate, hasIndexData); 
         }
     }
 

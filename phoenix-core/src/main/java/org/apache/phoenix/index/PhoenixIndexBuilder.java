@@ -28,7 +28,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.HConstants;
@@ -58,7 +57,6 @@ import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisit
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -77,7 +75,14 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     private static final byte[] ON_DUP_KEY_IGNORE_BYTES = new byte[] {1}; // boolean true
     private static final int ON_DUP_KEY_HEADER_BYTE_SIZE = Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN;
     
-
+    private PhoenixIndexMetaDataBuilder indexMetaDataBuilder;
+    
+    @Override
+    public void setup(RegionCoprocessorEnvironment env) throws IOException {
+        super.setup(env);
+        this.indexMetaDataBuilder = new PhoenixIndexMetaDataBuilder(env);
+    }
+    
     private static List<Cell> flattenCells(Mutation m, int estimatedSize) throws IOException {
         List<Cell> flattenedCells = Lists.newArrayListWithExpectedSize(estimatedSize);
         flattenCells(m, flattenedCells);
@@ -91,17 +96,12 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     }
     
     @Override
-    public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-        return new PhoenixIndexMetaData(env, miniBatchOp.getOperation(0).getAttributesMap());
+    public PhoenixIndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+        return indexMetaDataBuilder.getIndexMetaData(miniBatchOp);
     }
 
     protected PhoenixIndexCodec getCodec() {
         return (PhoenixIndexCodec)codec;
-    }
-
-    @Override
-    public void setup(RegionCoprocessorEnvironment env) throws IOException {
-        super.setup(env);
     }
 
     @Override
@@ -383,4 +383,5 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     public ReplayWrite getReplayWrite(Mutation m) {
         return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
+    
 }

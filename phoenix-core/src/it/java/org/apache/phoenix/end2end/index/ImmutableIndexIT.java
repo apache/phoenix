@@ -251,6 +251,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         iterator.next();
         assertEquals(!localIndex, iterator.hasNext());
     }
+    
 
     // This test is know to flap. We need PHOENIX-2582 to be fixed before enabling this back.
     @Ignore
