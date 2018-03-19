@@ -652,15 +652,13 @@ public class ScanUtil {
     }
 
     /**
-     * prefix region start key to the start row/stop row suffix and set as scan boundaries.
+     * Start key and stop key of the original scan from client are regions start and end keys so
+     * prefix scan start/stop key to the start row/stop row suffix and set them as scan boundaries.
      * @param scan
-     * @param lowerInclusiveRegionKey
-     * @param upperExclusiveRegionKey
      */
-    public static void setupLocalIndexScan(Scan scan, byte[] lowerInclusiveRegionKey,
-            byte[] upperExclusiveRegionKey) {
-        byte[] prefix = lowerInclusiveRegionKey.length == 0 ? new byte[upperExclusiveRegionKey.length]: lowerInclusiveRegionKey;
-        int prefixLength = lowerInclusiveRegionKey.length == 0? upperExclusiveRegionKey.length: lowerInclusiveRegionKey.length;
+    public static void setupLocalIndexScan(Scan scan) {
+        byte[] prefix = scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length]: scan.getStartRow();
+        int prefixLength = scan.getStartRow().length == 0? scan.getStopRow().length: scan.getStartRow().length;
         if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
             scan.setStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
         }
