@@ -40,6 +40,7 @@ DIR_BIN=$DIR_REL_BIN_PATH/bin
 DIR_PHERF_CONF=phoenix-pherf/config
 DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
 DIR_DOCS=dev/release_files
+DIR_PYTHON=$DIR_REL_BIN_PATH/python
 DIR_PARCEL_TAR=phoenix-parcel/target
 DIR_REL_PARCELS_PATH=$DIR_REL_ROOT/parcels
 SCRIPT_MAKE_MANIFEST=phoenix-parcel/src/build/manifest/make_manifest.py
@@ -68,6 +69,7 @@ mkdir $DIR_REL_SRC_TAR_PATH;
 mkdir $DIR_REL_PARCELS_PATH;
 mkdir $DIR_EXAMPLES;
 mkdir $DIR_BIN;
+mkdir $DIR_PYTHON;
 
 # Move src tar
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
@@ -90,6 +92,9 @@ cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
 # Copy examples
 cp -r examples/* $DIR_EXAMPLES
+
+# Copy the python driver
+cp -r python/* $DIR_PYTHON
 
 # Generate bin tar
 tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT apache-phoenix-$PHOENIX-bin;
