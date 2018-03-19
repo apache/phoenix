@@ -29,11 +29,13 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
+import org.apache.phoenix.util.StringUtil;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayRemoveFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
+@FunctionParseNode.BuiltInFunction(name = ArrayRemoveFunction.NAME, nodeClass = ArrayModifierParseNode.class, args = {
 		@FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }),
 		@FunctionParseNode.Argument(allowedTypes = { PVarbinary.class }) })
 public class ArrayRemoveFunction extends ArrayModifierFunction {
@@ -58,6 +60,12 @@ public class ArrayRemoveFunction extends ArrayModifierFunction {
 		}
 
 		PArrayDataTypeEncoder arrayDataTypeEncoder = new PArrayDataTypeEncoder(baseType, sortOrder);
+
+		if (getRHSBaseType().equals(PChar.INSTANCE)) {
+			int unpaddedCharLength = StringUtil.getUnpaddedCharLength(ptr.get(), ptr.getOffset(), ptr.getLength(),
+					sortOrder);
+			ptr.set(ptr.get(), offset, unpaddedCharLength);
+		}
 
 		for (int arrayIndex = 0; arrayIndex < arrayLength; arrayIndex++) {
 			ImmutableBytesWritable ptr2 = new ImmutableBytesWritable(arrayBytes, offset, length);

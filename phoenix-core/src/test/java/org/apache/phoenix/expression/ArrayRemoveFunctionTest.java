@@ -54,10 +54,10 @@ public class ArrayRemoveFunctionTest {
 		List<Expression> expressions = Lists.newArrayList((Expression) element);
 		expressions.add(array);
 
-		Expression arrayPrependFunction = new ArrayRemoveFunction(expressions);
+		Expression arrayRemoveFunction = new ArrayRemoveFunction(expressions);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-		arrayPrependFunction.evaluate(null, ptr);
-		PhoenixArray result = (PhoenixArray) arrayPrependFunction.getDataType().toObject(ptr,
+		arrayRemoveFunction.evaluate(null, ptr);
+		PhoenixArray result = (PhoenixArray) arrayRemoveFunction.getDataType().toObject(ptr,
 				expressions.get(1).getSortOrder(), array.getMaxLength(), array.getScale());
 		assertEquals(expected, result);
 	}
