@@ -474,6 +474,12 @@
             <exclude>examples/pig/testdata</exclude>
             <!-- precommit? -->
             <exclude>**/patchprocess/**</exclude>
+            <exclude>python/ci/**</exclude>
+            <exclude>python/phoenixdb/avatica/proto/*</exclude>
+            <exclude>python/*.rst</exclude>
+            <exclude>python/doc/*.rst</exclude>
+            <exclude>python/doc/conf.py</exclude>
+            <exclude>python/doc/Makefile</exclude>
           </excludes>
         </configuration>
       </plugin>
