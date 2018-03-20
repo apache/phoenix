@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -365,8 +367,10 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         // If the region start key is not the prefix of the scan start row then we can return empty
         // scanners. This is possible during merge where one of the child region scan should not return any
         // results as we go through merged region.
-        if (Bytes.compareTo(scan.getStartRow(), 0, startKey.length == 0 ? endKey.length
-                : startKey.length, startKey.length == 0 ? new byte[endKey.length] : startKey, 0,
+        int prefixLength =
+                scan.getAttribute(SCAN_START_ROW_SUFFIX) == null ? (startKey.length == 0 ? endKey.length
+                        : startKey.length) : (scan.getStartRow().length - scan.getAttribute(SCAN_START_ROW_SUFFIX).length);
+        if (Bytes.compareTo(scan.getStartRow(), 0, prefixLength, (startKey.length == 0 ? new byte[endKey.length] : startKey), 0,
             startKey.length == 0 ? endKey.length : startKey.length) != 0) {
             return keyValueScanners;
         }
