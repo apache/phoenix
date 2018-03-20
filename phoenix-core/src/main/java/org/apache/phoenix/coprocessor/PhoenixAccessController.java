@@ -22,7 +22,6 @@ import java.net.InetAddress;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -67,7 +66,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 
-import com.google.common.collect.Lists;
 import com.google.protobuf.RpcCallback;
 
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
@@ -102,10 +100,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     @Override
     public void preGetTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
             String tableName, TableName physicalTableName) throws IOException {
-        for (BaseMasterAndRegionObserver observer : getAccessControllers()) {
-            observer.preGetTableDescriptors(new ObserverContext<MasterCoprocessorEnvironment>(),
-                    Lists.newArrayList(physicalTableName), Collections.<HTableDescriptor> emptyList());
-        }
+        if (!accessCheckEnabled) { return; }
+        requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
     }
 
     @Override
