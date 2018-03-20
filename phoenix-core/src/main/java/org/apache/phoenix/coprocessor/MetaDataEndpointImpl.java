@@ -1293,6 +1293,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return function.getFunctionName() == null;
     }
 
+    private PTable getTable(RegionCoprocessorEnvironment env, byte[] key, ImmutableBytesPtr cacheKey,
+            long clientTimeStamp, long asOfTimeStamp, int clientVersion) throws IOException, SQLException {
+        PTable table = loadTable(env, key, cacheKey, clientTimeStamp, asOfTimeStamp, clientVersion);
+        if (table == null || isTableDeleted(table)) { return null; }
+        return table;
+    }
+
     private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key,
         ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp, int clientVersion)
         throws IOException, SQLException {
@@ -1464,7 +1471,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     
                     parentTableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
                             parentPhysicalSchemaTableNames[1], parentPhysicalSchemaTableNames[2]);
-                    PTable parentTable = loadTable(env, parentTableKey, new ImmutableBytesPtr(parentTableKey),
+                    PTable parentTable = getTable(env, parentTableKey, new ImmutableBytesPtr(parentTableKey),
                             clientTimeStamp, clientTimeStamp, clientVersion);
                     if (parentTable == null) {
                         builder.setReturnCode(MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
@@ -1479,13 +1486,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         byte[] parentKey = SchemaUtil.getTableKey(
                                 parentSchemaTableNames[0] == null ? ByteUtil.EMPTY_BYTE_ARRAY : parentSchemaTableNames[0],
                                 parentSchemaTableNames[1], parentSchemaTableNames[2]);
-                        parentTable = loadTable(env, parentKey, new ImmutableBytesPtr(parentKey),
+                        parentTable = getTable(env, parentKey, new ImmutableBytesPtr(parentKey),
                                 clientTimeStamp, clientTimeStamp, clientVersion);
                         if (parentTable == null) {
                             // it could be a global view
                             parentKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
                                     parentSchemaTableNames[1], parentSchemaTableNames[2]);
-                            parentTable = loadTable(env, parentKey, new ImmutableBytesPtr(parentKey),
+                            parentTable = getTable(env, parentKey, new ImmutableBytesPtr(parentKey),
                                     clientTimeStamp, clientTimeStamp, clientVersion);
                         }
                     }
@@ -1969,12 +1976,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] key =
                     parentTableName == null ? lockKey : SchemaUtil.getTableKey(tenantIdBytes,
                         schemaName, tableName);
-
-            
+            Region region = env.getRegion();
+            MetaDataMutationResult result = checkTableKeyInRegion(key, region);
+            if (result != null) {
+                done.run(MetaDataMutationResult.toProto(result));
+                return;
+            }
             PTableType ptableType=PTableType.fromSerializedValue(tableType);
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
             byte[] cKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
-            PTable loadedTable = loadTable(env, cKey, new ImmutableBytesPtr(cKey), clientTimeStamp, clientTimeStamp,
+            PTable loadedTable = getTable(env, cKey, new ImmutableBytesPtr(cKey), clientTimeStamp, clientTimeStamp,
                     request.getClientVersion());
             if (loadedTable == null) {
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
@@ -1986,13 +1997,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     SchemaUtil.getTableName(schemaName, tableName),
                     TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
                     getParentPhysicalTableName(loadedTable), ptableType,loadedTable.getIndexes());
-
-            Region region = env.getRegion();
-            MetaDataMutationResult result = checkTableKeyInRegion(key, region);
-            if (result != null) {
-                done.run(MetaDataMutationResult.toProto(result));
-                return;
-            }
             List<RowLock> locks = Lists.newArrayList();
 
             try {
@@ -2000,6 +2004,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (key != lockKey) {
                     acquireLock(region, key, locks);
                 }
+
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 result =
                         doDropTable(key, tenantIdBytes, schemaName, tableName, parentTableName,
@@ -3657,7 +3662,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
                 //check permission on data table
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
-                PTable loadedTable = loadTable(env, key, new ImmutableBytesPtr(key), clientTimeStamp, clientTimeStamp,
+                PTable loadedTable = getTable(env, key, new ImmutableBytesPtr(key), clientTimeStamp, clientTimeStamp,
                         request.getClientVersion());
                 if (loadedTable == null) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
