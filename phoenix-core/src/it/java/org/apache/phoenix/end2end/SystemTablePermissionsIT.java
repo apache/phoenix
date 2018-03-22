@@ -70,7 +70,7 @@ public class SystemTablePermissionsIT extends BasePermissionsIT {
                                 Action.EXEC, Action.READ);
                     }
                     grantPermissions(regularUser1.getShortName(),
-                        Collections.singleton(TABLE_NAME), Action.READ);
+                        Collections.singleton(TABLE_NAME), Action.READ,Action.EXEC);
                 } catch (Throwable e) {
                     if (e instanceof Exception) {
                         throw (Exception) e;
