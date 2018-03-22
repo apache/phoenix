@@ -607,8 +607,10 @@ public class UpgradeUtil {
                         String indexPhysicalTableName = MetaDataUtil.getViewIndexTableName(viewPTable.getPhysicalName().getString());
                         if (physicalTables.add(indexPhysicalTableName)) {
                             final TableName tableName = TableName.valueOf(indexPhysicalTableName);
-                            admin.disableTable(tableName);
-                            admin.truncateTable(tableName, false);
+                            if(admin.tableExists(tableName)) {
+                                admin.disableTable(tableName);
+                                admin.truncateTable(tableName, false);
+                            }
                         }
                     }
                 }
