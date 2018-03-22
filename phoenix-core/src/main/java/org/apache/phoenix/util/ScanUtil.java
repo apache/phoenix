@@ -657,10 +657,9 @@ public class ScanUtil {
      * @param lowerInclusiveRegionKey
      * @param upperExclusiveRegionKey
      */
-    public static void setupLocalIndexScan(Scan scan, byte[] lowerInclusiveRegionKey,
-            byte[] upperExclusiveRegionKey) {
-        byte[] prefix = lowerInclusiveRegionKey.length == 0 ? new byte[upperExclusiveRegionKey.length]: lowerInclusiveRegionKey;
-        int prefixLength = lowerInclusiveRegionKey.length == 0? upperExclusiveRegionKey.length: lowerInclusiveRegionKey.length;
+    public static void setupLocalIndexScan(Scan scan) {
+        byte[] prefix = scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length]: scan.getStartRow();
+        int prefixLength = scan.getStartRow().length == 0? scan.getStopRow().length: scan.getStartRow().length;
         if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
             scan.setStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
         }

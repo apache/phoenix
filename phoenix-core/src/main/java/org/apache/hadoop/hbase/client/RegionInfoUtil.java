@@ -15,19 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end.index;
-
-import org.junit.Test;
-
-public class MutableIndexSplitForwardScanIT extends MutableIndexSplitIT {
-
-    public MutableIndexSplitForwardScanIT(boolean localIndex, boolean multiTenant) {
-        super(localIndex, multiTenant);
+package org.apache.hadoop.hbase.client;
+  
+public class RegionInfoUtil {
+    public static byte[] toByteArray(RegionInfo regionInfo) {
+        return RegionInfo.toByteArray(regionInfo);
     }
-
-    @Test
-    public void testSplitDuringIndexScan() throws Exception {
-        testSplitDuringIndexScan(false);
-    }
-    
 }

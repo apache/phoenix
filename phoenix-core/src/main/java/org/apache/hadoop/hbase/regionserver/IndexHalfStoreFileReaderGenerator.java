@@ -22,6 +22,8 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,18 +32,19 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
@@ -68,11 +71,15 @@ import org.apache.phoenix.util.RepairUtil;
 
 import com.google.common.collect.Lists;
 
-public class IndexHalfStoreFileReaderGenerator implements RegionObserver {
+public class IndexHalfStoreFileReaderGenerator implements RegionObserver, RegionCoprocessor{
     
     private static final String LOCAL_INDEX_AUTOMATIC_REPAIR = "local.index.automatic.repair";
     public static final Log LOG = LogFactory.getLog(IndexHalfStoreFileReaderGenerator.class);
 
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
     
     @Override
     public StoreFileReader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,
@@ -82,7 +89,6 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver {
         Region region = ctx.getEnvironment().getRegion();
         RegionInfo childRegion = region.getRegionInfo();
         byte[] splitKey = null;
-        
         if (reader == null && r != null) {
             if(!p.toString().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 return reader;
@@ -96,11 +102,11 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver {
                 SingleColumnValueFilter scvf = null;
                 if (Reference.isTopFileRegion(r.getFileRegion())) {
                     scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                        HConstants.SPLITB_QUALIFIER, CompareOperator.EQUAL, ((HRegionInfo)region.getRegionInfo()).toByteArray());
+                        HConstants.SPLITB_QUALIFIER, CompareOperator.EQUAL, RegionInfoUtil.toByteArray(region.getRegionInfo()));
                     scvf.setFilterIfMissing(true);
                 } else {
                     scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                        HConstants.SPLITA_QUALIFIER, CompareOperator.EQUAL, ((HRegionInfo)region.getRegionInfo()).toByteArray());
+                        HConstants.SPLITA_QUALIFIER, CompareOperator.EQUAL, RegionInfoUtil.toByteArray(region.getRegionInfo()));
                     scvf.setFilterIfMissing(true);
                 }
                 if(scvf != null) scan.setFilter(scvf);
@@ -168,7 +174,8 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver {
                 return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
                         .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
                         childRegion, regionStartKeyInHFile, splitKey,
-                        childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID);
+                        childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID,
+                        new AtomicInteger(0), region.getRegionInfo());
             } catch (ClassNotFoundException e) {
                 throw new IOException(e);
             } catch (SQLException e) {

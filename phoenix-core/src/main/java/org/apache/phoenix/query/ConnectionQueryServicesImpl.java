@@ -1054,7 +1054,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (!tableExist) {
                 if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
                         PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
-                    newDesc.setValue(Bytes.toBytes(TableDescriptorBuilder.SPLIT_POLICY), Bytes.toBytes(IndexRegionSplitPolicy.class.getName()));
+                    newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
                 // Remove the splitPolicy attribute to prevent HBASE-12570
                 if (isMetaTable) {
@@ -1078,7 +1078,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * server and compatible. This works around HBASE-12570 which causes the cluster to be
                      * brought down.
                      */
-                    newDesc.setValue(TableDescriptorBuilder.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
+                    newDesc.setRegionSplitPolicyClassName(MetaDataSplitPolicy.class.getName());
                     modifyTable(physicalTableName, newDesc.build(), true);
                 }
                 return null;
@@ -1087,11 +1087,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                 } else {
                     for(Pair<byte[],Map<String,Object>> family: families) {
-                        if ((newDesc.build().getValue(TableDescriptorBuilder.SPLIT_POLICY)==null || !newDesc.build().getValue(TableDescriptorBuilder.SPLIT_POLICY).equals(
-                                IndexRegionSplitPolicy.class.getName()))
-                                && Bytes.toString(family.getFirst()).startsWith(
-                                        QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                            newDesc.setValue(TableDescriptorBuilder.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
+                        if ((Bytes.toString(family.getFirst())
+                                .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX))) {
+                            newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                             break;
                         }
                     }

@@ -22,11 +22,14 @@ import java.util.Map.Entry;
 import java.util.Optional;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilder;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.io.hfile.HFileScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -37,16 +40,18 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
 
     private IndexHalfStoreFileReader reader;
     private boolean changeBottomKeys;
+    private CellComparatorImpl comparator;
     @SuppressWarnings("deprecation")
     public LocalIndexStoreFileScanner(IndexHalfStoreFileReader reader, boolean cacheBlocks, boolean pread,
             boolean isCompaction, long readPt, long scannerOrder,
             boolean canOptimizeForNonNullColumn) {
-        super(reader, reader.getScanner(cacheBlocks, pread, isCompaction), true, reader
+        super(reader, reader.getScanner(cacheBlocks, pread, isCompaction), !isCompaction, reader
                 .getHFileReader().hasMVCCInfo(), readPt, scannerOrder, canOptimizeForNonNullColumn);
         this.reader = reader;
         this.changeBottomKeys =
                 this.reader.getRegionInfo().getStartKey().length == 0
                         && this.reader.getSplitRow().length != this.reader.getOffset();
+        this.comparator = (CellComparatorImpl)getComparator();
     }
 
     @Override
@@ -124,11 +129,10 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
             if (firstKey.isPresent()) {
                 return false;
             }
-            byte[] fk = PhoenixKeyValueUtil.maybeCopyCell(firstKey.get()).getKey();
-            if (getComparator().compare(kv, firstKey.get()) <= 0) {
+            if (this.comparator.compare(kv, firstKey.get(), true) <= 0) {
                 return super.seekToPreviousRow(key);
             }
-            KeyValue replacedKey = getKeyPresentInHFiles(kv.getRowArray());
+            Cell replacedKey = getKeyPresentInHFiles(kv);
             boolean seekToPreviousRow = super.seekToPreviousRow(replacedKey);
             while(super.peek()!=null && !isSatisfiedMidKeyCondition(super.peek())) {
                 seekToPreviousRow = super.seekToPreviousRow(super.peek());
@@ -137,8 +141,8 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         } else {
             // The equals sign isn't strictly necessary just here to be consistent with
             // seekTo
-            KeyValue splitKeyValue = KeyValueUtil.createKeyValueFromKey(reader.getSplitkey());
-            if (getComparator().compare(kv, splitKeyValue) >= 0) {
+            KeyValue splitKeyValue = new KeyValue.KeyOnlyKeyValue(reader.getSplitkey());
+            if (this.comparator.compare(kv, splitKeyValue, true) >= 0) {
                 boolean seekToPreviousRow = super.seekToPreviousRow(kv);
                 while(super.peek()!=null && !isSatisfiedMidKeyCondition(super.peek())) {
                     seekToPreviousRow = super.seekToPreviousRow(super.peek());
@@ -198,22 +202,21 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
      * @param key
      *
      */
-    private KeyValue getKeyPresentInHFiles(byte[] key) {
-        KeyValue keyValue = new KeyValue(key);
+    private KeyValue getKeyPresentInHFiles(Cell keyValue) {
         int rowLength = keyValue.getRowLength();
         int rowOffset = keyValue.getRowOffset();
 
         short length = (short) (rowLength - reader.getSplitRow().length + reader.getOffset());
         byte[] replacedKey =
-                new byte[length + key.length - (rowOffset + rowLength) + ROW_LENGTH_SIZE];
+                new byte[length + keyValue.getRowArray().length - (rowOffset + rowLength) + ROW_LENGTH_SIZE];
         System.arraycopy(Bytes.toBytes(length), 0, replacedKey, 0, ROW_LENGTH_SIZE);
         System.arraycopy(reader.getRegionStartKeyInHFile(), 0, replacedKey, ROW_LENGTH_SIZE, reader.getOffset());
         System.arraycopy(keyValue.getRowArray(), keyValue.getRowOffset() + reader.getSplitRow().length,
             replacedKey, reader.getOffset() + ROW_LENGTH_SIZE, rowLength
                     - reader.getSplitRow().length);
-        System.arraycopy(key, rowOffset + rowLength, replacedKey,
+        System.arraycopy(keyValue.getRowArray(), rowOffset + rowLength, replacedKey,
             reader.getOffset() + keyValue.getRowLength() - reader.getSplitRow().length
-                    + ROW_LENGTH_SIZE, key.length - (rowOffset + rowLength));
+                    + ROW_LENGTH_SIZE, keyValue.getRowArray().length - (rowOffset + rowLength));
         return new KeyValue.KeyOnlyKeyValue(replacedKey);
     }
     
@@ -225,31 +228,30 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
      * @throws IOException
      */
     public boolean seekOrReseek(Cell cell, boolean isSeek) throws IOException{
-        KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(cell);
-        KeyValue keyToSeek = kv;
-        KeyValue splitKeyValue = KeyValueUtil.createKeyValueFromKey(reader.getSplitkey());
+        Cell keyToSeek = cell;
+        KeyValue splitKeyValue = new KeyValue.KeyOnlyKeyValue(reader.getSplitkey());
         if (reader.isTop()) {
-            if(getComparator().compare(kv, splitKeyValue) < 0){
+            if(this.comparator.compare(cell, splitKeyValue, true) < 0){
                 if(!isSeek && realSeekDone()) {
                     return true;
                 }
                 return seekOrReseekToProperKey(isSeek, keyToSeek);
             }
-            keyToSeek = getKeyPresentInHFiles(kv.getRowArray());
+            keyToSeek = getKeyPresentInHFiles(cell);
             return seekOrReseekToProperKey(isSeek, keyToSeek);
         } else {
-            if (getComparator().compare(kv, splitKeyValue) >= 0) {
+            if (this.comparator.compare(cell, splitKeyValue, true) >= 0) {
                 close();
                 return false;
             }
             if(!isSeek && reader.getRegionInfo().getStartKey().length == 0 && reader.getSplitRow().length > reader.getRegionStartKeyInHFile().length) {
-                keyToSeek = getKeyPresentInHFiles(kv.getRowArray());
+                keyToSeek = getKeyPresentInHFiles(cell);
             }
         }
         return seekOrReseekToProperKey(isSeek, keyToSeek);
     }
 
-    private boolean seekOrReseekToProperKey(boolean isSeek, KeyValue kv)
+    private boolean seekOrReseekToProperKey(boolean isSeek, Cell kv)
             throws IOException {
         boolean seekOrReseek = isSeek ? super.seek(kv) : super.reseek(kv);
         while (seekOrReseek && super.peek() != null
@@ -269,5 +271,4 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                 reader.getSplitRow().length, lenOfRemainingKey);
         return keyReplacedStartKey;
     }
-
 }

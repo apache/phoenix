@@ -52,7 +52,6 @@ import org.junit.experimental.categories.Category;
 import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class LocalIndexSplitMergeIT extends BaseTest {
 
     @BeforeClass
@@ -265,4 +264,63 @@ public class LocalIndexSplitMergeIT extends BaseTest {
         }
     }
 
+    @Test
+    public void testLocalIndexScanWithMergeSpecialCase() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), false);
+        createBaseTable(tableName, "('a','aaaab','def')");
+        Connection conn1 = getConnectionForLocalIndexTest();
+        try {
+            String[] strings =
+                    { "aa", "aaa", "aaaa", "bb", "cc", "dd", "dff", "g", "h", "i", "j", "k", "l",
+                            "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
+            for (int i = 0; i < 26; i++) {
+                conn1.createStatement()
+                        .execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i
+                                + "," + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            }
+            conn1.commit();
+            conn1.createStatement()
+                    .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+            conn1.createStatement()
+            .execute("CREATE LOCAL INDEX " + indexName + "_2 ON " + tableName + "(k3)");
+
+            Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            List<RegionInfo> regionsOfUserTable =
+                    MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                        false);
+            admin.mergeRegionsAsync(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
+                regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
+            regionsOfUserTable =
+                    MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                        false);
+
+            while (regionsOfUserTable.size() != 3) {
+                Thread.sleep(100);
+                regionsOfUserTable =
+                        MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
+                            false);
+            }
+            String query = "SELECT t_id,k1,v1 FROM " + tableName;
+            ResultSet rs = conn1.createStatement().executeQuery(query);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[25-j], rs.getString("t_id"));
+                assertEquals(25-j, rs.getInt("k1"));
+                assertEquals(strings[j], rs.getString("V1"));
+            }
+            query = "SELECT t_id,k1,k3 FROM " + tableName;
+            rs = conn1.createStatement().executeQuery(query);
+            for (int j = 0; j < 26; j++) {
+                assertTrue(rs.next());
+                assertEquals(strings[j], rs.getString("t_id"));
+                assertEquals(j, rs.getInt("k1"));
+                assertEquals(j + 2, rs.getInt("k3"));
+            }
+        } finally {
+            conn1.close();
+        }
+    }
 }
