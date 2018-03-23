@@ -48,7 +48,7 @@
     <parcel.package.version>${phoenix.version}+${cdh.version}+${parcel.patch.count}</parcel.package.version>
     <parcel.component.version>${phoenix.version}-${cdh.version}</parcel.component.version>
     <parcel.component.release>${cdh.version}.p${parcel.release}</parcel.component.release>
-    <parcel.depends>CDH (= ${cdh.version.number})</parcel.depends>
+    <parcel.depends>CDH (= ${cdh.minor.version})</parcel.depends>
   </properties>
 
   <build>
@@ -59,7 +59,7 @@
         <version>3.0.0</version>
         <executions>
           <execution>
-            <id>regex-property</id>
+            <id>regex-property-phoenix-version</id>
             <phase>initialize</phase>
             <goals>
               <goal>regex-property</goal>
@@ -69,6 +69,20 @@
               <value>${project.version}</value>
               <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$</regex>
               <replacement>$1.$2.$3</replacement>
+              <failIfNoMatch>true</failIfNoMatch>
+            </configuration>
+          </execution>
+          <execution>
+            <id>regex-property-cdh-minor-version</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>regex-property</goal>
+            </goals>
+            <configuration>
+              <name>cdh.minor.version</name>
+              <value>${cdh.version.number}</value>
+              <regex>^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$</regex>
+              <replacement>$1.$2</replacement>
               <failIfNoMatch>true</failIfNoMatch>
             </configuration>
           </execution>
