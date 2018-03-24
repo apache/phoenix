@@ -100,8 +100,9 @@ public class TransactionUtil {
 	public static Mutation convertIfDelete(Mutation mutation) throws IOException {
         if (mutation instanceof Delete) {
             Put deleteMarker = null;
-            for (byte[] family : mutation.getFamilyCellMap().keySet()) {
-                List<Cell> familyCells = mutation.getFamilyCellMap().get(family);
+            for (Map.Entry<byte[],List<Cell>> entry : mutation.getFamilyCellMap().entrySet()) {
+                byte[] family = entry.getKey();
+                List<Cell> familyCells = entry.getValue();
                 if (familyCells.size() == 1) {
                     if (CellUtil.isDeleteFamily(familyCells.get(0))) {
                         if (deleteMarker == null) {
@@ -126,12 +127,12 @@ public class TransactionUtil {
                         }
                     }
                 }
-                if (deleteMarker != null) {
-                    for (Map.Entry<String, byte[]> entry : mutation.getAttributesMap().entrySet()) {
-                        deleteMarker.setAttribute(entry.getKey(), entry.getValue());
-                    }
-                    mutation = deleteMarker;
+            }
+            if (deleteMarker != null) {
+                for (Map.Entry<String, byte[]> entry : mutation.getAttributesMap().entrySet()) {
+                    deleteMarker.setAttribute(entry.getKey(), entry.getValue());
                 }
+                mutation = deleteMarker;
             }
         }
         return mutation;
