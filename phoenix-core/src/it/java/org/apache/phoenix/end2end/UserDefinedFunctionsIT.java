@@ -201,7 +201,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     public void cleanUpAfterTest() throws Exception {
         Connection conn = driver.connect(url, EMPTY_PROPS);
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery("list jars");
         stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar'");
         stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar'");
         stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar'");
@@ -280,7 +279,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         util.startMiniDFSCluster(1);
         util.startMiniZKCluster(1);
         String string = util.getConfiguration().get("fs.defaultFS");
-        conf.set(DYNAMIC_JARS_DIR_KEY, string+"/hbase/tmpjars");
+        // PHOENIX-4675 setting the trailing slash implicitly tests that we're doing some path normalization
+        conf.set(DYNAMIC_JARS_DIR_KEY, string+"/hbase/tmpjars/");
         util.startMiniHBaseCluster(1, 1);
         UDFExpression.setConfig(conf);
 
@@ -297,20 +297,21 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     @Test
     public void testListJars() throws Exception {
         Connection conn = driver.connect(url, EMPTY_PROPS);
+        Path jarPath = new Path(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY));
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("list jars");
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar1.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar2.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar3.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar4.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar5.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar6.jar").toString(), rs.getString("jar_location"));
         assertFalse(rs.next());
     }
 
@@ -320,30 +321,31 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("list jars");
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        Path jarPath = new Path(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY));
+        assertEquals(new Path(jarPath, "myjar1.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar2.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar3.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar4.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar5.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar6.jar").toString(), rs.getString("jar_location"));
         assertFalse(rs.next());
-        stmt.execute("delete jar '"+ util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar4.jar'");
+        stmt.execute("delete jar '"+ new Path(jarPath, "myjar4.jar").toString() + "'");
         rs = stmt.executeQuery("list jars");
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar1.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar1.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar2.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar2.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar3.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar3.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar5.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar5.jar").toString(), rs.getString("jar_location"));
         assertTrue(rs.next());
-        assertEquals(util.getConfiguration().get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+"myjar6.jar", rs.getString("jar_location"));
+        assertEquals(new Path(jarPath, "myjar6.jar").toString(), rs.getString("jar_location"));
         assertFalse(rs.next());
     }
 

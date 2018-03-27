@@ -173,21 +173,18 @@ public class UDFExpression extends ScalarFunction {
 
     public static DynamicClassLoader getClassLoader(final PName tenantId, final String jarPath) {
         DynamicClassLoader cl = tenantIdSpecificCls.get(tenantId);
-        String parent = null;
+        Path parent = null;
         if (cl != null) return cl;
         if(jarPath != null && !jarPath.isEmpty()) {
             cl = pathSpecificCls.get(jarPath);
             if (cl != null) return cl;
-            Path path = new Path(jarPath);
-            if(jarPath.endsWith(".jar")) {
-                parent = path.getParent().toString();
-            } else {
-                parent = path.toString();
-            }
+            parent = getPathForParent(jarPath);
         }
+        // Parse the DYNAMIC_JARS_DIR_KEY value as a Path if it's present in the configuration
+        Path allowedDynamicJarsPath = config.get(DYNAMIC_JARS_DIR_KEY) != null ? new Path(config.get(DYNAMIC_JARS_DIR_KEY)) : null;
         // The case jarPath is not provided, or it is provided and the jar is inside hbase.dynamic.jars.dir
         if (jarPath == null || jarPath.isEmpty()
-                || config.get(DYNAMIC_JARS_DIR_KEY) != null && (parent != null && parent.equals(config.get(DYNAMIC_JARS_DIR_KEY)))) {
+                || (allowedDynamicJarsPath != null && parent != null && parent.equals(allowedDynamicJarsPath))) {
             cl = tenantIdSpecificCls.get(tenantId);
             if (cl == null) {
                 cl = new DynamicClassLoader(config, UDFExpression.class.getClassLoader());
@@ -203,6 +200,14 @@ public class UDFExpression extends ScalarFunction {
             //As per PHOENIX-4231, DYNAMIC_JARS_DIR_KEY is the only place where loading a udf jar is allowed
             throw new SecurityException("Loading jars from " + jarPath + " is not allowed. The only location that is allowed is "+ config.get(DYNAMIC_JARS_DIR_KEY));
         }
+    }
+
+    public static Path getPathForParent(String jarPath) {
+        Path path = new Path(jarPath);
+        if (jarPath.endsWith(".jar")) {
+            return path.getParent();
+        }
+        return path;
     }
     
     @VisibleForTesting
