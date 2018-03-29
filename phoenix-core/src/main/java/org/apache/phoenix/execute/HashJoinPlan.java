@@ -22,21 +22,23 @@ import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 import static org.apache.phoenix.util.NumberUtil.add;
 import static org.apache.phoenix.util.NumberUtil.getMin;
 
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -46,6 +48,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
+import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
@@ -57,9 +60,7 @@ import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.iterate.FilterResultIterator;
-import org.apache.phoenix.iterate.ParallelScanGrouper;
-import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.*;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
@@ -86,9 +87,11 @@ import org.apache.phoenix.util.SQLCloseables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.apache.phoenix.util.ServerUtil;
 
 public class HashJoinPlan extends DelegateQueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
+    private static final Random RANDOM = new Random();
 
     private final SelectStatement statement;
     private final HashJoinInfo joinInfo;
@@ -105,6 +108,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private Long estimatedBytes;
     private Long estimateInfoTs;
     private boolean getEstimatesCalled;
+    private boolean hasSubPlansWithPersistentCache;
     
     public static HashJoinPlan create(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
@@ -134,8 +138,12 @@ public class HashJoinPlan extends DelegateQueryPlan {
         this.recompileWhereClause = recompileWhereClause;
         this.tableRefs = Sets.newHashSetWithExpectedSize(subPlans.length + plan.getSourceRefs().size());
         this.tableRefs.addAll(plan.getSourceRefs());
+        this.hasSubPlansWithPersistentCache = false;
         for (SubPlan subPlan : subPlans) {
             tableRefs.addAll(subPlan.getInnerPlan().getSourceRefs());
+            if (subPlan instanceof HashSubPlan && ((HashSubPlan)subPlan).usePersistentCache) {
+                this.hasSubPlansWithPersistentCache = true;
+            }
         }
         QueryServices services = plan.getContext().getConnection().getQueryServices();
         this.maxServerCacheTimeToLive = services.getProps().getInt(
@@ -214,7 +222,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             SQLCloseables.closeAllQuietly(dependencies.values());
             throw firstException;
         }
-        
+
         Expression postFilter = null;
         boolean hasKeyRangeExpressions = keyRangeExpressions != null && !keyRangeExpressions.isEmpty();
         if (recompileWhereClause || hasKeyRangeExpressions) {
@@ -241,8 +249,35 @@ public class HashJoinPlan extends DelegateQueryPlan {
         if (statement.getInnerSelectStatement() != null && postFilter != null) {
             iterator = new FilterResultIterator(iterator, postFilter);
         }
-        
-        return iterator;
+
+        if (hasSubPlansWithPersistentCache) {
+            return peekForPersistentCache(iterator, scanGrouper, scan);
+        } else {
+            return iterator;
+        }
+    }
+
+    private ResultIterator peekForPersistentCache(ResultIterator iterator, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        // The persistent subquery is optimistic and assumes caches are present on region
+        // servers. We verify that this is the case by peeking at one result. If there is
+        // a cache missing exception, we retry the query with the persistent cache disabled
+        // for that specific cache ID.
+        PeekingResultIterator peeking = LookAheadResultIterator.wrap(iterator);
+        try {
+            peeking.peek();
+        } catch (Exception e) {
+            try {
+                throw ServerUtil.parseServerException(e);
+            } catch (HashJoinCacheNotFoundException e2) {
+                Long cacheId = e2.getCacheId();
+                if (delegate.getContext().getRetryingPersistentCache(cacheId)) {
+                    throw e2;
+                }
+                delegate.getContext().setRetryingPersistentCache(cacheId);
+                return iterator(scanGrouper, scan);
+            }
+        }
+        return peeking;
     }
 
     private Expression createKeyRangeExpression(Expression lhsExpression,
@@ -467,20 +502,29 @@ public class HashJoinPlan extends DelegateQueryPlan {
         private final QueryPlan plan;
         private final List<Expression> hashExpressions;
         private final boolean singleValueOnly;
+        private final boolean usePersistentCache;
         private final Expression keyRangeLhsExpression;
         private final Expression keyRangeRhsExpression;
+        private final MessageDigest digest;
         
         public HashSubPlan(int index, QueryPlan subPlan, 
                 List<Expression> hashExpressions,
                 boolean singleValueOnly,
+                boolean usePersistentCache,
                 Expression keyRangeLhsExpression, 
                 Expression keyRangeRhsExpression) {
             this.index = index;
             this.plan = subPlan;
             this.hashExpressions = hashExpressions;
             this.singleValueOnly = singleValueOnly;
+            this.usePersistentCache = usePersistentCache;
             this.keyRangeLhsExpression = keyRangeLhsExpression;
             this.keyRangeRhsExpression = keyRangeRhsExpression;
+            try {
+                this.digest = MessageDigest.getInstance("SHA-256");
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
@@ -494,19 +538,37 @@ public class HashJoinPlan extends DelegateQueryPlan {
             if (hashExpressions != null) {
                 ResultIterator iterator = plan.iterator();
                 try {
-                    cache =
-                            parent.hashClient.addHashCache(ranges, iterator,
-                                plan.getEstimatedSize(), hashExpressions, singleValueOnly,
+                    final byte[] cacheId;
+                    String queryString = plan.getStatement().toString().replaceAll("\\$[0-9]+", "\\$");
+                    if (usePersistentCache) {
+                        cacheId = Arrays.copyOfRange(digest.digest(queryString.getBytes()), 0, 8);
+                        boolean retrying = parent.delegate.getContext().getRetryingPersistentCache(Bytes.toLong(cacheId));
+                        if (!retrying) {
+                            try {
+                                cache = parent.hashClient.createServerCache(cacheId, parent.delegate);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    } else {
+                        cacheId = Bytes.toBytes(RANDOM.nextLong());
+                    }
+                    LOG.debug("Using cache ID " + Hex.encodeHexString(cacheId) + " for " + queryString);
+                    if (cache == null) {
+                        LOG.debug("Making RPC to add cache " + Hex.encodeHexString(cacheId));
+                        cache = parent.hashClient.addHashCache(ranges, cacheId, iterator,
+                                plan.getEstimatedSize(), hashExpressions, singleValueOnly, usePersistentCache,
                                 parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
                                 keyRangeRhsValues);
-                    long endTime = System.currentTimeMillis();
-                    boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
-                    if (!isSet && (endTime
-                            - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
-                        LOG.warn(addCustomAnnotations(
-                            "Hash plan [" + index
-                                    + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.",
-                            parent.delegate.getContext().getConnection()));
+                        long endTime = System.currentTimeMillis();
+                        boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
+                        if (!isSet && (endTime
+                                - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
+                            LOG.warn(addCustomAnnotations(
+                                "Hash plan [" + index
+                                        + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.",
+                                parent.delegate.getContext().getConnection()));
+                        }
                     }
                 } finally {
                     iterator.close();

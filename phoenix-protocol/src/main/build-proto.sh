@@ -27,6 +27,12 @@ if [ $? != 0 ] ; then
   exit 1
 fi
 
+if [[ `protoc --version` != *"2.5.0"* ]]; then
+    echo "Must use protoc version 2.5.0"
+    exit 1
+fi
+
+
 PROTO_ROOT_DIR=`dirname $0`
 PROTO_DIR=$PROTO_ROOT_DIR
 JAVA_DIR=$PROTO_ROOT_DIR/../../../phoenix-core/src/main/java

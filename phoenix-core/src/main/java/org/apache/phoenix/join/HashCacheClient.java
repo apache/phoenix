@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -67,6 +68,20 @@ public class HashCacheClient  {
     }
 
     /**
+     * Creates a ServerCache object for cacheId. This is used for persistent cache, and there may or may not
+     * be corresponding data on each region server.
+     * @param cacheId ID for the cache entry
+     * @param delegate the query plan this will be used for
+     * @return client-side {@link ServerCache} representing the hash cache that may or may not be present on region servers.
+     * @throws SQLException
+     * size
+     */
+    public ServerCache createServerCache(final byte[] cacheId, QueryPlan delegate)
+            throws SQLException, IOException {
+        return serverCache.createServerCache(cacheId, delegate);
+    }
+
+    /**
      * Send the results of scanning through the scanner to all
      * region servers for regions of the table that will use the cache
      * that intersect with the minMaxKeyRange.
@@ -76,13 +91,16 @@ public class HashCacheClient  {
      * @throws MaxServerCacheSizeExceededException if size of hash cache exceeds max allowed
      * size
      */
-    public ServerCache addHashCache(ScanRanges keyRanges, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, PTable cacheUsingTable, Expression keyRangeRhsExpression, List<Expression> keyRangeRhsValues) throws SQLException {
+    public ServerCache addHashCache(
+            ScanRanges keyRanges, byte[] cacheId, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions,
+            boolean singleValueOnly, boolean usePersistentCache, PTable cacheUsingTable, Expression keyRangeRhsExpression,
+            List<Expression> keyRangeRhsValues) throws SQLException {
         /**
          * Serialize and compress hashCacheTable
          */
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         serialize(ptr, iterator, estimatedSize, onExpressions, singleValueOnly, keyRangeRhsExpression, keyRangeRhsValues);
-        ServerCache cache = serverCache.addServerCache(keyRanges, ptr, ByteUtil.EMPTY_BYTE_ARRAY, new HashCacheFactory(), cacheUsingTable, true);
+        ServerCache cache = serverCache.addServerCache(keyRanges, cacheId, ptr, ByteUtil.EMPTY_BYTE_ARRAY, new HashCacheFactory(), cacheUsingTable, usePersistentCache, true);
         return cache;
     }
     
@@ -90,7 +108,7 @@ public class HashCacheClient  {
      * Should only be used to resend the hash table cache to the regionserver.
      *  
      * @param startkeyOfRegion start key of any region hosted on a regionserver which needs hash cache
-     * @param cacheId Id of the cache which needs to be sent
+     * @param cache The cache which needs to be sent
      * @param pTable
      * @return
      * @throws Exception

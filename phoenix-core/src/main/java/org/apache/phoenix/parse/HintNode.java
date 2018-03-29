@@ -83,6 +83,10 @@ public class HintNode {
         */
        USE_SORT_MERGE_JOIN,
        /**
+        * Persist the RHS results of a hash join.
+        */
+       USE_PERSISTENT_CACHE,
+       /**
         * Avoid using star-join optimization. Used for broadcast join (hash join) only.
         */
        NO_STAR_JOIN,

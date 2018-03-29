@@ -74,6 +74,7 @@ public class StatementContext {
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
     private final Map<PColumn, Integer> dataColumns;
+    private Map<Long, Boolean> retryingPersistentCache;
 
     private long currentTime = QueryConstants.UNSET_TIMESTAMP;
     private ScanRanges scanRanges = ScanRanges.EVERYTHING;
@@ -138,6 +139,7 @@ public class StatementContext {
         this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
         this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
         this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
+        this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     }
 
     /**
@@ -326,5 +328,22 @@ public class StatementContext {
     public void setClientSideUpsertSelect(boolean isClientSideUpsertSelect) {
         this.isClientSideUpsertSelect = isClientSideUpsertSelect;
     }
-    
+
+    /*
+     * setRetryingPersistentCache can be used to override the USE_PERSISTENT_CACHE hint and disable the use of the
+     * persistent cache for a specific cache ID. This can be used to retry queries that failed when using the persistent
+     * cache.
+     */
+    public void setRetryingPersistentCache(long cacheId) {
+        retryingPersistentCache.put(cacheId, true);
+    }
+
+    public boolean getRetryingPersistentCache(long cacheId) {
+        Boolean retrying = retryingPersistentCache.get(cacheId);
+        if (retrying == null) {
+            return false;
+        } else {
+            return retrying;
+        }
+    }
 }
