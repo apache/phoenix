@@ -1684,22 +1684,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
         HTableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
-        Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
-        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size()+1));
-        if (families.isEmpty()) {
-            byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
+        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size() + 1));
+
+        // Create all column families that the parent table has
+        for (PColumnFamily family : table.getColumnFamilies()) {
+            byte[] familyName = family.getName().getBytes();
             Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
-            families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
-        } else {
-            for (PColumnFamily family : table.getColumnFamilies()) {
-                byte[] familyName = family.getName().getBytes();
-                Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
-                families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
-            }
-            // Always create default column family, because we don't know in advance if we'll
-            // need it for an index with no covered columns.
-            families.add(new Pair<byte[],Map<String,Object>>(table.getDefaultFamilyName().getBytes(), Collections.<String,Object>emptyMap()));
+            families.add(new Pair<>(familyName, familyProps));
         }
+        // Always create default column family, because we don't know in advance if we'll
+        // need it for an index with no covered columns.
+        byte[] defaultFamilyName = table.getDefaultFamilyName() == null ?
+          QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
+        families.add(new Pair<>(defaultFamilyName, Collections.<String,Object>emptyMap()));
+
         byte[][] splits = null;
         if (table.getBucketNum() != null) {
             splits = SaltingUtil.getSalteByteSplitPoints(table.getBucketNum());
@@ -1707,6 +1705,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         // Transfer over table values into tableProps
         // TODO: encapsulate better
+        Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
         tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, table.isTransactional());
         tableProps.put(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, table.isImmutableRows());
         ensureViewIndexTableCreated(physicalTableName, tableProps, families, splits, timestamp, isNamespaceMapped);
