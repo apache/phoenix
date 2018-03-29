@@ -73,6 +73,7 @@ message AddServerCacheRequest {
   optional bytes txState = 5;
   optional bool hasProtoBufIndexMaintainer = 6;
   optional int32 clientVersion = 7;
+  optional bool usePersistentCache = 8;
 }
 
 message AddServerCacheResponse {
