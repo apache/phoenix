@@ -18,6 +18,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -87,6 +88,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
         enableNamespacesOnServer(conf);
+        configureRandomHMasterPort(conf);
         testUtil.startMiniCluster(1);
     }
 
@@ -287,6 +289,12 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     private void enableNamespacesOnServer(Configuration conf) {
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+    }
+
+    // For PHOENIX-4389 (Flapping tests SystemTablePermissionsIT and MigrateSystemTablesToSystemNamespaceIT)
+    private void configureRandomHMasterPort(Configuration conf) {
+        // Avoid multiple clusters trying to bind the master's info port (16010)
+        conf.setInt(HConstants.MASTER_INFO_PORT, -1);
     }
 
     private Properties getClientPropertiesWithSystemMappingEnabled() {
