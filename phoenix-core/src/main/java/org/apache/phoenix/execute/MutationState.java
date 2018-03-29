@@ -1563,6 +1563,7 @@ public class MutationState implements SQLCloseable {
         
         public void clear(){
             rowKeyToRowMutationState.clear();
+            estimatedSize = 0;
         }
         
         public Collection<RowMutationState> values() {
