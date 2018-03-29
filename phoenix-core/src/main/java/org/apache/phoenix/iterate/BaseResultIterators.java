@@ -1309,8 +1309,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                     throw e2;
                                 }
                                 Long cacheId = ((HashJoinCacheNotFoundException)e2).getCacheId();
-                                if (!hashCacheClient.addHashCacheToServer(startKey,
-                                        caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId))), plan.getTableRef().getTable())) { throw e2; }
+                                ServerCache cache = caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
+                                if (cache .getCachePtr() != null) {
+                                    if (!hashCacheClient.addHashCacheToServer(startKey, cache, plan.getTableRef().getTable())) {
+                                        throw e2;
+                                    }
+                                }
                             }
                             concatIterators =
                                     recreateIterators(services, isLocalIndex, allIterators,
