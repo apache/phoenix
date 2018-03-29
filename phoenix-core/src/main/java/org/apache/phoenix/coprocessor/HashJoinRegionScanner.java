@@ -51,7 +51,6 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
 
@@ -122,8 +121,7 @@ public class HashJoinRegionScanner implements RegionScanner {
             }
             HashCache hashCache = (HashCache)cache.getServerCache(joinId);
             if (hashCache == null) {
-                Exception cause = new HashJoinCacheNotFoundException(
-                        Bytes.toLong(ByteUtil.copyKeyBytesIfNecessary(joinId)));
+                Exception cause = new HashJoinCacheNotFoundException(Bytes.toLong(joinId.get()));
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
             }
 
