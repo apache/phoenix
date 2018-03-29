@@ -31,6 +31,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -443,5 +444,47 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         assertEquals(indexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
     }
-    
+
+    @Test
+    public void testCreatingIndexOnViewBuiltOnTableWithOnlyNamedColumnFamilies() throws Exception {
+        try (Connection c = getConnection(); Statement s = c.createStatement()) {
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String indexName = generateUniqueName();
+
+            c.setAutoCommit(true);
+            s.execute("CREATE TABLE " + tableName + " (COL1 VARCHAR PRIMARY KEY, CF.COL2 VARCHAR)");
+            s.executeUpdate("UPSERT INTO " + tableName + " VALUES ('AAA', 'BBB')");
+            s.execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+            s.execute("CREATE INDEX " + indexName + " ON " + viewName + " (CF.COL2)");
+
+            try (ResultSet rs = s.executeQuery("SELECT * FROM " + viewName + " WHERE CF.COL2 = 'BBB'")) {
+                assertTrue(rs.next());
+                assertEquals("AAA", rs.getString("COL1"));
+                assertEquals("BBB", rs.getString("COL2"));
+            }
+        }
+        try (Connection c = getConnection(); Statement s = c.createStatement()) {
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String index1Name = generateUniqueName();
+            String index2Name = generateUniqueName();
+
+            c.setAutoCommit(true);
+            s.execute("create table " + tableName + " (i1 integer primary key, c2.i2 integer, c3.i3 integer, c4.i4 integer)");
+            s.execute("create view " + viewName + " as select * from " + tableName + " where c2.i2 = 1");
+            s.executeUpdate("upsert into " + viewName + "(i1, c3.i3, c4.i4) VALUES (1, 1, 1)");
+            s.execute("create index " + index1Name + " ON " + viewName + " (c3.i3)");
+            s.execute("create index " + index2Name + " ON " + viewName + " (c3.i3) include (c4.i4)");
+            s.executeUpdate("upsert into " + viewName + "(i1, c3.i3, c4.i4) VALUES (2, 2, 2)");
+
+            try (ResultSet rs = s.executeQuery("select * from " + viewName + " WHERE c3.i3 = 1")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt("i1"));
+                assertEquals(1, rs.getInt("i2"));
+                assertEquals(1, rs.getInt("i3"));
+                assertEquals(1, rs.getInt("i4"));
+            }
+        }
+    }
 }
