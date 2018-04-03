@@ -25,14 +25,8 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
@@ -233,15 +227,7 @@ public class MutationState implements SQLCloseable {
      */
     public void commitDDLFence(PTable dataTable) throws SQLException {
         if (dataTable.isTransactional()) {
-            try {
                 phoenixTransactionContext.commitDDLFence(dataTable, logger);
-            } finally {
-                // The client expects a transaction to be in progress on the txContext while the
-                // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
-                // finished, we start a new one here.
-                // TODO: seems like an autonomous tx capability in Tephra would be useful here.
-                phoenixTransactionContext.begin();
-            }
         }
     }
     
@@ -304,7 +290,7 @@ public class MutationState implements SQLCloseable {
     public HTableInterface getHTable(PTable table) throws SQLException {
         HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
-            PhoenixTransactionalTable phoenixTransactionTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, htable, table);
+            PhoenixTransactionalTable phoenixTransactionTable = TransactionFactory.getTransactionProvider().getTransactionalTable(phoenixTransactionContext, htable, table);
             // Using cloned mutationState as we may have started a new transaction already
             // if auto commit is true and we need to use the original one here.
             htable = phoenixTransactionTable;
@@ -1077,7 +1063,7 @@ public class MutationState implements SQLCloseable {
                                 hTable = new MetaDataAwareHTable(hTable, origTableRef);
                             }
 
-                            hTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, hTable, table);
+                            hTable = TransactionFactory.getTransactionProvider().getTransactionalTable(phoenixTransactionContext, hTable, table);
                         }
                         
                         numMutations = mutationList.size();

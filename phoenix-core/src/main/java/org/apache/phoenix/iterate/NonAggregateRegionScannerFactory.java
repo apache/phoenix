@@ -56,11 +56,11 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -129,7 +129,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       indexMaintainer = indexMaintainers.get(0);
       viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
       byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
-      tx = MutationState.decodeTransaction(txState);
+      MutationState.decodeTransaction(txState);
     }
 
     final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);

@@ -18,6 +18,7 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -25,6 +26,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
 
 public class OmidTransactionProvider implements TransactionProvider {
     private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
@@ -43,28 +45,34 @@ public class OmidTransactionProvider implements TransactionProvider {
 
     @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
-        //return new OmidTransactionContext(txnBytes);
-        return null;
+        return new OmidTransactionContext(txnBytes);
     }
     
     @Override
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
-        //return new OmidTransactionContext(connection);
-        return null;
+        return new OmidTransactionContext(connection);
     }
 
     @Override
     public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask) {
-        //return new OmidTransactionContext(contex, connection, subTask);
-        return null;
+        return new OmidTransactionContext(contex, connection, subTask);
     }
 
     @Override
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) {
-        //return new OmidTransactionTable(ctx, htable);
-        return null;
+    public PhoenixTransactionalTable getTransactionalTable() throws SQLException {
+        return new OmidTransactionTable();
     }
-    
+
+    @Override
+    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) throws SQLException {
+        return new OmidTransactionTable(ctx, htable);
+    }
+
+    @Override
+    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable, PTable pTable) throws SQLException {
+        return new OmidTransactionTable(ctx, htable, pTable);
+    }
+
     @Override
     public Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
         return CellUtil.createCell(row, family, HConstants.EMPTY_BYTE_ARRAY, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);

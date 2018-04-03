@@ -18,18 +18,22 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
 
 public interface TransactionProvider {
     public PhoenixTransactionContext getTransactionContext();
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException;
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection);
     public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask);
-    
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable);
+
+    public PhoenixTransactionalTable getTransactionalTable() throws SQLException;
+    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) throws SQLException;
+    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable, PTable pTable) throws SQLException;
     
     public Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp);
     public Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp);

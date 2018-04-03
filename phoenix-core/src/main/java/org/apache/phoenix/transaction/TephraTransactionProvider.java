@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
 import org.apache.tephra.TxConstants;
 
 public class TephraTransactionProvider implements TransactionProvider {
@@ -59,10 +60,20 @@ public class TephraTransactionProvider implements TransactionProvider {
     }
 
     @Override
+    public PhoenixTransactionalTable getTransactionalTable() {
+        return new TephraTransactionTable();
+    }
+
+    @Override
     public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) {
         return new TephraTransactionTable(ctx, htable);
     }
-    
+
+    @Override
+    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable, PTable pTable) {
+        return new TephraTransactionTable(ctx, htable, pTable);
+    }
+
     @Override
     public Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
         return CellUtil.createCell(row, family, TxConstants.FAMILY_DELETE_QUALIFIER, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);

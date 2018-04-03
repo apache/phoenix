@@ -12,9 +12,10 @@ package org.apache.phoenix.schema.types;
 
 import static org.junit.Assert.assertEquals;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
-public abstract class BasePhoenixArrayToStringTest {
+@Ignore public abstract class BasePhoenixArrayToStringTest {
 
     @Test
     public void testEmptyArray() {

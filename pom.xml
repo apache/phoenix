@@ -100,6 +100,8 @@
     <avatica.version>1.10.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.13.0-incubating</tephra.version>
+    <!-- <tephra.version>0.12.0-incubating</tephra.version> -->
+    <omid.version>0.8.2.11-SNAPSHOT</omid.version>
     <spark.version>2.0.2</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
@@ -789,6 +791,28 @@
         <artifactId>tephra-hbase-compat-1.3</artifactId>
         <version>${tephra.version}</version>
       </dependency>
+ <dependency>
+  <groupId>org.apache.omid</groupId>
+  <artifactId>omid-tso-server</artifactId>
+  <version>${omid.version}</version>
+  </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-client</artifactId>
+        <version>${omid.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-coprocessor</artifactId>
+        <version>${omid.version}</version>
+      </dependency>
+  <dependency>
+    <groupId>org.apache.omid</groupId>
+    <artifactId>omid-tso-server</artifactId>
+    <version>${omid.version}</version>
+    <type>test-jar</type>
+  </dependency>
+
 
       <!-- Make sure we have all the antlr dependencies -->
       <dependency>

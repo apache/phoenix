@@ -48,7 +48,7 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testReadOwnWritesWithStats() throws Exception {
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+        try (Connection conn1 = DriverManager.getConnection(getUrl());
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName
                     + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
@@ -58,7 +58,7 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
             for (int i = 0; i < 10; i++) {
                 conn1.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(" + i + ")");
             }
-    
+
             // verify you can read your own writes
             int count = 0;
             ResultSet rs = conn1.createStatement().executeQuery("SELECT k FROM " + fullTableName);
@@ -66,24 +66,24 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
                 assertEquals(count++, rs.getInt(1));
             }
             assertEquals(10, count);
-            
+
             count = 0;
             rs = conn1.createStatement().executeQuery("SELECT k FROM " + fullViewName);
             while (rs.next()) {
                 assertEquals(6+count++, rs.getInt(1));
             }
             assertEquals(4, count);
-            
+
             // verify stats can see the read own writes rows
             analyzeTable(conn2, fullViewName, true);
             List<KeyRange> splits = getAllSplits(conn2, fullViewName);
             assertEquals(4, splits.size());
         }
     }
-    
+
     @Test
     public void testInvalidRowsWithStats() throws Exception {
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+        try (Connection conn1 = DriverManager.getConnection(getUrl());
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName
                     + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
@@ -93,7 +93,7 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
             for (int i = 0; i < 10; i++) {
                 conn1.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(" + i + ")");
             }
-    
+
             // verify you can read your own writes
             int count = 0;
             ResultSet rs = conn1.createStatement().executeQuery("SELECT k FROM " + fullTableName);
@@ -101,22 +101,22 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
                 assertEquals(count++, rs.getInt(1));
             }
             assertEquals(10, count);
-            
+
             count = 0;
             rs = conn1.createStatement().executeQuery("SELECT k FROM " + fullViewName);
             while (rs.next()) {
                 assertEquals(6+count++, rs.getInt(1));
             }
             assertEquals(4, count);
-            
+
             // Thread.sleep(DEFAULT_TXN_TIMEOUT_SECONDS*1000+20000);
             // assertEquals("There should be one invalid transaction", 1, txManager.getInvalidSize());
-            
+
             // verify stats can see the rows from the invalid transaction
             analyzeTable(conn2, fullViewName, true);
             List<KeyRange> splits = getAllSplits(conn2, fullViewName);
             assertEquals(4, splits.size());
         }
     }
-    
+
 }

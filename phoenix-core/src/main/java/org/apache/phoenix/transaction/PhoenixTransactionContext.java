@@ -40,7 +40,8 @@ public interface PhoenixTransactionContext {
         SNAPSHOT,
         SNAPSHOT_EXCLUDE_CURRENT,
         SNAPSHOT_ALL
-      }
+
+    }
 
     public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "tephra.tx.rollback"; //"phoenix.tx.rollback"; 
 
@@ -61,8 +62,10 @@ public interface PhoenixTransactionContext {
      * @param config
      * @param props
      * @param connectionInfo
+     *
+     * @throws SQLException
      */
-    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo);
+    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo) throws SQLException;
 
     /**
      * Starts a transaction
@@ -169,6 +172,12 @@ public interface PhoenixTransactionContext {
     public BaseRegionObserver getCoprocessor();
 
     /**
+     *
+     * @return the garbage collector
+     */
+    public BaseRegionObserver getGarbageCollector();
+
+    /**
      * 
      * @return the family delete marker
      */
@@ -187,5 +196,6 @@ public interface PhoenixTransactionContext {
     /**
      * Tear down transaction manager for testing
      */
-    public void tearDownTxManager();
+    public void tearDownTxManager() throws SQLException;
+
 }

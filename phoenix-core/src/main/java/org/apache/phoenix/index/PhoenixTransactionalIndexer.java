@@ -23,6 +23,7 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -34,6 +35,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
+
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -42,6 +44,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
@@ -142,13 +145,18 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             
         };
     }
-    
+
     @Override
     public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
             MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
 
         Mutation m = miniBatchOp.getOperation(0);
-        if (!codec.isEnabled(m)) {
+
+        System.out.print("In index coprocessor: row: " + Bytes.toString(m.getRow()) + " ");
+        String k = (m.getAttribute(PhoenixIndexCodec.INDEX_UUID) != null) ? " has INDEX_UUID attribute" : "NO INDEX_UUID attribute";
+        System.out.println(k);
+
+       if (!codec.isEnabled(m)) {
             super.preBatchMutate(c, miniBatchOp);
             return;
         }

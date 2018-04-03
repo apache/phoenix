@@ -15,29 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.transaction;
+package org.apache.phoenix.coprocessor;
 
-public class TransactionFactory {
-    enum TransactionProcessor {
-        Tephra,
-        Omid
+import org.apache.phoenix.transaction.TransactionFactory;
+
+public class PhoenixTransactionalGCProcessor extends DelegateRegionObserver {
+
+    public PhoenixTransactionalGCProcessor() {
+        super(TransactionFactory.getTransactionProvider().getTransactionContext().getGarbageCollector());
     }
 
-//    static public TransactionProvider getTransactionProvider() {
-//        return TephraTransactionProvider.getInstance();
-//    }
-    static public TransactionProvider getTransactionProvider() {
-        return OmidTransactionProvider.getInstance();
-    }
-    
-    static public TransactionProvider getTransactionProvider(TransactionProcessor processor) {
-        switch (processor) {
-        case Tephra:
-            return TephraTransactionProvider.getInstance();
-        case Omid:
-            return OmidTransactionProvider.getInstance();
-        default:
-            throw new IllegalArgumentException("Unknown transaction processor: " + processor);
-        }
-    }
 }

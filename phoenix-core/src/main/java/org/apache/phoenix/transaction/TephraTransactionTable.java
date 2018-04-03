@@ -56,6 +56,11 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
 
     private TephraTransactionContext tephraTransactionContext;
 
+    public TephraTransactionTable() {
+        this.transactionAwareHTable = null;
+        this.tephraTransactionContext = null;
+    }
+
     public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
         this(ctx, hTable, null);
     }
@@ -169,6 +174,11 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     @Override
     public void close() throws IOException {
         transactionAwareHTable.close();
+    }
+
+    @Override
+    public Put MarkPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
+        return put;
     }
 
     @Override

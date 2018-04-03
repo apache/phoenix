@@ -128,7 +128,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo) {
+    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo) throws SQLException {
         String zkQuorumServersString = props.get(TxConstants.Service.CFG_DATA_TX_ZOOKEEPER_QUORUM);
         if (zkQuorumServersString==null) {
             zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
@@ -273,6 +273,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                     .setSchemaName(dataTable.getSchemaName().getString())
                     .setTableName(dataTable.getTableName().getString()).build()
                     .buildException();
+        } finally {
+            // The client expects a transaction to be in progress on the txContext while the
+            // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
+            // finished, we start a new one here.
+            // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+            this.begin();
         }
     }
 
@@ -428,6 +434,9 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
+    public BaseRegionObserver getGarbageCollector() { return null; }
+
+    @Override
     public byte[] getFamilyDeleteMarker() {
         return TxConstants.FAMILY_DELETE_QUALIFIER;
     }
@@ -444,6 +453,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         config.setLong(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L);
     }
 
+    // For testing
     @Override
     public void setupTxManager(Configuration config, String url) throws SQLException {
 
@@ -471,8 +481,9 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         txService.startAndWait();
     }
 
+    // For testing
     @Override
-    public void tearDownTxManager() {
+    public void tearDownTxManager() throws SQLException {
         try {
             if (txService != null) txService.stopAndWait();
         } finally {

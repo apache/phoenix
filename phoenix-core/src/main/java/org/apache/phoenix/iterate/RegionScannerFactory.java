@@ -44,7 +44,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.tephra.Transaction;
 
 import java.io.IOException;
 import java.util.List;

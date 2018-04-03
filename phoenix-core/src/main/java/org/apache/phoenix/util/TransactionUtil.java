@@ -59,10 +59,6 @@ public class TransactionUtil {
         return serverTimeStamp / TransactionFactory.getTransactionProvider().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
-    public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, HTableInterface htable, PTable pTable) {
-        return new TephraTransactionTable(phoenixTransactionContext, htable, pTable);
-    }
-    
     // we resolve transactional tables at the txn read pointer
 	public static long getResolvedTimestamp(PhoenixConnection connection, boolean isTransactional, long defaultResolvedTimestamp) {
 		MutationState mutationState = connection.getMutationState();

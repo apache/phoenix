@@ -142,6 +142,16 @@ public interface PhoenixTransactionalTable extends HTableInterface {
     public void flushCommits() throws IOException;
 
     /**
+     * Converts put operation to autocommit operation
+     *  @param  put put operation
+     *  @param  timestamp - start timestamp
+     *  @param  commitTimestamp - commit timestamp
+     * @return put operation with metadata
+     * @throws IOException
+     */
+    public Put MarkPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException;
+
+    /**
      * Releases resources
      * @throws IOException
      */
