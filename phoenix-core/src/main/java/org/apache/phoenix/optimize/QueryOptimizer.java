@@ -21,33 +21,45 @@ package org.apache.phoenix.optimize;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
+import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
+import org.apache.phoenix.parse.JoinTableNode;
+import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -57,6 +69,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
 
@@ -106,18 +119,81 @@ public class QueryOptimizer {
     }
     
     private List<QueryPlan> getApplicablePlans(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
-        SelectStatement select = (SelectStatement)dataPlan.getStatement();
-        // Exit early if we have a point lookup as we can't get better than that
-        if (!useIndexes 
-                || (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan)) {
+        if (!useIndexes) {
             return Collections.singletonList(dataPlan);
         }
-        // For single query tuple projection, indexes are inherited from the original table to the projected
-        // table; otherwise not. So we pass projected table here, which is enough to tell if this is from a
-        // single query or a part of join query.
-        List<PTable>indexes = Lists.newArrayList(dataPlan.getContext().getResolver().getTables().get(0).getTable().getIndexes());
+
+        if (dataPlan instanceof BaseQueryPlan) {
+            return getApplicablePlans((BaseQueryPlan) dataPlan, statement, targetColumns, parallelIteratorFactory, stopAtBestPlan);
+        }
+
+        SelectStatement select = (SelectStatement) dataPlan.getStatement();
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
+        Map<TableRef, QueryPlan> dataPlans = null;
+
+        // Find the optimal index plan for each join tables in a join query or a
+        // non-correlated sub-query, then rewrite the query with found index tables.
+        if (select.isJoin()
+                || (select.getWhere() != null && select.getWhere().hasSubquery())) {
+            JoinCompiler.JoinTable join = JoinCompiler.compile(statement, select, resolver);
+            Map<TableRef, TableRef> replacement = null;
+            for (JoinCompiler.Table table : join.getTables()) {
+                if (table.isSubselect())
+                    continue;
+                TableRef tableRef = table.getTableRef();
+                SelectStatement stmt = table.getAsSubqueryForOptimization(tableRef.equals(dataPlan.getTableRef()));
+                // Replace non-correlated sub-queries in WHERE clause with dummy values
+                // so the filter conditions can be taken into account in optimization.
+                if (stmt.getWhere() != null && stmt.getWhere().hasSubquery()) {
+                    StatementContext context =
+                            new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));;
+                    ParseNode dummyWhere = GenSubqueryParamValuesRewriter.replaceWithDummyValues(stmt.getWhere(), context);
+                    stmt = FACTORY.select(stmt, dummyWhere);
+                }
+                // TODO: It seems inefficient to be recompiling the statement again inside of this optimize call
+                QueryPlan subDataPlan =
+                        new QueryCompiler(
+                                statement, stmt,
+                                FromCompiler.getResolverForQuery(stmt, statement.getConnection()),
+                                false, false, null)
+                                .compile();
+                QueryPlan subPlan = optimize(statement, subDataPlan);
+                TableRef newTableRef = subPlan.getTableRef();
+                if (!newTableRef.equals(tableRef)) {
+                    if (replacement == null) {
+                        replacement = new HashMap<TableRef, TableRef>();
+                        dataPlans = new HashMap<TableRef, QueryPlan>();
+                    }
+                    replacement.put(tableRef, newTableRef);
+                    dataPlans.put(newTableRef, subDataPlan);
+                }
+            }
+
+            if (replacement != null) {
+                select = rewriteQueryWithIndexReplacement(
+                        statement.getConnection(), resolver, select, replacement);
+                resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
+            }
+        }
+
+        // Re-compile the plan with option "optimizeSubquery" turned on, so that enclosed
+        // sub-queries can be optimized recursively.
+        QueryCompiler compiler = new QueryCompiler(statement, select, resolver,
+                targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
+                true, true, dataPlans);
+        return Collections.singletonList(compiler.compile());
+    }
+
+    private List<QueryPlan> getApplicablePlans(BaseQueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
+        SelectStatement select = (SelectStatement)dataPlan.getStatement();
+        // Exit early if we have a point lookup as we can't get better than that
+        if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan) {
+            return Collections.<QueryPlan> singletonList(dataPlan);
+        }
+
+        List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
         if (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {
-            return Collections.singletonList(dataPlan);
+            return Collections.<QueryPlan> singletonList(dataPlan);
         }
         
         // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes place.
@@ -229,13 +305,15 @@ public class QueryOptimizer {
         // We will or will not do tuple projection according to the data plan.
         boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
         // Check index state of now potentially updated index table to make sure it's active
-        PIndexState indexState = resolver.getTables().get(0).getTable().getIndexState();
+        TableRef indexTableRef = resolver.getTables().get(0);
+        PIndexState indexState = indexTableRef.getTable().getIndexState();
+        Map<TableRef, QueryPlan> dataPlans = Collections.singletonMap(indexTableRef, dataPlan);
         if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
                 indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, dataPlan);
-                
+                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
+
                 QueryPlan plan = compiler.compile();
                 // If query doesn't have where clause and some of columns to project are missing
                 // in the index then we need to get missing columns from main table for each row in
@@ -303,7 +381,7 @@ public class QueryOptimizer {
                         query = SubqueryRewriter.transform(query, queryResolver, statement.getConnection());
                         queryResolver = FromCompiler.getResolverForQuery(query, statement.getConnection());
                         query = StatementNormalizer.normalize(query, queryResolver);
-                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, dataPlan).compile();
+                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans).compile();
                         return plan;
                     }
                 }
@@ -535,5 +613,76 @@ public class QueryOptimizer {
             return node;
         }
     }
-    
+
+    private static SelectStatement rewriteQueryWithIndexReplacement(
+            final PhoenixConnection connection, final ColumnResolver resolver,
+            final SelectStatement select, final Map<TableRef, TableRef> replacement) throws SQLException {
+        TableNode from = select.getFrom();
+        TableNode newFrom = from.accept(new TableNodeVisitor<TableNode>() {
+            private TableRef resolveTable(String alias, TableName name) throws SQLException {
+                if (alias != null)
+                    return resolver.resolveTable(null, alias);
+
+                return resolver.resolveTable(name.getSchemaName(), name.getTableName());
+            }
+
+            private TableName getReplacedTableName(TableRef tableRef) {
+                String schemaName = tableRef.getTable().getSchemaName().getString();
+                return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
+            }
+
+            @Override
+            public TableNode visit(BindTableNode boundTableNode) throws SQLException {
+                TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
+                TableRef replaceRef = replacement.get(tableRef);
+                if (replaceRef == null)
+                    return boundTableNode;
+
+                String alias = boundTableNode.getAlias();
+                return FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef));
+            }
+
+            @Override
+            public TableNode visit(JoinTableNode joinNode) throws SQLException {
+                TableNode lhs = joinNode.getLHS();
+                TableNode rhs = joinNode.getRHS();
+                TableNode lhsReplace = lhs.accept(this);
+                TableNode rhsReplace = rhs.accept(this);
+                if (lhs == lhsReplace && rhs == rhsReplace)
+                    return joinNode;
+
+                return FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
+            }
+
+            @Override
+            public TableNode visit(NamedTableNode namedTableNode)
+                    throws SQLException {
+                TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
+                TableRef replaceRef = replacement.get(tableRef);
+                if (replaceRef == null)
+                    return namedTableNode;
+
+                String alias = namedTableNode.getAlias();
+                return FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef), namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate());
+            }
+
+            @Override
+            public TableNode visit(DerivedTableNode subselectNode)
+                    throws SQLException {
+                return subselectNode;
+            }
+        });
+
+        if (from == newFrom) {
+            return select;
+        }
+
+        SelectStatement indexSelect = IndexStatementRewriter.translate(FACTORY.select(select, newFrom), resolver, replacement);
+        for (TableRef indexTableRef : replacement.values()) {
+            // replace expressions with corresponding matching columns for functional indexes
+            indexSelect = ParseNodeRewriter.rewrite(indexSelect, new IndexExpressionParseNodeRewriter(indexTableRef.getTable(), indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes()));
+        }
+
+        return indexSelect;
+    }
 }

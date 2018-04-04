@@ -40,7 +40,7 @@ import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.MinAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
@@ -53,26 +53,19 @@ import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.ConcreteTableNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.EqualParseNode;
-import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
-import org.apache.phoenix.parse.UDFParseNode;
-import org.apache.phoenix.parse.WildcardParseNode;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.LocalIndexDataColumnRef;
@@ -126,9 +119,8 @@ public class JoinCompiler {
     private final ColumnResolver origResolver;
     private final boolean useStarJoin;
     private final Map<ColumnRef, ColumnRefType> columnRefs;
+    private final Map<ColumnRef, ColumnParseNode> columnNodes;
     private final boolean useSortMergeJoin;
-    private final boolean costBased;
-
 
     private JoinCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) {
         this.statement = statement;
@@ -136,9 +128,8 @@ public class JoinCompiler {
         this.origResolver = resolver;
         this.useStarJoin = !select.getHint().hasHint(Hint.NO_STAR_JOIN);
         this.columnRefs = new HashMap<ColumnRef, ColumnRefType>();
+        this.columnNodes = new HashMap<ColumnRef, ColumnParseNode>();
         this.useSortMergeJoin = select.getHint().hasHint(Hint.USE_SORT_MERGE_JOIN);
-        this.costBased = statement.getConnection().getQueryServices().getProps().getBoolean(
-                QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
     }
 
     public static JoinTable compile(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
@@ -173,6 +164,9 @@ public class JoinCompiler {
             }
         }
 
+        compiler.columnNodes.putAll(joinLocalRefVisitor.getColumnRefMap());
+        compiler.columnNodes.putAll(generalRefVisitor.getColumnRefMap());
+
         for (ColumnRef ref : generalRefVisitor.getColumnRefMap().keySet()) {
             compiler.columnRefs.put(ref, ColumnRefType.GENERAL);
         }
@@ -196,8 +190,8 @@ public class JoinCompiler {
         @Override
         public Pair<Table, List<JoinSpec>> visit(BindTableNode boundTableNode) throws SQLException {
             TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
-            List<AliasedNode> selectNodes = extractFromSelect(select.getSelect(), tableRef, origResolver);
-            Table table = new Table(boundTableNode, Collections.<ColumnDef>emptyList(), boundTableNode.getTableSamplingRate(), selectNodes, tableRef);
+            boolean isWildCard = isWildCardSelectForTable(select.getSelect(), tableRef, origResolver);
+            Table table = new Table(boundTableNode, isWildCard, Collections.<ColumnDef>emptyList(), boundTableNode.getTableSamplingRate(), tableRef);
             return new Pair<Table, List<JoinSpec>>(table, null);
         }
 
@@ -219,8 +213,8 @@ public class JoinCompiler {
         public Pair<Table, List<JoinSpec>> visit(NamedTableNode namedTableNode)
                 throws SQLException {
             TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
-            List<AliasedNode> selectNodes = extractFromSelect(select.getSelect(), tableRef, origResolver);
-            Table table = new Table(namedTableNode, namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate(), selectNodes, tableRef);
+            boolean isWildCard = isWildCardSelectForTable(select.getSelect(), tableRef, origResolver);
+            Table table = new Table(namedTableNode, isWildCard, namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate(), tableRef);
             return new Pair<Table, List<JoinSpec>>(table, null);
         }
 
@@ -228,8 +222,8 @@ public class JoinCompiler {
         public Pair<Table, List<JoinSpec>> visit(DerivedTableNode subselectNode)
                 throws SQLException {
             TableRef tableRef = resolveTable(subselectNode.getAlias(), null);
-            List<AliasedNode> selectNodes = extractFromSelect(select.getSelect(), tableRef, origResolver);
-            Table table = new Table(subselectNode, selectNodes, tableRef);
+            boolean isWildCard = isWildCardSelectForTable(select.getSelect(), tableRef, origResolver);
+            Table table = new Table(subselectNode, isWildCard, tableRef);
             return new Pair<Table, List<JoinSpec>>(table, null);
         }
     }
@@ -666,36 +660,35 @@ public class JoinCompiler {
 
     public class Table {
         private final TableNode tableNode;
+        private final boolean isWildcard;
         private final List<ColumnDef> dynamicColumns;
         private final Double tableSamplingRate;
         private final SelectStatement subselect;
         private final TableRef tableRef;
-        private final List<AliasedNode> selectNodes; // all basic nodes related to this table, no aggregation.
         private final List<ParseNode> preFilters;
         private final List<ParseNode> postFilters;
         private final boolean isPostFilterConvertible;
 
-        private Table(TableNode tableNode, List<ColumnDef> dynamicColumns, Double tableSamplingRate,
-                List<AliasedNode> selectNodes, TableRef tableRef) {
+        private Table(TableNode tableNode, boolean isWildcard, List<ColumnDef> dynamicColumns,
+                      Double tableSamplingRate, TableRef tableRef) {
             this.tableNode = tableNode;
+            this.isWildcard = isWildcard;
             this.dynamicColumns = dynamicColumns;
             this.tableSamplingRate=tableSamplingRate;
             this.subselect = null;
             this.tableRef = tableRef;
-            this.selectNodes = selectNodes;
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = Collections.<ParseNode>emptyList();
             this.isPostFilterConvertible = false;
         }
 
-        private Table(DerivedTableNode tableNode,
-                List<AliasedNode> selectNodes, TableRef tableRef) throws SQLException {
+        private Table(DerivedTableNode tableNode, boolean isWildcard, TableRef tableRef) throws SQLException {
             this.tableNode = tableNode;
+            this.isWildcard = isWildcard;
             this.dynamicColumns = Collections.<ColumnDef>emptyList();
             this.tableSamplingRate=ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
             this.subselect = SubselectRewriter.flatten(tableNode.getSelect(), statement.getConnection());
             this.tableRef = tableRef;
-            this.selectNodes = selectNodes;
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = new ArrayList<ParseNode>();
             this.isPostFilterConvertible = SubselectRewriter.isPostFilterConvertible(subselect);
@@ -717,8 +710,24 @@ public class JoinCompiler {
             return subselect != null;
         }
 
+        /**
+         * Returns all the basic select nodes, no aggregation.
+         */
         public List<AliasedNode> getSelectNodes() {
-            return selectNodes;
+            if (isWildCardSelect()) {
+                return Collections.singletonList(NODE_FACTORY.aliasedNode(null, NODE_FACTORY.wildcard()));
+            }
+
+            List<AliasedNode> ret = new ArrayList<AliasedNode>();
+            for (Map.Entry<ColumnRef, ColumnParseNode> entry : columnNodes.entrySet()) {
+                if (tableRef.equals(entry.getKey().getTableRef())) {
+                    ret.add(NODE_FACTORY.aliasedNode(null, entry.getValue()));
+                }
+            }
+            if (ret.isEmpty()) {
+                ret.add(NODE_FACTORY.aliasedNode(null, NODE_FACTORY.literal(1)));
+            }
+            return ret;
         }
 
         public List<ParseNode> getPreFilters() {
@@ -757,9 +766,59 @@ public class JoinCompiler {
                         tableNode.getAlias(),
                         tableNode);
 
-            return NODE_FACTORY.select(tableNode, select.getHint(), false, selectNodes, getPreFiltersCombined(), null,
+            return NODE_FACTORY.select(tableNode, select.getHint(), false, getSelectNodes(), getPreFiltersCombined(), null,
                     null, orderBy, null, null, 0, false, select.hasSequence(),
                     Collections.<SelectStatement> emptyList(), select.getUdfParseNodes());
+        }
+
+        public SelectStatement getAsSubqueryForOptimization(boolean applyGroupByOrOrderBy) throws SQLException {
+            assert (!isSubselect());
+
+            SelectStatement query = getAsSubquery(null);
+            if (!applyGroupByOrOrderBy)
+                return query;
+
+            boolean addGroupBy = false;
+            boolean addOrderBy = false;
+            if (select.getGroupBy() != null && !select.getGroupBy().isEmpty()) {
+                ColumnRefParseNodeVisitor groupByVisitor = new ColumnRefParseNodeVisitor(origResolver, statement.getConnection());
+                for (ParseNode node : select.getGroupBy()) {
+                    node.accept(groupByVisitor);
+                }
+                Set<TableRef> set = groupByVisitor.getTableRefSet();
+                if (set.size() == 1 && tableRef.equals(set.iterator().next())) {
+                    addGroupBy = true;
+                }
+            } else if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) {
+                ColumnRefParseNodeVisitor orderByVisitor = new ColumnRefParseNodeVisitor(origResolver, statement.getConnection());
+                for (OrderByNode node : select.getOrderBy()) {
+                    node.getNode().accept(orderByVisitor);
+                }
+                Set<TableRef> set = orderByVisitor.getTableRefSet();
+                if (set.size() == 1 && tableRef.equals(set.iterator().next())) {
+                    addOrderBy = true;
+                }
+            }
+
+            if (!addGroupBy && !addOrderBy)
+                return query;
+
+            List<AliasedNode> selectList = query.getSelect();
+            if (addGroupBy) {
+                assert (!isWildCardSelect());
+                selectList = new ArrayList<AliasedNode>(query.getSelect().size());
+                for (AliasedNode aliasedNode : query.getSelect()) {
+                    ParseNode node = NODE_FACTORY.function(
+                            MinAggregateFunction.NAME, Collections.singletonList(aliasedNode.getNode()));
+                    selectList.add(NODE_FACTORY.aliasedNode(null, node));
+                }
+            }
+
+            return NODE_FACTORY.select(query.getFrom(), query.getHint(), query.isDistinct(), selectList,
+                    query.getWhere(), addGroupBy ? select.getGroupBy() : query.getGroupBy(),
+                    addGroupBy ? null : query.getHaving(), addOrderBy ? select.getOrderBy() : query.getOrderBy(),
+                    query.getLimit(), query.getOffset(), query.getBindCount(), addGroupBy, query.hasSequence(),
+                    query.getSelects(), query.getUdfParseNodes());
         }
 
         public boolean hasFilters() {
@@ -771,7 +830,7 @@ public class JoinCompiler {
         }
 
         protected boolean isWildCardSelect() {
-            return (selectNodes.size() == 1 && selectNodes.get(0).getNode() instanceof TableWildcardParseNode);
+            return isWildcard;
         }
 
         public void projectColumns(Scan scan) {
@@ -1154,35 +1213,19 @@ public class JoinCompiler {
         return NODE_FACTORY.and(nodes);
     }
 
-    private List<AliasedNode> extractFromSelect(List<AliasedNode> select, TableRef tableRef, ColumnResolver resolver) throws SQLException {
-        List<AliasedNode> ret = new ArrayList<AliasedNode>();
+    private boolean isWildCardSelectForTable(List<AliasedNode> select, TableRef tableRef, ColumnResolver resolver) throws SQLException {
         ColumnRefParseNodeVisitor visitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
         for (AliasedNode aliasedNode : select) {
             ParseNode node = aliasedNode.getNode();
             if (node instanceof TableWildcardParseNode) {
                 TableName tableName = ((TableWildcardParseNode) node).getTableName();
                 if (tableRef.equals(resolver.resolveTable(tableName.getSchemaName(), tableName.getTableName()))) {
-                    ret.clear();
-                    ret.add(aliasedNode);
-                    return ret;
+                    return true;
                 }
-                continue;
-            }
 
-            node.accept(visitor);
-            ColumnRefParseNodeVisitor.ColumnRefType type = visitor.getContentType(Collections.singletonList(tableRef));
-            if (type == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                ret.add(aliasedNode);
-            } else if (type == ColumnRefParseNodeVisitor.ColumnRefType.COMPLEX) {
-                for (Map.Entry<ColumnRef, ColumnParseNode> entry : visitor.getColumnRefMap().entrySet()) {
-                    if (entry.getKey().getTableRef().equals(tableRef)) {
-                        ret.add(NODE_FACTORY.aliasedNode(null, entry.getValue()));
-                    }
-                }
             }
-            visitor.reset();
         }
-        return ret;
+        return false;
     }
 
     private static Expression compilePostFilterExpression(StatementContext context, List<ParseNode> postFilters) throws SQLException {
@@ -1201,167 +1244,6 @@ public class JoinCompiler {
             return expressions.get(0);
 
         return AndExpression.create(expressions);
-    }
-
-    public static Pair<SelectStatement, Map<TableRef, QueryPlan>> optimize(
-            PhoenixStatement statement, SelectStatement select, final ColumnResolver resolver) throws SQLException {
-        TableRef groupByTableRef = null;
-        TableRef orderByTableRef = null;
-        if (select.getGroupBy() != null && !select.getGroupBy().isEmpty()) {
-            ColumnRefParseNodeVisitor groupByVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
-            for (ParseNode node : select.getGroupBy()) {
-                node.accept(groupByVisitor);
-            }
-            Set<TableRef> set = groupByVisitor.getTableRefSet();
-            if (set.size() == 1) {
-                groupByTableRef = set.iterator().next();
-            }
-        } else if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) {
-            ColumnRefParseNodeVisitor orderByVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
-            for (OrderByNode node : select.getOrderBy()) {
-                node.getNode().accept(orderByVisitor);
-            }
-            Set<TableRef> set = orderByVisitor.getTableRefSet();
-            if (set.size() == 1) {
-                orderByTableRef = set.iterator().next();
-            }
-        }
-        JoinTable join = compile(statement, select, resolver);
-        if (groupByTableRef != null || orderByTableRef != null) {
-            QueryCompiler compiler = new QueryCompiler(statement, select, resolver, false, null);
-            List<Object> binds = statement.getParameters();
-            StatementContext ctx = new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
-            QueryPlan plan = compiler.compileJoinQuery(ctx, binds, join, false, false, null, Collections.<TableRef, QueryPlan>emptyMap());
-            TableRef table = plan.getTableRef();
-            if (groupByTableRef != null && !groupByTableRef.equals(table)) {
-                groupByTableRef = null;
-            }
-            if (orderByTableRef != null && !orderByTableRef.equals(table)) {
-                orderByTableRef = null;
-            }
-        }
-
-        Map<TableRef, TableRef> replacementMap = null;
-        Map<TableRef, QueryPlan> dataPlanMap = null;
-
-        for (Table table : join.getTables()) {
-            if (table.isSubselect())
-                continue;
-            TableRef tableRef = table.getTableRef();
-            List<ParseNode> groupBy = tableRef.equals(groupByTableRef) ? select.getGroupBy() : null;
-            List<OrderByNode> orderBy = tableRef.equals(orderByTableRef) ? select.getOrderBy() : null;
-            SelectStatement stmt = getSubqueryForOptimizedPlan(select.getHint(), table.getDynamicColumns(), table.getTableSamplingRate(), tableRef, join.getColumnRefs(), table.getPreFiltersCombined(), groupBy, orderBy, table.isWildCardSelect(), select.hasSequence(), select.getUdfParseNodes());
-            // TODO: It seems inefficient to be recompiling the statement again and again inside of this optimize call
-            QueryPlan dataPlan =
-                    new QueryCompiler(
-                            statement, stmt,
-                            FromCompiler.getResolverForQuery(stmt, statement.getConnection()),
-                            false, null)
-                    .compile();
-            QueryPlan plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, dataPlan);
-            TableRef newTableRef = plan.getTableRef();
-            if (!newTableRef.equals(tableRef)) {
-                if (replacementMap == null) {
-                    replacementMap = new HashMap<TableRef, TableRef>();
-                    dataPlanMap = new HashMap<TableRef, QueryPlan>();
-                }
-                replacementMap.put(tableRef, newTableRef);
-                dataPlanMap.put(newTableRef, dataPlan);
-            }
-        }
-
-        if (replacementMap == null)
-            return new Pair<SelectStatement, Map<TableRef, QueryPlan>>(
-                    select, Collections.<TableRef, QueryPlan> emptyMap());
-
-        final Map<TableRef, TableRef> replacement = replacementMap;
-        TableNode from = select.getFrom();
-        TableNode newFrom = from.accept(new TableNodeVisitor<TableNode>() {
-            private TableRef resolveTable(String alias, TableName name) throws SQLException {
-                if (alias != null)
-                    return resolver.resolveTable(null, alias);
-
-                return resolver.resolveTable(name.getSchemaName(), name.getTableName());
-            }
-
-            private TableName getReplacedTableName(TableRef tableRef) {
-                String schemaName = tableRef.getTable().getSchemaName().getString();
-                return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
-            }
-
-            @Override
-            public TableNode visit(BindTableNode boundTableNode) throws SQLException {
-                TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
-                TableRef replaceRef = replacement.get(tableRef);
-                if (replaceRef == null)
-                    return boundTableNode;
-
-                String alias = boundTableNode.getAlias();
-                return NODE_FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef));
-            }
-
-            @Override
-            public TableNode visit(JoinTableNode joinNode) throws SQLException {
-                TableNode lhs = joinNode.getLHS();
-                TableNode rhs = joinNode.getRHS();
-                TableNode lhsReplace = lhs.accept(this);
-                TableNode rhsReplace = rhs.accept(this);
-                if (lhs == lhsReplace && rhs == rhsReplace)
-                    return joinNode;
-
-                return NODE_FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
-            }
-
-            @Override
-            public TableNode visit(NamedTableNode namedTableNode)
-                    throws SQLException {
-                TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
-                TableRef replaceRef = replacement.get(tableRef);
-                if (replaceRef == null)
-                    return namedTableNode;
-
-                String alias = namedTableNode.getAlias();
-                return NODE_FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef), namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate());
-            }
-
-            @Override
-            public TableNode visit(DerivedTableNode subselectNode)
-                    throws SQLException {
-                return subselectNode;
-            }
-        });
-
-        SelectStatement indexSelect = IndexStatementRewriter.translate(NODE_FACTORY.select(select, newFrom), resolver, replacement);
-        for ( TableRef indexTableRef : replacement.values()) {
-            // replace expressions with corresponding matching columns for functional indexes
-            indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(indexTableRef.getTable(), indexTableRef.getTableAlias(), statement.getConnection(), indexSelect.getUdfParseNodes()));
-        } 
-        return new Pair<SelectStatement, Map<TableRef, QueryPlan>>(indexSelect, dataPlanMap);
-    }
-
-    private static SelectStatement getSubqueryForOptimizedPlan(HintNode hintNode, List<ColumnDef> dynamicCols, Double tableSamplingRate, TableRef tableRef, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where, List<ParseNode> groupBy,
-            List<OrderByNode> orderBy, boolean isWildCardSelect, boolean hasSequence, Map<String, UDFParseNode> udfParseNodes) {
-        String schemaName = tableRef.getTable().getSchemaName().getString();
-        TableName tName = TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
-        List<AliasedNode> selectList = new ArrayList<AliasedNode>();
-        if (isWildCardSelect) {
-            selectList.add(NODE_FACTORY.aliasedNode(null, WildcardParseNode.INSTANCE));
-        } else {
-            for (ColumnRef colRef : columnRefs.keySet()) {
-                if (colRef.getTableRef().equals(tableRef)) {
-                    ParseNode node = NODE_FACTORY.column(tName, '"' + colRef.getColumn().getName().getString() + '"', null);
-                    if (groupBy != null) {
-                        node = NODE_FACTORY.function(CountAggregateFunction.NAME, Collections.singletonList(node));
-                    }
-                    selectList.add(NODE_FACTORY.aliasedNode(null, node));
-                }
-            }
-        }
-        String tableAlias = tableRef.getTableAlias();
-        TableNode from = NODE_FACTORY.namedTable(tableAlias == null ? null : '"' + tableAlias + '"', tName, dynamicCols,tableSamplingRate);
-
-        return NODE_FACTORY.select(from, hintNode, false, selectList, where, groupBy, null, orderBy, null, null, 0,
-                groupBy != null, hasSequence, Collections.<SelectStatement> emptyList(), udfParseNodes);
     }
 
     public static PTable joinProjectedTables(PTable left, PTable right, JoinType type) throws SQLException {
