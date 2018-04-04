@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -83,7 +84,9 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
@@ -4309,7 +4312,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
         }
     }
-    
+
     @Test
     public void testSingleColLocalIndexPruning() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -4653,6 +4656,115 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             Scan scanR2 = innerScansR2.get(0);
             assertEquals("G", Bytes.toString(scanR2.getStartRow()).trim());
             assertEquals("I", Bytes.toString(scanR2.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInHashJoin() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT K1, V1 FROM A WHERE V1 = 'A'\n" +
+                ") T1 JOIN (\n" +
+                "    SELECT K2, V2 FROM B WHERE V2 = 'B'\n" +
+                ") T2 ON K1 = K2 ORDER BY V1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSortMergeJoin() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT max(K1) KEY1, V1 FROM A GROUP BY V1\n" +
+                ") T1 JOIN (\n" +
+                "    SELECT max(K2) KEY2, V2 FROM B GROUP BY V2\n" +
+                ") T2 ON KEY1 = KEY2 ORDER BY V1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery() throws SQLException {
+        String query = "SELECT * FROM A\n" +
+                "WHERE K1 > (\n" +
+                "    SELECT max(K2) FROM B WHERE V2 = V1\n" +
+                ") ORDER BY V1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery2() throws SQLException {
+        String query = "SELECT * FROM A\n" +
+                "WHERE V1 > ANY (\n" +
+                "    SELECT K2 FROM B WHERE V2 = 'B'\n" +
+                ")";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery3() throws SQLException {
+        String query = "SELECT * FROM A\n" +
+                "WHERE V1 > ANY (\n" +
+                "    SELECT K2 FROM B B1" +
+                "    WHERE V2 = (\n" +
+                "        SELECT max(V2) FROM B B2\n" +
+                "        WHERE B2.K2 = B1.K2 AND V2 < 'K'\n" +
+                "    )\n" +
+                ")";
+        verifyQueryPlanSourceRefs(query, 3);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery4() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT K1, K2 FROM A\n" +
+                "    JOIN B ON K1 = K2\n" +
+                "    WHERE V1 = 'A' AND V2 = 'B'\n" +
+                "    LIMIT 10\n" +
+                ") ORDER BY K1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery5() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT KEY1, KEY2 FROM (\n" +
+                "        SELECT max(K1) KEY1, V1 FROM A GROUP BY V1\n" +
+                "    ) T1 JOIN (\n" +
+                "        SELECT max(K2) KEY2, V2 FROM B GROUP BY V2\n" +
+                "    ) T2 ON KEY1 = KEY2 LIMIT 10\n" +
+                ") ORDER BY KEY1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInUnion() throws SQLException {
+        String query = "SELECT K1, V1 FROM A WHERE V1 = 'A'\n" +
+                "UNION ALL\n" +
+                "SELECT K2, V2 FROM B WHERE V2 = 'B'";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    private void verifyQueryPlanSourceRefs(String query, int refCount) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE A (\n" +
+                    "    K1 VARCHAR(10) NOT NULL PRIMARY KEY,\n" +
+                    "    V1 VARCHAR(10))");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX1 ON A(V1)");
+            conn.createStatement().execute("CREATE TABLE B (\n" +
+                    "    K2 VARCHAR(10) NOT NULL PRIMARY KEY,\n" +
+                    "    V2 VARCHAR(10))");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX2 ON B(V2)");
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = stmt.compileQuery(query);
+            Set<TableRef> sourceRefs = plan.getSourceRefs();
+            assertEquals(refCount, sourceRefs.size());
+            for (TableRef table : sourceRefs) {
+                assertTrue(table.getTable().getType() == PTableType.TABLE);
+            }
+            plan = stmt.optimizeQuery(query);
+            sourceRefs = plan.getSourceRefs();
+            assertEquals(refCount, sourceRefs.size());
+            for (TableRef table : sourceRefs) {
+                assertTrue(table.getTable().getType() == PTableType.INDEX);
+            }
         }
     }
 
