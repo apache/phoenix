@@ -854,6 +854,25 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
+    public static int getRawRowCount(Table table) throws IOException {
+        Scan s = new Scan();
+        s.setRaw(true);;
+        s.setMaxVersions();
+        int rows = 0;
+        try (ResultScanner scanner = table.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                rows++;
+                CellScanner cellScanner = result.cellScanner();
+                Cell current = null;
+                while (cellScanner.advance()) {
+                    current = cellScanner.current();
+                }
+            }
+        }
+        return rows;
+    }
+
     public static void dumpIndexStatus(Connection conn, String indexName) throws IOException, SQLException {
         try (Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) { 
             System.out.println("************ dumping index status for " + indexName + " **************");

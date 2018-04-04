@@ -317,7 +317,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         return hasInactiveIndex;
     }
-    
+
     @Test
     public void testCompactionDuringRebuild() throws Throwable {
         String schemaName = generateUniqueName();

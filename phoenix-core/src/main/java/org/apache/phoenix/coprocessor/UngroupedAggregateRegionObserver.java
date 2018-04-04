@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -70,11 +71,14 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScanOptions;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.StoreScanner;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -106,14 +110,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
@@ -147,7 +149,6 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -955,85 +956,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         });
     }
 
-    @Override
-    public void postCompact(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
-            Store store, StoreFile resultFile,
-            org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker tracker,
-            CompactionRequest request) throws IOException {
-    
-        // If we're compacting all files, then delete markers are removed
-        // and we must permanently disable an index that needs to be
-        // partially rebuild because we're potentially losing the information
-        // we need to successfully rebuilt it.
-        if (request.isAllFiles() || request.isMajor()) {
-            // Compaction and split upcalls run with the effective user context of the requesting user.
-            // This will lead to failure of cross cluster RPC if the effective user is not
-            // the login user. Switch to the login user context to ensure we have the expected
-            // security context.
-            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-                @Override
-                public Void run() throws Exception {
-                    String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                    clearTsOnDisabledIndexes(fullTableName);
-                    return null;
-                }
-            });
-        }
-    }
-
-    @VisibleForTesting
-    public void clearTsOnDisabledIndexes(final String fullTableName) {
-        try (PhoenixConnection conn =
-                QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class)) {
-            String baseTable = fullTableName;
-            PTable table = PhoenixRuntime.getTableNoCache(conn, baseTable);
-            List<PTable> indexes;
-            // if it's an index table, we just need to check if it's disabled
-            if (PTableType.INDEX.equals(table.getType())) {
-                indexes = Lists.newArrayList(table.getIndexes());
-                indexes.add(table);
-            } else {
-                // for a data table, check all its indexes
-                indexes = table.getIndexes();
-            }
-            // FIXME need handle views and indexes on views as well
-            // if any index is disabled, we won't have all the data for a rebuild after compaction
-            for (PTable index : indexes) {
-                if (index.getIndexDisableTimestamp() != 0) {
-                    try {
-                        logger.info(
-                            "Major compaction running while index on table is disabled.  Clearing index disable timestamp: "
-                                    + index);
-                        IndexUtil.updateIndexState(conn, index.getName().getString(),
-                            PIndexState.DISABLE, Long.valueOf(0L));
-                    } catch (SQLException e) {
-                        logger.warn(
-                            "Unable to permanently disable index " + index.getName().getString(),
-                            e);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            if (e instanceof TableNotFoundException) {
-                logger.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
-                // non-Phoenix HBase tables won't be found, do nothing
-                return;
-            }
-            // If we can't reach the stats table, don't interrupt the normal
-            // compaction operation, just log a warning.
-            if (logger.isWarnEnabled()) {
-                logger.warn("Unable to permanently disable indexes being partially rebuild for "
-                        + fullTableName,
-                    e);
-            }
-        }
-    }
-
-    @VisibleForTesting
-    public void setCompactionConfig(Configuration compactionConfig) {
-        this.compactionConfig = compactionConfig;
-    }
-
     private static PTable deserializeTable(byte[] b) {
         try {
             PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);
@@ -1377,5 +1299,42 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
+    }
+
+    @Override
+    public void preCompactScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+            ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
+            final CompactionRequest request) throws IOException {
+        // Compaction and split upcalls run with the effective user context of the requesting user.
+        // This will lead to failure of cross cluster RPC if the effective user is not
+        // the login user. Switch to the login user context to ensure we have the expected
+        // security context.
+        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+            @Override
+            public Void run() throws Exception {
+                // If the index is disabled, keep the deleted cells so the rebuild doesn't corrupt the index
+                if (request.isMajor()) {
+                    String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+                        try (PhoenixConnection conn =
+                                QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class)) {
+                        String baseTable = fullTableName;
+                        PTable table = PhoenixRuntime.getTableNoCache(conn, baseTable);
+                        List<PTable> indexes = PTableType.INDEX.equals(table.getType()) ? Lists.newArrayList(table) : table.getIndexes();
+                        // FIXME need to handle views and indexes on views as well
+                        for (PTable index : indexes) {
+                            if (index.getIndexDisableTimestamp() != 0) {
+                                logger.info(
+                                    "Modifying major compaction scanner to retain deleted cells for a table with disabled index: "
+                                            + baseTable);
+                                options.setKeepDeletedCells(KeepDeletedCells.TRUE);
+                                options.readAllVersions();
+                                options.setTTL(Long.MAX_VALUE);
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+        });
     }
 }

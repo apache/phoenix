@@ -39,14 +39,25 @@ import jline.internal.Log;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.PartialScannerResultsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -731,7 +742,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       }
   }
 
-
   @Test
   public void testUpsertingDeletedRowShouldGiveProperDataWithIndexes() throws Exception {
       testUpsertingDeletedRowShouldGiveProperDataWithIndexes(false);
@@ -770,6 +780,52 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           assertEquals(0.5F, rs.getFloat(1), 0.0);
           assertEquals("foo", rs.getString(3));
       } 
+  }
+
+  // Tests that if major compaction is run on a table with a disabled index,
+  // deleted cells are kept
+  @Test
+  public void testCompactDisabledIndex() throws Exception {
+      try (Connection conn = getConnection()) {
+          String schemaName = generateUniqueName();
+          String dataTableName = generateUniqueName() + "_DATA";
+          String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+          String indexTableName = generateUniqueName() + "_IDX";
+          String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+          conn.createStatement().execute(
+              String.format(PartialScannerResultsDisabledIT.TEST_TABLE_DDL, dataTableFullName));
+          conn.createStatement().execute(String.format(PartialScannerResultsDisabledIT.INDEX_1_DDL,
+              indexTableName, dataTableFullName));
+
+          //insert a row, and delete it
+          PartialScannerResultsDisabledIT.writeSingleBatch(conn, 1, 1, dataTableFullName);
+          List<HRegion> regions = getUtility().getHBaseCluster().getRegions(TableName.valueOf(dataTableFullName));
+          HRegion hRegion = regions.get(0);
+          hRegion.flush(true); // need to flush here, or else nothing will get written to disk due to the delete
+          conn.createStatement().execute("DELETE FROM " + dataTableFullName);
+          conn.commit();
+
+          // disable the index, simulating an index write failure
+          PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+          IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.DISABLE,
+              EnvironmentEdgeManager.currentTimeMillis());
+
+          // major compaction should not remove the deleted row
+          hRegion.flush(true);
+          hRegion.compact(true);
+          Table dataTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(dataTableFullName));
+          assertEquals(1, TestUtil.getRawRowCount(dataTable));
+
+          // reenable the index
+          IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.INACTIVE,
+              EnvironmentEdgeManager.currentTimeMillis());
+          IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.ACTIVE, 0L);
+
+          // now major compaction should remove the deleted row
+          hRegion.compact(true);
+          dataTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(dataTableFullName));
+          assertEquals(0, TestUtil.getRawRowCount(dataTable));
+      }
   }
 
 private void upsertRow(String dml, Connection tenantConn, int i) throws SQLException {
