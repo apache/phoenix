@@ -38,7 +38,6 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
-import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -123,11 +122,14 @@ public class QueryOptimizer {
             return Collections.singletonList(dataPlan);
         }
 
-        if (dataPlan instanceof BaseQueryPlan) {
-            return getApplicablePlans((BaseQueryPlan) dataPlan, statement, targetColumns, parallelIteratorFactory, stopAtBestPlan);
+        SelectStatement select = (SelectStatement) dataPlan.getStatement();
+        if (!select.isUnion()
+                && !select.isJoin()
+                && select.getInnerSelectStatement() == null
+                && (select.getWhere() == null || !select.getWhere().hasSubquery())) {
+            return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns, parallelIteratorFactory, stopAtBestPlan);
         }
 
-        SelectStatement select = (SelectStatement) dataPlan.getStatement();
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
         Map<TableRef, QueryPlan> dataPlans = null;
 
@@ -184,7 +186,7 @@ public class QueryOptimizer {
         return Collections.singletonList(compiler.compile());
     }
 
-    private List<QueryPlan> getApplicablePlans(BaseQueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
+    private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
         if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan) {
