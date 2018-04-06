@@ -228,6 +228,7 @@ public enum SQLExceptionCode {
             return new TableAlreadyExistsException(info.getSchemaName(), info.getTableName());
         }
     }),
+    TABLES_NOT_IN_SYNC(1140, "42M05", "Tables not in sync for some properties."),
 
     // Syntax error
     TYPE_NOT_SUPPORTED_FOR_OPERATOR(1014, "42Y01", "The operator does not support the operand type."),

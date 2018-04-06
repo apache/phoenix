@@ -104,6 +104,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -197,6 +198,7 @@ import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
+import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -1235,7 +1237,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES)
                     .setMessage(
                             "Ensure that config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
-                            + " is consitent on client and server.")
+                            + " is consistent on client and server.")
                             .build().buildException(); }
             lowestClusterHBaseVersion = minHBaseVersion;
         } catch (SQLException e) {
@@ -2509,6 +2511,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
                                         success = true;
+                                    } else if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), NamespaceNotFoundException.class))) {
+                                        // This exception is only possible if SYSTEM namespace mapping is enabled and SYSTEM namespace is missing
+                                        // It implies that SYSTEM tables are not created and hence we shouldn't provide a connection
+                                        AccessDeniedException ade = new AccessDeniedException("Insufficient permissions to create SYSTEM namespace and SYSTEM Tables");
+                                        initializationException = ServerUtil.parseServerException(ade);
                                     } else {
                                         initializationException = e;
                                     }
@@ -2520,8 +2527,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // with SYSTEM Namespace. (See PHOENIX-4227 https://issues.apache.org/jira/browse/PHOENIX-4227)
                                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
                                         ConnectionQueryServicesImpl.this.getProps())) {
-                                    metaConnection.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "
-                                            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+                                    try {
+                                        metaConnection.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "
+                                                + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+                                    } catch (NewerSchemaAlreadyExistsException e) {
+                                        // Older clients with appropriate perms may try getting a new connection
+                                        // This results in NewerSchemaAlreadyExistsException, so we can safely ignore it here
+                                    } catch (PhoenixIOException e) {
+                                        if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
+                                            // Ignore ADE
+                                        } else {
+                                            throw e;
+                                        }
+                                    }
                                 }
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
                                     createOtherSystemTables(metaConnection, hBaseAdmin);

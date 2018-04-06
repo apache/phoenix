@@ -400,7 +400,7 @@ public final class QueryUtil {
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws ClassNotFoundException, SQLException {
         // read the hbase properties from the configuration
-        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
+        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT, props, conf);
         // Build the ZK quorum server string with "server:clientport" list, separated by ','
         final String server = getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
         String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);

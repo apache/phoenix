@@ -149,6 +149,7 @@ public interface QueryConstants {
     public enum JoinType {INNER, LEFT_OUTER}
     public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
     public final static byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
+    public final static String HBASE_DEFAULT_SCHEMA_NAME = "default";
     public final static String PHOENIX_METADATA = "table";
     public final static String OFFSET_ROW_KEY = "_OFFSET_";
     public final static byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);

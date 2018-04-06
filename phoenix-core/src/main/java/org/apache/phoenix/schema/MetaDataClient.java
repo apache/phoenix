@@ -112,6 +112,7 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -137,7 +138,9 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
+import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -168,6 +171,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
@@ -4434,6 +4438,137 @@ public class MetaDataClient {
 
         public void setIsTransactional(Boolean isTransactional) {
             this.isTransactional = isTransactional;
+        }
+    }
+
+
+    /**
+     * GRANT/REVOKE statements use this method to update HBase acl's
+     * Perms can be changed at Schema, Table or User level
+     * @throws SQLException
+     */
+    public MutationState changePermissions(ChangePermsStatement changePermsStatement) throws SQLException {
+
+        logger.info(changePermsStatement.toString());
+
+        try(Admin admin = connection.getQueryServices().getAdmin()) {
+            ClusterConnection clusterConnection = (ClusterConnection) admin.getConnection();
+
+            if (changePermsStatement.getSchemaName() != null) {
+                // SYSTEM.CATALOG doesn't have any entry for "default" HBase namespace, hence we will bypass the check
+                if(!changePermsStatement.getSchemaName().equals(QueryConstants.HBASE_DEFAULT_SCHEMA_NAME)) {
+                    FromCompiler.getResolverForSchema(changePermsStatement.getSchemaName(), connection);
+                }
+
+                changePermsOnSchema(clusterConnection, changePermsStatement);
+            } else if (changePermsStatement.getTableName() != null) {
+                PTable inputTable = PhoenixRuntime.getTable(connection,
+                        SchemaUtil.normalizeFullTableName(changePermsStatement.getTableName().toString()));
+                if (!(PTableType.TABLE.equals(inputTable.getType()) || PTableType.SYSTEM.equals(inputTable.getType()))) {
+                    throw new AccessDeniedException("Cannot GRANT or REVOKE permissions on INDEX TABLES or VIEWS");
+                }
+
+                // Changing perms on base table and update the perms for global and view indexes
+                // Views and local indexes are not physical tables and hence update perms is not needed
+                changePermsOnTables(clusterConnection, admin, changePermsStatement, inputTable);
+            } else {
+
+                // User can be given perms at the global level
+                changePermsOnUser(clusterConnection, changePermsStatement);
+            }
+
+        } catch (SQLException e) {
+            // Bubble up the SQL Exception
+            throw e;
+        } catch (Throwable throwable) {
+            // To change perms, the user must have ADMIN perms on that scope, otherwise it throws ADE
+            // Wrap around ADE and other exceptions to PhoenixIOException
+            throw ServerUtil.parseServerException(throwable);
+        }
+
+        return new MutationState(0, 0, connection);
+    }
+
+    private void changePermsOnSchema(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement) throws Throwable {
+        if(changePermsStatement.isGrantStatement()) {
+            AccessControlClient.grant(clusterConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), changePermsStatement.getPermsList());
+        } else {
+            AccessControlClient.revoke(clusterConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), Permission.Action.values());
+        }
+    }
+
+    private void changePermsOnTables(ClusterConnection clusterConnection, Admin admin, ChangePermsStatement changePermsStatement, PTable inputTable) throws Throwable {
+
+        org.apache.hadoop.hbase.TableName tableName = SchemaUtil.getPhysicalTableName
+                (inputTable.getPhysicalName().getBytes(), inputTable.isNamespaceMapped());
+
+        changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+
+        boolean schemaInconsistency = false;
+        List<PTable> inconsistentTables = null;
+
+        for(PTable indexTable : inputTable.getIndexes()) {
+            // Local Indexes don't correspond to new physical table, they are just stored in separate CF of base table.
+            if(indexTable.getIndexType().equals(IndexType.LOCAL)) {
+                continue;
+            }
+            if (inputTable.isNamespaceMapped() != indexTable.isNamespaceMapped()) {
+                schemaInconsistency = true;
+                if(inconsistentTables == null) {
+                    inconsistentTables = new ArrayList<>();
+                }
+                inconsistentTables.add(indexTable);
+                continue;
+            }
+            logger.info("Updating permissions for Index Table: " +
+                    indexTable.getName() + " Base Table: " + inputTable.getName());
+            tableName = SchemaUtil.getPhysicalTableName(indexTable.getPhysicalName().getBytes(), indexTable.isNamespaceMapped());
+            changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+        }
+
+        if(schemaInconsistency) {
+            for(PTable table : inconsistentTables) {
+                logger.error("Fail to propagate permissions to Index Table: " + table.getName());
+            }
+            throw new TablesNotInSyncException(inputTable.getTableName().getString(),
+                    inconsistentTables.get(0).getTableName().getString(), "Namespace properties");
+        }
+
+        // There will be only a single View Index Table for all the indexes created on views
+        byte[] viewIndexTableBytes = MetaDataUtil.getViewIndexPhysicalName(inputTable.getPhysicalName().getBytes());
+        tableName = org.apache.hadoop.hbase.TableName.valueOf(viewIndexTableBytes);
+        boolean viewIndexTableExists = admin.tableExists(tableName);
+        if(viewIndexTableExists) {
+            logger.info("Updating permissions for View Index Table: " +
+                    Bytes.toString(viewIndexTableBytes) + " Base Table: " + inputTable.getName());
+            changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+        } else {
+            if(inputTable.isMultiTenant()) {
+                logger.error("View Index Table not found for MultiTenant Table: " + inputTable.getName());
+                logger.error("Fail to propagate permissions to view Index Table: " + tableName.getNameAsString());
+                throw new TablesNotInSyncException(inputTable.getTableName().getString(),
+                        Bytes.toString(viewIndexTableBytes), " View Index table should exist for MultiTenant tables");
+            }
+        }
+    }
+
+    private void changePermsOnTable(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement, org.apache.hadoop.hbase.TableName tableName)
+            throws Throwable {
+        if(changePermsStatement.isGrantStatement()) {
+            AccessControlClient.grant(clusterConnection, tableName, changePermsStatement.getName(),
+                    null, null, changePermsStatement.getPermsList());
+        } else {
+            AccessControlClient.revoke(clusterConnection, tableName, changePermsStatement.getName(),
+                    null, null, Permission.Action.values());
+        }
+    }
+
+    private void changePermsOnUser(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement)
+            throws Throwable {
+        if(changePermsStatement.isGrantStatement()) {
+            AccessControlClient.grant(clusterConnection, changePermsStatement.getName(), changePermsStatement.getPermsList());
+        } else {
+            AccessControlClient.revoke(clusterConnection, changePermsStatement.getName(), Permission.Action.values());
         }
     }
 }

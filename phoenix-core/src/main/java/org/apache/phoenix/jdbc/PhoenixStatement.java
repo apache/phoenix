@@ -99,6 +99,7 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
+import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
@@ -214,8 +215,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         QUERY("queried", false),
         DELETE("deleted", true),
         UPSERT("upserted", true),
-        UPGRADE("upgrade", true);
-        
+        UPGRADE("upgrade", true),
+        ADMIN("admin", true);
+
         private final String toString;
         private final boolean isMutation;
         Operation(String toString, boolean isMutation) {
@@ -1172,6 +1174,33 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableChangePermsStatement extends ChangePermsStatement implements CompilableStatement {
+
+        public ExecutableChangePermsStatement (String permsString, boolean isSchemaName, TableName tableName,
+                                               String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
+            super(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("GRANT PERMISSION"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.changePermissions(ExecutableChangePermsStatement.this);
+                }
+            };
+        }
+    }
+
     private static class ExecutableDropIndexStatement extends DropIndexStatement implements CompilableStatement {
 
         public ExecutableDropIndexStatement(NamedNode indexName, TableName tableName, boolean ifExists) {
@@ -1577,6 +1606,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public ExecuteUpgradeStatement executeUpgrade() {
             return new ExecutableExecuteUpgradeStatement();
         }
+
+        @Override
+        public ExecutableChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName,
+                                                         String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
+            return new ExecutableChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup,isGrantStatement);
+        }
+
     }
     
     static class PhoenixStatementParser extends SQLParser {

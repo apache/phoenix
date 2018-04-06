@@ -103,7 +103,7 @@ import com.google.common.collect.Maps;
  * @since 0.1
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
-    private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+    private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT);
     
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
