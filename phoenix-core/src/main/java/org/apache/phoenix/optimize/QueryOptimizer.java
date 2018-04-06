@@ -126,7 +126,10 @@ public class QueryOptimizer {
         }
 
         SelectStatement select = (SelectStatement) dataPlan.getStatement();
-        if (!select.isUnion() && !select.isJoin() && select.getInnerSelectStatement() == null) {
+        if (!select.isUnion()
+                && !select.isJoin()
+                && select.getInnerSelectStatement() == null
+                && (select.getWhere() == null || !select.getWhere().hasSubquery())) {
             return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns, parallelIteratorFactory, stopAtBestPlan);
         }
 
