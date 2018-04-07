@@ -643,7 +643,7 @@ public class MetaDataUtil {
     public static String getJdbcUrl(RegionCoprocessorEnvironment env) {
         String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
         String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-            Integer.toString(HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT));
+            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
         String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
             HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
