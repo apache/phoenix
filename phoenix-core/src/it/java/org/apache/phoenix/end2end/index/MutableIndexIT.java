@@ -41,14 +41,18 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
+import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.PartialScannerResultsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
@@ -825,6 +829,41 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           hRegion.compact(true);
           dataTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(dataTableFullName));
           assertEquals(0, TestUtil.getRawRowCount(dataTable));
+      }
+  }
+
+  // some tables (e.g. indexes on views) have UngroupedAgg coproc loaded, but don't have a
+  // corresponding row in syscat.  This tests that compaction isn't blocked
+  @Test(timeout=120000)
+  public void testCompactNonPhoenixTable() throws Exception {
+      try (Connection conn = getConnection()) {
+          // create a vanilla HBase table (non-Phoenix)
+          String randomTable = generateUniqueName();
+          TableName hbaseTN = TableName.valueOf(randomTable);
+          byte[] famBytes = Bytes.toBytes("fam");
+          Table hTable = getUtility().createTable(hbaseTN, famBytes);
+          TestUtil.addCoprocessor(conn, randomTable, UngroupedAggregateRegionObserver.class);
+          Put put = new Put(Bytes.toBytes("row"));
+          byte[] value = new byte[1];
+          Bytes.random(value);
+          put.addColumn(famBytes, Bytes.toBytes("colQ"), value);
+          hTable.put(put);
+
+          // major compaction shouldn't cause a timeout or RS abort
+          List<HRegion> regions = getUtility().getHBaseCluster().getRegions(hbaseTN);
+          HRegion hRegion = regions.get(0);
+          hRegion.flush(true);
+          HStore store = (HStore) hRegion.getStore(famBytes);
+          store.triggerMajorCompaction();
+          store.compactRecentForTestingAssumingDefaultPolicy(1);
+
+          // we should be able to compact syscat itself as well
+          regions = getUtility().getHBaseCluster().getRegions(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+          hRegion = regions.get(0);
+          hRegion.flush(true);
+          store = (HStore) hRegion.getStore(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+          store.triggerMajorCompaction();
+          store.compactRecentForTestingAssumingDefaultPolicy(1);
       }
   }
 
