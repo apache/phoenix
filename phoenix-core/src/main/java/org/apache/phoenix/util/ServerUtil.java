@@ -21,29 +21,44 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.annotation.concurrent.GuardedBy;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.CoprocessorHConnection;
+import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.table.CoprocessorHTableFactory;
+import org.apache.phoenix.hbase.index.table.HTableFactory;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 
 
 @SuppressWarnings("deprecation")
 public class ServerUtil {
+    private static final Log LOG = LogFactory.getLog(ServerUtil.class);
     private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
     
     private static final String FORMAT = "ERROR %d (%s): %s";
@@ -257,6 +272,63 @@ public class ServerUtil {
         return (Bytes.compareTo(startKey, key) <= 0
                 && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
                     endKey) < 0));
+    }
+
+    public static HTableFactory getDelegateHTableFactory(CoprocessorEnvironment env, Configuration conf) {
+        if (env instanceof RegionCoprocessorEnvironment) {
+            RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) env;
+            RegionServerServices services = e.getRegionServerServices();
+            if (services instanceof HRegionServer) {
+                return new CoprocessorHConnectionTableFactory(conf, (HRegionServer) services);
+            }
+        }
+        return new CoprocessorHTableFactory(env);
+    }
+
+    /**
+     * {@code HTableFactory} that creates HTables by using a {@link CoprocessorHConnection} This
+     * factory was added as a workaround to the bug reported in
+     * https://issues.apache.org/jira/browse/HBASE-18359
+     */
+    public static class CoprocessorHConnectionTableFactory implements HTableFactory {
+        @GuardedBy("CoprocessorHConnectionTableFactory.this")
+        private HConnection connection;
+        private final Configuration conf;
+        private final HRegionServer server;
+
+        CoprocessorHConnectionTableFactory(Configuration conf, HRegionServer server) {
+            this.conf = conf;
+            this.server = server;
+        }
+
+        private synchronized HConnection getConnection(Configuration conf) throws IOException {
+            if (connection == null || connection.isClosed()) {
+                connection = new CoprocessorHConnection(conf, server);
+            }
+            return connection;
+        }
+
+        @Override
+        public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
+            return getConnection(conf).getTable(tablename.copyBytesIfNecessary());
+        }
+
+        @Override
+        public synchronized void shutdown() {
+            try {
+                if (connection != null && !connection.isClosed()) {
+                    connection.close();
+                }
+            } catch (Throwable e) {
+                LOG.warn("Error while trying to close the HConnection used by CoprocessorHConnectionTableFactory", e);
+            }
+        }
+
+        @Override
+        public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool)
+                throws IOException {
+            return getConnection(conf).getTable(tablename.copyBytesIfNecessary(), pool);
+        }
     }
 
 }

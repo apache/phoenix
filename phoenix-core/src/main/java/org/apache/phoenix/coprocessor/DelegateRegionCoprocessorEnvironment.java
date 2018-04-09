@@ -29,6 +29,9 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.phoenix.hbase.index.table.HTableFactory;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ServerUtil;
 
 /**
  * Class to encapsulate {@link RegionCoprocessorEnvironment} for phoenix coprocessors. Often we
@@ -39,10 +42,12 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
 
     private final Configuration config;
     private RegionCoprocessorEnvironment delegate;
+    private HTableFactory tableFactory;
 
     public DelegateRegionCoprocessorEnvironment(Configuration config, RegionCoprocessorEnvironment delegate) {
         this.config = config;
         this.delegate = delegate;
+        this.tableFactory = ServerUtil.getDelegateHTableFactory(this, config);
     }
 
     @Override
@@ -77,13 +82,13 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
 
     @Override
     public HTableInterface getTable(TableName tableName) throws IOException {
-        return delegate.getTable(tableName);
+        return tableFactory.getTable(new ImmutableBytesPtr(tableName.getName()));
     }
 
     @Override
     public HTableInterface getTable(TableName tableName, ExecutorService service)
             throws IOException {
-        return delegate.getTable(tableName, service);
+        return tableFactory.getTable(new ImmutableBytesPtr(tableName.getName()));
     }
 
     @Override
