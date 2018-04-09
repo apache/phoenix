@@ -100,6 +100,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -940,10 +941,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     InternalScanner internalScanner = scanner;
                     try {
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
+                        DelegateRegionCoprocessorEnvironment compactionConfEnv = new DelegateRegionCoprocessorEnvironment(compactionConfig, c.getEnvironment());
                         StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
-                            c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
+                            compactionConfEnv, table.getNameAsString(), clientTimeStamp,
                             store.getColumnFamilyDescriptor().getName());
-                        internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
+                        internalScanner =
+                                stats.createCompactionScanner(compactionConfEnv,
+                                    store, scanner);
                     } catch (Exception e) {
                         // If we can't reach the stats table, don't interrupt the normal
                         // compaction operation, just log a warning.

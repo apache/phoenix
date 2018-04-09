@@ -82,7 +82,7 @@ public class StatisticsWriter implements Closeable {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
         }
-        Table statsWriterTable = env.getConnection().getTable(
+        Table statsWriterTable = env.createConnection(env.getConfiguration()).getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
         Table statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
