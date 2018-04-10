@@ -75,11 +75,11 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.PropertyPolicyProvider;
@@ -168,6 +168,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue;
     private TableResultIteratorFactory tableResultIteratorFactory;
     private boolean isRunningUpgrade;
+    private LogLevel logLevel;
+    private Double logSamplingRate;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -378,6 +380,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.scannerQueue = new LinkedBlockingQueue<>();
         this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
         this.isRunningUpgrade = isRunningUpgrade;
+        this.logLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
+                QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
+        this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
+                QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
         GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
 
@@ -648,6 +654,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             } finally {
                 services.removeConnection(this);
             }
+            
         } finally {
             isClosed = true;
             GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
@@ -1272,6 +1279,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public void setRunningUpgrade(boolean isRunningUpgrade) {
         this.isRunningUpgrade = isRunningUpgrade;
+    }
+
+    public LogLevel getLogLevel(){
+        return this.logLevel;
+    }
+    
+    public Double getLogSamplingRate(){
+        return this.logSamplingRate;
     }
 
 }
