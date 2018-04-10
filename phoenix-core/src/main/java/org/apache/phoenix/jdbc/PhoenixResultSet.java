@@ -50,6 +50,9 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.log.QueryLogInfo;
+import org.apache.phoenix.log.QueryLogState;
+import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
@@ -72,6 +75,9 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SQLCloseable;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap.Builder;
 
 
 
@@ -122,6 +128,14 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     private boolean isClosed = false;
     private boolean wasNull = false;
     private boolean firstRecordRead = false;
+
+    private QueryLogger queryLogger;
+
+    private Long count = 0L;
+
+    private QueryLogState logStatus = QueryLogState.COMPLETED;
+
+    private RuntimeException exception;
     
     public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector, StatementContext ctx) throws SQLException {
         this.rowProjector = rowProjector;
@@ -130,6 +144,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         this.statement = context.getStatement();
         this.readMetricsQueue = context.getReadMetricsQueue();
         this.overAllQueryMetrics = context.getOverallQueryMetrics();
+        this.queryLogger = context.getQueryLogger();
     }
     
     @Override
@@ -779,17 +794,39 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
             currentRow = scanner.next();
             if (currentRow == null) {
                 close();
+            }else{
+                count++;
             }
             rowProjector.reset();
         } catch (RuntimeException e) {
+            this.logStatus=QueryLogState.FAILED;
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.
+            this.exception = e;
             if (e.getCause() instanceof SQLException) {
                 throw (SQLException) e.getCause();
             }
             throw e;
+        }finally{
+            if (currentRow == null && queryLogger != null ) {
+                if (queryLogger.isDebugEnabled()) {
+                    Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
+                    queryLogBuilder.put(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, count);
+                    queryLogBuilder.put(QueryLogInfo.TOTAL_EXECUTION_TIME_I,
+                            System.currentTimeMillis() - queryLogger.getStartTime());
+                    queryLogBuilder.put(QueryLogInfo.SCAN_METRICS_JSON_I,
+                            readMetricsQueue.getScanMetricsHolderList().toString());
+                    if (this.exception != null) {
+                        queryLogBuilder.put(QueryLogInfo.EXCEPTION_TRACE_I,
+                                Throwables.getStackTraceAsString(this.exception));
+                    }
+                    readMetricsQueue.getScanMetricsHolderList().clear();
+                    queryLogger.log(logStatus, queryLogBuilder.build());
+                }
+            }
         }
         if (currentRow == null) {
+            
             overAllQueryMetrics.endQuery();
             overAllQueryMetrics.stopResultSetWatch();
         }
@@ -1301,6 +1338,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     
     public void resetMetrics() {
         readMetricsQueue.clearMetrics();
+        readMetricsQueue.getScanMetricsHolderList().clear();
         overAllQueryMetrics.reset();
     }
     
