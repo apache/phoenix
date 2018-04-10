@@ -89,7 +89,7 @@ public class ScanningResultIterator implements ResultIterator {
             if(scanMetricsMap == null) {
                 return;
             }
-
+            scanMetricsHolder.setScanMetricMap(scanMetricsMap);
             changeMetric(scanMetricsHolder.getCountOfRPCcalls(),
                     scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
             changeMetric(scanMetricsHolder.getCountOfRemoteRPCcalls(),

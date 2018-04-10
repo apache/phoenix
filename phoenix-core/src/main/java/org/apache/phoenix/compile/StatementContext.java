@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.parse.SelectStatement;
@@ -83,6 +84,7 @@ public class StatementContext {
     private Map<SelectStatement, Object> subqueryResults;
     private final ReadMetricQueue readMetricsQueue;
     private final OverAllQueryMetrics overAllQueryMetrics;
+    private QueryLogger queryLogger;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -305,6 +307,14 @@ public class StatementContext {
     
     public OverAllQueryMetrics getOverallQueryMetrics() {
         return overAllQueryMetrics;
+    }
+
+    public void setQueryLogger(QueryLogger queryLogger) {
+       this.queryLogger=queryLogger;
+    }
+
+    public QueryLogger getQueryLogger() {
+        return queryLogger;
     }
     
 }

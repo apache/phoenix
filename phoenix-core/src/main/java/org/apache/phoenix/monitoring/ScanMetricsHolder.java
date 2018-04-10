@@ -17,20 +17,21 @@
  */
 package org.apache.phoenix.monitoring;
 
-import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
-import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_CALLS;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_BYTES_IN_REMOTE_RESULTS;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_NOT_SERVING_REGION_EXCEPTION;
-import static org.apache.phoenix.monitoring.MetricType.COUNT_BYTES_REGION_SERVER_RESULTS;
-import static org.apache.phoenix.monitoring.MetricType.COUNT_BYTES_IN_REMOTE_RESULTS;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_CALLS;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_RETRIES;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_SCANNED_REGIONS;
 
-import org.apache.hadoop.hbase.client.Scan;
+import java.io.IOException;
+import java.util.Map;
 
-import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
-import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_RETRIES;
-import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_SCANNED;
-import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_FILTERED;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.JsonMapper;
 
 public class ScanMetricsHolder {
 
@@ -43,9 +44,11 @@ public class ScanMetricsHolder {
     private final CombinableMetric countOfRegions;
     private final CombinableMetric countOfRPCRetries;
     private final CombinableMetric countOfRemoteRPCRetries;
+    private  Map<String, Long> scanMetricMap;
+    private Object scan;
 
     private static final ScanMetricsHolder NO_OP_INSTANCE =
-            new ScanMetricsHolder(new ReadMetricQueue(false), "");
+            new ScanMetricsHolder(new ReadMetricQueue(false),"", null);
 
     public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
             Scan scan, boolean isRequestMetricsEnabled) {
@@ -53,10 +56,12 @@ public class ScanMetricsHolder {
             return NO_OP_INSTANCE;
         }
         scan.setScanMetricsEnabled(true);
-        return new ScanMetricsHolder(readMetrics, tableName);
+        return new ScanMetricsHolder(readMetrics, tableName, scan);
     }
 
-    private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
+    private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName,Scan scan) {
+        readMetrics.addScanHolder(this);
+        this.scan=scan;
         countOfRPCcalls = readMetrics.allotMetric(COUNT_RPC_CALLS, tableName);
         countOfRemoteRPCcalls = readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName);
         sumOfMillisSecBetweenNexts = readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName);
@@ -104,6 +109,23 @@ public class ScanMetricsHolder {
 
     public CombinableMetric getCountOfBytesInResults() {
         return countOfBytesInResults;
+    }
+
+    public Map<String, Long> getScanMetricMap() {
+        return scanMetricMap;
+    }
+
+    public void setScanMetricMap(Map<String, Long> scanMetricMap) {
+        this.scanMetricMap = scanMetricMap;
+    }
+    
+    @Override
+    public String toString() {
+        try {
+            return "{\"scan\":" + scan + ", \"scanMetrics\":" + JsonMapper.writeObjectAsString(scanMetricMap) + "}";
+        } catch (IOException e) {
+            return "{\"Exception while converting scan metrics to Json\":\"" + e.getMessage() + "\"}";
+        }
     }
 
 }

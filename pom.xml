@@ -77,6 +77,7 @@
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
+    <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.6.4</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <commons-io.version>2.1</commons-io.version>
@@ -948,6 +949,11 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${servlet.api.version}</version>
+      </dependency>
+       <dependency>
+        <groupId>com.lmax</groupId>
+        <artifactId>disruptor</artifactId>
+        <version>${disruptor.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
