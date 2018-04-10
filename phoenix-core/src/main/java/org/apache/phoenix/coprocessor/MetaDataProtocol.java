@@ -76,6 +76,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
     public static final int DEFAULT_MAX_STAT_DATA_VERSIONS = 1;
     public static final boolean DEFAULT_STATS_KEEP_DELETED_CELLS = false;
+    public static final int DEFAULT_LOG_VERSIONS = 10;
+    public static final int DEFAULT_LOG_TTL = 7 * 24 * 60 * 60; // 7 days 
     
     // Min system table timestamps for every release.
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0 = MIN_TABLE_TIMESTAMP + 3;
@@ -120,7 +122,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_0_0, "5.0.x");
     }
     
-    public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER; 
+    public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER;
+     
     
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.

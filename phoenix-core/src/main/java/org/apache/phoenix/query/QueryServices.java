@@ -299,6 +299,10 @@ public interface QueryServices extends SQLCloseable {
     // Whether to enable cost-based-decision in the query optimizer
     public static final String COST_BASED_OPTIMIZER_ENABLED = "phoenix.costbased.optimizer.enabled";
     public static final String SMALL_SCAN_THRESHOLD_ATTRIB = "phoenix.query.smallScanThreshold";
+    public static final String LOG_LEVEL = "phoenix.log.level";
+    public static final String LOG_BUFFER_SIZE = "phoenix.log.buffer.size";
+    public static final String LOG_BUFFER_WAIT_STRATEGY = "phoenix.log.wait.strategy";
+    public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
 
     /**
      * Get executor service used for parallel scans

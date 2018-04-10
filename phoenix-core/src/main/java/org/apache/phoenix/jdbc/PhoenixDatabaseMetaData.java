@@ -343,6 +343,24 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String USE_STATS_FOR_PARALLELIZATION = "USE_STATS_FOR_PARALLELIZATION";
     public static final byte[] USE_STATS_FOR_PARALLELIZATION_BYTES = Bytes.toBytes(USE_STATS_FOR_PARALLELIZATION);
 
+    
+    //SYSTEM:LOG
+    public static final String SYSTEM_LOG_TABLE = "LOG";
+    public static final String QUERY_ID = "QUERY_ID";
+    public static final String USER = "USER";
+    public static final String CLIENT_IP = "CLIENT_IP";
+    public static final String QUERY = "QUERY";
+    public static final String EXPLAIN_PLAN = "EXPLAIN_PLAN";
+    public static final String TOTAL_EXECUTION_TIME = "TOTAL_EXECUTION_TIME";
+    public static final String NO_OF_RESULTS_ITERATED = "NO_OF_RESULTS_ITERATED";
+    public static final String QUERY_STATUS = "QUERY_STATUS";
+    public static final String EXCEPTION_TRACE = "EXCEPTION_TRACE";
+    public static final String GLOBAL_SCAN_DETAILS = "GLOBAL_SCAN_DETAILS";
+    public static final String SCAN_METRICS_JSON = "SCAN_METRICS_JSON";
+    public static final String START_TIME = "START_TIME";
+    public static final String BIND_PARAMETERS = "BIND_PARAMETERS";
+            
+    
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
         this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
         this.connection = connection;

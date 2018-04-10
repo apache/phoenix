@@ -130,6 +130,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -189,6 +190,7 @@ import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -273,6 +275,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // don't need.
     private final ReadOnlyProps props;
     private final String userName;
+    private final User user;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
     private final GuidePostsCache tableStatsCache;
 
@@ -342,6 +345,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return hbaseVersion >= PhoenixDatabaseMetaData.MIN_RENEW_LEASE_VERSION;
                 }
             });
+    private QueryLoggerDisruptor queryDisruptor;
 
     private PMetaData newEmptyMetaData() {
         return new PSynchronizedMetaData(new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps()));
@@ -378,6 +382,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
         this.props = new ReadOnlyProps(this.config.iterator());
         this.userName = connectionInfo.getPrincipal();
+        this.user = connectionInfo.getUser();
         this.latestMetaData = newEmptyMetaData();
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
@@ -402,6 +407,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS);
         this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0);
+        try {
+            this.queryDisruptor = new QueryLoggerDisruptor(this.config);
+        } catch (SQLException e) {
+            logger.warn("Unable to initiate qeuery logging service !!");
+            e.printStackTrace();
+        }
 
     }
 
@@ -483,6 +494,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             closed = true;
             GLOBAL_QUERY_SERVICES_COUNTER.decrement();
+            try {
+                if (this.queryDisruptor != null) {
+                    this.queryDisruptor.close();
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
             SQLException sqlE = null;
             try {
                 // Attempt to return any unused sequences.
@@ -2641,7 +2659,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_FUNCTION_METADATA);
         } catch (TableAlreadyExistsException ignore) {}
-
+        try {
+            metaConnection.createStatement().execute(QueryConstants.CREATE_LOG_METADATA);
+        } catch (TableAlreadyExistsException ignore) {}
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
             createSysMutexTableIfNotExists(hbaseAdmin, ConnectionQueryServicesImpl.this.getProps());
@@ -2997,6 +3017,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             try {
                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
+            try {
+                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_LOG_METADATA);
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
             ConnectionQueryServicesImpl.this.upgradeRequired.set(false);
             success = true;
@@ -4091,6 +4114,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public String getUserName() {
         return userName;
     }
+    
+    @Override
+    public User getUser() {
+        return user;
+    }
 
     private void checkClosed() {
         if (closed) {
@@ -4515,5 +4543,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public Configuration getConfiguration() {
         return config;
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return this.queryDisruptor;
     }
 }
