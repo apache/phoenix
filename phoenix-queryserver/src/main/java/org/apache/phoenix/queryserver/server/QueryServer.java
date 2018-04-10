@@ -246,6 +246,10 @@ public final class QueryServer extends Configured implements Tool, Runnable {
         File keytab = new File(keytabPath);
         String httpKeytabPath = getConf().get(QueryServices.QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB, null);
         String httpPrincipal = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB, null);
+        // Backwards compat for a configuration key change
+        if (httpPrincipal == null) {
+          httpPrincipal = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB_LEGACY, null);
+        }
         File httpKeytab = null;
         if (null != httpKeytabPath)
           httpKeytab = new File(httpKeytabPath);
