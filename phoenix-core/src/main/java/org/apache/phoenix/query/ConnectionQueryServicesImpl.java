@@ -2709,12 +2709,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sysCatalogTableName = e.getTable().getPhysicalName().getString();
                 if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP) {
                     // Ensure that the SYSTEM.MUTEX table has been created prior
-                    // to attempting to acquire the upgrade mutex. If namespace
-                    // mapping is enabled, we've already done this earlier in the
-                    // upgrade, so no need for a bunch of wasted RPCs.
-                    if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_10_0 &&
-                            !SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
-                                    ConnectionQueryServicesImpl.this.getProps())) {
+                    // to attempting to acquire the upgrade mutex.
+                    if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_10_0) {
                         try (Admin admin = getAdmin()) {
                             createSysMutexTableIfNotExists(admin, this.getProps());
                         }
