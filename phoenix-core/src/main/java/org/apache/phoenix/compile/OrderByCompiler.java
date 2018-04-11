@@ -30,6 +30,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
@@ -154,12 +155,16 @@ public class OrderByCompiler {
         // If we're ordering by the order returned by the scan, we don't need an order by
         if (isInRowKeyOrder && tracker.isOrderPreserving()) {
             if (tracker.isReverse()) {
-                // Don't use reverse scan if we're using a skip scan, as our skip scan doesn't support this yet.
+                // Don't use reverse scan if:
+                // 1) we're using a skip scan, as our skip scan doesn't support this yet.
+                // 2) we have the FORWARD_SCAN hint set to choose to keep loading of column
+                //    families on demand versus doing a reverse scan
                 // REV_ROW_KEY_ORDER_BY scan would not take effect for a projected table, so don't return it for such table types.
                 if (context.getConnection().getQueryServices().getProps().getBoolean(QueryServices.USE_REVERSE_SCAN_ATTRIB, QueryServicesOptions.DEFAULT_USE_REVERSE_SCAN)
                         && !context.getScanRanges().useSkipScanFilter()
                         && context.getCurrentTable().getTable().getType() != PTableType.PROJECTED
-                        && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
+                        && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY
+                        && !statement.getHint().hasHint(Hint.FORWARD_SCAN)) {
                     return OrderBy.REV_ROW_KEY_ORDER_BY;
                 }
             } else {
