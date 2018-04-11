@@ -612,10 +612,12 @@ public class ScanUtil {
     
     public static void setReversed(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.TRUE_BYTES);
+        scan.setLoadColumnFamiliesOnDemand(false);
     }
 
     public static void unsetReversed(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.FALSE_BYTES);
+        scan.setLoadColumnFamiliesOnDemand(true);
     }
 
     private static byte[] getReversedRow(byte[] startRow) {
