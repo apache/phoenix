@@ -74,20 +74,13 @@ import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFrom
 
 public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
-  private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-  private KeyValueSchema kvSchema = null;
-  private ValueBitSet kvSchemaBitSet;
-
-  public NonAggregateRegionScannerFactory(RegionCoprocessorEnvironment env, boolean useNewValueColumnQualifier,
-      PTable.QualifierEncodingScheme encodingScheme) {
+  public NonAggregateRegionScannerFactory(RegionCoprocessorEnvironment env) {
     this.env = env;
-    this.useNewValueColumnQualifier = useNewValueColumnQualifier;
-    this.encodingScheme = encodingScheme;
   }
 
   @Override
   public RegionScanner getRegionScanner(final Scan scan, final RegionScanner s) throws Throwable {
-
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     int offset = 0;
     if (ScanUtil.isLocalIndex(scan)) {
             /*
@@ -106,9 +99,17 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       scanOffset = (Integer)PInteger.INSTANCE.toObject(scanOffsetBytes);
     }
     RegionScanner innerScanner = s;
+    PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+    boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
     Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
-    Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
+    Expression[] arrayFuncRefs = deserializeArrayPositionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
+    KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
+    for (Expression expression : arrayFuncRefs) {
+        builder.addField(expression);
+    }
+    KeyValueSchema kvSchema = builder.build();
+    ValueBitSet kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
     TupleProjector tupleProjector = null;
     Region dataRegion = null;
     IndexMaintainer indexMaintainer = null;
@@ -196,13 +197,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
   }
 
-  private Expression[] deserializeArrayPostionalExpressionInfoFromScan(Scan scan, RegionScanner s,
-      Set<KeyValueColumnExpression> arrayKVRefs) {
+  private Expression[] deserializeArrayPositionalExpressionInfoFromScan(Scan scan, RegionScanner s,
+                                                                        Set<KeyValueColumnExpression> arrayKVRefs) {
     byte[] specificArrayIdx = scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX);
     if (specificArrayIdx == null) {
       return null;
     }
-    KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
     ByteArrayInputStream stream = new ByteArrayInputStream(specificArrayIdx);
     try {
       DataInputStream input = new DataInputStream(stream);
@@ -220,10 +220,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         ArrayIndexFunction arrayIdxFunc = new ArrayIndexFunction();
         arrayIdxFunc.readFields(input);
         arrayFuncRefs[i] = arrayIdxFunc;
-        builder.addField(arrayIdxFunc);
       }
-      kvSchema = builder.build();
-      kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
       return arrayFuncRefs;
     } catch (IOException e) {
       throw new RuntimeException(e);
