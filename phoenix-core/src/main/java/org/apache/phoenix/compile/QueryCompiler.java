@@ -66,7 +66,6 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -91,13 +90,6 @@ import com.google.common.collect.Sets;
  */
 public class QueryCompiler {
     private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
-    /*
-     * Not using Scan.setLoadColumnFamiliesOnDemand(true) because we don't
-     * want to introduce a dependency on 0.94.5 (where this feature was
-     * introduced). This will do the same thing. Once we do have a
-     * dependency on 0.94.5 or above, switch this around.
-     */
-    private static final String LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR = "_ondemand_";
     private final PhoenixStatement statement;
     private final Scan scan;
     private final Scan originalScan;
@@ -128,9 +120,7 @@ public class QueryCompiler {
         this.noChildParentJoinOptimization = select.getHint().hasHint(Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION);
         ConnectionQueryServices services = statement.getConnection().getQueryServices();
         this.costBased = services.getProps().getBoolean(QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
-        if (services.getLowestClusterHBaseVersion() >= PhoenixDatabaseMetaData.ESSENTIAL_FAMILY_VERSION_THRESHOLD) {
-            this.scan.setAttribute(LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR, QueryConstants.TRUE);
-        }
+        scan.setLoadColumnFamiliesOnDemand(true);
         if (select.getHint().hasHint(Hint.NO_CACHE)) {
             scan.setCacheBlocks(false);
         }
