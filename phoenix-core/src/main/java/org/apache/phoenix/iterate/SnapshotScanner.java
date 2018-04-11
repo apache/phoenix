@@ -65,15 +65,11 @@ public class SnapshotScanner extends AbstractClientScanner {
     values = new ArrayList<>();
     this.region = HRegion.openHRegion(conf, fs, rootDir, hri, htd, null, null, null);
 
-    // process the region scanner for non-aggregate queries
-    PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-    boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
-
     RegionCoprocessorEnvironment snapshotEnv = getSnapshotContextEnvironment(conf);
 
     RegionScannerFactory regionScannerFactory;
     if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
-      regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv, useNewValueColumnQualifier, encodingScheme);
+      regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
     } else {
       /* future work : Snapshot M/R jobs for aggregate queries*/
       throw new UnsupportedOperationException("Snapshot M/R jobs not available for aggregate queries");

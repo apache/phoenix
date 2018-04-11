@@ -42,6 +42,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.*;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -55,8 +56,6 @@ import java.util.Set;
 public abstract class RegionScannerFactory {
 
   protected RegionCoprocessorEnvironment env;
-  protected boolean useNewValueColumnQualifier;
-  protected PTable.QualifierEncodingScheme encodingScheme;
 
   /**
    * Returns the region based on the value of the
@@ -108,6 +107,7 @@ public abstract class RegionScannerFactory {
       private boolean hasReferences = checkForReferenceFiles();
       private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
+      private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
       // If there are any reference files after local index region merge some cases we might
       // get the records less than scan start row key. This will happen when we replace the

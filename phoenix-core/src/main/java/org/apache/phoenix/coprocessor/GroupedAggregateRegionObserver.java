@@ -64,6 +64,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -118,6 +119,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             keyOrdered = true;
         }
         int offset = 0;
+        boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         if (ScanUtil.isLocalIndex(scan)) {
             /*
              * For local indexes, we need to set an offset on row key expressions to skip
@@ -403,6 +405,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
         final boolean spillableEnabled =
                 conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
+        final PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
 
         GroupByCache groupByCache =
                 GroupByCacheFactory.INSTANCE.newCache(
@@ -474,6 +477,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
         final Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
         final boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
+        final PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
         return new BaseRegionScanner(scanner) {
             private long rowCount = 0;
             private ImmutableBytesPtr currentKey = null;

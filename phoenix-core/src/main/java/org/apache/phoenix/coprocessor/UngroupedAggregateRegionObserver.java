@@ -377,7 +377,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     env, region.getRegionInfo().getTable().getNameAsString(), ts,
                     gp_width_bytes, gp_per_region_bytes);
             return collectStats(s, statsCollector, region, scan, env.getConfiguration());
-        } else if (ScanUtil.isIndexRebuild(scan)) { return rebuildIndices(s, region, scan, env.getConfiguration()); }
+        } else if (ScanUtil.isIndexRebuild(scan)) {
+            return rebuildIndices(s, region, scan, env.getConfiguration());
+        }
+
+        PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+        boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         int offsetToBe = 0;
         if (localIndexScan) {
             /*

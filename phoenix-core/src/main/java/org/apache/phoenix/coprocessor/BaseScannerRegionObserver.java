@@ -131,8 +131,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
-    protected QualifierEncodingScheme encodingScheme;
-    protected boolean useNewValueColumnQualifier;
 
     /**
      * Used by logger to identify coprocessor
@@ -198,8 +196,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
         }
-        this.encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-        this.useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
+        return s;
     }
 
     private class RegionScannerHolder extends DelegateRegionScanner {
@@ -336,8 +333,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex) {
 
-        RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment(),
-            useNewValueColumnQualifier, encodingScheme);
+        RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment());
 
         return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
