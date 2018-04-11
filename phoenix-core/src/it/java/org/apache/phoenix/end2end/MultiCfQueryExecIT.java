@@ -31,11 +31,13 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
@@ -404,6 +406,51 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
             assertEquals("H1", rs.getString(1));
             assertEquals(10, rs.getInt(2));
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testBug4658() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+          Statement stmt = conn.createStatement()) {
+            String tableName = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + tableName + " ("
+                + "COL1 VARCHAR NOT NULL,"
+                + "COL2 VARCHAR NOT NULL,"
+                + "COL3 VARCHAR,"
+                + "FAM.COL4 VARCHAR,"
+                + "CONSTRAINT TRADE_EVENT_PK PRIMARY KEY (COL1, COL2))");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) values ('111', 'AAA')");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) values ('222', 'AAA')");
+            conn.commit();
+
+            try (ResultSet rs = stmt.executeQuery(
+              "SELECT * FROM " + tableName + " WHERE COL2 = 'AAA' ORDER BY COL1 DESC")) {
+                assertTrue(rs.next());
+                assertEquals(rs.getString("COL1"), "222");
+                assertEquals(rs.getString("COL2"), "AAA");
+                assertTrue(rs.next());
+                assertEquals(rs.getString("COL1"), "111");
+                assertEquals(rs.getString("COL2"), "AAA");
+                assertFalse(rs.next());
+            }
+
+            // Tests for FORWARD_SCAN hint
+            String query = "SELECT /*+ FORWARD_SCAN */ * FROM " + tableName + " WHERE COL2 = 'AAA' ORDER BY COL1 DESC";
+            try (ResultSet rs = stmt.executeQuery("EXPLAIN " + query)) {
+                String explainPlan = QueryUtil.getExplainPlan(rs);
+                assertFalse(explainPlan.contains("REVERSE"));
+            }
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                assertTrue(rs.next());
+                assertEquals(rs.getString("COL1"), "222");
+                assertEquals(rs.getString("COL2"), "AAA");
+                assertTrue(rs.next());
+                assertEquals(rs.getString("COL1"), "111");
+                assertEquals(rs.getString("COL2"), "AAA");
+                assertFalse(rs.next());
+            }
         }
     }
 }
