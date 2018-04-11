@@ -27,8 +27,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.OrderByExpression;
-import org.apache.phoenix.iterate.*;
-
+import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 
 /**
  *
@@ -67,9 +66,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable {
-        NonAggregateRegionScannerFactory nonAggregateRegionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment(),
-            useNewValueColumnQualifier, encodingScheme);
-        return nonAggregateRegionScannerFactory.getRegionScanner(scan, s);
+        NonAggregateRegionScannerFactory nonAggregateROUtil = new NonAggregateRegionScannerFactory(c.getEnvironment());
+        return nonAggregateROUtil.getRegionScanner(scan, s);
     }
 
     @Override
