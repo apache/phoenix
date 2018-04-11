@@ -18,8 +18,15 @@
 
 package org.apache.phoenix.iterate;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -61,16 +68,8 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
-import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
@@ -103,13 +102,17 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
     Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
+    KeyValueSchema kvSchema = null;
+    ValueBitSet kvSchemaBitSet = null;
     Expression[] arrayFuncRefs = deserializeArrayPositionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
-    KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
-    for (Expression expression : arrayFuncRefs) {
-        builder.addField(expression);
+    if (arrayFuncRefs != null) {
+        KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
+        for (Expression expression : arrayFuncRefs) {
+            builder.addField(expression);
+        }
+        kvSchema = builder.build();
+        kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
     }
-    KeyValueSchema kvSchema = builder.build();
-    ValueBitSet kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
     TupleProjector tupleProjector = null;
     Region dataRegion = null;
     IndexMaintainer indexMaintainer = null;
