@@ -17,24 +17,55 @@
  */
 package org.apache.phoenix.transaction;
 
+import java.io.IOException;
+
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+
+
 public class TransactionFactory {
-    enum TransactionProcessor {
-        Tephra,
-        Omid
+    public enum Provider {
+        TEPHRA((byte)1, TephraTransactionProvider.getInstance()),
+        OMID((byte)2, OmidTransactionProvider.getInstance());
+        
+        private final byte code;
+        private final PhoenixTransactionProvider provider;
+        
+        Provider(byte code, PhoenixTransactionProvider provider) {
+            this.code = code;
+            this.provider = provider;
+        }
+        
+        public byte getCode() {
+            return this.code;
+        }
+
+        public static Provider fromCode(int code) {
+            if (code < 1 || code > Provider.values().length) {
+                throw new IllegalArgumentException("Invalid TransactionFactory.Provider " + code);
+            }
+            return Provider.values()[code-1];
+        }
+        
+        public static Provider getDefault() {
+            return TEPHRA;
+        }
+
+        public PhoenixTransactionProvider getTransactionProvider()  {
+            return provider;
+        }
     }
 
-    static public TransactionProvider getTransactionProvider() {
-        return TephraTransactionProvider.getInstance();
+    public static PhoenixTransactionProvider getTransactionProvider(Provider provider) {
+        return provider.getTransactionProvider();
     }
     
-    static public TransactionProvider getTransactionProvider(TransactionProcessor processor) {
-        switch (processor) {
-        case Tephra:
-            return TephraTransactionProvider.getInstance();
-        case Omid:
-            return OmidTransactionProvider.getInstance();
-        default:
-            throw new IllegalArgumentException("Unknown transaction processor: " + processor);
+    public static PhoenixTransactionContext getTransactionContext(byte[] txState, int clientVersion) throws IOException {
+        if (txState == null || txState.length == 0) {
+            return null;
         }
+        Provider provider = (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) 
+                ? Provider.OMID
+                : Provider.fromCode(txState[txState.length-1]);
+        return provider.getTransactionProvider().getTransactionContext(txState);
     }
 }
