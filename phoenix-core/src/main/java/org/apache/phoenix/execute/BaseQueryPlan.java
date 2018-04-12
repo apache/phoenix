@@ -47,6 +47,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -251,6 +252,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
             return newIterator(scanGrouper, scan, caches);
         }
+        
+        ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.

@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 public class DelegateTable implements PTable {
     @Override
@@ -237,7 +238,12 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public boolean isTransactional() {
+    public TransactionFactory.Provider getTransactionProvider() {
+        return delegate.getTransactionProvider();
+    }
+
+    @Override
+    public final boolean isTransactional() {
         return delegate.isTransactional();
     }
 
