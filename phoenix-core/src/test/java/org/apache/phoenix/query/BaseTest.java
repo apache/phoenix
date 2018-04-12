@@ -130,7 +130,6 @@ import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -168,7 +167,6 @@ public abstract class BaseTest {
     
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
-    protected static final int DEFAULT_TXN_TIMEOUT_SECONDS = 30;
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
@@ -414,28 +412,12 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static void tearDownTxManager() throws SQLException {
-        TransactionFactory.getTransactionProvider().getTransactionContext().tearDownTxManager();
-    }
-
-    protected static void setTxnConfigs() throws IOException {
-        TransactionFactory.getTransactionProvider().getTransactionContext().setTxnConfigs(config, tmpFolder.newFolder().getAbsolutePath(), DEFAULT_TXN_TIMEOUT_SECONDS);
-    }
-
-    protected static void setupTxManager() throws SQLException, IOException {
-        TransactionFactory.getTransactionProvider().getTransactionContext().setupTxManager(config, getUrl());
-    }
-
     private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, serverProps);
             clusterInitialized = true;
         }
         return url;
-    }
-
-    private static void checkTxManagerInitialized(ReadOnlyProps clientProps) throws SQLException, IOException {
-        setupTxManager();
     }
 
     /**
@@ -476,11 +458,6 @@ public abstract class BaseTest {
         final HBaseTestingUtility u = utility;
         try {
             destroyDriver();
-            try {
-                tearDownTxManager();
-            } catch (Throwable t) {
-                logger.error("Exception caught when shutting down tx manager", t);
-            }
             utility = null;
             clusterInitialized = false;
         } finally {
@@ -519,9 +496,7 @@ public abstract class BaseTest {
     
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
         if (driver == null) {
-            setTxnConfigs();
             String url = checkClusterInitialized(serverProps);
-            checkTxManagerInitialized(serverProps);
             driver = initAndRegisterTestDriver(url, clientProps);
         }
     }
@@ -593,6 +568,7 @@ public abstract class BaseTest {
         conf.set(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, DEFAULT_RPC_SCHEDULER_FACTORY);
         conf.setLong(HConstants.ZK_SESSION_TIMEOUT, 10 * HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
         conf.setLong(HConstants.ZOOKEEPER_TICK_TIME, 6 * 1000);
+        
         // override any defaults based on overrideProps
         for (Entry<String,String> entry : overrideProps) {
             conf.set(entry.getKey(), entry.getValue());
