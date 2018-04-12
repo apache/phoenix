@@ -19,18 +19,33 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 
-public interface TransactionProvider {
-    public PhoenixTransactionContext getTransactionContext();
+public interface PhoenixTransactionProvider {
+    public enum Feature {
+        ALTER_NONTX_TO_TX(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL);
+        
+        private final SQLExceptionCode code;
+        
+        Feature(SQLExceptionCode code) {
+            this.code = code;
+        }
+        
+        public SQLExceptionCode getCode() {
+            return code;
+        }
+    }
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException;
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection);
-    public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask);
     
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, Table htable);
+    public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo);
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo);
+    public Class<? extends RegionObserver> getCoprocessor();
     
-    public Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp);
-    public Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp);
+    public TransactionFactory.Provider getProvider();
+    public boolean isUnsupported(Feature feature);
 }

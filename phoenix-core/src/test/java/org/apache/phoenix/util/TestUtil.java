@@ -782,7 +782,7 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         MutationState mutationState = pconn.getMutationState();
         if (table.isTransactional()) {
-            mutationState.startTransaction();
+            mutationState.startTransaction(table.getTransactionProvider());
         }
         try (Table htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");

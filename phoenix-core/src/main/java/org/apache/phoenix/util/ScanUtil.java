@@ -59,6 +59,7 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -88,6 +89,8 @@ import com.google.common.collect.Lists;
  */
 public class ScanUtil {
     public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
+    public static final int UNKNOWN_CLIENT_VERSION = VersionUtil.encodeVersion(4, 4, 0);
+
     /*
      * Max length that we fill our key when we turn an inclusive key
      * into a exclusive key.
@@ -931,5 +934,17 @@ public class ScanUtil {
     public static boolean isIndexRebuild(Scan scan) {
         return scan.getAttribute((BaseScannerRegionObserver.REBUILD_INDEXES)) != null;
     }
+ 
+    public static int getClientVersion(Scan scan) {
+        int clientVersion = UNKNOWN_CLIENT_VERSION;
+        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        if (clientVersionBytes != null) {
+            clientVersion = Bytes.toInt(clientVersionBytes);
+        }
+        return clientVersion;
+    }
     
+    public static void setClientVersion(Scan scan, int version) {
+        scan.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, Bytes.toBytes(version));
+    }
 }

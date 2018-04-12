@@ -19,21 +19,21 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.transaction.TephraTransactionProvider.TephraTransactionClient;
 import org.apache.tephra.Transaction;
 import org.apache.tephra.Transaction.VisibilityLevel;
 import org.apache.tephra.TransactionAware;
@@ -41,48 +41,24 @@ import org.apache.tephra.TransactionCodec;
 import org.apache.tephra.TransactionConflictException;
 import org.apache.tephra.TransactionContext;
 import org.apache.tephra.TransactionFailureException;
-import org.apache.tephra.TransactionManager;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.TxConstants;
-import org.apache.tephra.distributed.PooledClientProvider;
-import org.apache.tephra.distributed.TransactionService;
-import org.apache.tephra.distributed.TransactionServiceClient;
-import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
-import org.apache.tephra.inmemory.InMemoryTxSystemClient;
-import org.apache.tephra.metrics.TxMetricsCollector;
-import org.apache.tephra.persist.HDFSTransactionStateStorage;
-import org.apache.tephra.snapshot.SnapshotCodecProvider;
-import org.apache.tephra.util.TxUtils;
 import org.apache.tephra.visibility.FenceWait;
 import org.apache.tephra.visibility.VisibilityFence;
-import org.apache.tephra.zookeeper.TephraZKClientService;
-import org.apache.twill.discovery.DiscoveryService;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.internal.utils.Networks;
-import org.apache.twill.zookeeper.RetryStrategies;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.apache.twill.zookeeper.ZKClientServices;
-import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
-import com.google.inject.util.Providers;
+
 
 public class TephraTransactionContext implements PhoenixTransactionContext {
-
+    private static final Logger logger = LoggerFactory.getLogger(TephraTransactionContext.class);
     private static final TransactionCodec CODEC = new TransactionCodec();
-
-    private static TransactionSystemClient txClient = null;
-    private static ZKClientService zkClient = null;
-    private static TransactionService txService = null;
-    private static TransactionManager txManager = null;
 
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
     private Transaction tx;
     private TransactionSystemClient txServiceClient;
-    private TransactionFailureException e;
 
     public TephraTransactionContext() {
         this.txServiceClient = null;
@@ -92,21 +68,21 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     public TephraTransactionContext(byte[] txnBytes) throws IOException {
         this();
-        this.tx = (txnBytes != null && txnBytes.length > 0) ? CODEC
-                .decode(txnBytes) : null;
+        this.tx = CODEC.decode(txnBytes);
     }
 
     public TephraTransactionContext(PhoenixConnection connection) {
-        this.txServiceClient = txClient;  
+        PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());  
+        assert (client instanceof TephraTransactionClient);
+        this.txServiceClient = ((TephraTransactionClient)client).getTransactionClient();
         this.txAwares = Collections.emptyList();
         this.txContext = new TransactionContext(txServiceClient);
     }
 
-    public TephraTransactionContext(PhoenixTransactionContext ctx,
-            PhoenixConnection connection, boolean subTask) {
-        this.txServiceClient = txClient;  
+    private TephraTransactionContext(PhoenixTransactionContext ctx, boolean subTask) {
         assert (ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraTransactionContext = (TephraTransactionContext) ctx;
+        this.txServiceClient = tephraTransactionContext.txServiceClient;  
 
         if (subTask) {
             this.tx = tephraTransactionContext.getTransaction();
@@ -116,42 +92,13 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             this.txAwares = Collections.emptyList();
             this.txContext = tephraTransactionContext.getContext();
         }
-
-        this.e = null;
     }
 
     @Override
-    public void setInMemoryTransactionClient(Configuration config) {
-        TransactionManager txnManager = new TransactionManager(config);
-        txClient = this.txServiceClient = new InMemoryTxSystemClient(txnManager);
+    public TransactionFactory.Provider getProvider() {
+        return TransactionFactory.Provider.TEPHRA;
     }
-
-    @Override
-    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo) {
-        String zkQuorumServersString = props.get(TxConstants.Service.CFG_DATA_TX_ZOOKEEPER_QUORUM);
-        if (zkQuorumServersString==null) {
-            zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
-        }
-
-        int timeOut = props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
-        // Create instance of the tephra zookeeper client
-        ZKClientService txZKClientService  = ZKClientServices.delegate(
-            ZKClients.reWatchOnExpire(
-                ZKClients.retryOnFailure(
-                     new TephraZKClientService(zkQuorumServersString, timeOut, null,
-                             ArrayListMultimap.<String, byte[]>create()), 
-                         RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
-                     )
-                );
-        txZKClientService.startAndWait();
-        ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(txZKClientService);
-        PooledClientProvider pooledClientProvider = new PooledClientProvider(
-                config, zkDiscoveryService);
-        txClient = this.txServiceClient = new TransactionServiceClient(config,pooledClientProvider);
-        
-        return txZKClientService;
-    }
-
+    
     @Override
     public void begin() throws SQLException {
         if (txContext == null) {
@@ -180,8 +127,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         try {
             txContext.finish();
         } catch (TransactionFailureException e) {
-            this.e = e;
-
             if (e instanceof TransactionConflictException) {
                 throw new SQLExceptionInfo.Builder(
                         SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION)
@@ -203,14 +148,8 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         }
 
         try {
-            if (e != null) {
-                txContext.abort(e);
-                e = null;
-            } else {
-                txContext.abort();
-            }
+            txContext.abort();
         } catch (TransactionFailureException e) {
-            this.e = null;
             throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.TRANSACTION_FAILED)
                     .setMessage(e.getMessage()).setRootCause(e).build()
@@ -248,7 +187,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void commitDDLFence(PTable dataTable, Logger logger)
+    public void commitDDLFence(PTable dataTable)
             throws SQLException {
         byte[] key = dataTable.getName().getBytes();
 
@@ -275,7 +214,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         }
     }
 
+    @Override
     public void markDMLFence(PTable table) {
+        if (table.getType() == PTableType.INDEX) {
+            return;
+        }
+        
         byte[] logicalKey = table.getName().getBytes();
         TransactionAware logicalTxAware = VisibilityFence.create(logicalKey);
 
@@ -299,6 +243,9 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public void join(PhoenixTransactionContext ctx) {
+        if (ctx == PhoenixTransactionContext.NULL_CONTEXT) {
+            return;
+        }
         assert (ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraContext = (TephraTransactionContext) ctx;
 
@@ -324,7 +271,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public void reset() {
         tx = null;
         txAwares.clear();
-        this.e = null;
     }
 
     @Override
@@ -405,83 +351,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         assert (tx != null);
 
         try {
-            return CODEC.encode(tx);
+            byte[] encodedTxBytes = CODEC.encode(tx);
+            encodedTxBytes = Arrays.copyOf(encodedTxBytes, encodedTxBytes.length + 1);
+            encodedTxBytes[encodedTxBytes.length - 1] = getProvider().getCode();
+            return encodedTxBytes;
         } catch (IOException e) {
             throw new SQLException(e);
-        }
-    }
-
-    @Override
-    public long getMaxTransactionsPerSecond() {
-        return TxConstants.MAX_TX_PER_MS;
-    }
-
-    @Override
-    public boolean isPreExistingVersion(long version) {
-        return TxUtils.isPreExistingVersion(version);
-    }
-
-    @Override
-    public RegionObserver getCoprocessor() {
-        return new TransactionProcessor();
-    }
-
-    @Override
-    public byte[] getFamilyDeleteMarker() {
-        return TxConstants.FAMILY_DELETE_QUALIFIER;
-    }
-
-    @Override
-    public void setTxnConfigs(Configuration config, String tmpFolder, int defaultTxnTimeoutSeconds) throws IOException {
-        config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
-        config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
-        config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
-        config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
-        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder);
-        config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, defaultTxnTimeoutSeconds);
-        config.unset(TxConstants.Manager.CFG_TX_HDFS_USER);
-        config.setLong(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L);
-    }
-
-    @Override
-    public void setupTxManager(Configuration config, String url) throws SQLException {
-
-        if (txService != null) {
-            return;
-        }
-
-        ConnectionInfo connInfo = ConnectionInfo.create(url);
-        zkClient = ZKClientServices.delegate(
-          ZKClients.reWatchOnExpire(
-            ZKClients.retryOnFailure(
-              ZKClientService.Builder.of(connInfo.getZookeeperConnectionString())
-                .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT,
-                        HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
-                .build(),
-              RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
-            )
-          )
-        );
-        zkClient.startAndWait();
-
-        DiscoveryService discovery = new ZKDiscoveryService(zkClient);
-        txManager = new TransactionManager(config, new HDFSTransactionStateStorage(config, new SnapshotCodecProvider(config), new TxMetricsCollector()), new TxMetricsCollector());
-        txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
-        txService.startAndWait();
-    }
-
-    @Override
-    public void tearDownTxManager() {
-        try {
-            if (txService != null) txService.stopAndWait();
-        } finally {
-            try {
-                if (zkClient != null) zkClient.stopAndWait();
-            } finally {
-                txService = null;
-                zkClient = null;
-                txManager = null;
-            }
         }
     }
 
@@ -510,4 +385,17 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             txAware.startTx(tx);
         }
     }
+
+    @Override
+    public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext context, boolean subTask) {
+        return new TephraTransactionContext(context, subTask);
+    }
+    
+    @Override
+    public Table getTransactionalTable(Table htable, boolean isImmutable) {
+        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+        this.addTransactionAware(transactionAwareHTable);
+        return transactionAwareHTable;
+    }
+    
 }

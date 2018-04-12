@@ -25,42 +25,57 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.transaction.PhoenixTransactionContext;
-import org.apache.phoenix.transaction.PhoenixTransactionalTable;
-import org.apache.phoenix.transaction.TephraTransactionTable;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.tephra.util.TxUtils;
 
 public class TransactionUtil {
+    // All transaction providers must use an empty byte array as the family delete marker
+    // (see TxConstants.FAMILY_DELETE_QUALIFIER)
+    public static final byte[] FAMILY_DELETE_MARKER = HConstants.EMPTY_BYTE_ARRAY;
+    // All transaction providers must multiply timestamps by this constant.
+    // (see TxConstants.MAX_TX_PER_MS)
+    public static final int MAX_TRANSACTIONS_PER_MILLISECOND = 1000000;
+    // Constant used to empirically determine if a timestamp is a transactional or
+    // non transactional timestamp (see TxUtils.MAX_NON_TX_TIMESTAMP)
+    private static final long MAX_NON_TX_TIMESTAMP = (long) (System.currentTimeMillis() * 1.1);
+    
     private TransactionUtil() {
+        
     }
     
     public static boolean isTransactionalTimestamp(long ts) {
-        return !TxUtils.isPreExistingVersion(ts);
+        return ts >= MAX_NON_TX_TIMESTAMP;
     }
     
     public static boolean isDelete(Cell cell) {
-        return (CellUtil.matchingValue(cell, HConstants.EMPTY_BYTE_ARRAY));
+        return CellUtil.matchingValue(cell, HConstants.EMPTY_BYTE_ARRAY);
     }
     
+    public static boolean isDeleteFamily(Cell cell) {
+        return CellUtil.matchingQualifier(cell, FAMILY_DELETE_MARKER) && CellUtil.matchingValue(cell, HConstants.EMPTY_BYTE_ARRAY);
+    }
+    
+    private static Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
+        return CellUtil.createCell(row, family, FAMILY_DELETE_MARKER, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
+    }
+    
+    private static Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp) {
+        return CellUtil.createCell(row, family, qualifier, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
+    }
+
     public static long convertToNanoseconds(long serverTimeStamp) {
-        return serverTimeStamp * TransactionFactory.getTransactionProvider().getTransactionContext().getMaxTransactionsPerSecond();
+        return serverTimeStamp * MAX_TRANSACTIONS_PER_MILLISECOND;
     }
     
     public static long convertToMilliseconds(long serverTimeStamp) {
-        return serverTimeStamp / TransactionFactory.getTransactionProvider().getTransactionContext().getMaxTransactionsPerSecond();
-    }
-    
-    public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, Table htable, PTable pTable) {
-        return new TephraTransactionTable(phoenixTransactionContext, htable, pTable);
+        return serverTimeStamp / MAX_TRANSACTIONS_PER_MILLISECOND;
     }
     
     // we resolve transactional tables at the txn read pointer
@@ -83,14 +98,14 @@ public class TransactionUtil {
 		return  txInProgress ? convertToMilliseconds(mutationState.getInitialWritePointer()) : result.getMutationTime();
 	}
 
-	public static Long getTableTimestamp(PhoenixConnection connection, boolean transactional) throws SQLException {
+	public static Long getTableTimestamp(PhoenixConnection connection, boolean transactional, TransactionFactory.Provider provider) throws SQLException {
 		Long timestamp = null;
 		if (!transactional) {
 			return timestamp;
 		}
 		MutationState mutationState = connection.getMutationState();
 		if (!mutationState.isTransactionStarted()) {
-			mutationState.startTransaction();
+			mutationState.startTransaction(provider);
 		}
 		timestamp = convertToMilliseconds(mutationState.getInitialWritePointer());
 		return timestamp;
@@ -108,7 +123,7 @@ public class TransactionUtil {
                         if (deleteMarker == null) {
                             deleteMarker = new Put(mutation.getRow());
                         }
-                        deleteMarker.add(TransactionFactory.getTransactionProvider().newDeleteFamilyMarker(
+                        deleteMarker.add(newDeleteFamilyMarker(
                                 deleteMarker.getRow(), 
                                 family, 
                                 familyCells.get(0).getTimestamp()));
@@ -119,7 +134,7 @@ public class TransactionUtil {
                             if (deleteMarker == null) {
                                 deleteMarker = new Put(mutation.getRow());
                             }
-                            deleteMarker.add(TransactionFactory.getTransactionProvider().newDeleteColumnMarker(
+                            deleteMarker.add(newDeleteColumnMarker(
                                     deleteMarker.getRow(),
                                     family,
                                     CellUtil.cloneQualifier(cell), 

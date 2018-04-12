@@ -19,26 +19,20 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
-public class OmidTransactionProvider implements TransactionProvider {
+public class OmidTransactionProvider implements PhoenixTransactionProvider {
     private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
-    
+
     public static final OmidTransactionProvider getInstance() {
         return INSTANCE;
     }
-    
+
     private OmidTransactionProvider() {
-    }
-    
-    @Override
-    public PhoenixTransactionContext getTransactionContext()  {
-        return new OmidTransactionContext();
     }
 
     @Override
@@ -46,7 +40,7 @@ public class OmidTransactionProvider implements TransactionProvider {
         //return new OmidTransactionContext(txnBytes);
         return null;
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
         //return new OmidTransactionContext(connection);
@@ -54,25 +48,37 @@ public class OmidTransactionProvider implements TransactionProvider {
     }
 
     @Override
-    public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask) {
-        //return new OmidTransactionContext(contex, connection, subTask);
+    public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) {
+        // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, Table htable) {
-        //return new OmidTransactionTable(ctx, htable);
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) {
+        // TODO Auto-generated method stub
         return null;
     }
-    
+
     @Override
-    public Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
-        return CellUtil.createCell(row, family, HConstants.EMPTY_BYTE_ARRAY, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
-    }
-    
-    @Override
-    public Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp) {
-        return CellUtil.createCell(row, family, qualifier, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
+    public Class<? extends RegionObserver> getCoprocessor() {
+        // TODO Auto-generated method stub
+        return null;
     }
 
+    @Override
+    public Provider getProvider() {
+        return TransactionFactory.Provider.OMID;
+    }
+
+    @Override
+    public boolean isUnsupported(Feature feature) {
+        // FIXME: if we initialize a Set with the unsupported features
+        // and check for containment, we run into a test failure
+        // in SetPropertyOnEncodedTableIT.testSpecifyingColumnFamilyForTTLFails()
+        // due to TableProperty.colFamSpecifiedException being null
+        // (though it's set in the constructor). I suspect some
+        // mysterious class loader issue. The below works fine
+        // as a workaround.
+        return (feature == Feature.ALTER_NONTX_TO_TX);
+    }
 }

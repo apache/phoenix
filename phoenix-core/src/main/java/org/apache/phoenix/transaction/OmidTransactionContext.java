@@ -17,16 +17,11 @@
  */
 package org.apache.phoenix.transaction;
 
-import java.io.IOException;
 import java.sql.SQLException;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.slf4j.Logger;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
 public class OmidTransactionContext implements PhoenixTransactionContext {
 
@@ -55,7 +50,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void commitDDLFence(PTable dataTable, Logger logger) throws SQLException {
+    public void commitDDLFence(PTable dataTable) throws SQLException {
         // TODO Auto-generated method stub
 
     }
@@ -115,59 +110,24 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public long getMaxTransactionsPerSecond() {
-        // TODO Auto-generated method stub
-        return 0;
+    public Provider getProvider() {
+        return Provider.OMID;
     }
 
     @Override
-    public boolean isPreExistingVersion(long version) {
-        // TODO Auto-generated method stub
-        return false;
-    }
-
-    @Override
-    public RegionObserver getCoprocessor() {
-        // TODO Auto-generated method stub
+    public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask) {
         return null;
     }
 
     @Override
-    public void setInMemoryTransactionClient(Configuration config) {
+    public void markDMLFence(PTable dataTable) {
         // TODO Auto-generated method stub
         
     }
 
     @Override
-    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props,
-            ConnectionInfo connectionInfo) {
-        // TODO Auto-generated method stub
-        
-        return null;
-        
-    }
-
-    @Override
-    public byte[] getFamilyDeleteMarker() {
+    public Table getTransactionalTable(Table htable, boolean isImmutable) {
         // TODO Auto-generated method stub
         return null;
-    }
-
-    @Override
-    public void setTxnConfigs(Configuration config, String tmpFolder, int defaultTxnTimeoutSeconds) throws IOException {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public void setupTxManager(Configuration config, String url) throws SQLException {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public void tearDownTxManager() {
-        // TODO Auto-generated method stub
-
     }
 }

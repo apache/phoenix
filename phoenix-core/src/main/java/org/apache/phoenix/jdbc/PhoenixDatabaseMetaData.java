@@ -48,6 +48,7 @@ import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.DelegateResultIterator;
@@ -297,6 +298,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String TRANSACTIONAL = "TRANSACTIONAL";
     public static final byte[] TRANSACTIONAL_BYTES = Bytes.toBytes(TRANSACTIONAL);
+
+    public static final String TRANSACTION_PROVIDER = "TRANSACTION_PROVIDER";
+    public static final byte[] TRANSACTION_PROVIDER_BYTES = Bytes.toBytes(TRANSACTION_PROVIDER);
 
     public static final String UPDATE_CACHE_FREQUENCY = "UPDATE_CACHE_FREQUENCY";
     public static final byte[] UPDATE_CACHE_FREQUENCY_BYTES = Bytes.toBytes(UPDATE_CACHE_FREQUENCY);
@@ -1133,9 +1137,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     VIEW_STATEMENT + "," +
                     SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
                     SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE + "," +
-                    TRANSACTIONAL + "," +
+                    TRANSACTION_PROVIDER + " IS NOT NULL AS " + TRANSACTIONAL + "," +
                     IS_NAMESPACE_MAPPED + "," +
-                    GUIDE_POSTS_WIDTH +
+                    GUIDE_POSTS_WIDTH + "," +
+                    TransactionProviderNameFunction.NAME + "(" + TRANSACTION_PROVIDER + ") AS TRANSACTION_PROVIDER" +
                     " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                     " where " + COLUMN_NAME + " is null" +
                     " and " + COLUMN_FAMILY + " is null" +
@@ -1175,7 +1180,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     "'' " + INDEX_TYPE + "," +
                     "CAST(null AS BOOLEAN) " + TRANSACTIONAL + "," +
                     "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "," +
-                    "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "\n");
+                    "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "," +
+                    "CAST(null AS VARCHAR) " + TRANSACTION_PROVIDER + "\n");
             buf.append(
                     " from " + SYSTEM_SEQUENCE + "\n");
             StringBuilder whereClause = new StringBuilder();

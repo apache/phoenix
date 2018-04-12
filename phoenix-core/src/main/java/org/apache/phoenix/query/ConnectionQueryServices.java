@@ -49,6 +49,8 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.transaction.PhoenixTransactionClient;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
@@ -153,4 +155,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public User getUser();
 
     public QueryLoggerDisruptor getQueryDisruptor();
+    
+    public PhoenixTransactionClient initTransactionClient(TransactionFactory.Provider provider);
 }

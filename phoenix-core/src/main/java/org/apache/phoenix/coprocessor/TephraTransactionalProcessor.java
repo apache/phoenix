@@ -23,17 +23,17 @@ import java.util.Optional;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
 
-public class PhoenixTransactionalProcessor extends DelegateRegionObserver implements RegionCoprocessor {
+public class TephraTransactionalProcessor extends DelegateRegionObserver implements RegionCoprocessor {
+
+    public TephraTransactionalProcessor() {
+        super(new TransactionProcessor());
+    }
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
         return Optional.of(this);
-    }
-
-    public PhoenixTransactionalProcessor() {
-        super(TransactionFactory.getTransactionProvider().getTransactionContext().getCoprocessor());
     }
 
     @Override

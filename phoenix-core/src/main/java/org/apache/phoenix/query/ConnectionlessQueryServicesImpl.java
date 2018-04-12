@@ -84,7 +84,8 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.transaction.PhoenixTransactionClient;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -143,7 +144,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
-        TransactionFactory.getTransactionProvider().getTransactionContext().setInMemoryTransactionClient(config);
         this.guidePostsCache = new GuidePostsCache(this, config);
     }
 
@@ -685,5 +685,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public QueryLoggerDisruptor getQueryDisruptor() {
         return null;
+    }
+    
+    @Override
+    public PhoenixTransactionClient initTransactionClient(Provider provider) {
+        return null; // Client is not necessary
     }
 }
