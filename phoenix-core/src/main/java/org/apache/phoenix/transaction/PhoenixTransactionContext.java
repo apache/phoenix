@@ -17,20 +17,98 @@
  */
 package org.apache.phoenix.transaction;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.slf4j.Logger;
-
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
-public interface PhoenixTransactionContext {
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
+public interface PhoenixTransactionContext {
+    public static PhoenixTransactionContext NULL_CONTEXT = new PhoenixTransactionContext() {
+
+        @Override
+        public void begin() throws SQLException {
+        }
+
+        @Override
+        public void commit() throws SQLException {
+        }
+
+        @Override
+        public void abort() throws SQLException {
+        }
+
+        @Override
+        public void checkpoint(boolean hasUncommittedData) throws SQLException {
+        }
+
+        @Override
+        public void commitDDLFence(PTable dataTable) throws SQLException {
+        }
+
+        @Override
+        public void join(PhoenixTransactionContext ctx) {
+        }
+
+        @Override
+        public boolean isTransactionRunning() {
+            return false;
+        }
+
+        @Override
+        public void reset() {
+        }
+
+        @Override
+        public long getTransactionId() {
+            return 0;
+        }
+
+        @Override
+        public long getReadPointer() {
+            return 0;
+        }
+
+        @Override
+        public long getWritePointer() {
+            return 0;
+        }
+
+        @Override
+        public void setVisibilityLevel(PhoenixVisibilityLevel visibilityLevel) {
+        }
+
+        @Override
+        public PhoenixVisibilityLevel getVisibilityLevel() {
+            return null;
+        }
+
+        @Override
+        public byte[] encodeTransaction() throws SQLException {
+            return null;
+        }
+
+        @Override
+        public Provider getProvider() {
+            return null;
+        }
+
+        @Override
+        public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask) {
+            return NULL_CONTEXT;
+        }
+
+        @Override
+        public void markDMLFence(PTable dataTable) {
+            
+        }
+
+        @Override
+        public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
+            return null;
+        }
+    };
     /**
      * 
      * Visibility levels needed for checkpointing and  
@@ -47,22 +125,6 @@ public interface PhoenixTransactionContext {
     public static final String PROPERTY_TTL = "dataset.table.ttl";
 
     public static final String READ_NON_TX_DATA = "data.tx.read.pre.existing";
-
-    /**
-     * Set the in memory client connection to the transaction manager (for testing purpose)
-     *
-     * @param config
-     */
-    public void setInMemoryTransactionClient(Configuration config);
-
-    /**
-     * Set the client connection to the transaction manager
-     *
-     * @param config
-     * @param props
-     * @param connectionInfo
-     */
-    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo);
 
     /**
      * Starts a transaction
@@ -84,7 +146,7 @@ public interface PhoenixTransactionContext {
      * @throws SQLException
      */
     public void abort() throws SQLException;
-
+    
     /**
      * Create a checkpoint in a transaction as defined in [TEPHRA-96]
      * @throws SQLException
@@ -100,8 +162,16 @@ public interface PhoenixTransactionContext {
      * @throws InterruptedException
      * @throws TimeoutException
      */
-    public void commitDDLFence(PTable dataTable, Logger logger)
+    public void commitDDLFence(PTable dataTable)
             throws SQLException;
+
+
+    /**
+     * Mark the start of DML go ensure that updates to indexed rows are not
+     * missed.
+     * @param dataTable the table on which DML command is working
+     */
+    public void markDMLFence(PTable dataTable);
 
     /**
      * Augment the current context with ctx modified keys
@@ -121,7 +191,8 @@ public interface PhoenixTransactionContext {
     public void reset();
 
     /**
-     * Returns transaction unique identifier
+     * Returns transaction unique identifier which is also
+     * assumed to be the earliest write pointer.
      */
     public long getTransactionId();
 
@@ -150,42 +221,8 @@ public interface PhoenixTransactionContext {
      */
     public byte[] encodeTransaction() throws SQLException;
 
-    /**
-     * 
-     * @return max transactions per second
-     */
-    public long getMaxTransactionsPerSecond();
+    public Provider getProvider();
+    public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask);
 
-    /**
-     *
-     * @param version
-     */
-    public boolean isPreExistingVersion(long version);
-
-    /**
-     *
-     * @return the coprocessor
-     */
-    public BaseRegionObserver getCoprocessor();
-
-    /**
-     * 
-     * @return the family delete marker
-     */
-    public byte[] getFamilyDeleteMarker();
-
-    /**
-     * Setup transaction manager's configuration for testing
-     */
-     public void setTxnConfigs(Configuration config, String tmpFolder, int defaultTxnTimeoutSeconds) throws IOException;
-
-    /**
-     * Setup transaction manager for testing
-     */
-    public void setupTxManager(Configuration config, String url) throws SQLException;
-
-    /**
-     * Tear down transaction manager for testing
-     */
-    public void tearDownTxManager();
+    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable);
 }
