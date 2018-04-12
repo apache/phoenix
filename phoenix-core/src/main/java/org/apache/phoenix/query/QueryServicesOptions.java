@@ -104,6 +104,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableRefFactory;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
@@ -249,6 +250,7 @@ public class QueryServicesOptions {
     // We'll also need this for transactions to work correctly
     public static final boolean DEFAULT_AUTO_COMMIT = false;
     public static final boolean DEFAULT_TABLE_ISTRANSACTIONAL = false;
+    public static final String DEFAULT_TRANSACTION_PROVIDER = TransactionFactory.Provider.getDefault().name();
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
     
@@ -526,22 +528,22 @@ public class QueryServicesOptions {
         return set(GROUPBY_SPILL_FILES_ATTRIB, num);
     }
 
-    private QueryServicesOptions set(String name, boolean value) {
+    QueryServicesOptions set(String name, boolean value) {
         config.set(name, Boolean.toString(value));
         return this;
     }
 
-    private QueryServicesOptions set(String name, int value) {
+    QueryServicesOptions set(String name, int value) {
         config.set(name, Integer.toString(value));
         return this;
     }
 
-    private QueryServicesOptions set(String name, String value) {
+    QueryServicesOptions set(String name, String value) {
         config.set(name, value);
         return this;
     }
 
-    private QueryServicesOptions set(String name, long value) {
+    QueryServicesOptions set(String name, long value) {
         config.set(name, Long.toString(value));
         return this;
     }
