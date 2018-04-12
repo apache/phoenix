@@ -196,7 +196,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
         }
-        return s;
     }
 
     private class RegionScannerHolder extends DelegateRegionScanner {
