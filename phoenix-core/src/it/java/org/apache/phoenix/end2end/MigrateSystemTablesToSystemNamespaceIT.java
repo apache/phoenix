@@ -376,8 +376,10 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         while(rs.next()) {
 
             if(rs.getString("IS_NAMESPACE_MAPPED") == null) {
+                // Check that entry for SYSTEM namespace exists in SYSCAT
                 systemSchemaExists = rs.getString("TABLE_SCHEM").equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME) ? true : systemSchemaExists;
             } else if (rs.getString("COLUMN_NAME") == null) {
+                // Found the intial entry for a table in SYSCAT
                 String schemaName = rs.getString("TABLE_SCHEM");
                 String tableName = rs.getString("TABLE_NAME");
 
@@ -395,12 +397,11 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
             }
         }
 
-        if(!systemSchemaExists) {
-            fail(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME + " entry doesn't exist in SYSTEM.CATALOG table.");
-        }
-
         // The set will contain SYSMUTEX table since that table is not exposed in SYSCAT
         if (systemTablesMapped) {
+            if (!systemSchemaExists) {
+                fail(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME + " entry doesn't exist in SYSTEM.CATALOG table.");
+            }
             assertTrue(namespaceMappedSystemTablesSet.size() == 1);
         } else {
             assertTrue(systemTablesSet.size() == 1);

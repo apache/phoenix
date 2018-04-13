@@ -168,6 +168,7 @@ message GetVersionRequest {
 
 message GetVersionResponse {
   required int64 version = 1;
+  optional int64 systemCatalogTimestamp = 2;
 }
 
 message ClearTableFromCacheRequest {
