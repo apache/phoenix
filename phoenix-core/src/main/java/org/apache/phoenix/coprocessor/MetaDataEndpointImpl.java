@@ -3610,6 +3610,27 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
         long version = MetaDataUtil.encodeVersion(env.getHBaseVersion(), config);
 
+        PTable systemCatalog = null;
+        byte[] tableKey =
+          SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES,
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
+        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
+        try {
+            systemCatalog = loadTable(env, tableKey, cacheKey, MIN_SYSTEM_TABLE_TIMESTAMP,
+              HConstants.LATEST_TIMESTAMP, request.getClientVersion());
+        } catch (Throwable t) {
+            logger.error("loading system catalog table inside getVersion failed", t);
+            ProtobufUtil.setControllerException(controller,
+              ServerUtil.createIOException(
+                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                  isTablesMappingEnabled).toString(), t));
+        }
+        // In case this is the first connection, system catalog does not exist, and so we don't
+        // set the optional system catalog timestamp.
+        if (systemCatalog != null) {
+            builder.setSystemCatalogTimestamp(systemCatalog.getTimeStamp());
+        }
         builder.setVersion(version);
         done.run(builder.build());
     }

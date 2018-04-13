@@ -451,6 +451,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
         return iterator.next();
     }
     
+    public static long getPriorUpgradeVersion() {
+        return TIMESTAMP_VERSION_MAP.lowerKey(TIMESTAMP_VERSION_MAP.lastKey());
+    }
+
     public static String getVersion(long serverTimestamp) {
         /*
          * It is possible that when clients are trying to run upgrades concurrently, we could be at an intermediate

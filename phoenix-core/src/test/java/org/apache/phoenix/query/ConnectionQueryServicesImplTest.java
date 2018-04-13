@@ -47,9 +47,9 @@ public class ConnectionQueryServicesImplTest {
         ConnectionQueryServicesImpl cqs = mock(ConnectionQueryServicesImpl.class);
         // Invoke the real methods for these two calls
         when(cqs.createSchema(any(List.class), anyString())).thenCallRealMethod();
-        doCallRealMethod().when(cqs).ensureSystemTablesMigratedToSystemNamespace(any(ReadOnlyProps.class));
+        doCallRealMethod().when(cqs).ensureSystemTablesMigratedToSystemNamespace();
         // Do nothing for this method, just check that it was invoked later
-        doNothing().when(cqs).createSysMutexTableIfNotExists(any(Admin.class), any(ReadOnlyProps.class));
+        doNothing().when(cqs).createSysMutexTableIfNotExists(any(Admin.class));
 
         // Spoof out this call so that ensureSystemTablesUpgrade() will return-fast.
         when(cqs.getSystemTableNamesInDefaultNamespace(any(Admin.class))).thenReturn(Collections.<TableName> emptyList());
@@ -60,7 +60,8 @@ public class ConnectionQueryServicesImplTest {
         // Make sure that ensureSystemTablesMigratedToSystemNamespace will try to migrate the system tables.
         Map<String,String> props = new HashMap<>();
         props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        cqs.ensureSystemTablesMigratedToSystemNamespace(new ReadOnlyProps(props));
+        when(cqs.getProps()).thenReturn(new ReadOnlyProps(props));
+        cqs.ensureSystemTablesMigratedToSystemNamespace();
 
         // Should be called after upgradeSystemTables()
         // Proves that execution proceeded

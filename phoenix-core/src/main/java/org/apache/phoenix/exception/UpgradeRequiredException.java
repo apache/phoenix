@@ -17,12 +17,23 @@
  */
 package org.apache.phoenix.exception;
 
+import org.apache.hadoop.hbase.HConstants;
 
 public class UpgradeRequiredException extends RetriableUpgradeException {
+    private final long systemCatalogTimestamp;
 
     public UpgradeRequiredException() {
+        this(HConstants.OLDEST_TIMESTAMP);
+    }
+
+    public UpgradeRequiredException(long systemCatalogTimeStamp) {
         super("Operation not allowed since cluster hasn't been upgraded. Call EXECUTE UPGRADE. ",
-                SQLExceptionCode.UPGRADE_REQUIRED.getSQLState(), SQLExceptionCode.UPGRADE_REQUIRED.getErrorCode());
+          SQLExceptionCode.UPGRADE_REQUIRED.getSQLState(), SQLExceptionCode.UPGRADE_REQUIRED.getErrorCode());
+        this.systemCatalogTimestamp = systemCatalogTimeStamp;
+    }
+
+    public long getSystemCatalogTimeStamp() {
+        return systemCatalogTimestamp;
     }
 
 }
