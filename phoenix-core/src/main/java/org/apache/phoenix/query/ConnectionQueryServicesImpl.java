@@ -726,11 +726,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private ColumnFamilyDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
         ColumnFamilyDescriptorBuilder columnDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(family.getFirst());
         if (tableType != PTableType.VIEW) {
-            if(props.get(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB) != null){
-                columnDescBuilder.setKeepDeletedCells(props.getBoolean(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB,
-                        QueryServicesOptions.DEFAULT_KEEP_DELETED_CELLS) ? KeepDeletedCells.TRUE
-                                : KeepDeletedCells.FALSE);
-            }
             columnDescBuilder.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
             columnDescBuilder.setBloomFilterType(BloomType.NONE);
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
@@ -2494,8 +2489,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     // Available for testing
-    protected String getSystemCatalogDML() {
-        return QueryConstants.CREATE_TABLE_METADATA;
+    protected String getSystemCatalogTableDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
+    }
+
+    // Available for testing
+    protected String getFunctionTableDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
+    }
+
+    // Available for testing
+    protected String getLogTableDDL() {
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+
+    private String setSystemDDLProperties(String ddl) {
+        return String.format(ddl,
+          props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
+          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
+    }
+
+    private String setSystemLogDDLProperties(String ddl) {
+        return String.format(ddl,
+          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
     }
 
     @Override
@@ -2538,7 +2554,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                          scnProps, newEmptyMetaData())) {
                                 try {
                                     metaConnection.setRunningUpgrade(true);
-                                    metaConnection.createStatement().executeUpdate(getSystemCatalogDML());
+                                    metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
                                 } catch (NewerTableAlreadyExistsException ignore) {
                                     // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed
                                     // timestamp. A TableAlreadyExistsException is not thrown, since the table only exists
@@ -2695,10 +2711,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection.createStatement().execute(QueryConstants.CREATE_STATS_TABLE_METADATA);
         } catch (TableAlreadyExistsException ignore) {}
         try {
-            metaConnection.createStatement().execute(QueryConstants.CREATE_FUNCTION_METADATA);
+            metaConnection.createStatement().execute(getFunctionTableDDL());
         } catch (TableAlreadyExistsException ignore) {}
         try {
-            metaConnection.createStatement().execute(QueryConstants.CREATE_LOG_METADATA);
+            metaConnection.createStatement().execute(getLogTableDDL());
         } catch (TableAlreadyExistsException ignore) {}
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
@@ -3003,7 +3019,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 createSysMutexTableIfNotExists(admin);
             }
             try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
+                metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
             } catch (NewerTableAlreadyExistsException ignore) {
                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed
                 // timestamp. A TableAlreadyExistsException is not thrown, since the table only exists
@@ -3125,10 +3141,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
             try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+                metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
             try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_LOG_METADATA);
+                metaConnection.createStatement().executeUpdate(getLogTableDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
