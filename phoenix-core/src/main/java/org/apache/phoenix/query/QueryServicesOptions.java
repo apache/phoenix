@@ -212,6 +212,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
+    public static final int DEFAULT_SYSTEM_MAX_VERSIONS = 1;
+    public static final boolean DEFAULT_SYSTEM_KEEP_DELETED_CELLS = false;
 
     // Retries when doing server side writes to SYSTEM.CATALOG
     // 20 retries with 100 pause = 230 seconds total retry time
@@ -256,7 +258,6 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = true;
     public static final int DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK = 10;
     public static final long DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK = 5 * 1000; // 5 seconds.
-    public static final boolean DEFAULT_KEEP_DELETED_CELLS = false;
     public static final boolean DEFAULT_STORE_NULLS = false;
 
     // TODO Change this to true as part of PHOENIX-1543
