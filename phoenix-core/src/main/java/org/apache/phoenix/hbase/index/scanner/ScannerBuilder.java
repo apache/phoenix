@@ -101,10 +101,16 @@ public class ScannerBuilder {
     }
     
     if(columns.isEmpty()){
-        columnFilters.addFilter(new FilterBase(){
+        columnFilters.addFilter(new FilterBase() {
+            
             @Override
             public boolean filterAllRemaining() throws IOException {
                 return true;
+            }
+
+            @Override
+            public ReturnCode filterKeyValue(Cell v) throws IOException {
+                return Filter.ReturnCode.INCLUDE;
             }
         });
     }
