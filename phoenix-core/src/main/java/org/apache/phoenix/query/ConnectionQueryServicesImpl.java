@@ -1140,10 +1140,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
-                // Remove the splitPolicy attribute to prevent HBASE-12570
-                if (isMetaTable) {
-                    newDesc.removeValue(Bytes.toBytes(TableDescriptorBuilder.SPLIT_POLICY));
-                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc.build());
@@ -1160,13 +1156,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (isMetaTable && !isUpgradeRequired()) {
                     checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
-                    /*
-                     * Now we modify the table to add the split policy, since we know that the client and
-                     * server and compatible. This works around HBASE-12570 which causes the cluster to be
-                     * brought down.
-                     */
-                    newDesc.setRegionSplitPolicyClassName(MetaDataSplitPolicy.class.getName());
-                    modifyTable(physicalTableName, newDesc.build(), true);
                 }
                 return null;
             } else {
