@@ -30,12 +30,14 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.PColumn;
@@ -357,5 +359,15 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public PhoenixTransactionClient initTransactionClient(Provider provider) {
         return getDelegate().initTransactionClient(provider);
+    }
+    
+    @Override
+    public User getUser() {
+        return getDelegate().getUser();
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return getDelegate().getQueryDisruptor();
     }
 }

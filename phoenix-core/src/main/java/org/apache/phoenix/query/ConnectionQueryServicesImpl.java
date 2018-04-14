@@ -125,6 +125,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -169,8 +170,8 @@ import org.apache.phoenix.exception.RetriableUpgradeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeInProgressException;
-import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
+import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -185,6 +186,7 @@ import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -193,7 +195,6 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -271,6 +272,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // don't need.
     private final ReadOnlyProps props;
     private final String userName;
+    private final User user;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
     private final GuidePostsCache tableStatsCache;
 
@@ -341,6 +343,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return hbaseVersion >= PhoenixDatabaseMetaData.MIN_RENEW_LEASE_VERSION;
                 }
             });
+    private QueryLoggerDisruptor queryDisruptor;
 
     private PMetaData newEmptyMetaData() {
         return new PSynchronizedMetaData(new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps()));
@@ -377,6 +380,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
         this.props = new ReadOnlyProps(this.config.iterator());
         this.userName = connectionInfo.getPrincipal();
+        this.user = connectionInfo.getUser();
         this.latestMetaData = newEmptyMetaData();
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
@@ -401,6 +405,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS);
         this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0);
+        try {
+            this.queryDisruptor = new QueryLoggerDisruptor(this.config);
+        } catch (SQLException e) {
+            logger.warn("Unable to initiate qeuery logging service !!");
+            e.printStackTrace();
+        }
 
     }
 
@@ -470,6 +480,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             closed = true;
             GLOBAL_QUERY_SERVICES_COUNTER.decrement();
+            try {
+                if (this.queryDisruptor != null) {
+                    this.queryDisruptor.close();
+                }
+            } catch (Exception e) {
+                // Ignore
+            }
             SQLException sqlE = null;
             try {
                 // Attempt to return any unused sequences.
@@ -2441,6 +2458,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
     }
 
+    // Available for testing
+    protected String getLogTableDDL() {
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+    
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -2656,7 +2678,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().execute(getFunctionTableDDL());
         } catch (TableAlreadyExistsException ignore) {}
-
+        try {
+            metaConnection.createStatement().execute(getLogTableDDL());
+        } catch (TableAlreadyExistsException ignore) {}
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
             createSysMutexTableIfNotExists(hbaseAdmin);
@@ -3082,7 +3106,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
-
+            try {
+                metaConnection.createStatement().executeUpdate(getLogTableDDL());
+            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
             // with SYSTEM Namespace
@@ -4158,6 +4184,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public String getUserName() {
         return userName;
     }
+    
+    @Override
+    public User getUser() {
+        return user;
+    }
 
     private void checkClosed() {
         if (closed) {
@@ -4591,5 +4622,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             client = txClients[provider.ordinal()] = provider.getTransactionProvider().getTransactionClient(config, connectionInfo);
         }
         return client;
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return this.queryDisruptor;
     }
 }

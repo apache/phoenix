@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -55,6 +56,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.FunctionNotFoundException;
@@ -116,10 +118,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     private final GuidePostsCache guidePostsCache;
     private final Configuration config;
+
+    private User user;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
         userName = connInfo.getPrincipal();
+        user = connInfo.getUser();
         metaData = newEmptyMetaData();
 
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
@@ -157,7 +162,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     protected String getFunctionTableDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
     }
-
+    
+    protected String getLogTableDDL() {
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+    
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -353,6 +362,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                     metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
+                try {
+                    metaConnection.createStatement().executeUpdate(getLogTableDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {}
             } catch (SQLException e) {
                 sqlE = e;
             } finally {
@@ -693,5 +705,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public PhoenixTransactionClient initTransactionClient(Provider provider) {
         return null; // Client is not necessary
+    }
+
+    @Override
+    public User getUser() {
+        return user;
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return null;
     }
 }
