@@ -43,7 +43,7 @@ public class QueryLoggerDisruptor implements Closeable{
     private volatile Disruptor<RingBufferEvent> disruptor;
     private boolean isClosed = false;
     //number of elements to create within the ring buffer.
-    private static final int RING_BUFFER_SIZE = 256 * 1024;
+    private static final int RING_BUFFER_SIZE = 8 * 1024;
     private static final Log LOG = LogFactory.getLog(QueryLoggerDisruptor.class);
     private static final String DEFAULT_WAIT_STRATEGY = BlockingWaitStrategy.class.getName();
     
