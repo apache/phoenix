@@ -102,7 +102,6 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableExistsException;
@@ -201,7 +200,6 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -249,6 +247,7 @@ import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PhoenixStopWatch;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -412,11 +411,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS);
         this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0);
-        try {
-            this.queryDisruptor = new QueryLoggerDisruptor(this.config);
-        } catch (SQLException e) {
-            logger.warn("Unable to initiate qeuery logging service !!");
-            e.printStackTrace();
+        if (!QueryUtil.isServerConnection(props)) {
+            //Start queryDistruptor everytime as log level can be change at connection level as well, but we can avoid starting for server connections.
+            try {
+                this.queryDisruptor = new QueryLoggerDisruptor(this.config);
+            } catch (SQLException e) {
+                logger.warn("Unable to initiate qeuery logging service !!");
+                e.printStackTrace();
+            }
         }
 
     }

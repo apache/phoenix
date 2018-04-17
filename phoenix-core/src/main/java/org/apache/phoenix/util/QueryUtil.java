@@ -82,6 +82,7 @@ public final class QueryUtil {
      */
     public static final int DATA_TYPE_NAME_POSITION = 6;
 
+    public static final String IS_SERVER_CONNECTION = "IS_SERVER_CONNECTION";
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
@@ -358,6 +359,15 @@ public final class QueryUtil {
             SQLException {
         return getConnectionOnServer(new Properties(), conf);
     }
+    
+    public static void setServerConnection(Properties props){
+        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
+        props.setProperty(IS_SERVER_CONNECTION, Boolean.TRUE.toString());
+    }
+    
+    public static boolean isServerConnection(ReadOnlyProps props) {
+        return props.getBoolean(IS_SERVER_CONNECTION, false);
+    }
 
     /**
      * @return {@link PhoenixConnection} with {@value UpgradeUtil#DO_NOT_UPGRADE} set so that we don't initiate metadata upgrade.
@@ -365,13 +375,13 @@ public final class QueryUtil {
     public static Connection getConnectionOnServer(Properties props, Configuration conf)
             throws ClassNotFoundException,
             SQLException {
-        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
+        setServerConnection(props);
         return getConnection(props, conf);
     }
 
     public static Connection getConnectionOnServerWithCustomUrl(Properties props, String principal)
             throws SQLException, ClassNotFoundException {
-        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
+        setServerConnection(props);
         String url = getConnectionUrl(props, null, principal);
         LOG.info("Creating connection with the jdbc url: " + url);
         return DriverManager.getConnection(url, props);
