@@ -17,17 +17,17 @@
  */
 package org.apache.phoenix.hive;
 
+import static org.junit.Assert.assertTrue;
+
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-
-import static org.junit.Assert.assertTrue;
 
 /**
  * Test methods only. All supporting methods should be placed to BaseHivePhoenixStoreIT
@@ -178,7 +178,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 "   'phoenix.zookeeper.client.port'='" +
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id,id2');" + HiveTestUtil.CRLF);
-        sb.append("INSERT INTO TABLE phoenix_MultiKey VALUES (10, \"part2\",\"foodesc\",200,2.0,-1);" +
+        sb.append("INSERT INTO TABLE phoenix_MultiKey" + HiveTestUtil.CRLF +"VALUES (10, \'part2\',\'foodesc\',200,2.0,-1);" +
                 HiveTestUtil.CRLF);
         String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();
         createFile(sb.toString(), fullPath);
@@ -208,7 +208,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         String testName = "testJoin";
         hbaseTestUtil.getTestFileSystem().createNewFile(new Path(hiveLogDir, testName + ".out"));
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
-        createFile("10\tpart2\tfoodesc\t200.0\t2.0\t-1\t10\tpart2\tfoodesc\t200.0\t2.0\t-1\n",
+        createFile("#### A masked pattern was here ####\n10\tpart2\tfoodesc\t200.0\t2.0\t-1\t10\tpart2\tfoodesc\t200.0\t2.0\t-1\n",
                 new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE TABLE joinTable1(ID int, ID2 String,description STRING," +
@@ -234,13 +234,13 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id,id2');" + HiveTestUtil.CRLF);
 
-        sb.append("INSERT INTO TABLE joinTable1 VALUES (5, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
-        sb.append("INSERT INTO TABLE joinTable1 VALUES (10, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE joinTable1" + HiveTestUtil.CRLF +"VALUES (5, \'part2\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE joinTable1" + HiveTestUtil.CRLF +"VALUES (10, \'part2\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
 
-        sb.append("INSERT INTO TABLE joinTable2 VALUES (5, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
-        sb.append("INSERT INTO TABLE joinTable2 VALUES (10, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
-
-        sb.append("SELECT  * from joinTable1 A join joinTable2 B on A.ID = B.ID WHERE A.ID=10;" +
+        sb.append("INSERT INTO TABLE joinTable2" + HiveTestUtil.CRLF +"VALUES (5, \'part2\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE joinTable2" + HiveTestUtil.CRLF +"VALUES (10, \'part2\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
+        
+        sb.append("SELECT  * from joinTable1 A join joinTable2 B on A.id = B.id WHERE A.ID=10;" +
                 HiveTestUtil.CRLF);
 
         String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();
@@ -257,7 +257,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
     public void testJoinColumnMaps() throws Exception {
         String testName = "testJoin";
         hbaseTestUtil.getTestFileSystem().createNewFile(new Path(hiveLogDir, testName + ".out"));
-        createFile("10\t200.0\tpart2\n", new Path(hiveOutputDir, testName + ".out").toString());
+        createFile("#### A masked pattern was here ####\n10\t200.0\tpart2\n", new Path(hiveOutputDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
 
         StringBuilder sb = new StringBuilder();
@@ -271,7 +271,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 "   'phoenix.zookeeper.quorum'='localhost'," + HiveTestUtil.CRLF +
                 "   'phoenix.zookeeper.client.port'='" +
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
-                "   'phoenix.column.mapping' = 'id:i1, id2:I2'," + HiveTestUtil.CRLF +
+                "   'phoenix.column.mapping' = 'id:i1, id2:I2, db:db'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id,id2');" + HiveTestUtil.CRLF);
         sb.append("CREATE TABLE joinTable4(ID int, ID2 String,description STRING," +
                 "db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
@@ -283,15 +283,15 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 "   'phoenix.zookeeper.quorum'='localhost'," + HiveTestUtil.CRLF +
                 "   'phoenix.zookeeper.client.port'='" +
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
-                "   'phoenix.column.mapping' = 'id:i1, id2:I2'," + HiveTestUtil.CRLF +
+                "   'phoenix.column.mapping' = 'id:i1, id2:I2, db:db'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id,id2');" + HiveTestUtil.CRLF);
 
-        sb.append("INSERT INTO TABLE joinTable3 VALUES (5, \"part1\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
-        sb.append("INSERT INTO TABLE joinTable3 VALUES (10, \"part1\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE joinTable3" + HiveTestUtil.CRLF +"VALUES (5, \'part1\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE joinTable3" + HiveTestUtil.CRLF +"VALUES (10, \'part1\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
 
-        sb.append("INSERT INTO TABLE joinTable4 VALUES (5, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
-        sb.append("INSERT INTO TABLE joinTable4 VALUES (10, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
-
+        sb.append("INSERT INTO TABLE joinTable4" + HiveTestUtil.CRLF +"VALUES (5, \'part2\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE joinTable4" + HiveTestUtil.CRLF +"VALUES (10, \'part2\',\'foodesc\',200,2.0,-1);" + HiveTestUtil.CRLF);
+        
         sb.append("SELECT A.ID, a.db, B.ID2 from joinTable3 A join joinTable4 B on A.ID = B.ID WHERE A.ID=10;" +
                 HiveTestUtil.CRLF);
 

@@ -38,7 +38,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.mapreduce.RegionSizeCalculator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.SerializationUtilities;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.serde.serdeConstants;
@@ -104,7 +104,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
             String filterExprSerialized = jobConf.get(TableScanDesc.FILTER_EXPR_CONF_STR);
             if (filterExprSerialized != null) {
                 ExprNodeGenericFuncDesc filterExpr =
-                        Utilities.deserializeExpression(filterExprSerialized);
+                        SerializationUtilities.deserializeExpression(filterExprSerialized);
                 PhoenixPredicateDecomposer predicateDecomposer =
                         PhoenixPredicateDecomposer.create(Arrays.asList(jobConf.get(serdeConstants.LIST_COLUMNS).split(",")));
                 predicateDecomposer.decomposePredicate(filterExpr);

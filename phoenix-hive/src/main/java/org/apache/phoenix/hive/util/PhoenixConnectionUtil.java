@@ -17,22 +17,21 @@
  */
 package org.apache.phoenix.hive.util;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Map;
+import java.util.Properties;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.Map;
-import java.util.Properties;
 
 /**
  * Set of methods to obtain Connection depending on configuration
@@ -80,7 +79,11 @@ public class PhoenixConnectionUtil {
         String zNodeParent = tableParameterMap.get(PhoenixStorageHandlerConstants.ZOOKEEPER_PARENT);
         zNodeParent = zNodeParent == null ? PhoenixStorageHandlerConstants
                 .DEFAULT_ZOOKEEPER_PARENT : zNodeParent;
-
+        try {
+            Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
+        } catch (ClassNotFoundException e) {
+            LOG.warn(e.getStackTrace());
+        }
         return DriverManager.getConnection(QueryUtil.getUrl(zookeeperQuorum, clientPort,
                 zNodeParent));
     }

@@ -31,17 +31,38 @@
   </parent>
   <artifactId>phoenix-hive</artifactId>
   <name>Phoenix - Hive</name>
-
+<properties>
+    <test.tmp.dir>${project.build.directory}/tmp</test.tmp.dir>
+</properties>
   <dependencies>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
+      <exclusions>
+	  <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-cli</artifactId>
       <version>${hive.version}</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-metastore</artifactId>
+      <version>${hive.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-standalone-metastore</artifactId>
+      <type>test-jar</type>
+      <version>${hive.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
@@ -114,7 +135,7 @@
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-tests</artifactId>
       <scope>test</scope>
-      <version>0.8.4</version>
+      <version>0.9.1</version>
       <type>test-jar</type>
       <exclusions>
         <exclusion>
@@ -127,7 +148,7 @@
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-dag</artifactId>
       <scope>test</scope>
-      <version>0.8.4</version>
+      <version>0.9.1</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
@@ -141,6 +162,38 @@
       <version>${mockito-all.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>19.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica</artifactId>
+      <!-- Overriding the version of Avatica that PQS uses so that Hive will work -->
+      <version>${avatica.version}</version>
+      <scope>test</scope>
+      <!-- And removing a bunch of dependencies that haven't been shaded in this older
+           Avatica version which conflict with HDFS -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.hsqldb</groupId>
+          <artifactId>hsqldb</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
   </dependencies>
 
   <build>
@@ -152,6 +205,26 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+	    <execution>
+              <id>NeedTheirOwnClusterTests</id>
+              <configuration>
+                 <encoding>UTF-8</encoding>
+                 <forkCount>1</forkCount>
+                 <runOrder>alphabetical</runOrder>
+                 <reuseForks>false</reuseForks>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+                 <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                 <goal>integration-test</goal>
+                 <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
       </plugin>
       <plugin>
         <artifactId>maven-dependency-plugin</artifactId>

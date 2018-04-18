@@ -17,6 +17,17 @@
  */
 package org.apache.phoenix.hive;
 
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.File;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
+import java.util.Properties;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -24,7 +35,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
-import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.QTestProcessExecResult;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
@@ -35,14 +47,7 @@ import org.junit.AfterClass;
 import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
 
-import java.io.File;
-import java.io.IOException;
-import java.sql.*;
-import java.util.Properties;
-
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import com.google.common.base.Throwables;
 
 /**
  * Base class for all Hive Phoenix integration tests that may be run with Tez or MR mini cluster
@@ -72,6 +77,7 @@ public class BaseHivePhoenixStoreIT {
         conf = hbaseTestUtil.getConfiguration();
         setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        conf.set("hive.metastore.schema.verification","false");
         hiveOutputDir = new Path(hbaseTestUtil.getDataTestDir(), "hive_output").toString();
         File outputDir = new File(hiveOutputDir);
         outputDir.mkdirs();
@@ -82,17 +88,20 @@ public class BaseHivePhoenixStoreIT {
         Path testRoot = hbaseTestUtil.getDataTestDir();
         System.setProperty("test.tmp.dir", testRoot.toString());
         System.setProperty("test.warehouse.dir", (new Path(testRoot, "warehouse")).toString());
-
+        System.setProperty(HiveConf.ConfVars.METASTORE_SCHEMA_VERIFICATION.toString(), "false");
+        //System.setProperty(HiveConf.ConfVars.METASTORE_AUTO_CREATE_ALL.toString(),"true");
         try {
-            qt = new HiveTestUtil(hiveOutputDir, hiveLogDir, clusterType, null);
+            qt = new HiveTestUtil(hiveOutputDir, hiveLogDir, clusterType, "", "0.20",null, null, false);
+            // do a one time initialization
+            qt.createSources();
         } catch (Exception e) {
-            LOG.error("Unexpected exception in setup", e);
-            fail("Unexpected exception in setup");
+            LOG.error("Unexpected exception in setup: " + e.getMessage(), e);
+            fail("Unexpected exception in setup"+Throwables.getStackTraceAsString(e));
         }
 
         //Start HBase cluster
         hbaseCluster = hbaseTestUtil.startMiniCluster(1);
-        MiniDFSCluster x = hbaseTestUtil.getDFSCluster();
+        //MiniDFSCluster x = hbaseTestUtil.getDFSCluster();
         Class.forName(PhoenixDriver.class.getName());
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
@@ -124,14 +133,14 @@ public class BaseHivePhoenixStoreIT {
                 return;
             }
 
-            ecode = qt.checkCliDriverResults(fname);
-            if (ecode != 0) {
-                qt.failedDiff(ecode, fname, null);
+            QTestProcessExecResult result = qt.checkCliDriverResults(fname);
+            if (result.getReturnCode() != 0) {
+              qt.failedDiff(result.getReturnCode(), fname, result.getCapturedOutput());
             }
             qt.clearPostTestEffects();
 
         } catch (Throwable e) {
-            qt.failed(e, fname, null);
+            qt.failed(new Exception(e), fname, null);
         }
 
         long elapsedTime = System.currentTimeMillis() - startTime;
@@ -145,14 +154,6 @@ public class BaseHivePhoenixStoreIT {
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
-        if (qt != null) {
-            try {
-                qt.shutdown();
-            } catch (Exception e) {
-                LOG.error("Unexpected exception in setup", e);
-                fail("Unexpected exception in tearDown");
-            }
-        }
         try {
             conn.close();
         } finally {
@@ -166,5 +167,14 @@ public class BaseHivePhoenixStoreIT {
                 }
             }
         }
+        // Shutdowns down the filesystem -- do this after stopping HBase.
+        if (qt != null) {
+          try {
+              qt.shutdown();
+          } catch (Exception e) {
+              LOG.error("Unexpected exception in setup", e);
+              //fail("Unexpected exception in tearDown");
+          }
+      }
     }
 }

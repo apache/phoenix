@@ -71,7 +71,7 @@
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
-    <hive.version>1.2.1</hive.version>
+    <hive.version>3.0.0-SNAPSHOT</hive.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
@@ -97,7 +97,7 @@
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <avatica.version>1.10.0</avatica.version>
+    <avatica.version>1.11.0</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.13.0-incubating</tephra.version>
     <spark.version>2.0.2</spark.version>
@@ -666,12 +666,6 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
         <version>${hadoop.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.xerial.snappy</groupId>
-            <artifactId>snappy-java</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
