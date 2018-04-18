@@ -30,6 +30,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -1178,23 +1179,6 @@ public class OrderByIT extends ParallelStatsDisabledIT {
                 conn.close();
             }
         }
-    }
-
-    private void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
-        for(int rowIndex=0;rowIndex<rows.length;rowIndex++) {
-            assertTrue(rs.next());
-            for(int columnIndex=1;columnIndex<= rows[rowIndex].length;columnIndex++) {
-                Object realValue=rs.getObject(columnIndex);
-                Object expectedValue=rows[rowIndex][columnIndex-1];
-                if(realValue==null) {
-                    assertTrue(expectedValue==null);
-                }
-                else {
-                    assertTrue(realValue.equals(expectedValue));
-                }
-            }
-        }
-        assertTrue(!rs.next());
     }
 
 }
