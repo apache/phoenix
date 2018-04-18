@@ -9,6 +9,7 @@
  */
 package org.apache.phoenix.compile;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -49,6 +50,7 @@ public class OrderPreservingTracker {
         public final OrderPreserving orderPreserving;
         public final int pkPosition;
         public final int slotSpan;
+        public Expression expression;
 
         public Info(int pkPosition) {
             this.pkPosition = pkPosition;
@@ -141,6 +143,7 @@ public class OrderPreservingTracker {
                         return;
                     }
                 }
+                info.expression = node;
                 orderPreservingInfos.add(info);
             }
         }
@@ -151,6 +154,16 @@ public class OrderPreservingTracker {
      */
     public int getOrderPreservingColumnCount() {
         return orderPreservingColumnCount;
+    }
+
+    public List<Expression> getExpressionsFromOrderPreservingTrackInfos() {
+        assert isOrderPreserving;
+        assert (this.orderPreservingInfos != null && this.orderPreservingInfos.size() > 0);
+        List<Expression> newExpressions = new ArrayList<Expression>(this.orderPreservingInfos.size());
+        for(Info trackInfo : this.orderPreservingInfos) {
+            newExpressions.add(trackInfo.expression);
+        }
+        return newExpressions;
     }
 
     public boolean isOrderPreserving() {
