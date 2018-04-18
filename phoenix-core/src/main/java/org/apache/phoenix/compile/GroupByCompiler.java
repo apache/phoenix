@@ -153,9 +153,24 @@ public class GroupByCompiler {
                 // column and use each subsequent one in PK order).
                 isOrderPreserving = tracker.isOrderPreserving();
                 orderPreservingColumnCount = tracker.getOrderPreservingColumnCount();
+                if(isOrderPreserving) {
+                    //reorder the groupby expressions following pk columns
+                    List<Expression> newExpressions = tracker.getExpressionsFromOrderPreservingTrackInfos();
+                    assert newExpressions.size() == expressions.size();
+                    return new GroupBy.GroupByBuilder(this)
+                               .setIsOrderPreserving(isOrderPreserving)
+                               .setOrderPreservingColumnCount(orderPreservingColumnCount)
+                               .setExpressions(newExpressions)
+                               .setKeyExpressions(newExpressions)
+                               .build();
+                }
             }
-            if (isOrderPreserving || isUngroupedAggregate) {
-                return new GroupBy.GroupByBuilder(this).setIsOrderPreserving(isOrderPreserving).setOrderPreservingColumnCount(orderPreservingColumnCount).build();
+
+            if (isUngroupedAggregate) {
+                return new GroupBy.GroupByBuilder(this)
+                           .setIsOrderPreserving(isOrderPreserving)
+                           .setOrderPreservingColumnCount(orderPreservingColumnCount)
+                           .build();
             }
             List<Expression> expressions = Lists.newArrayListWithExpectedSize(this.expressions.size());
             List<Expression> keyExpressions = expressions;
