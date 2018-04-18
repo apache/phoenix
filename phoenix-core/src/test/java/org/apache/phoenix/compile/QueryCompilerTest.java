@@ -98,6 +98,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -4848,6 +4849,115 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         @Override
         public List<QueryPlan> visit(TraceQueryPlan plan) {
             return Collections.emptyList();
+        }
+    }
+
+    @Test
+    public void testGroupByOrderMatchPkColumnOrder4690() throws Exception{
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(false, false);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(false, true);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(true, false);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(true, true);
+    }
+
+    private void doTestGroupByOrderMatchPkColumnOrderBug4690(boolean desc ,boolean salted) throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 integer not null , " +
+                    " pk2 integer not null, " +
+                    " pk3 integer not null," +
+                    " pk4 integer not null,"+
+                    " v integer, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                       "pk1 "+(desc ? "desc" : "")+", "+
+                       "pk2 "+(desc ? "desc" : "")+", "+
+                       "pk3 "+(desc ? "desc" : "")+", "+
+                       "pk4 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "split on(2)");
+            conn.createStatement().execute(sql);
+
+            sql = "select pk2,pk1,count(v) from " + tableName + " group by pk2,pk1 order by pk2,pk1";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() ==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK2"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK1"));
+
+            sql = "select pk1,pk2,count(v) from " + tableName + " group by pk2,pk1 order by pk1,pk2";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.FWD_ROW_KEY_ORDER_BY : OrderBy.REV_ROW_KEY_ORDER_BY));
+
+            sql = "select pk2,pk1,count(v) from " + tableName + " group by pk2,pk1 order by pk2 desc,pk1 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() ==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK2 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK1 DESC"));
+
+            sql = "select pk1,pk2,count(v) from " + tableName + " group by pk2,pk1 order by pk1 desc,pk2 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
+
+
+            sql = "select pk3,pk2,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk3,pk2";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK3"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK2"));
+
+            sql = "select pk2,pk3,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk2,pk3";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.FWD_ROW_KEY_ORDER_BY : OrderBy.REV_ROW_KEY_ORDER_BY));
+
+            sql = "select pk3,pk2,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk3 desc,pk2 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK3 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK2 DESC"));
+
+            sql = "select pk2,pk3,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk2 desc,pk3 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
+
+
+            sql = "select pk4,pk3,pk1,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk4,pk3,pk1";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 3);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK4"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK3"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(2).toString().equals("PK1"));
+
+            sql = "select pk1,pk3,pk4,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk1,pk3,pk4";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.FWD_ROW_KEY_ORDER_BY : OrderBy.REV_ROW_KEY_ORDER_BY));
+
+            sql = "select pk4,pk3,pk1,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk4 desc,pk3 desc,pk1 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 3);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK4 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK3 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(2).toString().equals("PK1 DESC"));
+
+            sql = "select pk1,pk3,pk4,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk1 desc,pk3 desc,pk4 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
         }
     }
 }

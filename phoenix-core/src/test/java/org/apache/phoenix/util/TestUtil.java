@@ -1051,4 +1051,24 @@ public class TestUtil {
         return queryPlan;
     }
 
+    public static void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
+        for(int rowIndex=0; rowIndex < rows.length; rowIndex++) {
+            assertTrue("rowIndex:["+rowIndex+"] rs.next error!",rs.next());
+            for(int columnIndex = 1; columnIndex <= rows[rowIndex].length; columnIndex++) {
+                Object realValue = rs.getObject(columnIndex);
+                Object expectedValue = rows[rowIndex][columnIndex-1];
+                if(realValue == null) {
+                    assertNull("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"]",expectedValue);
+                }
+                else {
+                    assertEquals("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"],realValue:["+
+                            realValue+"],expectedValue:["+expectedValue+"]",
+                            expectedValue,
+                            realValue
+                            );
+                }
+            }
+        }
+        assertTrue(!rs.next());
+    }
 }
