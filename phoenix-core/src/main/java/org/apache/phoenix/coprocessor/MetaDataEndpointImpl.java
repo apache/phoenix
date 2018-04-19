@@ -2021,8 +2021,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             }
             List<byte[]> tableNamesToDelete = Lists.newArrayList();
             List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
+            // No need to lock parent table for views
             byte[] parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
-            byte[] lockTableName = parentTableName == null ? tableName : parentTableName;
+            byte[] lockTableName = parentTableName == null || tableType.equals(PTableType.VIEW.getSerializedValue()) ? tableName : parentTableName;
             byte[] lockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, lockTableName);
             byte[] key =
                     parentTableName == null ? lockKey : SchemaUtil.getTableKey(tenantIdBytes,
