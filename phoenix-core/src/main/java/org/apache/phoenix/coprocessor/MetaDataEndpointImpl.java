@@ -590,7 +590,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             done.run(builder.build());
             return;
         } catch (Throwable t) {
-        	logger.error("getTable failed", t);
+            logger.error("getTable failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -753,9 +753,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                                                                                // compatibility.
         Cell sortOrderKv = colKeyValues[SORT_ORDER_INDEX];
         SortOrder sortOrder =
-        		sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PInteger.INSTANCE
+                sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PInteger.INSTANCE
                         .getCodec().decodeInt(sortOrderKv.getValueArray(),
-                        		sortOrderKv.getValueOffset(), SortOrder.getDefault()));
+                                sortOrderKv.getValueOffset(), SortOrder.getDefault()));
 
         Cell arraySizeKv = colKeyValues[ARRAY_SIZE_INDEX];
         Integer arraySize = arraySizeKv == null ? null :
@@ -1314,9 +1314,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         return table.getName() == null;
     }
 
-	private static boolean isSchemaDeleted(PSchema schema) {
-		return schema.getSchemaName() == null;
-	}
+    private static boolean isSchemaDeleted(PSchema schema) {
+        return schema.getSchemaName() == null;
+    }
 
     private static boolean isFunctionDeleted(PFunction function) {
         return function.getFunctionName() == null;
@@ -1841,6 +1841,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             byte[] tableKey = SchemaUtil.getTableKey(viewtenantId, viewSchema, viewTable);
             ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
             PTable view = loadTable(env, tableKey, cacheKey, clientTimeStamp, clientTimeStamp, clientVersion);
+            if (view == null) {
+                logger.warn("Found orphan tenant view row in SYSTEM.CATALOG with tenantId:"
+                        + Bytes.toString(tenantId) + ", schema:"
+                        + Bytes.toString(viewSchema) + ", table:"
+                        + Bytes.toString(viewTable));
+                continue;
+            }
             findAllChildViews(region, viewtenantId, view, result, clientTimeStamp, clientVersion);
         }
     }
@@ -1983,8 +1990,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         if (systemCatalog.getTimeStamp() < MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0) {
             return findChildViews_deprecated(region, tenantId, table, PHYSICAL_TABLE_BYTES, stopAfterFirst);
         } else {
-            return findChildViews_4_11(region, tenantId, table.getSchemaName().getBytes(),
-                table.getTableName().getBytes(), stopAfterFirst);
+            return findChildViews_4_11(region, tenantId, 
+                    table.getSchemaName() == null ? ByteUtil.EMPTY_BYTE_ARRAY : table.getSchemaName().getBytes(),
+                    table.getTableName().getBytes(), stopAfterFirst);
         }
     }
     
@@ -2550,6 +2558,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             // lock the rows corresponding to views so that no other thread can modify the view meta-data
             RowLock viewRowLock = ServerUtil.acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock, clientVersion);
+            if (view == null) {
+                logger.warn("Found orphan tenant view row in SYSTEM.CATALOG with tenantId:"
+                    + Bytes.toString(tenantId) + ", schema:"
+                    + Bytes.toString(schema) + ", table:"
+                    + Bytes.toString(table));
+                continue;
+             }
+            
             ColumnOrdinalPositionUpdateList ordinalPositionList = new ColumnOrdinalPositionUpdateList();
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());
             boolean addingExistingPkCol = false;
@@ -2712,12 +2728,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 for (TableProperty tableProp : TableProperty.values()) {
                     Cell tablePropertyCell = tablePropertyCellMap.get(tableProp);
                     if ( tablePropertyCell != null) {
-						// set this table property on the view :
-						// 1. if it is not mutable on a view (which means the property is always the same as the base table)
-						// 2. or if it is mutable on a view and if it doesn't exist on the view
-						// 3. or if it is mutable on a view and the property value is the same as the base table property (which means it wasn't changed on the view)
+                        // set this table property on the view :
+                        // 1. if it is not mutable on a view (which means the property is always the same as the base table)
+                        // 2. or if it is mutable on a view and if it doesn't exist on the view
+                        // 3. or if it is mutable on a view and the property value is the same as the base table property (which means it wasn't changed on the view)
                         Object viewProp = tableProp.getPTableValue(view);
-						if (!tableProp.isMutableOnView() || viewProp==null || viewProp.equals(tableProp.getPTableValue(basePhysicalTable))) {
+                        if (!tableProp.isMutableOnView() || viewProp==null || viewProp.equals(tableProp.getPTableValue(basePhysicalTable))) {
                             viewHeaderRowPut.add(CellUtil.createCell(viewKey, CellUtil.cloneFamily(tablePropertyCell),
                                 CellUtil.cloneQualifier(tablePropertyCell), clientTimeStamp, tablePropertyCell.getTypeByte(),
                                 CellUtil.cloneValue(tablePropertyCell)));
@@ -2807,10 +2823,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         
         // if switching from from non tx to tx
         if (!basePhysicalTable.isTransactional() && switchAttribute(basePhysicalTable, basePhysicalTable.isTransactional(), tableMetadata, TRANSACTIONAL_BYTES)) {
-        	invalidateList.add(new ImmutableBytesPtr(viewKey));
-        	Put put = new Put(viewKey);
+            invalidateList.add(new ImmutableBytesPtr(viewKey));
+            Put put = new Put(viewKey);
             put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-            		TRANSACTIONAL_BYTES, clientTimeStamp, PBoolean.INSTANCE.toBytes(true));
+                    TRANSACTIONAL_BYTES, clientTimeStamp, PBoolean.INSTANCE.toBytes(true));
             mutationsForAddingColumnsToViews.add(put);
         }
     }
