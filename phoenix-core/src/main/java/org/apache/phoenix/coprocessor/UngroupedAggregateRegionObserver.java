@@ -244,6 +244,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
     }
 
+    private void commitBatchWithRetries(final HRegion region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
+        try {
+            commitBatch(region, localRegionMutations, blockingMemstoreSize);
+        } catch (IOException e) {
+            handleIndexWriteException(localRegionMutations, e, new MutateCommand() {
+                @Override
+                public void doMutation() throws IOException {
+                    commitBatch(region, localRegionMutations, blockingMemstoreSize);
+                }
+            });
+        }
+    }
+
     private void commitBatch(HRegion region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
       if (mutations.isEmpty()) {
           return;
@@ -251,7 +264,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       Mutation[] mutationArray = new Mutation[mutations.size()];
       // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
       // flush happen which decrease the memstore size and then writes allowed on the region.
-      for (int i = 0; region.getMemstoreSize().get() > blockingMemstoreSize && i < 30; i++) {
+      for (int i = 0; blockingMemstoreSize > 0 && region.getMemstoreSize().get() > blockingMemstoreSize && i < 30; i++) {
           try {
               checkForRegionClosing();
               Thread.sleep(100);
@@ -892,16 +905,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState, clientVersionBytes, useIndexProto);
         separateLocalAndRemoteMutations(targetHTable, region, mutations, localRegionMutations, remoteRegionMutations,
             isPKChanging);
-        try {
-            commitBatch(region, localRegionMutations, blockingMemStoreSize);
-        } catch (IOException e) {
-            handleIndexWriteException(localRegionMutations, e, new MutateCommand() {
-                @Override
-                public void doMutation() throws IOException {
-                    commitBatch(region, localRegionMutations, blockingMemStoreSize);
-                }
-            });
-        }
+        commitBatchWithRetries(region, localRegionMutations, blockingMemStoreSize);
         try {
             commitBatchWithHTable(targetHTable, remoteRegionMutations);
         } catch (IOException e) {
@@ -1073,8 +1077,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
-                                    HConstants.NO_NONCE);
+                            commitBatchWithRetries(region, mutations, -1);
                             uuidValue = ServerCacheClient.generateId();
                             mutations.clear();
                         }
@@ -1083,8 +1086,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE);
+                    commitBatchWithRetries(region, mutations, -1);
                 }
             }
         } catch (IOException e) {
