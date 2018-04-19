@@ -754,7 +754,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 if (!timeStamps.contains(kvts)) {
                                     Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
                                         kv.getRowLength());
-                                    put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
+                                    put.addColumn(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
                                         ByteUtil.EMPTY_BYTE_ARRAY);
                                     mutations.add(put);
                                 }
