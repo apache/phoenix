@@ -122,8 +122,10 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcServer.Call;
@@ -274,6 +276,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     // Column to track tables that have been upgraded based on PHOENIX-2067
     public static final String ROW_KEY_ORDER_OPTIMIZABLE = "ROW_KEY_ORDER_OPTIMIZABLE";
     public static final byte[] ROW_KEY_ORDER_OPTIMIZABLE_BYTES = Bytes.toBytes(ROW_KEY_ORDER_OPTIMIZABLE);
+
+    private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
+    private static final byte[] PHYSICAL_TABLE_BYTES =
+            new byte[] { PTable.LinkType.PHYSICAL_TABLE.getSerializedValue() };
 
     // KeyValues for Table
     private static final KeyValue TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
@@ -1527,7 +1533,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     for (PTable index : parentTable.getIndexes()) {
                         indexes.add(TableName.valueOf(index.getPhysicalName().getBytes()));
                     }
-
                 } else {
                     // Mapped View
                     cParentPhysicalName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
@@ -1810,13 +1815,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private boolean execeededIndexQuota(PTableType tableType, PTable parentTable) {
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
     }
-
-    private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
-
     
     private void findAllChildViews(Region region, byte[] tenantId, PTable table,
             TableViewFinder result, long clientTimeStamp, int clientVersion) throws IOException, SQLException {
-        TableViewFinder currResult = findChildViews(region, tenantId, table, clientVersion);
+        TableViewFinder currResult = findChildViews(region, tenantId, table, clientVersion, false);
         result.addResult(currResult);
         for (ViewInfo viewInfo : currResult.getViewInfoList()) {
             byte[] viewtenantId = viewInfo.getTenantId();
@@ -1829,9 +1831,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
         
-    // TODO remove this in 4.13 release 
-    @Deprecated
-    private TableViewFinder findChildViews_deprecated(Region region, byte[] tenantId, PTable table, byte[] linkTypeBytes) throws IOException {
+    // TODO use child link instead once splittable system catalog (PHOENIX-3534) is implemented
+    // and we have a separate table for links.
+    private TableViewFinder findChildViews_deprecated(Region region, byte[] tenantId, PTable table, byte[] linkTypeBytes, boolean stopAfterFirst) throws IOException {
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
         boolean isMultiTenant = table.isMultiTenant();
@@ -1854,7 +1856,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 .getPhysicalHBaseTableName(schemaName, tableName, table.isNamespaceMapped())
                 .getBytes());
         SuffixFilter rowFilter = new SuffixFilter(suffix);
-        FilterList filter = new FilterList(linkFilter,tableTypeFilter,rowFilter);
+        List<Filter> filters = Lists.<Filter>newArrayList(linkFilter,tableTypeFilter,rowFilter);
+        if (stopAfterFirst) {
+            filters.add(new PageFilter(1));
+        }
+        FilterList filter = new FilterList(filters);
         scan.setFilter(filter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
         scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
@@ -1897,15 +1903,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
     
-    private TableViewFinder findChildViews_4_11(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName) throws IOException {
+    private TableViewFinder findChildViews_4_11(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName, boolean stopAfterFirst) throws IOException {
         Scan scan = new Scan();
         byte[] startRow = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
         byte[] stopRow = ByteUtil.nextKey(startRow);
         scan.setStartRow(startRow);
         scan.setStopRow(stopRow);
         SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareOp.EQUAL, CHILD_TABLE_BYTES);
+        Filter filter = linkFilter;
         linkFilter.setFilterIfMissing(true);
-        scan.setFilter(linkFilter);
+        if (stopAfterFirst) {
+            filter = new FilterList(linkFilter, new PageFilter(1));
+        }
+        scan.setFilter(filter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
         scan.addColumn(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
         
@@ -1945,11 +1955,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
         }
     }
-    
-    private static final byte[] PHYSICAL_TABLE_BYTES =
-            new byte[] { PTable.LinkType.PHYSICAL_TABLE.getSerializedValue() };
 
-    private TableViewFinder findChildViews(Region region, byte[] tenantId, PTable table, int clientVersion)
+    private TableViewFinder findChildViews(Region region, byte[] tenantId, PTable table, int clientVersion, boolean stopAfterFirst)
             throws IOException, SQLException {
         byte[] tableKey =
                 SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
@@ -1960,10 +1967,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 loadTable(env, tableKey, cacheKey, MIN_SYSTEM_TABLE_TIMESTAMP,
                     HConstants.LATEST_TIMESTAMP, clientVersion);
         if (systemCatalog.getTimeStamp() < MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0) {
-            return findChildViews_deprecated(region, tenantId, table, PHYSICAL_TABLE_BYTES);
+            return findChildViews_deprecated(region, tenantId, table, PHYSICAL_TABLE_BYTES, stopAfterFirst);
         } else {
             return findChildViews_4_11(region, tenantId, table.getSchemaName().getBytes(),
-                table.getTableName().getBytes());
+                table.getTableName().getBytes(), stopAfterFirst);
         }
     }
     
@@ -2131,7 +2138,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
             if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
                 // Handle any child views that exist
-                TableViewFinder tableViewFinderResult = findChildViews(region, tenantId, table, clientVersion);
+                TableViewFinder tableViewFinderResult = findChildViews(region, tenantId, table, clientVersion, !isCascade);
                 if (tableViewFinderResult.hasViews()) {
                     if (isCascade) {
                         if (tableViewFinderResult.allViewsInMultipleRegions()) {
@@ -2541,7 +2548,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // lock the rows corresponding to views so that no other thread can modify the view meta-data
             RowLock viewRowLock = acquireLock(region, viewKey, locks);
             PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock, clientVersion);
-            
             ColumnOrdinalPositionUpdateList ordinalPositionList = new ColumnOrdinalPositionUpdateList();
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());
             boolean addingExistingPkCol = false;
