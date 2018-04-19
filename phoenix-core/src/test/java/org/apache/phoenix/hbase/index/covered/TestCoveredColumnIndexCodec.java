@@ -200,7 +200,7 @@ public class TestCoveredColumnIndexCodec {
     Delete d = new Delete(PK, 2);
     // need to set the timestamp here, as would actually happen on the server, unlike what happens
     // with puts, where the get the constructor specified timestamp for unspecified methods.
-    d.deleteFamily(FAMILY, 2);
+    d.addFamily(FAMILY, 2);
     // setup the next batch of 'current state', basically just ripping out the current state from
     // the last round
     table = new SimpleTableState(new Result(kvs));
@@ -221,12 +221,12 @@ public class TestCoveredColumnIndexCodec {
 
     // now with the delete of the columns
     d = new Delete(PK, 2);
-    d.deleteColumns(FAMILY, QUAL, 2);
+    d.addColumns(FAMILY, QUAL, 2);
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
 
     // this delete needs to match timestamps exactly, by contract, to have any effect
     d = new Delete(PK, 1);
-    d.deleteColumn(FAMILY, QUAL, 1);
+    d.addColumn(FAMILY, QUAL, 1);
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
   }
 
