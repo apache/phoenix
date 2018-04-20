@@ -74,6 +74,11 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     // coprocessor calls. TODO: remove after HBASE-18127 when available
     private static class BatchMutateContext {
         public Collection<Pair<Mutation, byte[]>> indexUpdates = Collections.emptyList();
+        public final int clientVersion;
+
+        public BatchMutateContext(int clientVersion) {
+            this.clientVersion = clientVersion;
+        }
     }
     
     private ThreadLocal<BatchMutateContext> batchMutateContext =
@@ -159,7 +164,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             super.preBatchMutate(c, miniBatchOp);
             return;
         }
-        BatchMutateContext context = new BatchMutateContext();
+        BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);
         
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
@@ -229,7 +234,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
             if (success) { // if miniBatchOp was successfully written, write index updates
                 if (!context.indexUpdates.isEmpty()) {
-                    this.writer.write(context.indexUpdates, false);
+                    this.writer.write(context.indexUpdates, false, context.clientVersion);
                 }
                 current.addTimelineAnnotation("Wrote index updates");
             }
