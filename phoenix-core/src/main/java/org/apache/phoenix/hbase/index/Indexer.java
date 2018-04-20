@@ -90,6 +90,7 @@ import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Lists;
@@ -130,8 +131,13 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   // Hack to get around not being able to save any state between
   // coprocessor calls. TODO: remove after HBASE-18127 when available
   private static class BatchMutateContext {
+      public final int clientVersion;
       public Collection<Pair<Mutation, byte[]>> indexUpdates = Collections.emptyList();
       public List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+
+      public BatchMutateContext(int clientVersion) {
+          this.clientVersion = clientVersion;
+      }
   }
   
   private ThreadLocal<BatchMutateContext> batchMutateContext =
@@ -392,7 +398,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
        * Exclusively lock all rows so we get a consistent read
        * while determining the index updates
        */
-      BatchMutateContext context = new BatchMutateContext();
+      BatchMutateContext context = new BatchMutateContext(this.builder.getIndexMetaData(miniBatchOp).getClientVersion());
       setBatchMutateContext(c, context);
       Durability durability = Durability.SKIP_WAL;
       boolean copyMutations = false;
@@ -619,7 +625,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           long start = EnvironmentEdgeManager.currentTimeMillis();
           
           current.addTimelineAnnotation("Actually doing index update for first time");
-          writer.writeAndKillYourselfOnFailure(context.indexUpdates, false);
+          writer.writeAndKillYourselfOnFailure(context.indexUpdates, false, context.clientVersion);
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexWriteThreshold) {
@@ -687,7 +693,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
         // do the usual writer stuff, killing the server again, if we can't manage to make the index
         // writes succeed again
         try {
-            writer.writeAndKillYourselfOnFailure(updates, true);
+            writer.writeAndKillYourselfOnFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IOException e) {
                 LOG.error("During WAL replay of outstanding index updates, "
                         + "Exception is thrown instead of killing server during index writing", e);
@@ -727,7 +733,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
            * hopes they come up before the primary table finishes.
            */
           Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-          recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true);
+          recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowPreWALRestoreThreshold) {

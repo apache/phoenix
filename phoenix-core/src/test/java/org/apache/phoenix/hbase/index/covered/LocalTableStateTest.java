@@ -41,6 +41,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -68,6 +69,11 @@ public class LocalTableStateTest {
         return true;
     }
       
+    @Override
+    public int getClientVersion() {
+        return ScanUtil.UNKNOWN_CLIENT_VERSION;
+    }
+
   };
 
   @SuppressWarnings("unchecked")
@@ -131,7 +137,12 @@ public class LocalTableStateTest {
             return true;
         }
             
-        };
+        @Override
+        public int getClientVersion() {
+            return ScanUtil.UNKNOWN_CLIENT_VERSION;
+        }
+
+    };
     Put m = new Put(row);
     m.addColumn(fam, qual, ts, val);
     // setup mocks
@@ -168,6 +179,11 @@ public class LocalTableStateTest {
             return false;
         }
             
+        @Override
+        public int getClientVersion() {
+            return ScanUtil.UNKNOWN_CLIENT_VERSION;
+        }
+
     };
     Put m = new Put(row);
     m.addColumn(fam, qual, ts, val);

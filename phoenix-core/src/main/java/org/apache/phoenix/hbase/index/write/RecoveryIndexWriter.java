@@ -71,9 +71,9 @@ public class RecoveryIndexWriter extends IndexWriter {
     }
 
     @Override
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates) throws IOException {
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates, int clientVersion) throws IOException {
         try {
-            write(resolveTableReferences(toWrite), allowLocalUpdates);
+            write(resolveTableReferences(toWrite), allowLocalUpdates, clientVersion);
         } catch (MultiIndexWriteFailureException e) {
             for (HTableInterfaceReference table : e.getFailedTables()) {
                 if (!admin.tableExists(TableName.valueOf(table.getTableName()))) {

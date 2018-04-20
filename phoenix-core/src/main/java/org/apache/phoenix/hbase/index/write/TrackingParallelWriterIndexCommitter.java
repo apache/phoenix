@@ -112,7 +112,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws MultiIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws MultiIndexWriteFailureException {
         Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
         TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
         List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());

@@ -53,6 +53,7 @@ import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -138,7 +139,7 @@ public class TestIndexWriter {
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, e);
     IndexWriter writer = new IndexWriter(committer, policy);
-    writer.write(indexUpdates);
+    writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.testName.getTableNameString() + " finished");
@@ -214,7 +215,7 @@ public class TestIndexWriter {
       @Override
       public void run() {
         try {
-          writer.write(indexUpdates);
+          writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IndexWriteException e) {
           failedWrite[0] = true;
         }
