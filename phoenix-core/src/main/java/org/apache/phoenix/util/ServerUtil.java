@@ -121,6 +121,25 @@ public class ServerUtil {
         }
         return new PhoenixIOException(t);
     }
+
+    /**
+     * Return the first SQLException in the exception chain, otherwise parse it.
+     * When we're receiving an exception locally, there's no need to string parse,
+     * as the SQLException will already be part of the chain.
+     * @param t
+     * @return the SQLException, or null if none found
+     */
+    public static SQLException parseLocalOrRemoteServerException(Throwable t) {
+        while (t.getCause() != null) {
+            if (t instanceof NotServingRegionException) {
+                return parseRemoteException(new StaleRegionBoundaryCacheException());
+            } else if (t instanceof SQLException) {
+                return (SQLException) t;
+            }
+            t = t.getCause();
+        }
+        return parseRemoteException(t);
+    }
     
     public static SQLException parseServerExceptionOrNull(Throwable t) {
         while (t.getCause() != null) {
@@ -197,7 +216,7 @@ public class ServerUtil {
         return parseTimestampFromRemoteException(t);
     }
 
-    private static long parseTimestampFromRemoteException(Throwable t) {
+    public static long parseTimestampFromRemoteException(Throwable t) {
         String message = t.getLocalizedMessage();
         if (message != null) {
             // If the message matches the standard pattern, recover the SQLException and throw it.
@@ -217,7 +236,7 @@ public class ServerUtil {
             msg = "";
         }
         if (t instanceof SQLException) {
-            msg = constructSQLErrorMessage((SQLException) t, msg);
+            msg = t.getMessage() + " " + msg;
         }
         msg += String.format(FORMAT_FOR_TIMESTAMP, timestamp);
         return new DoNotRetryIOException(msg, t);

@@ -370,6 +370,7 @@ public enum SQLExceptionCode {
     CONNECTION_CLOSED(1111, "XCL11", "Connectioin is closed."),
 
     INDEX_FAILURE_BLOCK_WRITE(1120, "XCL20", "Writes to table blocked until index can be updated."),
+    INDEX_WRITE_FAILURE(1121, "XCL21", "Write to the index failed."),
     
     UPDATE_CACHE_FREQUENCY_INVALID(1130, "XCL30", "UPDATE_CACHE_FREQUENCY cannot be set to ALWAYS if APPEND_ONLY_SCHEMA is true."),
     CANNOT_DROP_COL_APPEND_ONLY_SCHEMA(1131, "XCL31", "Cannot drop column from table that with append only schema."),

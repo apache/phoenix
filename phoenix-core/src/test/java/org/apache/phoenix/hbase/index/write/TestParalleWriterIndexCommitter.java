@@ -30,10 +30,14 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.IndexTableName;
@@ -84,6 +88,13 @@ public class TestParalleWriterIndexCommitter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    TableDescriptor mockTableDesc = Mockito.mock(TableDescriptor.class);
+    Mockito.when(mockTableDesc.getTableName()).thenReturn(TableName.valueOf("test"));
+    Connection mockConnection = Mockito.mock(Connection.class);
+    Mockito.when(e.getConnection()).thenReturn(mockConnection);
+    Mockito.when(mockRegion.getTableDescriptor()).thenReturn(mockTableDesc);
     Stoppable stop = Mockito.mock(Stoppable.class);
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, Table> tables =

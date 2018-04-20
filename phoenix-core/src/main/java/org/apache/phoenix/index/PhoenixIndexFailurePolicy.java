@@ -26,14 +26,17 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.ConnectionUtils;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
@@ -42,10 +45,16 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
+import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.DelegateIndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -58,9 +67,13 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 /**
@@ -101,14 +114,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 rebuildIndexOnFailure = Boolean.parseBoolean(value);
             }
         }
-        String value = htd.getValue(DISABLE_INDEX_ON_WRITE_FAILURE);
-        if (value == null) {
-            disableIndexOnFailure = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_DISABLE_INDEX, 
-                QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX);
-        } else {
-            disableIndexOnFailure = Boolean.parseBoolean(value);
-        }
-        value = htd.getValue(BLOCK_DATA_TABLE_WRITES_ON_WRITE_FAILURE);
+        disableIndexOnFailure = getDisableIndexOnFailure(env);
+        String value = htd.getValue(BLOCK_DATA_TABLE_WRITES_ON_WRITE_FAILURE);
         if (value == null) {
             blockDataTableWritesOnFailure = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
                 QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
@@ -148,7 +155,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             throwing = false;
         } finally {
             if (!throwing) {
-            	IOException ioException = ServerUtil.wrapInDoNotRetryIOException("Unable to update the following indexes: " + attempted.keySet(), cause, timestamp);
+                SQLException sqlException =
+                        new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_WRITE_FAILURE)
+                                .setRootCause(cause).setMessage(cause.getLocalizedMessage()).build()
+                                .buildException();
+                IOException ioException = ServerUtil.wrapInDoNotRetryIOException(null, sqlException, timestamp);
             	Mutation m = attempted.entries().iterator().next().getValue();
             	boolean isIndexRebuild = PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap());
             	// Always throw if rebuilding index since the rebuilder needs to know if it was successful
@@ -201,6 +212,19 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
                 }
+                // client disables the index, so we pass the index names in the thrown exception
+                if (cause instanceof MultiIndexWriteFailureException) {
+                    List<HTableInterfaceReference> failedLocalIndexes =
+                            Lists.newArrayList(Iterables.transform(indexTableNames.entrySet(),
+                                new Function<Map.Entry<String, Long>, HTableInterfaceReference>() {
+                                    @Override
+                                    public HTableInterfaceReference apply(Entry<String, Long> input) {
+                                        return new HTableInterfaceReference(new ImmutableBytesPtr(
+                                                Bytes.toBytes(input.getKey())));
+                                    }
+                                }));
+                    ((MultiIndexWriteFailureException) cause).setFailedTables(failedLocalIndexes);
+                }
             } else {
                 indexTableNames.put(ref.getTableName(), minTimeStamp);
             }
@@ -211,7 +235,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             return timestamp;
         }
 
-        final PIndexState newState = disableIndexOnFailure ? PIndexState.DISABLE : PIndexState.PENDING_ACTIVE;
+        final PIndexState newState = disableIndexOnFailure ? PIndexState.PENDING_DISABLE : PIndexState.PENDING_ACTIVE;
         final long fTimestamp = timestamp;
         // for all the index tables that we've found, try to disable them and if that fails, try to
         return User.runAsLoginUser(new PrivilegedExceptionAction<Long>() {
@@ -253,12 +277,9 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                                 throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
                             }
                         }
-                        if (leaveIndexActive)
-                            LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName
-                                    + " due to an exception while writing updates.", cause);
-                        else
-                            LOG.info("Successfully disabled index " + indexTableName
-                                    + " due to an exception while writing updates.", cause);
+                        LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName
+                            + " due to an exception while writing updates. indexState=" + newState,
+                        cause);
                     } catch (Throwable t) {
                         if (t instanceof Exception) {
                             throw (Exception)t;
@@ -327,5 +348,159 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             }
         }
         return indexTableNames;
+    }
+
+    /**
+     * Check config for whether to disable index on index write failures
+     * @param htd
+     * @param config
+     * @param connection
+     * @return The table config for {@link PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE}
+     * @throws SQLException
+     */
+    public static boolean getDisableIndexOnFailure(RegionCoprocessorEnvironment env) {
+        TableDescriptor htd = env.getRegion().getTableDescriptor();
+        Configuration config = env.getConfiguration();
+        String value = htd.getValue(PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE);
+        boolean disableIndexOnFailure;
+        if (value == null) {
+            disableIndexOnFailure =
+                    config.getBoolean(QueryServices.INDEX_FAILURE_DISABLE_INDEX,
+                        QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX);
+        } else {
+            disableIndexOnFailure = Boolean.parseBoolean(value);
+        }
+        return disableIndexOnFailure;
+    }
+
+    /**
+     * If we're leaving the index active after index write failures on the server side, then we get
+     * the exception on the client side here after hitting the max # of hbase client retries. We
+     * disable the index as it may now be inconsistent. The indexDisableTimestamp was already set
+     * on the server side, so the rebuilder will be run.
+     */
+    private static void handleIndexWriteFailureFromClient(IndexWriteException indexWriteException,
+            PhoenixConnection conn) {
+        handleExceptionFromClient(indexWriteException, conn, PIndexState.DISABLE);
+    }
+
+    private static void handleIndexWriteSuccessFromClient(IndexWriteException indexWriteException,
+            PhoenixConnection conn) {
+        handleExceptionFromClient(indexWriteException, conn, PIndexState.ACTIVE);
+    }
+
+    private static void handleExceptionFromClient(IndexWriteException indexWriteException,
+            PhoenixConnection conn, PIndexState indexState) {
+        try {
+            Set<String> indexesToUpdate = new HashSet<>();
+            if (indexWriteException instanceof MultiIndexWriteFailureException) {
+                MultiIndexWriteFailureException indexException =
+                        (MultiIndexWriteFailureException) indexWriteException;
+                List<HTableInterfaceReference> failedIndexes = indexException.getFailedTables();
+                if (indexException.isDisableIndexOnFailure() && failedIndexes != null) {
+                    for (HTableInterfaceReference failedIndex : failedIndexes) {
+                        String failedIndexTable = failedIndex.getTableName();
+                        if (!indexesToUpdate.contains(failedIndexTable)) {
+                            updateIndex(failedIndexTable, conn, indexState);
+                            indexesToUpdate.add(failedIndexTable);
+                        }
+                    }
+                }
+            } else if (indexWriteException instanceof SingleIndexWriteFailureException) {
+                SingleIndexWriteFailureException indexException =
+                        (SingleIndexWriteFailureException) indexWriteException;
+                String failedIndex = indexException.getTableName();
+                if (indexException.isDisableIndexOnFailure() && failedIndex != null) {
+                    updateIndex(failedIndex, conn, indexState);
+                }
+            }
+        } catch (Exception handleE) {
+            LOG.warn("Error while trying to handle index write exception", indexWriteException);
+        }
+    }
+
+    public static interface MutateCommand {
+        void doMutation() throws IOException;
+    }
+
+    /**
+     * Retries a mutationBatch where the index write failed.
+     * One attempt should have already been made before calling this.
+     * Max retries and exponential backoff logic mimics that of HBase's client
+     * If max retries are hit, the index is disabled.
+     * If the write is successful on a subsequent retry, the index is set back to ACTIVE
+     * @param mutateCommand mutation command to execute
+     * @param iwe original IndexWriteException
+     * @param connection connection to use
+     * @param config config used to get retry settings
+     * @throws Exception
+     */
+    public static void doBatchWithRetries(MutateCommand mutateCommand,
+            IndexWriteException iwe, PhoenixConnection connection, ReadOnlyProps config)
+            throws IOException {
+        int maxTries = config.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+            HConstants.DEFAULT_HBASE_CLIENT_RETRIES_NUMBER);
+        long pause = config.getLong(HConstants.HBASE_CLIENT_PAUSE,
+            HConstants.DEFAULT_HBASE_CLIENT_PAUSE);
+        int numRetry = 1; // already tried once
+        // calculate max time to retry for
+        int timeout = 0;
+        for (int i = 0; i < maxTries; ++i) {
+          timeout = (int) (timeout + ConnectionUtils.getPauseTime(pause, i));
+        }
+        long canRetryUntil = EnvironmentEdgeManager.currentTime() + timeout;
+        while (canRetryMore(numRetry++, maxTries, canRetryUntil)) {
+            try {
+                Thread.sleep(ConnectionUtils.getPauseTime(pause, numRetry)); // HBase's exponential backoff
+                mutateCommand.doMutation();
+                // success - change the index state from PENDING_DISABLE back to ACTIVE
+                handleIndexWriteSuccessFromClient(iwe, connection);
+                return;
+            } catch (IOException e) {
+                SQLException inferredE = ServerUtil.parseLocalOrRemoteServerException(e);
+                if (inferredE == null || inferredE.getErrorCode() != SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
+                    // if it's not an index write exception, throw exception, to be handled normally in caller's try-catch
+                    throw e;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(e);
+            }
+        }
+        // max retries hit - disable the index
+        handleIndexWriteFailureFromClient(iwe, connection);
+        throw new DoNotRetryIOException(iwe); // send failure back to client
+    }
+
+    private static boolean canRetryMore(int numRetry, int maxRetries, long canRetryUntil) {
+        // If there is a single try we must not take into account the time.
+        return numRetry < maxRetries
+                || (maxRetries > 1 && EnvironmentEdgeManager.currentTime() < canRetryUntil);
+    }
+
+    /**
+     * Converts from SQLException to IndexWriteException
+     * @param sqlE the SQLException
+     * @return the IndexWriteException
+     */
+    public static IndexWriteException getIndexWriteException(SQLException sqlE) {
+        String sqlMsg = sqlE.getMessage();
+        if (sqlMsg.contains(MultiIndexWriteFailureException.FAILURE_MSG)) {
+            return new MultiIndexWriteFailureException(sqlMsg);
+        } else if (sqlMsg.contains(SingleIndexWriteFailureException.FAILED_MSG)) {
+            return new SingleIndexWriteFailureException(sqlMsg);
+        }
+        return null;
+    }
+
+    private static void updateIndex(String indexFullName, PhoenixConnection conn,
+            PIndexState indexState) throws SQLException {
+        if (PIndexState.DISABLE.equals(indexState)) {
+            LOG.info("Disabling index after hitting max number of index write retries: "
+                    + indexFullName);
+        } else if (PIndexState.ACTIVE.equals(indexState)) {
+            LOG.debug("Resetting index to active after subsequent success " + indexFullName);
+        }
+        IndexUtil.updateIndexState(conn, indexFullName, indexState, null);
     }
 }

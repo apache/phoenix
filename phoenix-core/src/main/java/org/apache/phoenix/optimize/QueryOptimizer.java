@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Lists;
@@ -80,11 +81,14 @@ public class QueryOptimizer {
     private final QueryServices services;
     private final boolean useIndexes;
     private final boolean costBased;
+    private long indexPendingDisabledThreshold;
 
     public QueryOptimizer(QueryServices services) {
         this.services = services;
         this.useIndexes = this.services.getProps().getBoolean(QueryServices.USE_INDEXES_ATTRIB, QueryServicesOptions.DEFAULT_USE_INDEXES);
         this.costBased = this.services.getProps().getBoolean(QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
+        this.indexPendingDisabledThreshold = this.services.getProps().getLong(QueryServices.INDEX_PENDING_DISABLE_THRESHOLD,
+            QueryServicesOptions.DEFAULT_INDEX_PENDING_DISABLE_THRESHOLD);
     }
 
     public QueryPlan optimize(PhoenixStatement statement, QueryPlan dataPlan) throws SQLException {
@@ -236,7 +240,7 @@ public class QueryOptimizer {
         return hintedPlan == null ? orderPlansBestToWorst(select, plans, stopAtBestPlan) : plans;
     }
     
-    private static QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select, List<PTable> indexes, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
+    private QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select, List<PTable> indexes, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
         QueryPlan dataPlan = plans.get(0);
         String indexHint = select.getHint().getHint(Hint.INDEX);
         if (indexHint == null) {
@@ -293,7 +297,7 @@ public class QueryOptimizer {
         return -1;
     }
     
-    private static QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan, boolean isHinted) throws SQLException {
+    private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan, boolean isHinted) throws SQLException {
         int nColumns = dataPlan.getProjector().getColumnCount();
         String tableAlias = dataPlan.getTableRef().getTableAlias();
 		String alias = tableAlias==null ? null : '"' + tableAlias + '"'; // double quote in case it's case sensitive
@@ -308,9 +312,11 @@ public class QueryOptimizer {
         boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
         // Check index state of now potentially updated index table to make sure it's active
         TableRef indexTableRef = resolver.getTables().get(0);
-        PIndexState indexState = indexTableRef.getTable().getIndexState();
         Map<TableRef, QueryPlan> dataPlans = Collections.singletonMap(indexTableRef, dataPlan);
-        if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE) {
+        PTable indexTable = indexTableRef.getTable();
+        PIndexState indexState = indexTable.getIndexState();
+        if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
+                || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
                 indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
@@ -326,10 +332,13 @@ public class QueryOptimizer {
                         && !plan.getContext().getDataColumns().isEmpty()) {
                     return null;
                 }
-                indexState = plan.getTableRef().getTable().getIndexState();
+                indexTableRef = plan.getTableRef();
+                indexTable = indexTableRef.getTable();
+                indexState = indexTable.getIndexState();
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.
-                if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE) {
+                if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
+                        || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
                     } else if (index.getIndexType() == IndexType.GLOBAL) {
@@ -390,6 +399,12 @@ public class QueryOptimizer {
             }
         }
         return null;
+    }
+
+    // returns true if we can still use the index
+    // retuns false if we've been in PENDING_DISABLE too long - index should be considered disabled
+    private boolean isUnderPendingDisableThreshold(long currentTimestamp, long indexDisableTimestamp) {
+        return currentTimestamp - indexDisableTimestamp <= indexPendingDisabledThreshold;
     }
 
     /**

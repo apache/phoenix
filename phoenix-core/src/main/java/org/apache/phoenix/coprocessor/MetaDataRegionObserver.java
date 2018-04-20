@@ -237,6 +237,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
         private final long rebuildIndexBatchSize;
         private final long configuredBatches;
         private final long indexDisableTimestampThreshold;
+        private final long pendingDisableThreshold;
         private final ReadOnlyProps props;
         private final List<String> onlyTheseTables;
 
@@ -255,6 +256,9 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
             this.indexDisableTimestampThreshold =
                     configuration.getLong(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD);
+            this.pendingDisableThreshold =
+                    configuration.getLong(QueryServices.INDEX_PENDING_DISABLE_THRESHOLD,
+                        QueryServicesOptions.DEFAULT_INDEX_PENDING_DISABLE_THRESHOLD);
             this.props = new ReadOnlyProps(env.getConfiguration().iterator());
         }
 
@@ -350,6 +354,18 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                     }
                     
                     PIndexState indexState = PIndexState.fromSerializedValue(indexStateBytes[0]);
+                    long elapsedSinceDisable = EnvironmentEdgeManager.currentTimeMillis() - Math.abs(indexDisableTimestamp);
+
+                    // on an index write failure, the server side transitions to PENDING_DISABLE, then the client
+                    // retries, and after retries are exhausted, disables the index
+                    if (indexState == PIndexState.PENDING_DISABLE) {
+                        if (elapsedSinceDisable > pendingDisableThreshold) {
+                            // too long in PENDING_DISABLE - client didn't disable the index, so we do it here
+                            IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.DISABLE, indexDisableTimestamp);
+                        }
+                        continue;
+                    }
+
                     // Only perform relatively expensive check for all regions online when index
                     // is disabled or pending active since that's the state it's placed into when
                     // an index write fails.
@@ -359,7 +375,8 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                                 + indexPTable.getName() + " are online.");
                         continue;
                     }
-                    if (EnvironmentEdgeManager.currentTimeMillis() - Math.abs(indexDisableTimestamp) > indexDisableTimestampThreshold) {
+
+                    if (elapsedSinceDisable > indexDisableTimestampThreshold) {
                         /*
                          * It has been too long since the index has been disabled and any future
                          * attempts to reenable it likely will fail. So we are going to mark the

@@ -17,7 +17,12 @@
  */
 package org.apache.phoenix.hbase.index.exception;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.hadoop.hbase.HBaseIOException;
+import org.apache.phoenix.query.QueryServicesOptions;
+
+import com.google.common.base.Objects;
 
 /**
  * Generic {@link Exception} that an index write has failed
@@ -25,19 +30,58 @@ import org.apache.hadoop.hbase.HBaseIOException;
 @SuppressWarnings("serial")
 public class IndexWriteException extends HBaseIOException {
 
+    /*
+     * We pass this message back to the client so that the config only needs to be set on the
+     * server side.
+     */
+    private static final String DISABLE_INDEX_ON_FAILURE_MSG = "disableIndexOnFailure=";
+    private boolean disableIndexOnFailure = QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
+
   public IndexWriteException() {
     super();
   }
 
+    /**
+     * Used for the case where we cannot reach the index, but not sure of the table or the mutations
+     * that caused the failure
+     * @param message
+     * @param cause
+     */
   public IndexWriteException(String message, Throwable cause) {
-    super(message, cause);
+      super(message, cause);
   }
 
-  public IndexWriteException(String message) {
-    super(message);
+  public IndexWriteException(Throwable cause, boolean disableIndexOnFailure) {
+    super(cause);
+    this.disableIndexOnFailure = disableIndexOnFailure;
   }
 
-  public IndexWriteException(Throwable cause) {
+  public IndexWriteException(boolean disableIndexOnFailure) {
+    this.disableIndexOnFailure = disableIndexOnFailure;
+  }
+
+public IndexWriteException(Throwable cause) {
     super(cause);
   }
+
+    public static boolean parseDisableIndexOnFailure(String message) {
+        Pattern p =
+                Pattern.compile(DISABLE_INDEX_ON_FAILURE_MSG + "(true|false)",
+                    Pattern.CASE_INSENSITIVE);
+        Matcher m = p.matcher(message);
+        if (m.find()) {
+            boolean disableIndexOnFailure = Boolean.parseBoolean(m.group(1));
+            return disableIndexOnFailure;
+        }
+        return QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
+    }
+
+    public boolean isDisableIndexOnFailure() {
+        return disableIndexOnFailure;
+    }
+
+    @Override
+    public String getMessage() {
+        return Objects.firstNonNull(super.getMessage(), "") + " " + DISABLE_INDEX_ON_FAILURE_MSG + disableIndexOnFailure + ",";
+    }
 }

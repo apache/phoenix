@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
@@ -216,5 +217,16 @@ public class PhoenixKeyValueUtil {
         int rowLength = rowEntry.getKey().getLength();
         long colValuesLength = rowEntry.getValue().calculateEstimatedSize();
         return (rowLength + colValuesLength);
+    }
+
+    public static void setTimestamp(Mutation m, long timestamp) {
+        byte[] tsBytes = Bytes.toBytes(timestamp);
+        for (List<Cell> family : m.getFamilyCellMap().values()) {
+            List<KeyValue> familyKVs = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValues(family);
+            for (KeyValue kv : familyKVs) {
+                int tsOffset = kv.getTimestampOffset();
+                System.arraycopy(tsBytes, 0, kv.getBuffer(), tsOffset, Bytes.SIZEOF_LONG);
+            }
+        }
     }
 }
