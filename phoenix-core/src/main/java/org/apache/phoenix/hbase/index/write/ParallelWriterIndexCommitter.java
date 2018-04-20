@@ -35,6 +35,7 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -56,7 +57,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
     private static final Log LOG = LogFactory.getLog(ParallelWriterIndexCommitter.class);
 
-    private HTableFactory factory;
+    private HTableFactory retryingFactory;
+    private HTableFactory noRetriesfactory;
     private Stoppable stopped;
     private QuickFailingTaskRunner pool;
     private KeyValueBuilder kvBuilder;
@@ -87,7 +89,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
      * Exposed for TESTING
      */
     void setup(HTableFactory factory, ExecutorService pool,Stoppable stop, RegionCoprocessorEnvironment env) {
-        this.factory = factory;
+        this.retryingFactory = factory;
+        this.noRetriesfactory = IndexWriterUtils.getNoRetriesHTableFactory(env);
         this.pool = new QuickFailingTaskRunner(pool);
         this.stopped = stop;
     }
@@ -161,6 +164,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 }
                             }
                         }
+                     // if the client can retry index writes, then we don't need to retry here
+                        HTableFactory factory = clientVersion < PhoenixDatabaseMetaData.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesfactory;
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations, null);
@@ -225,7 +230,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public void stop(String why) {
         LOG.info("Shutting down " + this.getClass().getSimpleName() + " because " + why);
         this.pool.stop(why);
-        this.factory.shutdown();
+        this.retryingFactory.shutdown();
+        this.noRetriesfactory.shutdown();
     }
 
     @Override

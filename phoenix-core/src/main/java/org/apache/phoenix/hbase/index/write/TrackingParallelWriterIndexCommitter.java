@@ -40,6 +40,7 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -73,7 +74,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
 
     private TaskRunner pool;
-    private HTableFactory factory;
+    private HTableFactory retryingFactory;
+    private HTableFactory noRetriesFactory;
     private Stoppable stopped;
     private RegionCoprocessorEnvironment env;
     private KeyValueBuilder kvBuilder;
@@ -106,7 +108,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     void setup(HTableFactory factory, ExecutorService pool, Stoppable stop,
             RegionCoprocessorEnvironment env) {
         this.pool = new WaitForCompletionTaskRunner(pool);
-        this.factory = factory;
+        this.retryingFactory = factory;
+        this.noRetriesFactory = IndexWriterUtils.getNoRetriesHTableFactory(env);
         this.stopped = stop;
         this.env = env;
     }
@@ -172,7 +175,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         if (LOG.isTraceEnabled()) {
                             LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                         }
-
+                        // if the client can retry index writes, then we don't need to retry here
+                        HTableFactory factory = clientVersion < PhoenixDatabaseMetaData.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations, null);
@@ -238,7 +242,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     public void stop(String why) {
         LOG.info("Shutting down " + this.getClass().getSimpleName());
         this.pool.stop(why);
-        this.factory.shutdown();
+        this.retryingFactory.shutdown();
+        this.noRetriesFactory.shutdown();
     }
 
     @Override
