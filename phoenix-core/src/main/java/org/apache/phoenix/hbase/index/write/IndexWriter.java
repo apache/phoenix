@@ -135,13 +135,14 @@ public class IndexWriter implements Stoppable {
    * which ensures that the server crashes when an index write fails, ensuring that we get WAL
    * replay of the index edits.
    * @param indexUpdates Updates to write
+ * @param clientVersion version of the client
  * @throws IOException 
    */
     public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-            boolean allowLocalUpdates) throws IOException {
+            boolean allowLocalUpdates, int clientVersion) throws IOException {
     // convert the strings to htableinterfaces to which we can talk and group by TABLE
     Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-    writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates);
+    writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates, clientVersion);
   }
 
   /**
@@ -150,9 +151,9 @@ public class IndexWriter implements Stoppable {
  * @throws IOException 
    */
     public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
-            boolean allowLocalUpdates) throws IOException {
+            boolean allowLocalUpdates, int clientVersion) throws IOException {
     try {
-      write(toWrite, allowLocalUpdates);
+      write(toWrite, allowLocalUpdates, clientVersion);
       if (LOG.isTraceEnabled()) {
         LOG.trace("Done writing all index updates!\n\t" + toWrite);
       }
@@ -176,12 +177,12 @@ public class IndexWriter implements Stoppable {
    * @throws IndexWriteException if we cannot successfully write to the index. Whether or not we
    *           stop early depends on the {@link IndexCommitter}.
    */
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite) throws IndexWriteException {
-    	write(resolveTableReferences(toWrite), false);
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, int clientVersion) throws IndexWriteException {
+    	write(resolveTableReferences(toWrite), false, clientVersion);
     }
 
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates) throws IOException {
-    	write(resolveTableReferences(toWrite), allowLocalUpdates);
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates, int clientVersion) throws IOException {
+    	write(resolveTableReferences(toWrite), allowLocalUpdates, clientVersion);
     }
     
     /**
@@ -189,9 +190,9 @@ public class IndexWriter implements Stoppable {
    * @param toWrite
    * @throws IndexWriteException
    */
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates)
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
 	      throws IndexWriteException {
-	  this.writer.write(toWrite, allowLocalUpdates);
+	  this.writer.write(toWrite, allowLocalUpdates, clientVersion);
   }
 
   /**
