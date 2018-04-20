@@ -73,6 +73,10 @@ public class IndexBuildManager implements Stoppable {
     }
   }
 
+  public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+      return this.delegate.getIndexMetaData(miniBatchOp);
+  }
+
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(
       MiniBatchOperationInProgress<Mutation> miniBatchOp,
       Collection<? extends Mutation> mutations) throws Throwable {
