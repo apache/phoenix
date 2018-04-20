@@ -54,6 +54,7 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -140,7 +141,7 @@ public class TestIndexWriter {
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
     IndexWriter writer = new IndexWriter(committer, policy);
-    writer.write(indexUpdates);
+    writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.testName.getTableNameString() + " finished");
@@ -218,7 +219,7 @@ public class TestIndexWriter {
         indexUpdates.put(ht1, m);
         indexUpdates.put(ht2, m);
         indexUpdates.put(ht2, m);
-        writer.write(indexUpdates, false);
+        writer.write(indexUpdates, false, ScanUtil.UNKNOWN_CLIENT_VERSION);
         fail("Should not have successfully completed all index writes");
     } catch (SingleIndexWriteFailureException s) {
       LOG.info("Correctly got a failure to reach the index", s);
@@ -299,7 +300,7 @@ public class TestIndexWriter {
       @Override
       public void run() {
         try {
-          writer.write(indexUpdates);
+          writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IndexWriteException e) {
           failedWrite[0] = true;
         }
