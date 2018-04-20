@@ -19,8 +19,10 @@ package org.apache.phoenix.hbase.index.covered;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
+import org.apache.phoenix.util.ScanUtil;
 
 public interface IndexMetaData {
+
     public static final IndexMetaData NULL_INDEX_META_DATA = new IndexMetaData() {
 
         @Override
@@ -31,7 +33,13 @@ public interface IndexMetaData {
         @Override
         public ReplayWrite getReplayWrite() {
           return null;
-        }};
+        }
+
+        @Override
+        public int getClientVersion() {
+            return ScanUtil.UNKNOWN_CLIENT_VERSION;
+        }
+    };
 
         
     /**
@@ -42,4 +50,6 @@ public interface IndexMetaData {
     public boolean requiresPriorRowState(Mutation m);
 
     public ReplayWrite getReplayWrite();
+    
+    public int getClientVersion();
 }
