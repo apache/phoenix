@@ -2639,7 +2639,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             int newPosition = ++lastOrdinalPos;
                             byte[] ptr = new byte[PInteger.INSTANCE.getByteSize()];
                             PInteger.INSTANCE.getCodec().encodeInt(newPosition, ptr, 0);
-                            viewColumnPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                            viewColumnPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                     PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, clientTimeStamp, ptr);
                             mutationsForAddingColumnsToViews.add(viewColumnPut);
                         } else {
@@ -2674,7 +2674,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         short newKeySeq = (short)(currentKeySeq + deltaNumPkColsSoFar);
                         byte[] keySeqBytes = new byte[PSmallint.INSTANCE.getByteSize()];
                         PSmallint.INSTANCE.getCodec().encodeShort(newKeySeq, keySeqBytes, 0);
-                        viewColumnPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                        viewColumnPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                 PhoenixDatabaseMetaData.KEY_SEQ_BYTES, keySeqBytes);
                         addMutationsForAddingPkColsToViewIndexes(mutationsForAddingColumnsToViews, clientTimeStamp, view,
                                 deltaNumPkColsSoFar, columnName, viewColumnPut);
@@ -2713,7 +2713,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
                 byte[] viewSequencePtr = new byte[PLong.INSTANCE.getByteSize()];
                 PLong.INSTANCE.getCodec().encodeLong(view.getSequenceNumber() + 1, viewSequencePtr, 0);
-                viewHeaderRowPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                viewHeaderRowPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, clientTimeStamp, viewSequencePtr);
                 // invalidate the view so that it is removed from the cache
                 invalidateList.add(new ImmutableBytesPtr(viewKey));
@@ -2751,21 +2751,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             int oldBaseColumnCount = view.getBaseColumnCount();
             byte[] baseColumnCountPtr = new byte[PInteger.INSTANCE.getByteSize()];
             PInteger.INSTANCE.getCodec().encodeInt(oldBaseColumnCount + baseTableColumnDelta, baseColumnCountPtr, 0);
-            viewHeaderRowPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            viewHeaderRowPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES, clientTimeStamp, baseColumnCountPtr);
         }
         
         if (viewColumnDelta != 0) {
             byte[] columnCountPtr = new byte[PInteger.INSTANCE.getByteSize()];
             PInteger.INSTANCE.getCodec().encodeInt(numCols + viewColumnDelta, columnCountPtr, 0);
-            viewHeaderRowPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            viewHeaderRowPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES, clientTimeStamp, columnCountPtr);
         }
         
         if (changeSequenceNumber) {
             byte[] viewSequencePtr = new byte[PLong.INSTANCE.getByteSize()];
             PLong.INSTANCE.getCodec().encodeLong(view.getSequenceNumber() + 1, viewSequencePtr, 0);
-            viewHeaderRowPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            viewHeaderRowPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, clientTimeStamp, viewSequencePtr);
 
             mutationsForAddingColumnsToViews.add(viewHeaderRowPut);
@@ -2781,7 +2781,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Put positionUpdatePut = new Put(columnKey, clientTimeStamp);
                 byte[] ptr = new byte[PInteger.INSTANCE.getByteSize()];
                 PInteger.INSTANCE.getCodec().encodeInt(ordinalPosition, ptr, 0);
-                positionUpdatePut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                positionUpdatePut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, clientTimeStamp, ptr);
                 mutationsForAddingColumnsToViews.add(positionUpdatePut);
                 i++;
@@ -2796,7 +2796,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         if (!basePhysicalTable.isTransactional() && switchAttribute(basePhysicalTable, basePhysicalTable.isTransactional(), tableMetadata, TRANSACTIONAL_BYTES)) {
         	invalidateList.add(new ImmutableBytesPtr(viewKey));
         	Put put = new Put(viewKey);
-            put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
             		TRANSACTIONAL_BYTES, clientTimeStamp, PBoolean.INSTANCE.toBytes(true));
             mutationsForAddingColumnsToViews.add(put);
         }
@@ -3034,14 +3034,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 long newSequenceNumber = index.getSequenceNumber() + 1;
                 byte[] newSequenceNumberPtr = new byte[PLong.INSTANCE.getByteSize()];
                 PLong.INSTANCE.getCodec().encodeLong(newSequenceNumber, newSequenceNumberPtr, 0);
-                indexHeaderRowMutation.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                indexHeaderRowMutation.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, newSequenceNumberPtr);
                 
                 // increase the column count
                 int newColumnCount = index.getColumns().size() + deltaNumPkColsSoFar;
                 byte[] newColumnCountPtr = new byte[PInteger.INSTANCE.getByteSize()];
                 PInteger.INSTANCE.getCodec().encodeInt(newColumnCount, newColumnCountPtr, 0);
-                indexHeaderRowMutation.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                indexHeaderRowMutation.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES, newColumnCountPtr);
                 
                 // add index row header key to the invalidate list to force clients to fetch the latest meta-data
@@ -3068,7 +3068,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             int indexColumnDataType = IndexUtil.getIndexColumnDataType(true,
                     PDataType.fromTypeId(viewPkColumnDataType)).getSqlType();
             PInteger.INSTANCE.getCodec().encodeInt(indexColumnDataType, indexColumnDataTypeBytes, 0);
-            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.DATA_TYPE_BYTES, indexColumnDataTypeBytes);
             
              
@@ -3078,7 +3078,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES);
             if (decimalDigits != null && decimalDigits.size() > 0) {
                 Cell decimalDigit = decimalDigits.get(0);
-                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES, decimalDigit.getValueArray());
             }
             
@@ -3088,7 +3088,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES);
             if (columnSizes != null && columnSizes.size() > 0) {
                 Cell columnSize = columnSizes.get(0);
-                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES, columnSize.getValueArray());
             }
             
@@ -3097,7 +3097,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     PhoenixDatabaseMetaData.SORT_ORDER_BYTES);
             if (sortOrders != null && sortOrders.size() > 0) {
                 Cell sortOrder = sortOrders.get(0);
-                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.SORT_ORDER_BYTES, sortOrder.getValueArray());
             }
             
@@ -3106,7 +3106,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
             if (dataTableNames != null && dataTableNames.size() > 0) {
                 Cell dataTableName = dataTableNames.get(0);
-                indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES, dataTableName.getValueArray());
             }
             
@@ -3114,12 +3114,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] ordinalPositionBytes = new byte[PInteger.INSTANCE.getByteSize()];
             int ordinalPositionOfNewCol = oldNumberOfColsInIndex + deltaNumPkColsSoFar;
             PInteger.INSTANCE.getCodec().encodeInt(ordinalPositionOfNewCol, ordinalPositionBytes, 0);
-            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, ordinalPositionBytes);
             
             // New PK columns have to be nullable after the first DDL
             byte[] isNullableBytes = PInteger.INSTANCE.toBytes(ResultSetMetaData.columnNullable);
-            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.NULLABLE_BYTES, isNullableBytes);
             
             // Set the key sequence for the pk column to be added
@@ -3127,7 +3127,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             short newKeySeq = (short)(currentKeySeq + deltaNumPkColsSoFar);
             byte[] keySeqBytes = new byte[PSmallint.INSTANCE.getByteSize()];
             PSmallint.INSTANCE.getCodec().encodeShort(newKeySeq, keySeqBytes, 0);
-            indexColumnDefinitionPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            indexColumnDefinitionPut.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.KEY_SEQ_BYTES, keySeqBytes);
             
             mutationsForAddingColumnsToViews.add(indexColumnDefinitionPut);

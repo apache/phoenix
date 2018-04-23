@@ -1040,10 +1040,10 @@ public class PTableImpl implements PTable {
             newMutations();
             Delete delete = new Delete(key);
             if (families.isEmpty()) {
-                delete.deleteFamily(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), ts);
+                delete.addFamily(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), ts);
             } else {
                 for (PColumnFamily colFamily : families) {
-                    delete.deleteFamily(colFamily.getName().getBytes(), ts);
+                    delete.addFamily(colFamily.getName().getBytes(), ts);
                 }
             }
 
