@@ -103,7 +103,7 @@ public class TestParalleWriterIndexCommitter {
 
     ImmutableBytesPtr tableName = new ImmutableBytesPtr(this.test.getTableName());
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     Multimap<HTableInterfaceReference, Mutation> indexUpdates =
         ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     indexUpdates.put(new HTableInterfaceReference(tableName), m);

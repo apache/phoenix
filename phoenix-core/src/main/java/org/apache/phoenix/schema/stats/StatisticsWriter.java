@@ -59,7 +59,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.protobuf.ServiceException;
 
@@ -187,13 +186,13 @@ public class StatisticsWriter implements Closeable {
     private void addGuidepost(ImmutableBytesPtr cfKey, List<Mutation> mutations, ImmutableBytesWritable ptr, long byteCount, long rowCount, long timeStamp) {
         byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, ptr);
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
                 timeStamp, PLong.INSTANCE.toBytes(byteCount));
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
                 PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
                 PLong.INSTANCE.toBytes(rowCount));
         // Add our empty column value so queries behave correctly
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
                 ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
     }
@@ -231,7 +230,7 @@ public class StatisticsWriter implements Closeable {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         byte[] prefix = tableName;
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
                 timeStamp, PDate.INSTANCE.toBytes(new Date(currentTime)));
         return put;
     }

@@ -79,7 +79,7 @@ public class LocalTableStateTest {
   @Test
   public void testCorrectOrderingWithLazyLoadingColumns() throws Exception {
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     Configuration conf = new Configuration(false);
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -143,7 +143,7 @@ public class LocalTableStateTest {
 
     };
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     Configuration conf = new Configuration(false);
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -185,7 +185,7 @@ public class LocalTableStateTest {
 
     };
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     Configuration conf = new Configuration(false);
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -217,7 +217,7 @@ public class LocalTableStateTest {
   @SuppressWarnings("unchecked")
   public void testCorrectRollback() throws Exception {
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
 
@@ -285,7 +285,7 @@ public class LocalTableStateTest {
     });
     LocalHBaseState state = new LocalTable(env);
     Put pendingUpdate = new Put(row);
-    pendingUpdate.add(fam, qual, ts, val);
+    pendingUpdate.addColumn(fam, qual, ts, val);
     LocalTableState table = new LocalTableState(state, pendingUpdate);
 
     // do the lookup for the given column
