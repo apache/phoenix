@@ -1159,8 +1159,8 @@ public class UpgradeUtil {
             metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
             logger.info("Upgrading metadata to add parent to child links for views");
             metaConnection.commit();
-            String createChildLink = "UPSERT INTO SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE)" +
-                                        "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE" + 
+            String createChildLink = "UPSERT INTO SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE) " +
+                                        "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE " + 
                                         "FROM SYSTEM.CATALOG " + 
                                         "WHERE LINK_TYPE = 4";
             metaConnection.createStatement().execute(createChildLink);

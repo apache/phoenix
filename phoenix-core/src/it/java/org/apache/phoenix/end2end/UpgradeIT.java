@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX_UNLOCKED;
-import static org.apache.phoenix.util.UpgradeUtil.SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -42,11 +41,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.curator.shaded.com.google.common.collect.Sets;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -549,7 +546,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testAddParentChildLinks() throws Exception {
+    public void testMoveParentChildLinks() throws Exception {
         String schema = "S_" + generateUniqueName();
         String table1 = "T_" + generateUniqueName();
         String table2 = "T_" + generateUniqueName();
@@ -589,13 +586,16 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             Set<String> expectedChildLinkSet = getChildLinks(conn);
 
             // delete all the child links
-            conn.createStatement().execute("DELETE FROM SYSTEM.CATALOG WHERE LINK_TYPE = "
+            conn.createStatement().execute("DELETE FROM SYSTEM.CHILD_LINK WHERE LINK_TYPE = "
                     + LinkType.CHILD_TABLE.getSerializedValue());
 
             // re-create them by running the upgrade code
             PhoenixConnection phxMetaConn = metaConn.unwrap(PhoenixConnection.class);
             phxMetaConn.setRunningUpgrade(true);
+            // create the parent-> child links in SYSTEM.CATALOG
             UpgradeUtil.addParentToChildLinks(phxMetaConn);
+            // move the parent->child links to SYSTEM.CHILD_LINK
+            UpgradeUtil.moveChildLinks(phxMetaConn);
             Set<String> actualChildLinkSet = getChildLinks(conn);
 
             assertEquals("Unexpected child links", expectedChildLinkSet, actualChildLinkSet);
@@ -605,7 +605,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     private Set<String> getChildLinks(Connection conn) throws SQLException {
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG WHERE LINK_TYPE = "
+                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CHILD_LINK WHERE LINK_TYPE = "
                             + LinkType.CHILD_TABLE.getSerializedValue());
         Set<String> childLinkSet = Sets.newHashSet();
         while (rs.next()) {

@@ -57,7 +57,11 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.util.UpgradeUtil.*;
+import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
+import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
+import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
+import static org.apache.phoenix.util.UpgradeUtil.moveChildLinks;
+import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -2865,14 +2869,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + PBoolean.INSTANCE.getSqlTypeName());
                     addParentToChildLinks(metaConnection);
                 }
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_13_0) {
-                    metaConnection = addColumnsIfNotExists(
-                        metaConnection,
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0,
-                        PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION + " "
-                                + PBoolean.INSTANCE.getSqlTypeName());
+                // TODO set the version for which the following upgrade code runs correct
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) {
                     addViewIndexToParentLinks(metaConnection);
+                    moveChildLinks(metaConnection);
                 }
             }
 
