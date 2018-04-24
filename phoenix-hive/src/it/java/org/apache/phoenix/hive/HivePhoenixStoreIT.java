@@ -309,6 +309,33 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
             assert (rs.getString(2).equalsIgnoreCase("part1"));
             assert (rs.getDouble(3) == 200);
         }
+    }
 
+    @Test
+    public void testTimestampPredicate() throws Exception {
+        String testName = "testTimeStampPredicate";
+        hbaseTestUtil.getTestFileSystem().createNewFile(new Path(hiveLogDir, testName + ".out"));
+        createFile("10\t2013-01-02 01:01:01.123456\n", new Path(hiveOutputDir, testName + ".out").toString());
+        createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE TABLE timeStampTable(ID int,ts TIMESTAMP)" + HiveTestUtil.CRLF +
+                " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
+                .CRLF +
+                " TBLPROPERTIES(" + HiveTestUtil.CRLF +
+                "   'phoenix.hbase.table.name'='TIMESTAMPTABLE'," + HiveTestUtil.CRLF +
+                "   'phoenix.zookeeper.znode.parent'='/hbase'," + HiveTestUtil.CRLF +
+                "   'phoenix.zookeeper.quorum'='localhost'," + HiveTestUtil.CRLF +
+                "   'phoenix.zookeeper.client.port'='" +
+                hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
+                "   'phoenix.column.mapping' = 'id:ID, ts:TS'," + HiveTestUtil.CRLF +
+                "   'phoenix.rowkeys'='id');" + HiveTestUtil.CRLF);
+        sb.append("INSERT INTO TABLE timeStampTable VALUES (10, \"2013-01-02 01:01:01.123456\");" + HiveTestUtil.CRLF);
+        sb.append("SELECT * from timeStampTable WHERE ts between '2013-01-02 01:01:01.123455' and " +
+                " '2013-01-02 12:01:02.123457789' AND id = 10;" + HiveTestUtil.CRLF);
+
+        String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();
+        createFile(sb.toString(), fullPath);
+        runTest(testName, fullPath);
     }
 }
