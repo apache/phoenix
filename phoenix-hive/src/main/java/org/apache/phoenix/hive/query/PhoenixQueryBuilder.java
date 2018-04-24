@@ -255,10 +255,10 @@ public class PhoenixQueryBuilder {
 
                 if (PhoenixStorageHandlerConstants.DATE_TYPE.equals(
                         columnTypeMap.get(columnName).getTypeName())) {
-                    whereClause = applyDateFunctionUsingRegex(whereClause, columnName);
+                    whereClause = applyDateFunctionUsingRegex(whereClause, column);
                 } else if (PhoenixStorageHandlerConstants.TIMESTAMP_TYPE.equals(
                         columnTypeMap.get(columnName).getTypeName())) {
-                    whereClause = applyTimestampFunctionUsingRegex(whereClause, columnName);
+                    whereClause = applyTimestampFunctionUsingRegex(whereClause, column);
                 }
             }
         }
