@@ -307,7 +307,7 @@ public class PTableImpl implements PTable {
             table.getSequenceNumber(), table.getPKName(), basePTable.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
             table.getIndexes(), basePTable.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
             table.isWALDisabled(), basePTable.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-            baseTableColumnCount, table.rowKeyOrderOptimizable(), basePTable.isTransactional(), table.getUpdateCacheFrequency(),
+            baseTableColumnCount, table.rowKeyOrderOptimizable(), basePTable.getTransactionProvider(), table.getUpdateCacheFrequency(),
             table.getIndexDisableTimestamp(), basePTable.isNamespaceMapped(), basePTable.getAutoPartitionSeqName(), basePTable.isAppendOnlySchema(),
             basePTable.getImmutableStorageScheme(), basePTable.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
     }

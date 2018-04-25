@@ -2473,6 +2473,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     protected String getLogTableDDL() {
         return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
     }
+    
+    // Available for testing
+    protected String getChildLinkDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CHILD_LINK_METADATA);
+    }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
@@ -2693,7 +2698,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection.createStatement().execute(getLogTableDDL());
         } catch (TableAlreadyExistsException ignore) {}
         try {
-            metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
+            metaConnection.createStatement().executeUpdate(getChildLinkDDL());
         } catch (TableAlreadyExistsException e) {}
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
@@ -3129,7 +3134,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 metaConnection.createStatement().executeUpdate(getLogTableDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
             try {
-                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
+                metaConnection.createStatement().executeUpdate(getChildLinkDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,

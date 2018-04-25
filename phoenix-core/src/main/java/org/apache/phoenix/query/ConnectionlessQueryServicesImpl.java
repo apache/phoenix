@@ -166,6 +166,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     protected String getLogTableDDL() {
         return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
     }
+    
+    protected String getChildLinkDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CHILD_LINK_METADATA);
+    }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
@@ -367,7 +371,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 } catch (NewerTableAlreadyExistsException ignore) {}
                 try {
                     metaConnection.createStatement()
-                            .executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
+                            .executeUpdate(getChildLinkDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {
