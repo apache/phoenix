@@ -18,8 +18,12 @@
 package org.apache.phoenix.hbase.index.exception;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.client.Mutation;
+
+import com.google.common.base.Objects;
 
 /**
  * Exception thrown if we cannot successfully write to an index table.
@@ -27,7 +31,9 @@ import org.apache.hadoop.hbase.client.Mutation;
 @SuppressWarnings("serial")
 public class SingleIndexWriteFailureException extends IndexWriteException {
 
+  public static final String FAILED_MSG = "Failed to make index update:";
   private String table;
+  private String mutationsMsg;
 
   /**
    * Cannot reach the index, but not sure of the table or the mutations that caused the failure
@@ -45,10 +51,24 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
    * @param cause underlying reason for the failure
    */
   public SingleIndexWriteFailureException(String targetTableName, List<Mutation> mutations,
-      Exception cause) {
-    super("Failed to make index update:\n\t table: " + targetTableName + "\n\t edits: " + mutations
-        + "\n\tcause: " + cause == null ? "UNKNOWN" : cause.getMessage(), cause);
+      Exception cause, boolean disableIndexOnFailure) {
+    super(cause, disableIndexOnFailure);
     this.table = targetTableName;
+    this.mutationsMsg = mutations.toString();
+  }
+
+  /**
+   * This constructor used to rematerialize this exception when receiving
+   * an rpc exception from the server
+   * @param message detail message
+   */
+  public SingleIndexWriteFailureException(String msg) {
+      super(IndexWriteException.parseDisableIndexOnFailure(msg));
+      Pattern pattern = Pattern.compile(FAILED_MSG + ".* table: ([\\S]*)\\s.*", Pattern.DOTALL);
+      Matcher m = pattern.matcher(msg);
+      if (m.find()) {
+          this.table = m.group(1);
+      }
   }
 
   /**
@@ -58,4 +78,10 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
   public String getTableName() {
     return this.table;
   }
+
+  @Override
+    public String getMessage() {
+      return Objects.firstNonNull(super.getMessage(), "") + " " + FAILED_MSG + "\n\t table: " + this.table + "\n\t edits: " + mutationsMsg
+      + "\n\tcause: " + getCause() == null ? "UNKNOWN" : getCause().getMessage();
+    }
 }

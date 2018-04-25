@@ -83,6 +83,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
@@ -112,7 +113,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -133,7 +133,6 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -223,6 +222,9 @@ import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -281,7 +283,7 @@ public class MetaDataClient {
                     INDEX_TYPE + "," +
                     STORE_NULLS + "," +
                     BASE_COLUMN_COUNT + "," +
-                    TRANSACTIONAL + "," +
+                    TRANSACTION_PROVIDER + "," +
                     UPDATE_CACHE_FREQUENCY + "," +
                     IS_NAMESPACE_MAPPED + "," +
                     AUTO_PARTITION_SEQ +  "," +
@@ -584,14 +586,11 @@ public class MetaDataClient {
         } catch (TableNotFoundException e) {
         }
 
-        boolean defaultTransactional = connection.getQueryServices().getProps().getBoolean(
-                QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB,
-                QueryServicesOptions.DEFAULT_TRANSACTIONAL);
         // start a txn if all table are transactional by default or if we found the table in the cache and it is transactional
         // TODO if system tables become transactional remove the check
-        boolean isTransactional = defaultTransactional || (table!=null && table.isTransactional());
-        if (!systemTable && isTransactional && !connection.getMutationState().isTransactionStarted()) {
-            connection.getMutationState().startTransaction();
+        boolean isTransactional = (table!=null && table.isTransactional());
+        if (isTransactional) {
+            connection.getMutationState().startTransaction(table.getTransactionProvider());
         }
         resolvedTimestamp = resolvedTimestamp==null ? TransactionUtil.getResolvedTimestamp(connection, isTransactional, HConstants.LATEST_TIMESTAMP) : resolvedTimestamp;
         // Do not make rpc to getTable if
@@ -608,66 +607,115 @@ public class MetaDataClient {
         int tryCount = 0;
         MetaDataMutationResult result;
 
-        do {
-            final byte[] schemaBytes = PVarchar.INSTANCE.toBytes(schemaName);
-            final byte[] tableBytes = PVarchar.INSTANCE.toBytes(tableName);
-            ConnectionQueryServices queryServices = connection.getQueryServices();
-            result = queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, resolvedTimestamp);
-            // if the table was assumed to be transactional, but is actually not transactional then re-resolve as of the right timestamp (and vice versa)
-            if (table==null && result.getTable()!=null && result.getTable().isTransactional()!=isTransactional) {
-                result = queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, TransactionUtil.getResolvedTimestamp(connection, result.getTable().isTransactional(), HConstants.LATEST_TIMESTAMP));
+        // if we are looking up an index on a child view that is inherited from its
+        // parent, then we need to resolve the parent of the child view which will also
+        // load any of its indexes instead of trying to load the inherited view index
+        // which doesn't exist in SYSTEM.CATALOG
+        if (tableName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            String parentViewName =
+                    SchemaUtil.getSchemaNameFromFullName(tableName,
+                        QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            // recursively look up the parent view as we could have inherited this index from an ancestor
+            // view(V) with Index (VIndex) -> child view (V1) -> grand child view (V2)
+            // the view index name will be V2#V1#VIndex
+            result =
+                    updateCache(origTenantId, SchemaUtil.getSchemaNameFromFullName(parentViewName),
+                        SchemaUtil.getTableNameFromFullName(parentViewName), alwaysHitServer,
+                        resolvedTimestamp);
+            if (result.getTable() != null) {
+                try {
+                    tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
+                    table = tableRef.getTable();
+                    return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
+                            QueryConstants.UNSET_TIMESTAMP, table);
+                } catch (TableNotFoundException e) {
+                    // reset the result as we looked up the parent view 
+                    return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
+                        QueryConstants.UNSET_TIMESTAMP, null);
+                }
             }
+        }
+        else {
+            do {
+                final byte[] schemaBytes = PVarchar.INSTANCE.toBytes(schemaName);
+                final byte[] tableBytes = PVarchar.INSTANCE.toBytes(tableName);
+                ConnectionQueryServices queryServices = connection.getQueryServices();
+                result =
+                        queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp,
+                            resolvedTimestamp);
+                // if the table was assumed to be non transactional, but is actually transactional
+                // then re-resolve as of the right timestamp
+                if (result.getTable() != null
+                        && result.getTable().isTransactional()
+                        && !isTransactional) {
+                    long resolveTimestamp = TransactionUtil.getResolvedTimestamp(connection,
+                            result.getTable().isTransactional(),
+                            HConstants.LATEST_TIMESTAMP);
+                    // Reresolve if table timestamp is past timestamp as of which we should see data
+                    if (result.getTable().getTimeStamp() >= resolveTimestamp) {
+                        result =
+                                queryServices.getTable(tenantId, schemaBytes, tableBytes,
+                                    tableTimestamp, resolveTimestamp);
+                    }
+                }
 
-            if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
-                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS && result.getTable() == null) {
-                    result.setTable(table);
-                }
-                return result;
-            }
-            MutationCode code = result.getMutationCode();
-            PTable resultTable = result.getTable();
-            // We found an updated table, so update our cache
-            if (resultTable != null) {
-                // Cache table, even if multi-tenant table found for null tenant_id
-                // These may be accessed by tenant-specific connections, as the
-                // tenant_id will always be added to mask other tenants data.
-                // Otherwise, a tenant would be required to create a VIEW first
-                // which is not really necessary unless you want to filter or add
-                // columns
-                addTableToCache(result);
-                return result;
-            } else {
-                // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
-                // TODO: No table exists at the clientTimestamp, but a newer one exists.
-                // Since we disallow creation or modification of a table earlier than the latest
-                // timestamp, we can handle this such that we don't ask the
-                // server again.
-                if (table != null) {
-                    // Ensures that table in result is set to table found in our cache.
-                    if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                if (SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
+                    if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS
+                            && result.getTable() == null) {
                         result.setTable(table);
-                        // Although this table is up-to-date, the parent table may not be.
-                        // In this case, we update the parent table which may in turn pull
-                        // in indexes to add to this table.
-                        long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                        if (addIndexesFromParentTable(result, resolvedTimestamp)) {
-                            connection.addTable(result.getTable(), resolvedTime);
-                        }
-                        else {
-                            // if we aren't adding the table, we still need to update the resolved time of the table
-                            connection.updateResolvedTimestamp(table, resolvedTime);
-                        }
-                        return result;
                     }
-                    // If table was not found at the current time stamp and we have one cached, remove it.
-                    // Otherwise, we're up to date, so there's nothing to do.
-                    if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
-                        connection.removeTable(origTenantId, fullTableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
+                    return result;
+                }
+                MutationCode code = result.getMutationCode();
+                PTable resultTable = result.getTable();
+                // We found an updated table, so update our cache
+                if (resultTable != null) {
+                    // Cache table, even if multi-tenant table found for null tenant_id
+                    // These may be accessed by tenant-specific connections, as the
+                    // tenant_id will always be added to mask other tenants data.
+                    // Otherwise, a tenant would be required to create a VIEW first
+                    // which is not really necessary unless you want to filter or add
+                    // columns
+                    addTableToCache(result);
+                    return result;
+                } else {
+                    // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
+                    // TODO: No table exists at the clientTimestamp, but a newer one exists.
+                    // Since we disallow creation or modification of a table earlier than the latest
+                    // timestamp, we can handle this such that we don't ask the
+                    // server again.
+                    if (table != null) {
+                        // Ensures that table in result is set to table found in our cache.
+                        if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                            result.setTable(table);
+                            // Although this table is up-to-date, the parent table may not be.
+                            // In this case, we update the parent table which may in turn pull
+                            // in indexes to add to this table.
+                            long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
+                            if (addIndexesFromParentTable(result, resolvedTimestamp)) {
+                                connection.addTable(result.getTable(), resolvedTime);
+                            } else {
+                                // if we aren't adding the table, we still need to update the
+                                // resolved time of the table
+                                connection.updateResolvedTimestamp(table, resolvedTime);
+                            }
+                            return result;
+                        }
+                        // If table was not found at the current time stamp and we have one cached,
+                        // remove it.
+                        // Otherwise, we're up to date, so there's nothing to do.
+                        if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
+                            connection
+                                    .removeTable(origTenantId, fullTableName,
+                                        table.getParentName() == null ? null
+                                                : table.getParentName().getString(),
+                                        table.getTimeStamp());
+                        }
                     }
                 }
-            }
-            tenantId = null; // Try again with global tenantId
-        } while (++tryCount < maxTryCount);
+                tenantId = null; // Try again with global tenantId
+            } while (++tryCount < maxTryCount);
+        }
 
         return result;
     }
@@ -864,11 +912,11 @@ public class MetaDataClient {
             if (containsAllReqdCols) {
                 // Tack on view statement to index to get proper filtering for view
                 String viewStatement = IndexUtil.rewriteViewStatement(connection, index, parentTable, view.getViewStatement());
-                PName modifiedIndexName = PNameFactory.newName(index.getName().getString() 
-                    + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + view.getName().getString());
+                PName modifiedIndexName = PNameFactory.newName(view.getName().getString() 
+                    + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + index.getName().getString());
                 // add the index table with a new name so that it does not conflict with the existing index table
-                // also set update cache frequency to never since the renamed index is not present on the server
-                indexesToAdd.add(PTableImpl.makePTable(index, modifiedIndexName, viewStatement, Long.MAX_VALUE, view.getTenantId()));
+                // and set update cache frequency to that of the view
+                indexesToAdd.add(PTableImpl.makePTable(index, modifiedIndexName, viewStatement, view.getUpdateCacheFrequency(), view.getTenantId()));
             }
         }
         PTable allIndexesTable = PTableImpl.makePTable(view, view.getTimeStamp(), indexesToAdd);
@@ -942,7 +990,8 @@ public class MetaDataClient {
         argUpsert.execute();
     }
 
-    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily, boolean addingToPK, byte[] columnQualifierBytes) throws SQLException {
+    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily,
+            boolean addingToPK, byte[] columnQualifierBytes, boolean isImmutableRows) throws SQLException {
         try {
             ColumnName columnDefName = def.getColumnDefName();
             SortOrder sortOrder = def.getSortOrder();
@@ -974,7 +1023,7 @@ public class MetaDataClient {
                 if (isPK) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_WITH_FAMILY_NAME)
                     .setColumnName(columnName).setFamilyName(family).build().buildException();
-                } else if (!def.isNull()) {
+                } else if (!def.isNull() && !isImmutableRows) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
                     .setColumnName(columnName).setFamilyName(family).build().buildException();
                 }
@@ -1177,9 +1226,7 @@ public class MetaDataClient {
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs, boolean checkLastStatsUpdateTime) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
-                        props.getLong(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
-                                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2);
+                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
@@ -1205,8 +1252,8 @@ public class MetaDataClient {
             //view all the data belonging to the table
             PTable nonTxnLogicalTable = new DelegateTable(logicalTable) {
                 @Override
-                public boolean isTransactional() {
-                    return false;
+                public TransactionFactory.Provider getTransactionProvider() {
+                    return null;
                 }
             };
             TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
@@ -1830,7 +1877,7 @@ public class MetaDataClient {
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
             boolean multiTenant = false;
             boolean storeNulls = false;
-            boolean transactional = (parent!= null) ? parent.isTransactional() : false;
+            TransactionFactory.Provider transactionProvider = (parent!= null) ? parent.getTransactionProvider() : null;
             Integer saltBucketNum = null;
             String defaultFamilyName = null;
             boolean isImmutableRows = false;
@@ -1846,7 +1893,7 @@ public class MetaDataClient {
             QualifierEncodingScheme encodingScheme = NON_ENCODED_QUALIFIERS;
             ImmutableStorageScheme immutableStorageScheme = ONE_CELL_PER_COLUMN;
             if (parent != null && tableType == PTableType.INDEX) {
-                timestamp = TransactionUtil.getTableTimestamp(connection, transactional);
+                timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 storeNulls = parent.getStoreNulls();
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
@@ -1998,31 +2045,45 @@ public class MetaDataClient {
                 storeNulls = storeNullsProp;
             }
             Boolean transactionalProp = (Boolean) TableProperty.TRANSACTIONAL.getValue(tableProps);
-            if (transactionalProp != null && parent != null) {
+            TransactionFactory.Provider transactionProviderProp = (TransactionFactory.Provider) TableProperty.TRANSACTION_PROVIDER.getValue(tableProps);
+            if ((transactionalProp != null || transactionProviderProp != null) && parent != null) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.ONLY_TABLE_MAY_BE_DECLARED_TRANSACTIONAL)
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
             if (parent == null) {
-                if (transactionalProp == null) {
+                boolean transactional;
+                if (transactionProviderProp != null) {
+                    transactional = true;
+                } else if (transactionalProp == null) {
                     transactional = connection.getQueryServices().getProps().getBoolean(
                                     QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB,
                                     QueryServicesOptions.DEFAULT_TABLE_ISTRANSACTIONAL);
                 } else {
                     transactional = transactionalProp;
                 }
+                if (transactional) {
+                    if (transactionProviderProp == null) {
+                        transactionProvider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(
+                                connection.getQueryServices().getProps().get(
+                                        QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB,
+                                        QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER));
+                    } else {
+                        transactionProvider = transactionProviderProp;
+                    }
+                }
             }
             boolean transactionsEnabled = connection.getQueryServices().getProps().getBoolean(
                                             QueryServices.TRANSACTIONS_ENABLED,
                                             QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
             // can't create a transactional table if transactions are not enabled
-            if (!transactionsEnabled && transactional) {
+            if (!transactionsEnabled && transactionProvider != null) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED)
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
             // can't create a transactional table if it has a row timestamp column
-            if (pkConstraint.getNumColumnsWithRowTimestamp() > 0 && transactional) {
+            if (pkConstraint.getNumColumnsWithRowTimestamp() > 0 && transactionProvider != null) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP)
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
@@ -2030,8 +2091,9 @@ public class MetaDataClient {
 
             // Put potentially inferred value into tableProps as it's used by the createTable call below
             // to determine which coprocessors to install on the new table.
-            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactional);
-            if (transactional) {
+            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactionProvider != null);
+            if (transactionProvider != null) {
+                // TODO: for Omid
                 // If TTL set, use Tephra TTL property name instead
                 Object ttl = commonFamilyProps.remove(HColumnDescriptor.TTL);
                 if (ttl != null) {
@@ -2043,7 +2105,7 @@ public class MetaDataClient {
                     (Boolean) TableProperty.USE_STATS_FOR_PARALLELIZATION.getValue(tableProps);
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;
-            if (transactional) {
+            if (transactionProvider != null) {
                 // Tephra uses an empty value cell as its delete marker, so we need to turn on
                 // storeNulls for transactional tables.
                 // If we use regular column delete markers (which is what non transactional tables
@@ -2078,7 +2140,7 @@ public class MetaDataClient {
                     }
                 }
             }
-            timestamp = timestamp==null ? TransactionUtil.getTableTimestamp(connection, transactional) : timestamp;
+            timestamp = timestamp==null ? TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider) : timestamp;
 
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if (sharedTable) {
@@ -2202,7 +2264,6 @@ public class MetaDataClient {
             }
 
             Map<String, PName> familyNames = Maps.newLinkedHashMap();
-            boolean isPK = false;
             boolean rowTimeStampColumnAlreadyFound = false;
             int positionOffset = columns.size();
             if (saltBucketNum != null) {
@@ -2245,27 +2306,8 @@ public class MetaDataClient {
                  * partitioned by the virtue of indexId present in the row key. As such, different shared indexes can use
                  * potentially overlapping column qualifiers.
                  * 
-                 * If the hbase table already exists, then possibly encoded or non-encoded column qualifiers were used. 
-                 * In this case we pursue ahead with non-encoded column qualifier scheme. If the phoenix metadata for this table already exists 
-                 * then we rely on the PTable, with appropriate storage scheme, returned in the MetadataMutationResult to be updated 
-                 * in the client cache. If the phoenix table metadata already doesn't exist then the non-encoded column qualifier scheme works
-                 * because we cannot control the column qualifiers that were used when populating the hbase table.
                  */
-                
-                byte[] tableNameBytes = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-                boolean tableExists = true;
-                try {
-                    HTableDescriptor tableDescriptor = connection.getQueryServices().getTableDescriptor(tableNameBytes);
-                    if (tableDescriptor == null) { // for connectionless
-                        tableExists = false;
-                    }
-                } catch (org.apache.phoenix.schema.TableNotFoundException e) {
-                    tableExists = false;
-                }
-                if (tableExists) {
-                    encodingScheme = NON_ENCODED_QUALIFIERS;
-                    immutableStorageScheme = ONE_CELL_PER_COLUMN;
-                } else if (parent != null) {
+                if (parent != null) {
                     encodingScheme = parent.getEncodingScheme();
                     immutableStorageScheme = parent.getImmutableStorageScheme();
                 } else {
@@ -2312,19 +2354,20 @@ public class MetaDataClient {
             }
 
             Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
+            boolean wasPKDefined = false;
             for (ColumnDef colDef : colDefs) {
                 rowTimeStampColumnAlreadyFound = checkAndValidateRowTimestampCol(colDef, pkConstraint, rowTimeStampColumnAlreadyFound, tableType);
                 if (colDef.isPK()) { // i.e. the column is declared as CREATE TABLE COLNAME DATATYPE PRIMARY KEY...
-                    if (isPK) {
+                    if (wasPKDefined) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_ALREADY_EXISTS)
                             .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                     }
-                    isPK = true;
+                    wasPKDefined = true;
                 } else {
                     // do not allow setting NOT-NULL constraint on non-primary columns.
-                    if (  Boolean.FALSE.equals(colDef.isNull()) &&
-                        ( isPK || ( pkConstraint != null && !pkConstraint.contains(colDef.getColumnDefName())))) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT)
+                    if (  !colDef.isNull() && !isImmutableRows &&
+                        ( wasPKDefined || !isPkColumn(pkConstraint, colDef))) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
                                 .setSchemaName(schemaName)
                                 .setTableName(tableName)
                                 .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
@@ -2332,7 +2375,7 @@ public class MetaDataClient {
                 }
                 ColumnName columnDefName = colDef.getColumnDefName();
                 String colDefFamily = columnDefName.getFamilyName();
-                boolean isPkColumn = isPkColumn(pkConstraint, colDef, columnDefName);
+                boolean isPkColumn = isPkColumn(pkConstraint, colDef);
                 String cqCounterFamily = null;
                 if (!isPkColumn) {
                     if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS && encodingScheme != NON_ENCODED_QUALIFIERS) {
@@ -2353,7 +2396,7 @@ public class MetaDataClient {
                     .setSchemaName(schemaName)
                     .setTableName(tableName).build().buildException();
                 }
-                PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes);
+                PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
                 if (cqCounter.increment(cqCounterFamily)) {
                     changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }
@@ -2393,7 +2436,7 @@ public class MetaDataClient {
             }
             
             // We need a PK definition for a TABLE or mapped VIEW
-            if (!isPK && pkColumnsNames.isEmpty() && tableType != PTableType.VIEW && viewType != ViewType.MAPPED) {
+            if (!wasPKDefined && pkColumnsNames.isEmpty() && tableType != PTableType.VIEW && viewType != ViewType.MAPPED) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
                     .setSchemaName(schemaName)
                     .setTableName(tableName)
@@ -2480,7 +2523,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, null, indexType, true, false, 0, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, null, indexType, true, null, 0, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
             
@@ -2620,7 +2663,11 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setInt(19, BASE_TABLE_BASE_COLUMN_COUNT);
             }
-            tableUpsert.setBoolean(20, transactional);
+            if (transactionProvider == null) {
+                tableUpsert.setNull(20, Types.TINYINT);
+            } else {
+                tableUpsert.setByte(20, transactionProvider.getCode());
+            }
             tableUpsert.setLong(21, updateCacheFrequency);
             tableUpsert.setBoolean(22, isNamespaceMapped);
             if (autoPartitionSeq == null) {
@@ -2669,7 +2716,8 @@ public class MetaDataClient {
             MetaDataMutationResult result = connection.getQueryServices().createTable(
                     tableMetaData,
                     viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).getBytes() : null,
-                    tableType, tableProps, familyPropList, splits, isNamespaceMapped, allocateIndexId);
+                    tableType, tableProps, familyPropList, splits, isNamespaceMapped, allocateIndexId,
+                    UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()));
             MutationCode code = result.getMutationCode();
             switch(code) {
             case TABLE_ALREADY_EXISTS:
@@ -2745,7 +2793,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns.values(),
                         parent == null ? null : parent.getSchemaName(), parent == null ? null : parent.getTableName(), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForParallelizationProp);
+                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForParallelizationProp);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;
@@ -2755,8 +2803,8 @@ public class MetaDataClient {
         }
     }
 
-    private static boolean isPkColumn(PrimaryKeyConstraint pkConstraint, ColumnDef colDef, ColumnName columnDefName) {
-        return colDef.isPK() || (pkConstraint != null && pkConstraint.getColumnWithSortOrder(columnDefName) != null);
+    private static boolean isPkColumn(PrimaryKeyConstraint pkConstraint, ColumnDef colDef) {
+        return colDef.isPK() || (pkConstraint != null && pkConstraint.contains(colDef.getColumnDefName()));
     }
     
     /**
@@ -3248,8 +3296,10 @@ public class MetaDataClient {
 
                 MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
                 changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
-
-                Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || metaProperties.getNonTxToTx());
+                // If changing isImmutableRows to true or it's not being changed and is already true
+                boolean willBeImmutableRows = Boolean.TRUE.equals(metaPropertiesEvaluated.getIsImmutableRows()) || (metaPropertiesEvaluated.getIsImmutableRows() == null && table.isImmutableRows());
+                boolean willBeTxnl = metaProperties.getNonTxToTx();
+                Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || willBeTxnl, table.isTransactional() ? table.getTransactionProvider() : metaPropertiesEvaluated.getTransactionProvider());
                 int numPkColumnsAdded = 0;
                 List<PColumn> columns = Lists.newArrayListWithExpectedSize(numCols);
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
@@ -3270,8 +3320,8 @@ public class MetaDataClient {
                                 if(colDef.isPK()) {
                                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
                                     .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
-                                } else {
-                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ADD_NOT_NULLABLE_COLUMN)
+                                } else if (!willBeImmutableRows) {
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
                                     .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                                 }
                             }
@@ -3315,7 +3365,7 @@ public class MetaDataClient {
                                 .setSchemaName(schemaName)
                                 .setTableName(tableName).build().buildException();
                             }
-                            PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes);
+                            PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, willBeImmutableRows);
                             columns.add(column);
                             String pkName = null;
                             Short keySeq = null;
@@ -3353,7 +3403,7 @@ public class MetaDataClient {
                                         ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
                                         Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
                                         ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
-                                        PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true, null);
+                                        PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true, null, willBeImmutableRows);
                                         addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
                                     }
                                 }
@@ -4244,6 +4294,8 @@ public class MetaDataClient {
                         metaProperties.setStoreNullsProp((Boolean)value);
                     } else if (propName.equals(TRANSACTIONAL)) {
                         metaProperties.setIsTransactionalProp((Boolean)value);
+                    } else if (propName.equals(TRANSACTION_PROVIDER)) {
+                        metaProperties.setTransactionProviderProp((TransactionFactory.Provider) value);
                     } else if (propName.equals(UPDATE_CACHE_FREQUENCY)) {
                         metaProperties.setUpdateCacheFrequencyProp((Long)value);
                     } else if (propName.equals(GUIDE_POSTS_WIDTH)) {
@@ -4366,6 +4418,22 @@ public class MetaDataClient {
                             .setSchemaName(schemaName).setTableName(tableName)
                             .build().buildException();
                 }
+                TransactionFactory.Provider provider = metaProperties.getTransactionProviderProp();
+                if (provider == null) {
+                    provider = (Provider)
+                            TableProperty.TRANSACTION_PROVIDER.getValue(
+                                    connection.getQueryServices().getProps().get(
+                                            QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB,
+                                            QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER));
+                    metaPropertiesEvaluated.setTransactionProvider(provider);
+                }
+                if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
+                        .setMessage(provider.name() + ". ")
+                        .setSchemaName(schemaName)
+                        .setTableName(tableName)
+                        .build().buildException();
+                }
                 changingPhoenixTableProperty = true;
                 metaProperties.setNonTxToTx(true);
             }
@@ -4378,6 +4446,7 @@ public class MetaDataClient {
         private Boolean multiTenantProp = null;
         private Boolean disableWALProp = null;
         private Boolean storeNullsProp = null;
+        private TransactionFactory.Provider transactionProviderProp = null;
         private Boolean isTransactionalProp = null;
         private Long updateCacheFrequencyProp = null;
         private Boolean appendOnlySchemaProp = null;
@@ -4416,6 +4485,14 @@ public class MetaDataClient {
 
         public void setStoreNullsProp(Boolean storeNullsProp) {
             this.storeNullsProp = storeNullsProp;
+        }
+
+        public TransactionFactory.Provider getTransactionProviderProp() {
+            return transactionProviderProp;
+        }
+
+        public void setTransactionProviderProp(TransactionFactory.Provider transactionProviderProp) {
+            this.transactionProviderProp = transactionProviderProp;
         }
 
         public Boolean getIsTransactionalProp() {
@@ -4487,6 +4564,7 @@ public class MetaDataClient {
         private Boolean storeNulls = null;
         private Boolean useStatsForParallelization = null;
         private Boolean isTransactional = null;
+        private TransactionFactory.Provider transactionProvider = null;
 
         public Boolean getIsImmutableRows() {
             return isImmutableRows;
@@ -4567,5 +4645,14 @@ public class MetaDataClient {
         public void setIsTransactional(Boolean isTransactional) {
             this.isTransactional = isTransactional;
         }
+        
+        public TransactionFactory.Provider getTransactionProvider() {
+            return transactionProvider;
+        }
+
+        public void setTransactionProvider(TransactionFactory.Provider transactionProvider) {
+            this.transactionProvider = transactionProvider;
+        }
+
     }
 }

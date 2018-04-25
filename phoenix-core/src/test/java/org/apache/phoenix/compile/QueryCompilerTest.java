@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -52,11 +53,18 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.AggregatePlan;
+import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
+import org.apache.phoenix.execute.CorrelatePlan;
+import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.UnionPlan;
+import org.apache.phoenix.execute.UnnestArrayPlan;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -76,7 +84,9 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
@@ -88,8 +98,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 
 
@@ -237,10 +250,27 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
+    }
+
+    @Test
+    public void testImmutableRowsPK() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            String query = "CREATE IMMUTABLE TABLE foo (pk integer not null, col1 decimal, col2 decimal)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.execute();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
+        }
+        String query = "CREATE IMMUTABLE TABLE foo (k1 integer not null, k2 decimal not null, col1 decimal not null, constraint pk primary key (k1,k2))";
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.execute();
+        conn.close();
     }
 
     @Test
@@ -1037,6 +1067,25 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testAlterNotNull() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("ALTER TABLE atable ADD xyz VARCHAR NOT NULL");
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("CREATE IMMUTABLE TABLE foo (K1 VARCHAR PRIMARY KEY)");
+        try {
+            conn.createStatement().execute("ALTER TABLE foo ADD xyz VARCHAR NOT NULL PRIMARY KEY");
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("ALTER TABLE FOO ADD xyz VARCHAR NOT NULL");
+    }
+
+    @Test
     public void testSubstrSetScanKey() throws Exception {
         String query = "SELECT inst FROM ptsdb WHERE substr(inst, 0, 3) = 'abc'";
         List<Object> binds = Collections.emptyList();
@@ -1830,6 +1879,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testNotOrderByOrderPreservingForAggregation() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS VA_TEST(ID VARCHAR NOT NULL PRIMARY KEY, VAL1 VARCHAR, VAL2 INTEGER)");
+        String[] queries = {
+                "select distinct ID, VAL1, VAL2 from VA_TEST where \"ID\" in ('ABC','ABD','ABE','ABF','ABG','ABH','AAA', 'AAB', 'AAC','AAD','AAE','AAF') order by VAL1 ASC"
+                };
+        String query;
+        for (int i = 0; i < queries.length; i++) {
+            query = queries[i];
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            assertFalse("Expected order by not to be compiled out: " + query, plan.getOrderBy().getOrderByExpressions().isEmpty());
+        }
+    }
+    
+    @Test
     public void testGroupByOrderPreserving() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k1 date not null, k2 date not null, k3 date not null, v varchar, constraint pk primary key(k1,k2,k3))");
@@ -2126,6 +2190,48 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER ARRAY ELEMENT PROJECTION"));
         } finally {
             conn.createStatement().execute("DROP TABLE IF EXISTS t");
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testArrayAppendSingleArg() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
+            conn.createStatement().executeQuery("SELECT ARRAY_APPEND(arr2) from t");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(),e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testArrayPrependSingleArg() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
+            conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(arr2) from t");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(),e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testArrayConcatSingleArg() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
+            conn.createStatement().executeQuery("SELECT ARRAY_CAT(arr2) from t");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(),e.getErrorCode());
+        } finally {
             conn.close();
         }
     }
@@ -2656,6 +2762,66 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testNotNullKeyValueColumnSalted() throws Exception {
+        testNotNullKeyValueColumn(3);
+    }
+    @Test
+    public void testNotNullKeyValueColumnUnsalted() throws Exception {
+        testNotNullKeyValueColumn(0);
+    }
+    
+    private void testNotNullKeyValueColumn(int saltBuckets) throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, v bigint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+            conn.createStatement().execute("UPSERT INTO t1 VALUES(0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t2 (k integer not null primary key, v1 bigint not null, v2 varchar, v3 tinyint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+            conn.createStatement().execute("UPSERT INTO t2(k, v3) VALUES(0,0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            conn.createStatement().execute("CREATE TABLE t3 (k integer not null primary key, v1 bigint not null, v2 varchar, v3 tinyint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+            conn.createStatement().execute("UPSERT INTO t3(k, v1) VALUES(0,0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("CREATE TABLE t4 (k integer not null primary key, v1 bigint not null) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+        conn.createStatement().execute("UPSERT INTO t4 VALUES(0,0)");
+        conn.createStatement().execute("CREATE TABLE t5 (k integer not null primary key, v1 bigint not null default 0) IMMUTABLE_ROWS=true" + (saltBuckets == 0 ? "" : (",SALT_BUCKETS="+saltBuckets)));
+        conn.createStatement().execute("UPSERT INTO t5 VALUES(0)");
+        conn.close();
+    }
+
+    @Test
+    public void testAlterAddNotNullKeyValueColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, v1 bigint not null) IMMUTABLE_ROWS=true");
+        try {
+            conn.createStatement().execute("ALTER TABLE t1 ADD k2 bigint not null primary key");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("ALTER TABLE t1 ADD v2 bigint not null");
+        try {
+            conn.createStatement().execute("UPSERT INTO t1(k, v1) VALUES(0,0)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+        }
+        conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0,0)");
+        conn.createStatement().execute("UPSERT INTO t1(v1,k,v2) VALUES(0,0,0)");
+    }
+    
     @Test
     public void testOnDupKeyForImmutableTable() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -4147,6 +4313,653 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             fail();
         } catch (SQLException e) {
             assertEquals(e.getErrorCode(), SQLExceptionCode.CONNECTION_CLOSED.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testSingleColLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,C)");
+            String query = "SELECT * FROM T WHERE A = 'B' and C='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("A", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scan.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testMultiColLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A = 'C' and B = 'X' and D='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("C", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals("E", Bytes.toString(scan.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testSkipScanLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A IN ('A','G') and B = 'A' and D = 'D'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(2, outerScans.size());
+            List<Scan> innerScans1 = outerScans.get(0);
+            assertEquals(1, innerScans1.size());
+            Scan scan1 = innerScans1.get(0);
+            assertEquals("A", Bytes.toString(scan1.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scan1.getStopRow()).trim());
+            List<Scan> innerScans2 = outerScans.get(1);
+            assertEquals(1, innerScans2.size());
+            Scan scan2 = innerScans2.get(0);
+            assertEquals("G", Bytes.toString(scan2.getStartRow()).trim());
+            assertEquals("I", Bytes.toString(scan2.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testRVCLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A='I' and (B,D) IN (('A','D'),('B','I'))";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("I", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals(0, scan.getStopRow().length);
+        }
+    }
+
+    @Test
+    public void testRVCLocalIndexPruning2() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B VARCHAR,\n" + 
+                    "    C VARCHAR,\n" + 
+                    "    D VARCHAR,\n" + 
+                    "    E VARCHAR,\n" + 
+                    "    F VARCHAR,\n" + 
+                    "    G VARCHAR,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D,\n" + 
+                    "        E,\n" + 
+                    "        F,\n" + 
+                    "        G\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,C,F,G)");
+            String query = "SELECT * FROM T WHERE (A,B,C,D) IN (('I','D','F','X'),('I','I','G','Y')) and F='X' and G='Y'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("I", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals(0, scan.getStopRow().length);
+        }
+    }
+
+    @Test
+    public void testMinMaxRangeLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C,\n" + 
+                    "        D\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
+            String query = "SELECT * FROM T WHERE A = 'C' and (A,B,D) > ('C','B','X') and D='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(1, outerScans.size());
+            List<Scan> innerScans = outerScans.get(0);
+            assertEquals(1, innerScans.size());
+            Scan scan = innerScans.get(0);
+            assertEquals("C", Bytes.toString(scan.getStartRow()).trim());
+            assertEquals("E", Bytes.toString(scan.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testNoLocalIndexPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(C)");
+            String query = "SELECT * FROM T WHERE C='C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            List<List<Scan>> outerScans = plan.getScans();
+            assertEquals(6, outerScans.size());
+        }
+    }
+
+    @Test
+    public void testSmallScanForPointLookups() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        createTestTable(getUrl(), "CREATE TABLE FOO(\n" +
+                      "                a VARCHAR NOT NULL,\n" +
+                      "                b VARCHAR NOT NULL,\n" +
+                      "                c VARCHAR,\n" +
+                      "                CONSTRAINT pk PRIMARY KEY (a, b DESC, c)\n" +
+                      "              )");
+
+        props.put(QueryServices.SMALL_SCAN_THRESHOLD_ATTRIB, "2");
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String query = "select * from foo where a = 'a' and b = 'b' and c in ('x','y','z')";
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = stmt.optimizeQuery(query);
+            plan.iterator();
+            //Fail since we have 3 rows in pointLookup
+            assertFalse(plan.getContext().getScan().isSmall());
+            query = "select * from foo where a = 'a' and b = 'b' and c = 'c'";
+            plan = stmt.compileQuery(query);
+            plan.iterator();
+            //Should be small scan, query is for single row pointLookup
+            assertTrue(plan.getContext().getScan().isSmall());
+        }
+    }
+
+    @Test
+    public void testLocalIndexPruningInSortMergeJoin() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT /*+ USE_SORT_MERGE_JOIN*/ *\n" +
+                "FROM T1 JOIN T2 ON T1.A = T2.A\n" +
+                "WHERE T1.A = 'B' and T1.C='C' and T2.A IN ('A','G') and T2.B = 'A' and T2.D = 'D'");
+    }
+
+    @Ignore("Blocked by PHOENIX-4614")
+    @Test
+    public void testLocalIndexPruningInLeftOrInnerHashJoin() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT *\n" +
+                "FROM T1 JOIN T2 ON T1.A = T2.A\n" +
+                "WHERE T1.A = 'B' and T1.C='C' and T2.A IN ('A','G') and T2.B = 'A' and T2.D = 'D'");
+    }
+
+    @Ignore("Blocked by PHOENIX-4614")
+    @Test
+    public void testLocalIndexPruningInRightHashJoin() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT *\n" +
+                "FROM (\n" +
+                "    SELECT A, B, C, D FROM T2 WHERE T2.A IN ('A','G') and T2.B = 'A' and T2.D = 'D'\n" +
+                ") T2\n" +
+                "RIGHT JOIN T1 ON T2.A = T1.A\n" +
+                "WHERE T1.A = 'B' and T1.C='C'");
+    }
+
+    @Test
+    public void testLocalIndexPruningInUinon() throws SQLException {
+        verifyLocalIndexPruningWithMultipleTables("SELECT A, B, C FROM T1\n" +
+                "WHERE A = 'B' and C='C'\n" +
+                "UNION ALL\n" +
+                "SELECT A, B, C FROM T2\n" +
+                "WHERE A IN ('A','G') and B = 'A' and D = 'D'");
+    }
+
+    private void verifyLocalIndexPruningWithMultipleTables(String query) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T1 (\n" +
+                    "    A CHAR(1) NOT NULL,\n" +
+                    "    B CHAR(1) NOT NULL,\n" +
+                    "    C CHAR(1) NOT NULL,\n" +
+                    "    CONSTRAINT PK PRIMARY KEY (\n" +
+                    "        A,\n" +
+                    "        B,\n" +
+                    "        C\n" +
+                    "    )\n" +
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX1 ON T1(A,C)");
+            conn.createStatement().execute("CREATE TABLE T2 (\n" +
+                    "    A CHAR(1) NOT NULL,\n" +
+                    "    B CHAR(1) NOT NULL,\n" +
+                    "    C CHAR(1) NOT NULL,\n" +
+                    "    D CHAR(1) NOT NULL,\n" +
+                    "    CONSTRAINT PK PRIMARY KEY (\n" +
+                    "        A,\n" +
+                    "        B,\n" +
+                    "        C,\n" +
+                    "        D\n" +
+                    "    )\n" +
+                    ") SPLIT ON ('A','C','E','G','I')");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX2 ON T2(A,B,D)");
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            List<QueryPlan> childPlans = plan.accept(new MultipleChildrenExtractor());
+            assertEquals(2, childPlans.size());
+            // Check left child
+            assertEquals("IDX1", childPlans.get(0).getContext().getCurrentTable().getTable().getName().getString());
+            childPlans.get(0).iterator();
+            List<List<Scan>> outerScansL = childPlans.get(0).getScans();
+            assertEquals(1, outerScansL.size());
+            List<Scan> innerScansL = outerScansL.get(0);
+            assertEquals(1, innerScansL.size());
+            Scan scanL = innerScansL.get(0);
+            assertEquals("A", Bytes.toString(scanL.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scanL.getStopRow()).trim());
+            // Check right child
+            assertEquals("IDX2", childPlans.get(1).getContext().getCurrentTable().getTable().getName().getString());
+            childPlans.get(1).iterator();
+            List<List<Scan>> outerScansR = childPlans.get(1).getScans();
+            assertEquals(2, outerScansR.size());
+            List<Scan> innerScansR1 = outerScansR.get(0);
+            assertEquals(1, innerScansR1.size());
+            Scan scanR1 = innerScansR1.get(0);
+            assertEquals("A", Bytes.toString(scanR1.getStartRow()).trim());
+            assertEquals("C", Bytes.toString(scanR1.getStopRow()).trim());
+            List<Scan> innerScansR2 = outerScansR.get(1);
+            assertEquals(1, innerScansR2.size());
+            Scan scanR2 = innerScansR2.get(0);
+            assertEquals("G", Bytes.toString(scanR2.getStartRow()).trim());
+            assertEquals("I", Bytes.toString(scanR2.getStopRow()).trim());
+        }
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInHashJoin() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT K1, V1 FROM A WHERE V1 = 'A'\n" +
+                ") T1 JOIN (\n" +
+                "    SELECT K2, V2 FROM B WHERE V2 = 'B'\n" +
+                ") T2 ON K1 = K2 ORDER BY V1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSortMergeJoin() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT max(K1) KEY1, V1 FROM A GROUP BY V1\n" +
+                ") T1 JOIN (\n" +
+                "    SELECT max(K2) KEY2, V2 FROM B GROUP BY V2\n" +
+                ") T2 ON KEY1 = KEY2 ORDER BY V1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery() throws SQLException {
+        String query = "SELECT * FROM A\n" +
+                "WHERE K1 > (\n" +
+                "    SELECT max(K2) FROM B WHERE V2 = V1\n" +
+                ") ORDER BY V1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery2() throws SQLException {
+        String query = "SELECT * FROM A\n" +
+                "WHERE V1 > ANY (\n" +
+                "    SELECT K2 FROM B WHERE V2 = 'B'\n" +
+                ")";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery3() throws SQLException {
+        String query = "SELECT * FROM A\n" +
+                "WHERE V1 > ANY (\n" +
+                "    SELECT K2 FROM B B1" +
+                "    WHERE V2 = (\n" +
+                "        SELECT max(V2) FROM B B2\n" +
+                "        WHERE B2.K2 = B1.K2 AND V2 < 'K'\n" +
+                "    )\n" +
+                ")";
+        verifyQueryPlanSourceRefs(query, 3);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery4() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT K1, K2 FROM A\n" +
+                "    JOIN B ON K1 = K2\n" +
+                "    WHERE V1 = 'A' AND V2 = 'B'\n" +
+                "    LIMIT 10\n" +
+                ") ORDER BY K1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInSubquery5() throws SQLException {
+        String query = "SELECT * FROM (\n" +
+                "    SELECT KEY1, KEY2 FROM (\n" +
+                "        SELECT max(K1) KEY1, V1 FROM A GROUP BY V1\n" +
+                "    ) T1 JOIN (\n" +
+                "        SELECT max(K2) KEY2, V2 FROM B GROUP BY V2\n" +
+                "    ) T2 ON KEY1 = KEY2 LIMIT 10\n" +
+                ") ORDER BY KEY1";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    @Test
+    public void testQueryPlanSourceRefsInUnion() throws SQLException {
+        String query = "SELECT K1, V1 FROM A WHERE V1 = 'A'\n" +
+                "UNION ALL\n" +
+                "SELECT K2, V2 FROM B WHERE V2 = 'B'";
+        verifyQueryPlanSourceRefs(query, 2);
+    }
+
+    private void verifyQueryPlanSourceRefs(String query, int refCount) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE A (\n" +
+                    "    K1 VARCHAR(10) NOT NULL PRIMARY KEY,\n" +
+                    "    V1 VARCHAR(10))");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX1 ON A(V1)");
+            conn.createStatement().execute("CREATE TABLE B (\n" +
+                    "    K2 VARCHAR(10) NOT NULL PRIMARY KEY,\n" +
+                    "    V2 VARCHAR(10))");
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX2 ON B(V2)");
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = stmt.compileQuery(query);
+            Set<TableRef> sourceRefs = plan.getSourceRefs();
+            assertEquals(refCount, sourceRefs.size());
+            for (TableRef table : sourceRefs) {
+                assertTrue(table.getTable().getType() == PTableType.TABLE);
+            }
+            plan = stmt.optimizeQuery(query);
+            sourceRefs = plan.getSourceRefs();
+            assertEquals(refCount, sourceRefs.size());
+            for (TableRef table : sourceRefs) {
+                assertTrue(table.getTable().getType() == PTableType.INDEX);
+            }
+        }
+    }
+
+    private static class MultipleChildrenExtractor implements QueryPlanVisitor<List<QueryPlan>> {
+
+        @Override
+        public List<QueryPlan> defaultReturn(QueryPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(AggregatePlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(ScanPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(ClientAggregatePlan plan) {
+            return plan.getDelegate().accept(this);
+        }
+
+        @Override
+        public List<QueryPlan> visit(ClientScanPlan plan) {
+            return plan.getDelegate().accept(this);
+        }
+
+        @Override
+        public List<QueryPlan> visit(LiteralResultIterationPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(TupleProjectionPlan plan) {
+            return plan.getDelegate().accept(this);
+        }
+
+        @Override
+        public List<QueryPlan> visit(HashJoinPlan plan) {
+            List<QueryPlan> children = new ArrayList<QueryPlan>(plan.getSubPlans().length + 1);
+            children.add(plan.getDelegate());
+            for (HashJoinPlan.SubPlan subPlan : plan.getSubPlans()) {
+                children.add(subPlan.getInnerPlan());
+            }
+            return children;
+        }
+
+        @Override
+        public List<QueryPlan> visit(SortMergeJoinPlan plan) {
+            return Lists.newArrayList(plan.getLhsPlan(), plan.getRhsPlan());
+        }
+
+        @Override
+        public List<QueryPlan> visit(UnionPlan plan) {
+            return plan.getSubPlans();
+        }
+
+        @Override
+        public List<QueryPlan> visit(UnnestArrayPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(CorrelatePlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(CursorFetchPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(ListJarsQueryPlan plan) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<QueryPlan> visit(TraceQueryPlan plan) {
+            return Collections.emptyList();
+        }
+    }
+
+    @Test
+    public void testGroupByOrderMatchPkColumnOrder4690() throws Exception{
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(false, false);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(false, true);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(true, false);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(true, true);
+    }
+
+    private void doTestGroupByOrderMatchPkColumnOrderBug4690(boolean desc ,boolean salted) throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 integer not null , " +
+                    " pk2 integer not null, " +
+                    " pk3 integer not null," +
+                    " pk4 integer not null,"+
+                    " v integer, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                       "pk1 "+(desc ? "desc" : "")+", "+
+                       "pk2 "+(desc ? "desc" : "")+", "+
+                       "pk3 "+(desc ? "desc" : "")+", "+
+                       "pk4 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "split on(2)");
+            conn.createStatement().execute(sql);
+
+            sql = "select pk2,pk1,count(v) from " + tableName + " group by pk2,pk1 order by pk2,pk1";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() ==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK2"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK1"));
+
+            sql = "select pk1,pk2,count(v) from " + tableName + " group by pk2,pk1 order by pk1,pk2";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.FWD_ROW_KEY_ORDER_BY : OrderBy.REV_ROW_KEY_ORDER_BY));
+
+            sql = "select pk2,pk1,count(v) from " + tableName + " group by pk2,pk1 order by pk2 desc,pk1 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() ==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK2 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK1 DESC"));
+
+            sql = "select pk1,pk2,count(v) from " + tableName + " group by pk2,pk1 order by pk1 desc,pk2 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
+
+
+            sql = "select pk3,pk2,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk3,pk2";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK3"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK2"));
+
+            sql = "select pk2,pk3,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk2,pk3";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.FWD_ROW_KEY_ORDER_BY : OrderBy.REV_ROW_KEY_ORDER_BY));
+
+            sql = "select pk3,pk2,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk3 desc,pk2 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK3 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK2 DESC"));
+
+            sql = "select pk2,pk3,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk2 desc,pk3 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
+
+
+            sql = "select pk4,pk3,pk1,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk4,pk3,pk1";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 3);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK4"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK3"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(2).toString().equals("PK1"));
+
+            sql = "select pk1,pk3,pk4,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk1,pk3,pk4";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.FWD_ROW_KEY_ORDER_BY : OrderBy.REV_ROW_KEY_ORDER_BY));
+
+            sql = "select pk4,pk3,pk1,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk4 desc,pk3 desc,pk1 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() == 3);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK4 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("PK3 DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(2).toString().equals("PK1 DESC"));
+
+            sql = "select pk1,pk3,pk4,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk1 desc,pk3 desc,pk4 desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
         }
     }
 }

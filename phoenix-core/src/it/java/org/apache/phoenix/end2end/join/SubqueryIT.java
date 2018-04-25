@@ -148,7 +148,7 @@ public class SubqueryIT extends BaseJoinIT {
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
@@ -156,7 +156,7 @@ public class SubqueryIT extends BaseJoinIT {
                 "    PARALLEL LEFT-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
@@ -220,7 +220,7 @@ public class SubqueryIT extends BaseJoinIT {
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" + 
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
@@ -229,7 +229,7 @@ public class SubqueryIT extends BaseJoinIT {
                 "    PARALLEL LEFT-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
+                "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" + 
                 "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
@@ -737,6 +737,47 @@ public class SubqueryIT extends BaseJoinIT {
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "INVALID-1");
 
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testNoncorrelatedSubqueryWithUpsert() throws Exception {
+        String tempTable = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tempTable
+                    + "   (item_id varchar not null primary key, "
+                    + "    name varchar)");
+            conn.createStatement().execute("UPSERT INTO " + tempTable + " VALUES('1', 'a')");
+            conn.createStatement().execute("UPSERT INTO " + tempTable + " VALUES('2', 'b')");
+            conn.createStatement().execute("UPSERT INTO " + tempTable + "(item_id, name)"
+                    + "   SELECT item_id, 'x' FROM " + tempTable
+                    + "   WHERE item_id < 'z' AND name > ALL (SELECT name FROM " + tempTable + ")");
+
+            String query = "SELECT name FROM " + tempTable + " ORDER BY item_id";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertFalse(rs.next());
+
+            conn.createStatement().execute("UPSERT INTO " + tempTable + "(item_id, name)"
+                    + "   SELECT item_id, 'x' FROM " + tempTable
+                    + "   WHERE item_id < 'z' AND name > ANY (SELECT name FROM " + tempTable + ")");
+
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("x", rs.getString(1));
             assertFalse(rs.next());
         } finally {
             conn.close();

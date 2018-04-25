@@ -67,7 +67,7 @@ public class SizedUtil {
     
     public static long sizeOfMap(int nRows, int keySize, int valueSize) {
         return SizedUtil.OBJECT_SIZE * 4 + sizeOfArrayList(nRows) /* key set */ + nRows * (
-                SizedUtil.MAP_ENTRY_SIZE + /* entry set */
+                SizedUtil.MAP_ENTRY_SIZE * 1L + /* entry set */
                 keySize + // key size
                 valueSize); // value size
     }

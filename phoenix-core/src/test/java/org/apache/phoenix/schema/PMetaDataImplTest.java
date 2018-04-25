@@ -19,12 +19,15 @@ package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TimeKeeper;
@@ -207,7 +210,23 @@ public class PMetaDataImplTest {
         assertEquals(1, metaData.getAge(bTableRef));
         assertEquals(2, metaData.getAge(aTableRef));
     }
-    
+
+    @Test
+    public void testSchema() throws Exception {
+        TestTimeKeeper timeKeeper = new TestTimeKeeper();
+        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,
+            new ReadOnlyProps(Collections.EMPTY_MAP));
+        PSchema schema = new PSchema("testSchema");
+        metaData.addSchema(schema);
+        assertEquals(schema, metaData.getSchema(schema.getSchemaKey()));
+        metaData.removeSchema(schema, schema.getTimeStamp());
+        try {
+            metaData.getSchema(schema.getSchemaKey());
+            fail("the schema should be removed");
+        } catch (SchemaNotFoundException e) {
+        }
+    }
+
     private static class PSizedTable extends PTableImpl {
         private final int size;
         private final PTableKey key;

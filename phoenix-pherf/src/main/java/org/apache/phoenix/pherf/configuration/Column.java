@@ -28,7 +28,8 @@ public class Column {
 	private String name;
     private String prefix;
     private DataSequence dataSequence;
-    private int length, minValue, maxValue, precision;
+    private int length, precision;
+    private long minValue, maxValue;
     private int nullChance;
     private boolean userDefined;
     private List<DataValue> dataValues;
@@ -40,8 +41,8 @@ public class Column {
         // Initialize int to negative value so we can distinguish 0 in mutations
         // Object fields can be detected with null
         this.length = Integer.MIN_VALUE;
-        this.minValue = Integer.MIN_VALUE;
-        this.maxValue = Integer.MIN_VALUE;
+        this.minValue = Long.MIN_VALUE;
+        this.maxValue = Long.MIN_VALUE;
         this.precision = Integer.MIN_VALUE;
         this.nullChance = Integer.MIN_VALUE;
         this.userDefined = false;
@@ -84,6 +85,10 @@ public class Column {
 	public int getLength() {
 		return length;
 	}
+	
+	public int getLengthExcludingPrefix() {
+		return (this.getPrefix() == null) ? this.length : this.length - this.getPrefix().length();
+	}
 
 	public void setLength(int length) {
 		this.length = length;
@@ -97,19 +102,19 @@ public class Column {
 		this.type = type;
 	}
 
-    public int getMinValue() {
+    public long getMinValue() {
         return minValue;
     }
 
-    public void setMinValue(int minValue) {
+    public void setMinValue(long minValue) {
         this.minValue = minValue;
     }
 
-    public int getMaxValue() {
+    public long getMaxValue() {
         return maxValue;
     }
 
-    public void setMaxValue(int maxValue) {
+    public void setMaxValue(long maxValue) {
         this.maxValue = maxValue;
     }
 
@@ -134,11 +139,11 @@ public class Column {
      *               obj contains only the fields you want to mutate this object into.
      */
     public void mutate(Column column) {
-        if (column.getMinValue() != Integer.MIN_VALUE) {
+        if (column.getMinValue() != Long.MIN_VALUE) {
             setMinValue(column.getMinValue());
         }
 
-        if (column.getMaxValue() != Integer.MIN_VALUE) {
+        if (column.getMaxValue() != Long.MIN_VALUE) {
             setMaxValue(column.getMaxValue());
         }
 

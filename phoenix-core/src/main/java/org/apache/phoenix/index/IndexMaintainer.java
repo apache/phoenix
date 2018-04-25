@@ -101,7 +101,6 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -109,6 +108,7 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.base.Preconditions;
@@ -194,13 +194,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        Iterator<PTable> indexesItr = maintainedIndexes(indexes.iterator());
-        if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
-            indexesItr = maintainedLocalIndexes(indexesItr);
-            if (!indexesItr.hasNext()) {
-                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                return;
-            }
+        Iterator<PTable> indexesItr;
+        boolean onlyLocalIndexes = dataTable.isImmutableRows() || dataTable.isTransactional();
+        if (onlyLocalIndexes) {
+            indexesItr = maintainedLocalIndexes(indexes.iterator());
+        } else {
+            indexesItr = maintainedIndexes(indexes.iterator());
+        }
+        if (!indexesItr.hasNext()) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return;
         }
         int nIndexes = 0;
         while (indexesItr.hasNext()) {
@@ -214,9 +217,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
-            indexesItr =
-                    dataTable.isImmutableRows() ? maintainedLocalIndexes(indexes.iterator())
-                            : maintainedIndexes(indexes.iterator());
+            indexesItr = onlyLocalIndexes 
+                        ? maintainedLocalIndexes(indexes.iterator())
+                        : maintainedIndexes(indexes.iterator());
             while (indexesItr.hasNext()) {
                     org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(indexesItr.next().getIndexMaintainer(dataTable, connection));
                     byte[] protoBytes = proto.toByteArray();
@@ -1065,7 +1068,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         	else if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()
         			// Since we don't include the index rows in the change set for txn tables, we need to detect row deletes that have transformed by TransactionProcessor
-        			|| (CellUtil.matchingQualifier(kv, TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker()) && CellUtil.matchingValue(kv, HConstants.EMPTY_BYTE_ARRAY))) {
+        	        || TransactionUtil.isDeleteFamily(kv)) {
         	    nDeleteCF++;
         	}
         }
@@ -1151,15 +1154,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 ColumnReference indexColumn = coveredColumnsMap.get(ref);
                 // If table delete was single version, then index delete should be as well
                 if (deleteType == DeleteType.SINGLE_VERSION) {
-                    delete.deleteFamilyVersion(indexColumn.getFamily(), ts);
+                    delete.addFamilyVersion(indexColumn.getFamily(), ts);
                 } else {
-                    delete.deleteFamily(indexColumn.getFamily(), ts);
+                    delete.addFamily(indexColumn.getFamily(), ts);
                 }
             }
             if (deleteType == DeleteType.SINGLE_VERSION) {
-                delete.deleteFamilyVersion(emptyCF, ts);
+                delete.addFamilyVersion(emptyCF, ts);
             } else {
-                delete.deleteFamily(emptyCF, ts);
+                delete.addFamily(emptyCF, ts);
             }
             delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
             return delete;
@@ -1178,9 +1181,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     ColumnReference indexColumn = coveredColumnsMap.get(ref);
                     // If point delete for data table, then use point delete for index as well
                     if (kv.getTypeByte() == KeyValue.Type.Delete.getCode()) { 
-                        delete.deleteColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
+                        delete.addColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     } else {
-                        delete.deleteColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
+                        delete.addColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     }
                 }
             }

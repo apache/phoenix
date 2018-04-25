@@ -37,7 +37,7 @@ public class Scenario {
     private Map<String, String> phoenixProperties;
     private DataOverride dataOverride;
     private List<QuerySet> querySet = new ArrayList<>();
-    private WriteParams writeParams;
+    private WriteParams writeParams = null;
     private String name;
     private String tenantId;
     private List<Ddl> preScenarioDdls;
@@ -45,7 +45,6 @@ public class Scenario {
     
    
     public Scenario() {
-        writeParams = new WriteParams();
     }
 
     /**

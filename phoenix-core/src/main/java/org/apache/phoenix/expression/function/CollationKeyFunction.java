@@ -29,7 +29,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -118,6 +117,11 @@ public class CollationKeyFunction extends ScalarFunction {
 		if (LOG.isTraceEnabled()) {
 			LOG.trace("CollationKey inputString: " + inputString);
 		}
+
+		if (inputString == null) {
+			return true;
+		}
+
 		byte[] collationKeyByteArray = collator.getCollationKey(inputString).toByteArray();
 
 		if (LOG.isTraceEnabled()) {
@@ -185,15 +189,9 @@ public class CollationKeyFunction extends ScalarFunction {
 		// TODO: Look into calling freeze() on them to be able return true here.
 		return false;
 	}
-
-	private <T> T getLiteralValue(int childIndex, Class<T> type) {
-		Expression expression = getChildren().get(childIndex);
-		if (LOG.isDebugEnabled()) {
-			LOG.debug("child: " + childIndex + ", expression: " + expression);
-		}
-		// It's safe to assume expression is a LiteralExpression since
-		// only arguments marked as isConstant = true should be handled through
-		// this method.
-		return type.cast(((LiteralExpression) expression).getValue());
-	}
+	
+    @Override
+    public boolean isNullable() {
+        return getChildren().get(0).isNullable();
+    }
 }

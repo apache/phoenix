@@ -42,6 +42,7 @@ import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -430,20 +431,20 @@ public class UpsertCompiler {
             targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
             Arrays.fill(columnIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
             Arrays.fill(pkSlotIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
-            BitSet pkColumnsSet = new BitSet(table.getPKColumns().size());
+            BitSet columnsBeingSet = new BitSet(table.getColumns().size());
             int i = 0;
             if (isSharedViewIndex) {
                 PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
-                columnIndexesToBe[i] = indexIdColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                columnsBeingSet.set(columnIndexesToBe[i] = indexIdColumn.getPosition());
+                pkSlotIndexesToBe[i] = i + posOffset;
                 targetColumns.set(i, indexIdColumn);
                 i++;
             }
             // Add tenant column directly, as we don't want to resolve it as this will fail
             if (isTenantSpecific) {
                 PColumn tenantColumn = table.getPKColumns().get(i + posOffset);
-                columnIndexesToBe[i] = tenantColumn.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                columnsBeingSet.set(columnIndexesToBe[i] = tenantColumn.getPosition());
+                pkSlotIndexesToBe[i] = i + posOffset;
                 targetColumns.set(i, tenantColumn);
                 i++;
             }
@@ -458,18 +459,18 @@ public class UpsertCompiler {
                     overlapViewColumnsToBe.add(column);
                     addViewColumnsToBe.remove(column);
                 }
-                columnIndexesToBe[i] = ref.getColumnPosition();
+                columnsBeingSet.set(columnIndexesToBe[i] = ref.getColumnPosition());
                 targetColumns.set(i, column);
                 if (SchemaUtil.isPKColumn(column)) {
-                    pkColumnsSet.set(pkSlotIndexesToBe[i] = ref.getPKSlotPosition());
+                    pkSlotIndexesToBe[i] = ref.getPKSlotPosition();
                 }
                 i++;
             }
             for (PColumn column : addViewColumnsToBe) {
-                columnIndexesToBe[i] = column.getPosition();
+                columnsBeingSet.set(columnIndexesToBe[i] = column.getPosition());
                 targetColumns.set(i, column);
                 if (SchemaUtil.isPKColumn(column)) {
-                    pkColumnsSet.set(pkSlotIndexesToBe[i] = SchemaUtil.getPKPosition(table, column));
+                    pkSlotIndexesToBe[i] = SchemaUtil.getPKPosition(table, column);
                 }
                 i++;
             }
@@ -480,20 +481,18 @@ public class UpsertCompiler {
                 // Need to resize columnIndexesToBe and pkSlotIndexesToBe to include this extra column.
                 columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, columnIndexesToBe.length + 1);
                 pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, pkSlotIndexesToBe.length + 1);
-                columnIndexesToBe[i] = rowTimestampCol.getPosition();
-                pkColumnsSet.set(pkSlotIndexesToBe[i] = table.getRowTimestampColPos());
+                columnsBeingSet.set(columnIndexesToBe[i] = rowTimestampCol.getPosition());
+                pkSlotIndexesToBe[i] = table.getRowTimestampColPos();
                 targetColumns.add(rowTimestampCol);
                 if (valueNodes != null && !valueNodes.isEmpty()) {
                     valueNodes.add(getNodeForRowTimestampColumn(rowTimestampCol));
                 }
                 nColumnsToSet++;
             }
-            for (i = posOffset; i < table.getPKColumns().size(); i++) {
-                PColumn pkCol = table.getPKColumns().get(i);
-                if (!pkColumnsSet.get(i)) {
-                    if (!pkCol.isNullable() && pkCol.getExpressionStr() == null) {
-                        throw new ConstraintViolationException(table.getName().getString() + "." + pkCol.getName().getString() + " may not be null");
-                    }
+            for (i = posOffset; i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (!columnsBeingSet.get(i) && !column.isNullable() && column.getExpressionStr() == null) {
+                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column) + " may not be null");
                 }
             }
         }
@@ -533,9 +532,10 @@ public class UpsertCompiler {
                 // region space managed by region servers. So we bail out on executing on server side.
                 // Disable running upsert select on server side if a table has global mutable secondary indexes on it
                 boolean hasGlobalMutableIndexes = SchemaUtil.hasGlobalIndex(table) && !table.isImmutableRows();
+                boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
                 runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit && !table.isTransactional()
                         && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
-                        && !select.isJoin() && table.getRowTimestampColPos() == -1;
+                        && !select.isJoin() && !hasWhereSubquery && table.getRowTimestampColPos() == -1;
             }
             // If we may be able to run on the server, add a hint that favors using the data table
             // if all else is equal.
@@ -549,7 +549,7 @@ public class UpsertCompiler {
             select = SelectStatement.create(select, hint);
             // Pass scan through if same table in upsert and select so that projection is computed correctly
             // Use optimizer to choose the best plan
-            QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
+            QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false, false, null);
             queryPlanToBe = compiler.compile();
             // This is post-fix: if the tableRef is a projected table, this means there are post-processing
             // steps and parallelIteratorFactory did not take effect.
@@ -567,6 +567,12 @@ public class UpsertCompiler {
             nColumnsToSet = nValuesToSet;
             columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, nValuesToSet);
             pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, nValuesToSet);
+            for (int i = posOffset + nValuesToSet; i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (!column.isNullable() && column.getExpressionStr() == null) {
+                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column) + " may not be null");
+                }
+            }
         }
         
         if (nValuesToSet != nColumnsToSet) {
@@ -697,7 +703,7 @@ public class UpsertCompiler {
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
                     
                     // Ignore order by - it has no impact
-                    final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                    final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, originalQueryPlan);
                     return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context, connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
                 }
             }
@@ -1015,6 +1021,7 @@ public class UpsertCompiler {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
                 scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
             }
             ResultIterator iterator = aggPlan.iterator();
             try {

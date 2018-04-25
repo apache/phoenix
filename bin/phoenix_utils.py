@@ -151,7 +151,7 @@ def setPath():
     global testjar
     testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
     if testjar == "":
-        testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, ".."))
+        testjar = findFileInPathWithoutRecursion(PHOENIX_TESTS_JAR_PATTERN, os.path.join(current_dir, "..", 'lib'))
     if testjar == "":
         testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 

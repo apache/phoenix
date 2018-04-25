@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -210,6 +212,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
             }
             if (repairScanner != null) {
+                if (s!=null) {
+                    s.close();
+                }
                 return repairScanner;
             } else {
                 return s;
@@ -222,10 +227,13 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             if (reader instanceof IndexHalfStoreFileReader) {
                 newScanners.add(new LocalIndexStoreFileScanner(reader, reader.getScanner(
                     scan.getCacheBlocks(), scanUsePread, false), true, reader.getHFileReader()
-                        .hasMVCCInfo(), store.getSmallestReadPoint()));
+                        .hasMVCCInfo(), store.getSmallestReadPoint(), scanner.getScannerOrder(), false));
             } else {
                 newScanners.add(((StoreFileScanner) scanner));
             }
+        }
+        if (s!=null) {
+            s.close();
         }
         return new StoreScanner(store, store.getScanInfo(), scan, newScanners,
             scanType, store.getSmallestReadPoint(), earliestPutTs);
@@ -311,6 +319,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 && store.hasReferences()) {
             final long readPt = c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel
                     ());
+            if (s!=null) {
+                s.close();
+            }
             if (!scan.isReversed()) {
                 return new StoreScanner(store, store.getScanInfo(), scan,
                         targetCols, readPt) {
@@ -352,6 +363,18 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 ());
         final List<KeyValueScanner> keyValueScanners = new ArrayList<>(store
                 .getStorefiles().size() + 1);
+        byte[] startKey = c.getEnvironment().getRegionInfo().getStartKey();
+        byte[] endKey = c.getEnvironment().getRegionInfo().getEndKey();
+        // If the region start key is not the prefix of the scan start row then we can return empty
+        // scanners. This is possible during merge where one of the child region scan should not return any
+        // results as we go through merged region.
+        int prefixLength =
+                scan.getAttribute(SCAN_START_ROW_SUFFIX) == null ? (startKey.length == 0 ? endKey.length
+                        : startKey.length) : (scan.getStartRow().length - scan.getAttribute(SCAN_START_ROW_SUFFIX).length);
+        if (Bytes.compareTo(scan.getStartRow(), 0, prefixLength, (startKey.length == 0 ? new byte[endKey.length] : startKey), 0,
+            startKey.length == 0 ? endKey.length : startKey.length) != 0) {
+            return keyValueScanners;
+        }
         for (StoreFile storeFile : storeFiles) {
             if (storeFile.isReference()) {
                 referenceStoreFiles.add(storeFile);
@@ -362,14 +385,15 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         final List<StoreFileScanner> scanners = StoreFileScanner.getScannersForStoreFiles(nonReferenceStoreFiles, scan.getCacheBlocks(), scanUsePread, readPt);
         keyValueScanners.addAll(scanners);
         for (StoreFile sf : referenceStoreFiles) {
+            long scannerOrder = 0;
             if (sf.getReader() instanceof IndexHalfStoreFileReader) {
                 keyValueScanners.add(new LocalIndexStoreFileScanner(sf.getReader(), sf.getReader()
                         .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
+                        .getReader().getHFileReader().hasMVCCInfo(), readPt, scannerOrder++, false));
             } else {
                 keyValueScanners.add(new StoreFileScanner(sf.getReader(), sf.getReader()
                         .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
+                        .getReader().getHFileReader().hasMVCCInfo(), readPt, scannerOrder++, false));
             }
         }
         keyValueScanners.addAll(((HStore) store).memstore.getScanners(readPt));

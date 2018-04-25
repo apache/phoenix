@@ -72,6 +72,7 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 
 /**
@@ -191,7 +192,7 @@ public class TestWALRecoveryCaching {
 
     // load some data into the table
     Put p = new Put(Bytes.toBytes("row"));
-    p.add(family, qual, Bytes.toBytes("value"));
+    p.addColumn(family, qual, Bytes.toBytes("value"));
     HTable primary = new HTable(conf, testTable.getTableName());
     primary.put(p);
     primary.flushCommits();
@@ -234,7 +235,7 @@ public class TestWALRecoveryCaching {
     // make a second put that (1), isn't indexed, so we can be sure of the index state and (2)
     // ensures that our table is back up
     Put p2 = new Put(p.getRow());
-    p2.add(nonIndexedFamily, Bytes.toBytes("Not indexed"), Bytes.toBytes("non-indexed value"));
+    p2.addColumn(nonIndexedFamily, Bytes.toBytes("Not indexed"), Bytes.toBytes("non-indexed value"));
     primary.put(p2);
     primary.flushCommits();
 
@@ -313,7 +314,7 @@ public class TestWALRecoveryCaching {
 
         // force reassign the regions from the table
         for (Region region : online) {
-          cluster.getMaster().assignRegion(region.getRegionInfo());
+          cluster.getMaster().getAssignmentManager().assign(Lists.newArrayList(region.getRegionInfo()));
         }
 
         LOG.info("Starting region server:" + server.getHostname());

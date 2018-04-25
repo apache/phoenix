@@ -40,6 +40,7 @@ DIR_BIN=$DIR_REL_BIN_PATH/bin
 DIR_PHERF_CONF=phoenix-pherf/config
 DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
 DIR_DOCS=dev/release_files
+DIR_PYTHON=$DIR_REL_BIN_PATH/python
 
 # Verify no target exists
 mvn clean; rm -rf $DIR_REL_BASE;
@@ -64,6 +65,7 @@ mkdir $DIR_REL_BIN_TAR_PATH;
 mkdir $DIR_REL_SRC_TAR_PATH;
 mkdir $DIR_EXAMPLES;
 mkdir $DIR_BIN;
+mkdir $DIR_PYTHON;
 
 # Move src tar
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
@@ -77,7 +79,7 @@ phx_jars=$(find . -iwholename "./*/target/phoenix-*.jar")
 cp $phx_jars $DIR_REL_BIN_PATH;
 
 # Copy bin
-cp bin/* $DIR_BIN;
+cp -r bin/* $DIR_BIN;
 cp -R $DIR_PHERF_CONF $DIR_BIN;
 
 # Copy release docs
@@ -86,6 +88,9 @@ cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
 # Copy examples
 cp -r examples/* $DIR_EXAMPLES
+
+# Copy the python driver
+cp -r python/* $DIR_PYTHON
 
 # Generate bin tar
 tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT apache-phoenix-$PHOENIX-bin;
@@ -102,14 +107,14 @@ function_sign() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     gpg2 --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
     openssl md5 $phoenix_tar > $phoenix_tar.md5;
-    openssl dgst -sha512 $phoenix_tar > $phoenix_tar.sha;
-    openssl dgst -sha256 $phoenix_tar >> $phoenix_tar.sha;
+    openssl dgst -sha512 $phoenix_tar > $phoenix_tar.sha512;
+    openssl dgst -sha256 $phoenix_tar >> $phoenix_tar.sha256;
   # all other OS
   else
     gpg --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
     md5sum -b $phoenix_tar > $phoenix_tar.md5;
-    sha512sum -b $phoenix_tar > $phoenix_tar.sha;
-    sha256sum -b $phoenix_tar >> $phoenix_tar.sha;
+    sha512sum -b $phoenix_tar > $phoenix_tar.sha512;
+    sha256sum -b $phoenix_tar >> $phoenix_tar.sha256;
   fi
 }
 

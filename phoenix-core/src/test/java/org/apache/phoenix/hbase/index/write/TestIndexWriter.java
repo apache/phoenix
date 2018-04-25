@@ -17,12 +17,9 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -51,17 +48,13 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
-import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
-import com.google.common.collect.LinkedListMultimap;
-import com.google.common.collect.Multimap;
 
 public class TestIndexWriter {
   private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
@@ -105,13 +98,17 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     Collection<Pair<Mutation, byte[]>> indexUpdates = Arrays.asList(new Pair<Mutation, byte[]>(m,
         tableName));
 
@@ -136,7 +133,7 @@ public class TestIndexWriter {
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
     policy.setup(stop, abort);
     IndexWriter writer = new IndexWriter(committer, policy);
-    writer.write(indexUpdates);
+    writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.testName.getTableNameString() + " finished");
@@ -161,6 +158,10 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
@@ -189,7 +190,7 @@ public class TestIndexWriter {
 
     // update a single table
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     final List<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 
@@ -206,7 +207,7 @@ public class TestIndexWriter {
       @Override
       public void run() {
         try {
-          writer.write(indexUpdates);
+          writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IndexWriteException e) {
           failedWrite[0] = true;
         }

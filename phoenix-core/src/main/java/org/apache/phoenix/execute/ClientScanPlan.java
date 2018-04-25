@@ -26,6 +26,8 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -53,25 +55,27 @@ public class ClientScanPlan extends ClientProcessingPlan {
 
     @Override
     public Cost getCost() {
-        Long byteCount = null;
-        try {
-            byteCount = getEstimatedBytesToScan();
-        } catch (SQLException e) {
-            // ignored.
-        }
+        Double inputBytes = this.getDelegate().accept(new ByteCountVisitor());
+        Double outputBytes = this.accept(new ByteCountVisitor());
 
-        if (byteCount == null) {
+        if (inputBytes == null || outputBytes == null) {
             return Cost.UNKNOWN;
         }
 
-        Cost cost = new Cost(0, 0, byteCount);
         int parallelLevel = CostUtil.estimateParallelLevel(
                 false, context.getConnection().getQueryServices());
+        Cost cost = new Cost(0, 0, 0);
         if (!orderBy.getOrderByExpressions().isEmpty()) {
-            Cost orderByCost = CostUtil.estimateOrderByCost(byteCount, parallelLevel);
+            Cost orderByCost =
+                    CostUtil.estimateOrderByCost(inputBytes, outputBytes, parallelLevel);
             cost = cost.plus(orderByCost);
         }
         return super.getCost().plus(cost);
+    }
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override

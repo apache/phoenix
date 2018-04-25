@@ -29,7 +29,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -113,7 +112,7 @@ public class MutableIndexFailureIT extends BaseTest {
     public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
         this.transactional = transactional;
         this.localIndex = localIndex;
-        this.tableDDLOptions = " SALT_BUCKETS=2 " + (transactional ? ", TRANSACTIONAL=true " : "") 
+        this.tableDDLOptions = " SALT_BUCKETS=2, COLUMN_ENCODED_BYTES=NONE" + (transactional ? ", TRANSACTIONAL=true " : "") 
                 + (disableIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE + "=" + disableIndexOnWriteFailure))
                 + (throwIndexWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.THROW_INDEX_WRITE_FAILURE + "=" + throwIndexWriteFailure));
         this.tableName = FailingRegionObserver.FAIL_TABLE_NAME;
@@ -130,7 +129,6 @@ public class MutableIndexFailureIT extends BaseTest {
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
-        serverProps.put(IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER, "2");
         serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
         serverProps.put(IndexWriterUtils.INDEX_WRITER_RPC_PAUSE, "5000");
         serverProps.put("data.tx.snapshot.dir", "/tmp");
@@ -144,7 +142,8 @@ public class MutableIndexFailureIT extends BaseTest {
          * because we want to control it's execution ourselves
          */
         serverProps.put(QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY, Long.toString(Long.MAX_VALUE));
-        Map<String, String> clientProps = Collections.singletonMap(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         indexRebuildTaskRegionEnvironment =
@@ -161,7 +160,8 @@ public class MutableIndexFailureIT extends BaseTest {
     @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
     public static List<Object[]> data() {
         return Arrays.asList(new Object[][] { 
-                { false, false, false, true, false, false},
+                // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
+                { false, false, false, false, false, false},
                 { false, false, true, true, false, null},
                 { false, false, true, true, false, true},
                 { false, false, false, true, false, null},
@@ -181,8 +181,8 @@ public class MutableIndexFailureIT extends BaseTest {
                 { false, true, false, true, false, null},
                 { false, false, false, true, true, null},
                 { false, false, true, true, true, null},
-                { false, false, false, true, true, false},
-                { false, false, true, true, true, false},
+                { false, false, false, false, true, false},
+                { false, false, true, false, true, false},
                 } 
         );
     }
@@ -289,7 +289,6 @@ public class MutableIndexFailureIT extends BaseTest {
             assertEquals("z", rs.getString(2));
             assertFalse(rs.next());
 
-            FailingRegionObserver.FAIL_WRITE = true;
             updateTable(conn, true);
             // Verify the metadata for index is correct.
             rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(schema), StringUtil.escapeLike(indexName),
@@ -466,9 +465,13 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt = conn.prepareStatement("DELETE FROM " + fullTableName + " WHERE k=?");
         stmt.setString(1, "b");
         stmt.execute();
+        // Set to fail after the DELETE, since transactional tables will write
+        // uncommitted data when the DELETE is executed.
+        FailingRegionObserver.FAIL_WRITE = true;
         try {
+            FailingRegionObserver.FAIL_NEXT_WRITE = localIndex && transactional;
             conn.commit();
-            if (commitShouldFail && !localIndex && this.throwIndexWriteFailure) {
+            if (commitShouldFail && (!localIndex || transactional) && this.throwIndexWriteFailure) {
                 fail();
             }
         } catch (CommitException e) {
@@ -502,13 +505,17 @@ public class MutableIndexFailureIT extends BaseTest {
 
     public static class FailingRegionObserver extends SimpleRegionObserver {
         public static volatile boolean FAIL_WRITE = false;
+        public static volatile boolean FAIL_NEXT_WRITE = false;
         public static final String FAIL_INDEX_NAME = "FAIL_IDX";
         public static final String FAIL_TABLE_NAME = "FAIL_TABLE";
 
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
             boolean throwException = false;
-            if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().endsWith("A_" + FAIL_INDEX_NAME)
+            if (FAIL_NEXT_WRITE) {
+                throwException = true;
+                FAIL_NEXT_WRITE = false;
+            } else if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().endsWith("A_" + FAIL_INDEX_NAME)
                     && FAIL_WRITE) {
                 throwException = true;
             } else {

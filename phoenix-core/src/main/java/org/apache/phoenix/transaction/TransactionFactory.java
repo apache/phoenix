@@ -19,125 +19,54 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+
+
 
 public class TransactionFactory {
-
-    static private TransactionFactory transactionFactory = null;
-
-    private TransactionProcessor tp = TransactionProcessor.Tephra;
-
-    enum TransactionProcessor {
-        Tephra,
-        Omid
-    }
-
-    private TransactionFactory(TransactionProcessor tp) {
-        this.tp = tp;
-    }
-
-    static public void createTransactionFactory(TransactionProcessor tp) {
-        if (transactionFactory == null) {
-            transactionFactory = new TransactionFactory(tp);
-        }
-    }
-
-    static public TransactionFactory getTransactionFactory() {
-        if (transactionFactory == null) {
-            createTransactionFactory(TransactionProcessor.Tephra);
-        }
-
-        return transactionFactory;
-    }
-
-    public PhoenixTransactionContext getTransactionContext()  {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext();
-            break;
-        case Omid:
-            ctx = new OmidTransactionContext();
-            break;
-        default:
-            ctx = null;
+    public enum Provider {
+        TEPHRA((byte)1, TephraTransactionProvider.getInstance()),
+        OMID((byte)2, OmidTransactionProvider.getInstance());
+        
+        private final byte code;
+        private final PhoenixTransactionProvider provider;
+        
+        Provider(byte code, PhoenixTransactionProvider provider) {
+            this.code = code;
+            this.provider = provider;
         }
         
-        return ctx;
-    }
+        public byte getCode() {
+            return this.code;
+        }
 
-    public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext(txnBytes);
-            break;
-        case Omid:
-//            ctx = new OmidTransactionContext(txnBytes);
-            break;
-        default:
-            ctx = null;
+        public static Provider fromCode(int code) {
+            if (code < 1 || code > Provider.values().length) {
+                throw new IllegalArgumentException("Invalid TransactionFactory.Provider " + code);
+            }
+            return Provider.values()[code-1];
         }
         
-        return ctx;
+        public static Provider getDefault() {
+            return TEPHRA;
+        }
+
+        public PhoenixTransactionProvider getTransactionProvider()  {
+            return provider;
+        }
+    }
+
+    public static PhoenixTransactionProvider getTransactionProvider(Provider provider) {
+        return provider.getTransactionProvider();
     }
     
-    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext(connection);
-            break;
-        case Omid:
-//            ctx = new OmidTransactionContext(connection);
-            break;
-        default:
-            ctx = null;
+    public static PhoenixTransactionContext getTransactionContext(byte[] txState, int clientVersion) throws IOException {
+        if (txState == null || txState.length == 0) {
+            return null;
         }
-        
-        return ctx;
-    }
-
-    public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask) {
-
-        PhoenixTransactionContext ctx = null;
-
-        switch(tp) {
-        case Tephra:
-            ctx = new TephraTransactionContext(contex, connection, subTask);
-            break;
-        case Omid:
-//            ctx = new OmidTransactionContext(contex, connection, subTask);
-            break;
-        default:
-            ctx = null;
-        }
-        
-        return ctx;
-    }
-
-    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) {
-
-        PhoenixTransactionalTable table = null;
-
-        switch(tp) {
-        case Tephra:
-            table = new TephraTransactionTable(ctx, htable);
-            break;
-        case Omid:
-//            table = new OmidTransactionContext(contex, connection, subTask);
-            break;
-        default:
-            table = null;
-        }
-        
-        return table;
+        Provider provider = (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) 
+                ? Provider.OMID
+                : Provider.fromCode(txState[txState.length-1]);
+        return provider.getTransactionProvider().getTransactionContext(txState);
     }
 }

@@ -145,7 +145,6 @@ public enum SQLExceptionCode {
     }),
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed."),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !=."),
-    INVALID_NOT_NULL_CONSTRAINT(517, "42895", "Invalid not null constraint on non primary key column."),
 
     /**
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
@@ -203,14 +202,14 @@ public enum SQLExceptionCode {
     PRIMARY_KEY_WITH_FAMILY_NAME(1003, "42J01", "Primary key columns must not have a family name."),
     PRIMARY_KEY_OUT_OF_ORDER(1004, "42J02", "Order of columns in primary key constraint must match the order in which they're declared."),
     VARBINARY_IN_ROW_KEY(1005, "42J03", "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key."),
-    NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to a multi-part row key."),
+    NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to primary key."),
     VARBINARY_LAST_PK(1015, "42J04", "Cannot add column to table when the last PK column is of type VARBINARY or ARRAY."),
     NULLABLE_FIXED_WIDTH_LAST_PK(1023, "42J04", "Cannot add column to table when the last PK column is nullable and fixed width."),
     CANNOT_MODIFY_VIEW_PK(1036, "42J04", "Cannot modify the primary key of a VIEW if last PK column of parent is variable length."),
     BASE_TABLE_COLUMN(1037, "42J04", "Cannot modify columns of base table used by tenant-specific tables."),
     UNALLOWED_COLUMN_FAMILY(1090, "42J04", "Column family names should not contain local index column prefix: "+QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX),
     // Key/value column related errors
-    KEY_VALUE_NOT_NULL(1007, "42K01", "A key/value column may not be declared as not null."),
+    KEY_VALUE_NOT_NULL(1007, "42K01", "A non primary key column may only be declared as not null on tables with immutable rows."),
     // View related errors.
     VIEW_WITH_TABLE_CONFIG(1008, "42L01", "A view may not contain table configuration properties."),
     VIEW_WITH_PROPERTIES(1009, "42L02", "Properties may not be defined for a view."),
@@ -296,7 +295,11 @@ public enum SQLExceptionCode {
     CANNOT_COERCE_AUTO_PARTITION_ID(1087, "44A18", "Auto-partition id cannot be coerced"),
     
     CANNOT_CREATE_INDEX_ON_MUTABLE_TABLE_WITH_ROWTIMESTAMP(1088, "44A19", "Cannot create an index on a mutable table that has a ROW_TIMESTAMP column."),
-    INVALID_VIEW(1089, "44A20", "View is invalid as a required column was dropped"),
+    UNKNOWN_TRANSACTION_PROVIDER(1089,"44A20", "Unknown TRANSACTION_PROVIDER: "),
+    CANNOT_START_TXN_IF_TXN_DISABLED(1091, "44A22", "Cannot start transaction if transactions are disabled."),
+    CANNOT_MIX_TXN_PROVIDERS(1092, "44A23", "Cannot mix transaction providers: "),
+    CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL(1093, "44A24", "Cannot alter table from non transactional to transactional for "),
+    INVALID_VIEW(1094, "44A25", "View is invalid as a required column was dropped"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -369,6 +372,7 @@ public enum SQLExceptionCode {
     CONNECTION_CLOSED(1111, "XCL11", "Connectioin is closed."),
 
     INDEX_FAILURE_BLOCK_WRITE(1120, "XCL20", "Writes to table blocked until index can be updated."),
+    INDEX_WRITE_FAILURE(1121, "XCL21", "Write to the index failed."),
     
     UPDATE_CACHE_FREQUENCY_INVALID(1130, "XCL30", "UPDATE_CACHE_FREQUENCY cannot be set to ALWAYS if APPEND_ONLY_SCHEMA is true."),
     CANNOT_DROP_COL_APPEND_ONLY_SCHEMA(1131, "XCL31", "Cannot drop column from table that with append only schema."),
@@ -436,14 +440,15 @@ public enum SQLExceptionCode {
     SCHEMA_NOT_ALLOWED(724, "43M07", "Schema name not allowed!!"),
     CREATE_SCHEMA_NOT_ALLOWED(725, "43M08", "Cannot create schema because config "
             + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " for enabling name space mapping isn't enabled."),
-    INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES(726, "43M10", " Inconsistent namespace mapping properties.."),
-    ASYNC_NOT_ALLOWED(727, "43M11", " ASYNC option is not allowed.. "),
+    INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES(726, "43M10", " Inconsistent namespace mapping properties."),
+    ASYNC_NOT_ALLOWED(727, "43M11", " ASYNC option is not allowed."),
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
     
     MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
     MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes"), 
+    INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found");
 
     private final int errorCode;

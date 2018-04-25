@@ -23,8 +23,6 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STAR
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -37,6 +35,7 @@ import java.io.DataInputStream;
 import java.io.EOFException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
@@ -82,8 +81,8 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.HashCacheClient;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -93,17 +92,18 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
@@ -138,7 +138,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
-	private static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
+	public static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
     private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "98", "12");
     private final List<List<Scan>> scans;
@@ -157,6 +157,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Scan scan;
     private final boolean useStatsForParallelization;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
+    private final QueryPlan dataPlan;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -473,13 +474,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
     }
     
-    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, QueryPlan dataPlan) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
                 plan.getStatement().getHint(), QueryUtil.getOffsetLimit(plan.getLimit(), plan.getOffset()), offset);
         this.plan = plan;
         this.scan = scan;
         this.caches = caches;
         this.scanGrouper = scanGrouper;
+        this.dataPlan = dataPlan;
         StatementContext context = plan.getContext();
         // Clone MutationState as the one on the connection will change if auto commit is on
         // yet we need the original one with the original transaction from TableResultIterator.
@@ -495,7 +497,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        this.useStatsForParallelization = getStatsForParallelizationProp(context, table);
+        this.useStatsForParallelization = PhoenixConfigurationUtil.getStatsForParallelizationProp(context.getConnection(), table);
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -589,9 +591,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return context.getConnection().getQueryServices().getTableStats(key);
     }
 
+    private static void updateEstimates(GuidePostsInfo gps, int guideIndex, GuidePostEstimate estimate) {
+        estimate.rowsEstimate += gps.getRowCounts()[guideIndex];
+        estimate.bytesEstimate += gps.getByteCounts()[guideIndex];
+        /*
+         * It is possible that the timestamp of guideposts could be different.
+         * So we report the time at which stats information was collected as the
+         * minimum of timestamp of the guideposts that we will be going over.
+         */
+        estimate.lastUpdated =
+                Math.min(estimate.lastUpdated,
+                    gps.getGuidePostTimestamps()[guideIndex]);
+    }
+    
     private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan,
-            byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation,
-            GuidePostEstimate estimate, Long gpsRows, Long gpsBytes) {
+            byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
             if (regionLocation.getServerName() != null) {
@@ -599,12 +613,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
             if (useStatsForParallelization || crossedRegionBoundary) {
                 scans.add(scan);
-            }
-            if (estimate != null && gpsRows != null) {
-                estimate.rowsEstimate += gpsRows;
-            }
-            if (estimate != null && gpsBytes != null) {
-                estimate.bytesEstimate += gpsBytes;
             }
         }
         if (startNewScan && !scans.isEmpty()) {
@@ -667,7 +675,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     newScan.setStopRow(regionInfo.getEndKey());
                 }
             }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation, null, null, null);
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
             regionIndex++;
         }
         if (!scans.isEmpty()) { // Add any remaining scans
@@ -679,12 +687,195 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private static class GuidePostEstimate {
         private long bytesEstimate;
         private long rowsEstimate;
+        private long lastUpdated = Long.MAX_VALUE;
     }
 
+    private int computeColumnsInCommon() {
+        PTable dataTable;
+        if ((dataTable=dataPlan.getTableRef().getTable()).getBucketNum() != null) { // unable to compute prefix range for salted data table
+            return 0;
+        }
+
+        PTable table = getTable();
+        int nColumnsOffset = dataTable.isMultiTenant() ? 1 :0;
+        int nColumnsInCommon = nColumnsOffset;
+        List<PColumn> dataPKColumns = dataTable.getPKColumns();
+        List<PColumn> indexPKColumns = table.getPKColumns();
+        int nIndexPKColumns = indexPKColumns.size();
+        int nDataPKColumns = dataPKColumns.size();
+        // Skip INDEX_ID and tenant ID columns
+        for (int i = 1 + nColumnsInCommon; i < nIndexPKColumns; i++) {
+            PColumn indexColumn = indexPKColumns.get(i);
+            String indexColumnName = indexColumn.getName().getString();
+            String cf = IndexUtil.getDataColumnFamilyName(indexColumnName);
+            if (cf.length() != 0) {
+                break;
+            }
+            if (i > nDataPKColumns) {
+                break;
+            }
+            PColumn dataColumn = dataPKColumns.get(i-1);
+            String dataColumnName = dataColumn.getName().getString();
+            // Ensure both name and type are the same. Because of the restrictions we have
+            // on PK column types (namely that you can only have a fixed width nullable
+            // column as your last column), the type check is more of a sanity check
+            // since it wouldn't make sense to have an index with every column in common.
+            if (indexColumn.getDataType() == dataColumn.getDataType() 
+                    && dataColumnName.equals(IndexUtil.getDataColumnName(indexColumnName))) {
+                nColumnsInCommon++;
+                continue;
+            }
+            break;
+        }
+        return nColumnsInCommon;
+    }
+     
+    // public for testing
+    public static ScanRanges computePrefixScanRanges(ScanRanges dataScanRanges, int nColumnsInCommon) {
+        if (nColumnsInCommon == 0) {
+            return ScanRanges.EVERYTHING;
+        }
+        
+        int offset = 0;
+        List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(nColumnsInCommon);
+        int[] slotSpan = new int[nColumnsInCommon];
+        boolean useSkipScan = false;
+        boolean hasRange = false;
+        List<List<KeyRange>> rangesList = dataScanRanges.getRanges();
+        int rangesListSize = rangesList.size();
+        while (offset < nColumnsInCommon && offset < rangesListSize) {
+            List<KeyRange> ranges = rangesList.get(offset);
+            // We use a skip scan if we have multiple ranges or if
+            // we have a non single key range before the last range.
+            useSkipScan |= ranges.size() > 1 || hasRange;
+            cnf.add(ranges);
+            int rangeSpan = 1 + dataScanRanges.getSlotSpans()[offset];
+            if (offset + rangeSpan > nColumnsInCommon) {
+                rangeSpan = nColumnsInCommon - offset;
+                // trim range to only be rangeSpan in length
+                ranges = Lists.newArrayListWithExpectedSize(cnf.get(cnf.size()-1).size());
+                for (KeyRange range : cnf.get(cnf.size()-1)) {
+                    range = clipRange(dataScanRanges.getSchema(), offset, rangeSpan, range);
+                    // trim range to be only rangeSpan in length
+                    ranges.add(range);
+                }
+                cnf.set(cnf.size()-1, ranges);
+            }
+            for (KeyRange range : ranges) {
+                if (!range.isSingleKey()) {
+                    hasRange = true;
+                }
+            }
+            slotSpan[offset] = rangeSpan - 1;
+            offset = offset + rangeSpan;
+        }
+        useSkipScan &= dataScanRanges.useSkipScanFilter();
+        KeyRange minMaxRange = 
+                clipRange(dataScanRanges.getSchema(), 0, nColumnsInCommon, dataScanRanges.getMinMaxRange());
+        slotSpan = slotSpan.length == cnf.size() ? slotSpan : Arrays.copyOf(slotSpan, cnf.size());
+        ScanRanges commonScanRanges = ScanRanges.create(dataScanRanges.getSchema(), cnf, slotSpan, minMaxRange, null, useSkipScan, -1);
+        return commonScanRanges;
+    }
+        
+    /**
+     * Truncates range to be a max of rangeSpan fields
+     * @param schema row key schema
+     * @param fieldIndex starting index of field with in the row key schema
+     * @param rangeSpan maximum field length
+     * @return the same range if unchanged and otherwise a new range
+     */
+    public static KeyRange clipRange(RowKeySchema schema, int fieldIndex, int rangeSpan, KeyRange range) {
+        if (range == KeyRange.EVERYTHING_RANGE) {
+            return range;
+        }
+        if (range == KeyRange.EMPTY_RANGE) {
+            return range;
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        boolean newRange = false;
+        boolean lowerUnbound = range.lowerUnbound();
+        boolean lowerInclusive = range.isLowerInclusive();
+        byte[] lowerRange = range.getLowerRange();
+        if (!lowerUnbound && lowerRange.length > 0) {
+            if (clipKeyRangeBytes(schema, fieldIndex, rangeSpan, lowerRange, ptr, true)) {
+                // Make lower range inclusive since we're decreasing the range by chopping the last part off
+                lowerInclusive = true;
+                lowerRange = ptr.copyBytes();
+                newRange = true;
+            }
+        }
+        boolean upperUnbound = range.upperUnbound();
+        boolean upperInclusive = range.isUpperInclusive();
+        byte[] upperRange = range.getUpperRange();
+        if (!upperUnbound && upperRange.length > 0) {
+            if (clipKeyRangeBytes(schema, fieldIndex, rangeSpan, upperRange, ptr, false)) {
+                // Make lower range inclusive since we're decreasing the range by chopping the last part off
+                upperInclusive = true;
+                upperRange = ptr.copyBytes();
+                newRange = true;
+            }
+        }
+        
+        return newRange ? KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive) : range;
+    }
+
+    private static boolean clipKeyRangeBytes(RowKeySchema schema, int fieldIndex, int rangeSpan, byte[] rowKey, ImmutableBytesWritable ptr, boolean trimTrailingNulls) {
+        int position = 0;
+        int maxOffset = schema.iterator(rowKey, ptr);
+        byte[] newRowKey = new byte[rowKey.length];
+        int offset = 0;
+        int trailingNullsToTrim = 0;
+        do {
+            if (schema.next(ptr, fieldIndex, maxOffset) == null) {
+                break;
+            }
+            System.arraycopy(ptr.get(), ptr.getOffset(), newRowKey, offset, ptr.getLength());
+            offset += ptr.getLength();
+            Field field =  schema.getField(fieldIndex);
+            if (field.getDataType().isFixedWidth()) {
+                trailingNullsToTrim = 0;
+            } else {
+                boolean isNull = ptr.getLength() == 0;
+                byte sepByte = SchemaUtil.getSeparatorByte(true, isNull, field);
+                newRowKey[offset++] = sepByte;
+                if (isNull) {
+                    if (trimTrailingNulls) {
+                        trailingNullsToTrim++;
+                    } else {
+                        trailingNullsToTrim = 0;
+                    }
+                } else {
+                    // So that last zero separator byte is always trimmed
+                    trailingNullsToTrim = 1;
+                }
+            }
+            fieldIndex++;
+        } while (++position < rangeSpan);
+        // remove trailing nulls
+        ptr.set(newRowKey, 0, offset - trailingNullsToTrim);
+        // return true if we've clipped the rowKey
+        return maxOffset != offset;
+    }
+    
     /**
      * Compute the list of parallel scans to run for a given query. The inner scans
      * may be concatenated together directly, while the other ones may need to be
      * merge sorted, depending on the query.
+     * Also computes an estimated bytes scanned, rows scanned, and last update time
+     * of statistics. To compute correctly, we need to handle a couple of edge cases:
+     * 1) if a guidepost is equal to the start key of the scan.
+     * 2) If a guidepost is equal to the end region key.
+     * In both cases, we set a flag (delayAddingEst) which indicates that the previous
+     * gp should be use in our stats calculation. The normal case is that a gp is
+     * encountered which is in the scan range in which case it is simply added to
+     * our calculation.
+     * For the last update time, we use the min timestamp of the gp that are in
+     * range of the scans that will be issued. If we find no gp in the range, we use
+     * the gp in the first or last region of the scan. If we encounter a region with
+     * no gp, then we return a null value as an indication that we don't know with
+     * certainty when the stats were updated last. This handles the case of a split
+     * occurring for a large ingest with stats never having been calculated for the
+     * new region.
      * @return list of parallel scans to run for a given query.
      * @throws SQLException
      */
@@ -702,26 +893,44 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // case we generate an empty guide post with the byte estimate being set as guide post
         // width. 
         boolean emptyGuidePost = gps.isEmptyGuidePost();
+        byte[] startRegionBoundaryKey = startKey;
+        byte[] stopRegionBoundaryKey = stopKey;
+        int columnsInCommon = 0;
+        ScanRanges prefixScanRanges = ScanRanges.EVERYTHING;
         boolean traverseAllRegions = isSalted || isLocalIndex;
-        if (!traverseAllRegions) {
+        if (isLocalIndex) {
+            // TODO: when implementing PHOENIX-4585, we should change this to an assert
+            // as we should always have a data plan when a local index is being used.
+            if (dataPlan != null && dataPlan.getTableRef().getTable().getType() != PTableType.INDEX) { // Sanity check
+                prefixScanRanges = computePrefixScanRanges(dataPlan.getContext().getScanRanges(), columnsInCommon=computeColumnsInCommon());
+                KeyRange prefixRange = prefixScanRanges.getScanRange();
+                if (!prefixRange.lowerUnbound()) {
+                    startRegionBoundaryKey = prefixRange.getLowerRange();
+                }
+                if (!prefixRange.upperUnbound()) {
+                    stopRegionBoundaryKey = prefixRange.getUpperRange();
+                }
+            }
+        } else if (!traverseAllRegions) {
             byte[] scanStartRow = scan.getStartRow();
             if (scanStartRow.length != 0 && Bytes.compareTo(scanStartRow, startKey) > 0) {
-                startKey = scanStartRow;
+                startRegionBoundaryKey = startKey = scanStartRow;
             }
             byte[] scanStopRow = scan.getStopRow();
             if (stopKey.length == 0
                     || (scanStopRow.length != 0 && Bytes.compareTo(scanStopRow, stopKey) < 0)) {
-                stopKey = scanStopRow;
+                stopRegionBoundaryKey = stopKey = scanStopRow;
             }
         }
         
         int regionIndex = 0;
+        int startRegionIndex = 0;
         int stopIndex = regionBoundaries.size();
-        if (startKey.length > 0) {
-            regionIndex = getIndexContainingInclusive(regionBoundaries, startKey);
+        if (startRegionBoundaryKey.length > 0) {
+            startRegionIndex = regionIndex = getIndexContainingInclusive(regionBoundaries, startRegionBoundaryKey);
         }
-        if (stopKey.length > 0) {
-            stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopKey));
+        if (stopRegionBoundaryKey.length > 0) {
+            stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), stopRegionBoundaryKey));
             if (isLocalIndex) {
                 stopKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
             }
@@ -741,77 +950,120 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         PrefixByteDecoder decoder = null;
         int guideIndex = 0;
         GuidePostEstimate estimates = new GuidePostEstimate();
-        long estimateTs = Long.MAX_VALUE;
-        long minGuidePostTimestamp = Long.MAX_VALUE;
+        boolean gpsForFirstRegion = false;
+        boolean intersectWithGuidePosts = true;
+        // Maintain min ts for gps in first or last region outside of
+        // gps that are in the scan range. We'll use this if we find
+        // no gps in range.
+        long fallbackTs = Long.MAX_VALUE;
+        // Determination of whether of not we found a guidepost in
+        // every region between the start and stop key. If not, then
+        // we cannot definitively say at what time the guideposts
+        // were collected.
+        boolean gpsAvailableForAllRegions = true;
         try {
+            boolean delayAddingEst = false;
+            ImmutableBytesWritable firstRegionStartKey = null;
             if (gpsSize > 0) {
                 stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
                 input = new DataInputStream(stream);
                 decoder = new PrefixByteDecoder(gps.getMaxLength());
+                firstRegionStartKey = new ImmutableBytesWritable(regionLocations.get(regionIndex).getRegionInfo().getStartKey());
                 try {
-                    while (currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input)) >= 0
-                            && currentKey.getLength() != 0) {
-                        minGuidePostTimestamp = Math.min(estimateTs,
-                            gps.getGuidePostTimestamps()[guideIndex]);
+                    int c;
+                    // Continue walking guideposts until we get past the currentKey
+                    while ((c=currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input))) >= 0) {
+                        // Detect if we found a guidepost that might be in the first region. This
+                        // is for the case where the start key may be past the only guidepost in
+                        // the first region.
+                        if (!gpsForFirstRegion && firstRegionStartKey.compareTo(currentGuidePost) <= 0) {
+                            gpsForFirstRegion = true;
+                        }
+                        // While we have gps in the region (but outside of start/stop key), track
+                        // the min ts as a fallback for the time at which stas were calculated.
+                        if (gpsForFirstRegion) {
+                            fallbackTs =
+                                    Math.min(fallbackTs,
+                                        gps.getGuidePostTimestamps()[guideIndex]);
+                        }
+                        // Special case for gp == startKey in which case we want to
+                        // count this gp (if it's in range) though we go past it.
+                        delayAddingEst = (c == 0);
                         guideIndex++;
                     }
                 } catch (EOFException e) {
                     // expected. Thrown when we have decoded all guide posts.
+                    intersectWithGuidePosts = false;
                 }
             }
+            byte[] endRegionKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
             byte[] currentKeyBytes = currentKey.copyBytes();
-            boolean intersectWithGuidePosts = guideIndex < gpsSize;
-            if (!intersectWithGuidePosts) {
-                // If there are no guide posts within the query range, we use the estimateInfoTimestamp
-                // as the minimum time across all guideposts
-                estimateTs = minGuidePostTimestamp;
-            }
+            intersectWithGuidePosts &= guideIndex < gpsSize;
             // Merge bisect with guideposts for all but the last region
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
                 HRegionInfo regionInfo = regionLocation.getRegionInfo();
                 byte[] currentGuidePostBytes = currentGuidePost.copyBytes();
-                byte[] endKey, endRegionKey = EMPTY_BYTE_ARRAY;
+                byte[] endKey;
                 if (regionIndex == stopIndex) {
                     endKey = stopKey;
                 } else {
                     endKey = regionBoundaries.get(regionIndex);
                 }
                 if (isLocalIndex) {
-                    endRegionKey = regionInfo.getEndKey();
-                    keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
+                    // Only attempt further pruning if the prefix range is using
+                    // a skip scan since we've already pruned the range of regions
+                    // based on the start/stop key.
+                    if (columnsInCommon > 0 && prefixScanRanges.useSkipScanFilter()) {
+                        byte[] regionStartKey = regionInfo.getStartKey();
+                        ImmutableBytesWritable ptr = context.getTempPtr();
+                        clipKeyRangeBytes(prefixScanRanges.getSchema(), 0, columnsInCommon, regionStartKey, ptr, false);
+                        regionStartKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        // Prune this region if there's no intersection
+                        if (!prefixScanRanges.intersectRegion(regionStartKey, regionInfo.getEndKey(), false)) {
+                            currentKeyBytes = endKey;
+                            regionIndex++;
+                            continue;
+                        }
+                    }
+                    keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), regionInfo.getEndKey());
                 }
                 byte[] initialKeyBytes = currentKeyBytes;
-                while (intersectWithGuidePosts && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
+                int gpsComparedToEndKey = -1;
+                boolean everNotDelayed = false;
+                while (intersectWithGuidePosts && (endKey.length == 0 || (gpsComparedToEndKey=currentGuidePost.compareTo(endKey)) <= 0)) {
                     Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                         false);
                     if (newScan != null) {
                         ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
                             regionInfo.getStartKey(), regionInfo.getEndKey(),
                             newScan.getStartRow(), newScan.getStopRow());
+                        // If we've delaying adding estimates, add the previous
+                        // gp estimates now that we know they are in range.
+                        if (delayAddingEst) {
+                            updateEstimates(gps, guideIndex-1, estimates);
+                        }
+                        // If we're not delaying adding estimates, add the
+                        // current gp estimates.
+                        if (! (delayAddingEst = gpsComparedToEndKey == 0) ) {
+                            updateEstimates(gps, guideIndex, estimates);
+                        }
+                    } else {
+                        delayAddingEst = false;
                     }
-                    scans =
-                            addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false,
-                                regionLocation, estimates, gps.getRowCounts()[guideIndex],
-                                gps.getByteCounts()[guideIndex]);
+                    everNotDelayed |= !delayAddingEst;
+                    scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePostBytes;
                     try {
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();
-                        /*
-                         * It is possible that the timestamp of guideposts could be different.
-                         * So we report the time at which stats information was collected as the
-                         * minimum of timestamp of the guideposts that we will be going over.
-                         */
-                        estimateTs =
-                                Math.min(estimateTs,
-                                    gps.getGuidePostTimestamps()[guideIndex]);
                         guideIndex++;
                     } catch (EOFException e) {
                         // We have read all guide posts
                         intersectWithGuidePosts = false;
                     }
                 }
+                boolean gpsInThisRegion = initialKeyBytes != currentKeyBytes;
                 if (!useStatsForParallelization) {
                     /*
                      * If we are not using stats for generating parallel scans, we need to reset the
@@ -823,15 +1075,40 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 if(newScan != null) {
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                         regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
+                    // Boundary case of no GP in region after delaying adding of estimates
+                    if (!gpsInThisRegion && delayAddingEst) {
+                        updateEstimates(gps, guideIndex-1, estimates);
+                        gpsInThisRegion = true;
+                        delayAddingEst = false;
+                    }
+                } else if (!gpsInThisRegion) {
+                    delayAddingEst = false;
                 }
-                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation, null, null, null);
+                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
                 currentKeyBytes = endKey;
+                // We have a guide post in the region if the above loop was entered
+                // or if the current key is less than the region end key (since the loop
+                // may not have been entered if our scan end key is smaller than the
+                // first guide post in that region).
+                boolean gpsAfterStopKey = false;
+                gpsAvailableForAllRegions &= 
+                    ( gpsInThisRegion && everNotDelayed) || // GP in this region
+                    ( regionIndex == startRegionIndex && gpsForFirstRegion ) || // GP in first region (before start key)
+                    ( gpsAfterStopKey = ( regionIndex == stopIndex && intersectWithGuidePosts && // GP in last region (after stop key)
+                            ( endRegionKey.length == 0 || // then check if gp is in the region
+                            currentGuidePost.compareTo(endRegionKey) < 0)  ) );            
+                if (gpsAfterStopKey) {
+                    // If gp after stop key, but still in last region, track min ts as fallback 
+                    fallbackTs =
+                            Math.min(fallbackTs,
+                                gps.getGuidePostTimestamps()[guideIndex]);
+                }
                 regionIndex++;
             }
             if (scanRanges.isPointLookup()) {
                 this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
                 this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
-                this.estimateInfoTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                this.estimateInfoTimestamp = computeMinTimestamp(gpsAvailableForAllRegions, estimates, fallbackTs);
             } else if (emptyGuidePost) {
                 // In case of an empty guide post, we estimate the number of rows scanned by
                 // using the estimated row size
@@ -841,7 +1118,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } else if (hasGuidePosts) {
                 this.estimatedRows = estimates.rowsEstimate;
                 this.estimatedSize = estimates.bytesEstimate;
-                this.estimateInfoTimestamp = estimateTs;
+                this.estimateInfoTimestamp = computeMinTimestamp(gpsAvailableForAllRegions, estimates, fallbackTs);
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
@@ -855,6 +1132,20 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
         sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
         return parallelScans;
+    }
+
+    private static Long computeMinTimestamp(boolean gpsAvailableForAllRegions, 
+            GuidePostEstimate estimates,
+            long fallbackTs) {
+        if (gpsAvailableForAllRegions) {
+            if (estimates.lastUpdated < Long.MAX_VALUE) {
+                return estimates.lastUpdated;
+            }
+            if (fallbackTs < Long.MAX_VALUE) {
+                return fallbackTs;
+            }
+        }
+        return null;
     }
 
     /**
@@ -1233,37 +1524,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     public Long getEstimateInfoTimestamp() {
         return this.estimateInfoTimestamp;
-    }
-
-    private boolean getStatsForParallelizationProp(StatementContext context, PTable table) {
-        Boolean useStats = table.useStatsForParallelization();
-        if (useStats != null) {
-            return useStats;
-        }
-        /*
-         * For a view index, we use the property set on view. For indexes on base table, whether
-         * global or local, we use the property set on the base table. Null check needed when
-         * dropping local indexes.
-         */
-        if (table.getType() == PTableType.INDEX && table.getParentName() != null) {
-            PhoenixConnection conn = context.getConnection();
-            String parentTableName = table.getParentName().getString();
-            try {
-                PTable parentTable =
-                        conn.getTable(new PTableKey(conn.getTenantId(), parentTableName));
-                useStats = parentTable.useStatsForParallelization();
-                if (useStats != null) {
-                    return useStats;
-                }
-            } catch (TableNotFoundException e) {
-                logger.warn("Unable to find parent table \"" + parentTableName + "\" of table \""
-                        + table.getName().getString()
-                        + "\" to determine USE_STATS_FOR_PARALLELIZATION",
-                    e);
-            }
-        }
-        return context.getConnection().getQueryServices().getConfiguration()
-                .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
     }
 
 }

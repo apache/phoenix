@@ -40,6 +40,8 @@ import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -73,7 +75,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
 
     private TaskRunner pool;
-    private HTableFactory factory;
+    private HTableFactory retryingFactory;
+    private HTableFactory noRetriesFactory;
     private CapturingAbortable abortable;
     private Stoppable stopped;
     private RegionCoprocessorEnvironment env;
@@ -107,13 +110,15 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop,
             RegionCoprocessorEnvironment env) {
         this.pool = new WaitForCompletionTaskRunner(pool);
-        this.factory = factory;
+        this.retryingFactory = factory;
+        this.noRetriesFactory = IndexWriterUtils.getNoRetriesHTableFactory(env);
         this.abortable = new CapturingAbortable(abortable);
         this.stopped = stop;
+        this.env = env;
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws MultiIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws MultiIndexWriteFailureException {
         Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
         TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
         List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());
@@ -173,7 +178,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         if (LOG.isTraceEnabled()) {
                             LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                         }
-
+                        // if the client can retry index writes, then we don't need to retry here
+                        HTableFactory factory = clientVersion < PhoenixDatabaseMetaData.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations);
@@ -226,7 +232,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         // if any of the tasks failed, then we need to propagate the failure
         if (failures.size() > 0) {
             // make the list unmodifiable to avoid any more synchronization concerns
-            throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures));
+            throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
+                    PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
         }
         return;
     }
@@ -235,7 +242,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     public void stop(String why) {
         LOG.info("Shutting down " + this.getClass().getSimpleName());
         this.pool.stop(why);
-        this.factory.shutdown();
+        this.retryingFactory.shutdown();
+        this.noRetriesFactory.shutdown();
     }
 
     @Override

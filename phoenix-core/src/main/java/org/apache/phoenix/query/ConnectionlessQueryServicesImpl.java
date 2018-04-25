@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -55,6 +56,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.FunctionNotFoundException;
@@ -80,11 +82,15 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.transaction.PhoenixTransactionClient;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
@@ -102,6 +108,7 @@ import com.google.common.collect.Maps;
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
     
+    private final ReadOnlyProps props;
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
     private final String userName;
@@ -111,10 +118,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     private final GuidePostsCache guidePostsCache;
     private final Configuration config;
+
+    private User user;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
         userName = connInfo.getPrincipal();
+        user = connInfo.getUser();
         metaData = newEmptyMetaData();
 
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
@@ -136,10 +146,36 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         this.guidePostsCache = new GuidePostsCache(this, config);
+        // set replication required parameter
+        ConfigUtil.setReplicationConfigIfAbsent(this.config);
+        this.props = new ReadOnlyProps(this.config.iterator());
     }
 
     private PMetaData newEmptyMetaData() {
         return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps());
+    }
+
+    protected String getSystemCatalogTableDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
+    }
+
+    protected String getFunctionTableDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
+    }
+
+    protected String getLogTableDDL() {
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+
+    private String setSystemDDLProperties(String ddl) {
+        return String.format(ddl,
+          props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
+          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
+    }
+
+    private String setSystemLogDDLProperties(String ddl) {
+        return String.format(ddl,
+          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
     }
 
     @Override
@@ -235,8 +271,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException {
-        if (splits != null) {
+            boolean isNamespaceMapped, boolean allocateIndexId, boolean isDoNotUpgradePropSet) throws SQLException {
+        if (tableType == PTableType.INDEX && IndexUtil.isLocalIndexFamily(Bytes.toString(families.iterator().next().getFirst()))) {
+            Object dataTableName = tableProps.get(PhoenixDatabaseMetaData.DATA_TABLE_NAME);
+            List<HRegionLocation> regionLocations = tableSplits.get(dataTableName);
+            byte[] tableName = getTableName(tableMetaData, physicalName);
+            tableSplits.put(Bytes.toString(tableName), regionLocations);
+        } else if (splits != null) {
             byte[] tableName = getTableName(tableMetaData, physicalName);
             tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
         }
@@ -295,7 +336,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
                 metaConnection.setRunningUpgrade(true);
                 try {
-                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
+                    metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
                 } catch (TableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
@@ -318,14 +359,17 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 }
                 
                 try {
-                   metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+                    metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
-                
                 try {
-                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
-                 } catch (NewerTableAlreadyExistsException ignore) {
-                 }
+                    metaConnection.createStatement().executeUpdate(getLogTableDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {}
+                try {
+                    metaConnection.createStatement()
+                            .executeUpdate(QueryConstants.CREATE_CHILD_LINK_METADATA);
+                } catch (NewerTableAlreadyExistsException ignore) {
+                }
             } catch (SQLException e) {
                 sqlE = e;
             } finally {
@@ -661,5 +705,20 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public Configuration getConfiguration() {
         return config;
+    }
+
+    @Override
+    public User getUser() {
+        return user;
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return null;
+    }
+    
+    @Override
+    public PhoenixTransactionClient initTransactionClient(Provider provider) {
+        return null; // Client is not necessary
     }
 }

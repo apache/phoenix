@@ -35,6 +35,8 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -56,7 +58,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
     private static final Log LOG = LogFactory.getLog(ParallelWriterIndexCommitter.class);
 
-    private HTableFactory factory;
+    private HTableFactory retryingFactory;
+    private HTableFactory noRetriesfactory;
     private Stoppable stopped;
     private QuickFailingTaskRunner pool;
     private KeyValueBuilder kvBuilder;
@@ -87,13 +90,14 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
      * Exposed for TESTING
      */
     void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, RegionCoprocessorEnvironment env) {
-        this.factory = factory;
+        this.retryingFactory = factory;
+        this.noRetriesfactory = IndexWriterUtils.getNoRetriesHTableFactory(env);
         this.pool = new QuickFailingTaskRunner(pool);
         this.stopped = stop;
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws SingleIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws SingleIndexWriteFailureException {
         /*
          * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the writes in
          * parallel to each index table, so each table gets its own task and is submitted to the pool. Where it gets
@@ -161,17 +165,19 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 }
                             }
                         }
+                     // if the client can retry index writes, then we don't need to retry here
+                        HTableFactory factory = clientVersion < PhoenixDatabaseMetaData.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesfactory;
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations);
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;
                     } catch (IOException e) {
-                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e);
+                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e, PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
                     } catch (InterruptedException e) {
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
-                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e);
+                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e, PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
                     }
                     finally{
                         if (table != null) {
@@ -225,7 +231,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public void stop(String why) {
         LOG.info("Shutting down " + this.getClass().getSimpleName() + " because " + why);
         this.pool.stop(why);
-        this.factory.shutdown();
+        this.retryingFactory.shutdown();
+        this.noRetriesfactory.shutdown();
     }
 
     @Override

@@ -145,7 +145,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
             verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
         } else {
-            verifyAllowed(grantPermissions("C", regularUser1, "\"" + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"", true), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE), true), superUser1);
         }
 
         // Create new table. Create indexes, views and view indexes on top of it. Verify the contents by querying it
@@ -167,7 +167,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
 
         // Grant READ permissions to RegularUser2 on the table
         // Permissions should propagate automatically to relevant physical tables such as global index and view index.
-        verifyAllowed(grantPermissions("R", regularUser2, FULL_TABLE_NAME, false), regularUser1);
+        verifyAllowed(grantPermissions("RX", regularUser2, FULL_TABLE_NAME, false), regularUser1);
         // Granting permissions directly to index tables should fail
         verifyDenied(grantPermissions("W", regularUser2, SCHEMA_NAME + "." + IDX1_TABLE_NAME, false), AccessDeniedException.class, regularUser1);
         // Granting permissions directly to views should fail. We expect TableNotFoundException since VIEWS are not physical tables
@@ -209,12 +209,12 @@ public class ChangePermissionsIT extends BasePermissionsIT {
         grantSystemTableAccess(superUser1, regularUser1);
 
         // Grant Permissions to Groups (Should be automatically applicable to all users inside it)
-        verifyAllowed(grantPermissions("AR", GROUP_SYSTEM_ACCESS, FULL_TABLE_NAME, false), superUser1);
+        verifyAllowed(grantPermissions("ARX", GROUP_SYSTEM_ACCESS, FULL_TABLE_NAME, false), superUser1);
         verifyAllowed(readTable(FULL_TABLE_NAME), groupUser);
 
         // GroupUser is an admin and can grant perms to other users
         verifyDenied(readTable(FULL_TABLE_NAME), AccessDeniedException.class, regularUser1);
-        verifyAllowed(grantPermissions("R", regularUser1, FULL_TABLE_NAME, false), groupUser);
+        verifyAllowed(grantPermissions("RX", regularUser1, FULL_TABLE_NAME, false), groupUser);
         verifyAllowed(readTable(FULL_TABLE_NAME), regularUser1);
 
         // Revoke the perms and try accessing data again
@@ -236,7 +236,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
             verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
         } else {
-            verifyAllowed(grantPermissions("C", regularUser1, "\"" + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE + "\"", true), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE), true), superUser1);
         }
 
         // Create MultiTenant Table (View Index Table should be automatically created)
@@ -247,7 +247,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
         verifyDenied(readMultiTenantTableWithoutIndex(FULL_TABLE_NAME), AccessDeniedException.class, regularUser2);
 
         // Grant perms to base table (Should propagate to View Index as well)
-        verifyAllowed(grantPermissions("R", regularUser2, FULL_TABLE_NAME, false), regularUser1);
+        verifyAllowed(grantPermissions("RX", regularUser2, FULL_TABLE_NAME, false), regularUser1);
         // Try reading full table
         verifyAllowed(readMultiTenantTableWithoutIndex(FULL_TABLE_NAME), regularUser2);
 
@@ -266,5 +266,27 @@ public class ChangePermissionsIT extends BasePermissionsIT {
         // _IDX_ is the prefix used with base table name to derieve the name of view index table
         verifyAllowed(readMultiTenantTableWithIndex(VIEW1_TABLE_NAME, "o1"), regularUser2);
         verifyAllowed(readMultiTenantTableWithoutIndex(VIEW2_TABLE_NAME, "o2"), regularUser2);
+    }
+
+    /**
+     * Grant RX permissions on the schema to regularUser1,
+     * Creating view on a table with that schema by regularUser1 should be allowed
+     */
+    @Test
+    public void testCreateViewOnTableWithRXPermsOnSchema() throws Exception {
+
+        startNewMiniCluster();
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
+            verifyAllowed(createTable(FULL_TABLE_NAME), superUser1);
+            verifyAllowed(grantPermissions("RX", regularUser1, SCHEMA_NAME, true), superUser1);
+        } else {
+            verifyAllowed(createTable(FULL_TABLE_NAME), superUser1);
+            verifyAllowed(grantPermissions("RX", regularUser1, surroundWithDoubleQuotes(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE), true), superUser1);
+        }
+
+        verifyAllowed(createView(VIEW1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
     }
 }

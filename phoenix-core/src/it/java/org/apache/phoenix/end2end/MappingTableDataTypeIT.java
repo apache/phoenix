@@ -107,8 +107,8 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
     private void insertData(final byte[] tableName, HBaseAdmin admin, HTableInterface t) throws IOException,
             InterruptedException {
         Put p = new Put(Bytes.toBytes("row"));
-        p.add(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
-        p.add(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
+        p.addColumn(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
+        p.addColumn(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
         t.put(p);
         t.flushCommits();
         admin.flush(tableName);
@@ -119,7 +119,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
      */
     private void createPhoenixTable(String tableName) throws SQLException {
         String ddl = "create table IF NOT EXISTS " + tableName+ " (" + " id varchar NOT NULL primary key,"
-                + " \"cf1\".\"q1\" varchar" + " ) ";
+                + " \"cf1\".\"q1\" varchar" + " ) COLUMN_ENCODED_BYTES=NONE";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);

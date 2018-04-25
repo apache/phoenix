@@ -440,8 +440,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
                         "    CLIENT SORTED BY [BUCKET, \"TIMESTAMP\"]\n" +
-                        "CLIENT SORTED BY [E.BUCKET, E.TIMESTAMP]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
+                        "CLIENT SORTED BY [E.TIMESTAMP, E.BUCKET]\n" +
+                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.TIMESTAMP, E.BUCKET]"
                         :
                         "SORT-MERGE-JOIN (INNER) TABLES\n" +
                         "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + eventCountTableName + " [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
@@ -456,8 +456,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
-                        "CLIENT SORTED BY [E.BUCKET, E.TIMESTAMP]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
+                        "CLIENT SORTED BY [E.TIMESTAMP, E.BUCKET]\n" +
+                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.TIMESTAMP, E.BUCKET]";
                 
                 ResultSet rs = conn.createStatement().executeQuery("explain " + q);
                 assertEquals(p, QueryUtil.getExplainPlan(rs));
@@ -632,6 +632,114 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             if(conn!=null) {
                 conn.close();
             }
+        }
+    }
+
+    @Test
+    public void testBug4508() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty("TenantId", "010");
+        Connection conn010 = DriverManager.getConnection(getUrl(), props);
+        try {
+            // Salted tables
+            String peopleTable = generateUniqueName();
+            String myTable = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + peopleTable + " (\n" +
+                    "PERSON_ID VARCHAR NOT NULL,\n" +
+                    "NAME VARCHAR\n" +
+                    "CONSTRAINT PK_TEST_PEOPLE PRIMARY KEY (PERSON_ID)) SALT_BUCKETS = 3");
+            conn.createStatement().execute("CREATE TABLE " + myTable + " (\n" +
+                    "LOCALID VARCHAR NOT NULL,\n" +
+                    "DSID VARCHAR(255) NOT NULL, \n" +
+                    "EID CHAR(40),\n" +
+                    "HAS_CANDIDATES BOOLEAN\n" +
+                    "CONSTRAINT PK_MYTABLE PRIMARY KEY (LOCALID, DSID)) SALT_BUCKETS = 3");
+            verifyQueryPlanAndResultForBug4508(conn, peopleTable, myTable);
+
+            // Salted multi-tenant tables
+            String peopleTable2 = generateUniqueName();
+            String myTable2 = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + peopleTable2 + " (\n" +
+                    "TENANT_ID VARCHAR NOT NULL,\n" +
+                    "PERSON_ID VARCHAR NOT NULL,\n" +
+                    "NAME VARCHAR\n" +
+                    "CONSTRAINT PK_TEST_PEOPLE PRIMARY KEY (TENANT_ID, PERSON_ID))\n" +
+                    "SALT_BUCKETS = 3, MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE TABLE " + myTable2 + " (\n" +
+                    "TENANT_ID VARCHAR NOT NULL,\n" +
+                    "LOCALID VARCHAR NOT NULL,\n" +
+                    "DSID VARCHAR(255) NOT NULL, \n" +
+                    "EID CHAR(40),\n" +
+                    "HAS_CANDIDATES BOOLEAN\n" +
+                    "CONSTRAINT PK_MYTABLE PRIMARY KEY (TENANT_ID, LOCALID, DSID))\n" +
+                    "SALT_BUCKETS = 3, MULTI_TENANT=true");
+            verifyQueryPlanAndResultForBug4508(conn010, peopleTable2, myTable2);
+        } finally {
+            conn.close();
+            conn010.close();
+        }
+    }
+
+    private static void verifyQueryPlanAndResultForBug4508(
+            Connection conn, String peopleTable, String myTable) throws Exception {
+        PreparedStatement peopleTableUpsertStmt = conn.prepareStatement(
+                "UPSERT INTO " + peopleTable + " VALUES(?, ?)");
+        peopleTableUpsertStmt.setString(1, "X001");
+        peopleTableUpsertStmt.setString(2, "Marcus");
+        peopleTableUpsertStmt.execute();
+        peopleTableUpsertStmt.setString(1, "X002");
+        peopleTableUpsertStmt.setString(2, "Jenny");
+        peopleTableUpsertStmt.execute();
+        peopleTableUpsertStmt.setString(1, "X003");
+        peopleTableUpsertStmt.setString(2, "Seymour");
+        peopleTableUpsertStmt.execute();
+        conn.commit();
+
+        PreparedStatement myTableUpsertStmt = conn.prepareStatement(
+                "UPSERT INTO " + myTable + " VALUES(?, ?, ?, ?)");
+        myTableUpsertStmt.setString(1, "X001");
+        myTableUpsertStmt.setString(2, "GROUP");
+        myTableUpsertStmt.setString(3, null);
+        myTableUpsertStmt.setBoolean(4, false);
+        myTableUpsertStmt.execute();
+        myTableUpsertStmt.setString(1, "X001");
+        myTableUpsertStmt.setString(2, "PEOPLE");
+        myTableUpsertStmt.setString(3, null);
+        myTableUpsertStmt.setBoolean(4, false);
+        myTableUpsertStmt.execute();
+        myTableUpsertStmt.setString(1, "X003");
+        myTableUpsertStmt.setString(2, "PEOPLE");
+        myTableUpsertStmt.setString(3, null);
+        myTableUpsertStmt.setBoolean(4, false);
+        myTableUpsertStmt.execute();
+        myTableUpsertStmt.setString(1, "X002");
+        myTableUpsertStmt.setString(2, "PEOPLE");
+        myTableUpsertStmt.setString(3, "Z990");
+        myTableUpsertStmt.setBoolean(4, false);
+        myTableUpsertStmt.execute();
+        conn.commit();
+
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ COUNT(*)\n" +
+                "FROM " + peopleTable + " ds JOIN " + myTable + " l\n" +
+                "ON ds.PERSON_ID = l.LOCALID\n" +
+                "WHERE l.EID IS NULL AND l.DSID = 'PEOPLE' AND l.HAS_CANDIDATES = FALSE";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN */ COUNT(*)\n" +
+                "FROM (SELECT LOCALID FROM " + myTable + "\n" +
+                "WHERE EID IS NULL AND DSID = 'PEOPLE' AND HAS_CANDIDATES = FALSE) l\n" +
+                "JOIN " + peopleTable + " ds ON ds.PERSON_ID = l.LOCALID";
+
+        for (String q : new String[]{query1, query2}) {
+            ResultSet rs = conn.createStatement().executeQuery("explain " + q);
+            String plan = QueryUtil.getExplainPlan(rs);
+            assertFalse("Tables should not be sorted over their PKs:\n" + plan,
+                    plan.contains("SERVER SORTED BY"));
+
+            rs = conn.createStatement().executeQuery(q);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
         }
     }
 }

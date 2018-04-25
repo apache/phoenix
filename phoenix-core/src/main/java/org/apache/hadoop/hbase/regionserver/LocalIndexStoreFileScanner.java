@@ -39,8 +39,8 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
     private IndexHalfStoreFileReader reader;
     private boolean changeBottomKeys;
     public LocalIndexStoreFileScanner(Reader reader, HFileScanner hfs, boolean useMVCC,
-            boolean hasMVCC, long readPt) {
-        super(reader, hfs, useMVCC, hasMVCC, readPt);
+            boolean hasMVCC, long readPt, long scannerOrder, boolean canOptimizeForNonNullColumn) {
+        super(reader, hfs, useMVCC, hasMVCC, readPt, scannerOrder, canOptimizeForNonNullColumn);
         this.reader = ((IndexHalfStoreFileReader)super.getReader());
         this.changeBottomKeys =
                 this.reader.getRegionInfo().getStartKey().length == 0

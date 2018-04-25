@@ -30,17 +30,21 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.TableName;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -93,9 +97,13 @@ public class TestParalleIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    HTableDescriptor mockTableDesc = Mockito.mock(HTableDescriptor.class);
+    Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     ImmutableBytesPtr tableName = new ImmutableBytesPtr(this.test.getTableName());
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     Multimap<HTableInterfaceReference, Mutation> indexUpdates =
         ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     indexUpdates.put(new HTableInterfaceReference(tableName), m);
@@ -118,7 +126,7 @@ public class TestParalleIndexWriter {
     // setup the writer and failure policy
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     writer.setup(factory, exec, abort, stop, e);
-    writer.write(indexUpdates, true);
+    writer.write(indexUpdates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.test.getTableNameString() + " finished");

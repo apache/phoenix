@@ -40,6 +40,7 @@ import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -695,6 +696,7 @@ public interface PTable extends PMetaDataEntity {
     boolean isMultiTenant();
     boolean getStoreNulls();
     boolean isTransactional();
+    TransactionFactory.Provider getTransactionProvider();
 
     ViewType getViewType();
     String getViewStatement();

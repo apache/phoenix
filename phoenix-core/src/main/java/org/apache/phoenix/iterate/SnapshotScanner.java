@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.*;
 
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.schema.PTable;
@@ -54,15 +55,11 @@ public class SnapshotScanner extends AbstractClientScanner {
     values = new ArrayList<>();
     this.region = HRegion.openHRegion(conf, fs, rootDir, hri, htd, null, null, null);
 
-    // process the region scanner for non-aggregate queries
-    PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-    boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
-
     RegionCoprocessorEnvironment snapshotEnv = getSnapshotContextEnvironment(conf);
 
     RegionScannerFactory regionScannerFactory;
     if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
-      regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv, useNewValueColumnQualifier, encodingScheme);
+      regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
     } else {
       /* future work : Snapshot M/R jobs for aggregate queries*/
       throw new UnsupportedOperationException("Snapshot M/R jobs not available for aggregate queries");
@@ -176,6 +173,11 @@ public class SnapshotScanner extends AbstractClientScanner {
 
       @Override
       public ClassLoader getClassLoader() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public MetricRegistry getMetricRegistryForRegionServer() {
         throw new UnsupportedOperationException();
       }
     };

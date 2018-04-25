@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.FamilyFilter;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -97,6 +98,21 @@ public class ScannerBuilder {
                 ref.getQualifier())));
       }
       columnFilters.addFilter(columnFilter);
+    }
+    
+    if(columns.isEmpty()){
+        columnFilters.addFilter(new FilterBase() {
+            
+            @Override
+            public boolean filterAllRemaining() throws IOException {
+                return true;
+            }
+
+            @Override
+            public ReturnCode filterKeyValue(Cell v) throws IOException {
+                return Filter.ReturnCode.INCLUDE;
+            }
+        });
     }
     return columnFilters;
   }

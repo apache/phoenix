@@ -33,6 +33,10 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
+import org.apache.phoenix.execute.visitor.RowCountVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.RowKeyExpression;
@@ -90,17 +94,17 @@ public class AggregatePlan extends BaseQueryPlan {
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
-            ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having) throws SQLException {
+            ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having, QueryPlan dataPlan) throws SQLException {
         this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
-                null);
+                null, dataPlan);
     }
 
     private AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
-            Expression dynamicFilter) throws SQLException {
+            Expression dynamicFilter, QueryPlan dataPlan) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
-                orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
+                orderBy, groupBy, parallelIteratorFactory, dynamicFilter, dataPlan);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
         boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
@@ -117,25 +121,39 @@ public class AggregatePlan extends BaseQueryPlan {
 
     @Override
     public Cost getCost() {
-        Long byteCount = null;
+        Double outputBytes = this.accept(new ByteCountVisitor());
+        Double rowWidth = this.accept(new AvgRowWidthVisitor());
+        Long inputRows = null;
         try {
-            byteCount = getEstimatedBytesToScan();
+            inputRows = getEstimatedRowsToScan();
         } catch (SQLException e) {
             // ignored.
         }
-
-        if (byteCount == null) {
+        if (inputRows == null || outputBytes == null || rowWidth == null) {
             return Cost.UNKNOWN;
         }
+        double inputBytes = inputRows * rowWidth;
+        double rowsBeforeHaving = RowCountVisitor.aggregate(
+                                    RowCountVisitor.filter(
+                                            inputRows.doubleValue(),
+                                            RowCountVisitor.stripSkipScanFilter(
+                                                    context.getScan().getFilter())),
+                                    groupBy);
+        double rowsAfterHaving = RowCountVisitor.filter(rowsBeforeHaving, having);
+        double bytesBeforeHaving = rowWidth * rowsBeforeHaving;
+        double bytesAfterHaving = rowWidth * rowsAfterHaving;
 
         int parallelLevel = CostUtil.estimateParallelLevel(
                 true, context.getConnection().getQueryServices());
-        Cost cost = CostUtil.estimateAggregateCost(byteCount,
-                groupBy, aggregators.getEstimatedByteSize(), parallelLevel);
+        Cost cost = new Cost(0, 0, inputBytes);
+        Cost aggCost = CostUtil.estimateAggregateCost(
+                inputBytes, bytesBeforeHaving, groupBy, parallelLevel);
+        cost = cost.plus(aggCost);
         if (!orderBy.getOrderByExpressions().isEmpty()) {
-            double outputBytes = CostUtil.estimateAggregateOutputBytes(
-                    byteCount, groupBy, aggregators.getEstimatedByteSize());
-            Cost orderByCost = CostUtil.estimateOrderByCost(outputBytes, parallelLevel);
+            parallelLevel = CostUtil.estimateParallelLevel(
+                    false, context.getConnection().getQueryServices());
+            Cost orderByCost = CostUtil.estimateOrderByCost(
+                    bytesAfterHaving, outputBytes, parallelLevel);
             cost = cost.plus(orderByCost);
         }
         return cost;
@@ -251,8 +269,8 @@ public class AggregatePlan extends BaseQueryPlan {
             }
         }
         BaseResultIterators iterators = isSerial
-                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false, caches);
+                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches, dataPlan)
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false, caches, dataPlan);
         estimatedRows = iterators.getEstimatedRowCount();
         estimatedSize = iterators.getEstimatedByteCount();
         estimateInfoTimestamp = iterators.getEstimateInfoTimestamp();
@@ -302,6 +320,11 @@ public class AggregatePlan extends BaseQueryPlan {
     @Override
     public boolean useRoundRobinIterator() throws SQLException {
         return false;
+    }
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
 }

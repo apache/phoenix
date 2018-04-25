@@ -56,6 +56,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -67,6 +68,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -107,6 +109,32 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testMetadataTenantSpecific() throws SQLException {
+    	// create multi-tenant table
+    	String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        	String baseTableDdl = "CREATE TABLE %s (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, V VARCHAR CONSTRAINT PK PRIMARY KEY(K1, K2)) MULTI_TENANT=true";
+        	conn.createStatement().execute(String.format(baseTableDdl, tableName));
+        }
+    	
+        // create tenant specific view and execute metdata data call with tenant specific connection
+        String tenantId = generateUniqueName();
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+        	String viewName = generateUniqueName();
+        	String viewDdl = "CREATE VIEW %s AS SELECT * FROM %s";
+        	tenantConn.createStatement().execute(String.format(viewDdl, viewName, tableName));
+        	DatabaseMetaData dbmd = tenantConn.getMetaData();
+        	ResultSet rs = dbmd.getTables(tenantId, "", viewName, null);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_NAME"), viewName);
+            assertEquals(PTableType.VIEW.toString(), rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
     public void testTableMetadataScan() throws SQLException {
         String tableAName = generateUniqueName() + "TABLE";
         String tableASchema = "";
@@ -140,6 +168,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
             assertEquals(SYSTEM_FUNCTION_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
             assertTrue(rs.next());
             assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
@@ -872,8 +904,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                     pconn.getQueryServices()
                             .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
             Put put = new Put(Bytes.toBytes("0"));
-            put.add(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
+            put.addColumn(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
+            put.addColumn(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
             // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
@@ -939,8 +971,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                     "ALTER TABLE " + tableName + " ADD z_string varchar not null primary key");
                 fail();
             } catch (SQLException e) {
-                assertTrue(e.getMessage(), e.getMessage().contains(
-                    "ERROR 1006 (42J04): Only nullable columns may be added to a multi-part row key."));
+                assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
             }
             conn1.createStatement().executeUpdate(
                 "ALTER TABLE " + tableName + " ADD z_string varchar primary key");

@@ -34,6 +34,7 @@ import java.util.regex.Pattern;
 
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -456,6 +457,7 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
 	protected Connection getConnection() throws SQLException {
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.put(ServerCacheClient.HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER, "true");
+        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, "true");
 		return DriverManager.getConnection(getUrl(), props);
 	}
 	

@@ -18,8 +18,15 @@
 
 package org.apache.phoenix.iterate;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -35,7 +42,6 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.HashJoinRegionScanner;
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -56,38 +62,24 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
-import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
-  private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-  private KeyValueSchema kvSchema = null;
-  private ValueBitSet kvSchemaBitSet;
-
-  public NonAggregateRegionScannerFactory(RegionCoprocessorEnvironment env, boolean useNewValueColumnQualifier,
-      PTable.QualifierEncodingScheme encodingScheme) {
+  public NonAggregateRegionScannerFactory(RegionCoprocessorEnvironment env) {
     this.env = env;
-    this.useNewValueColumnQualifier = useNewValueColumnQualifier;
-    this.encodingScheme = encodingScheme;
   }
 
   @Override
   public RegionScanner getRegionScanner(final Scan scan, final RegionScanner s) throws Throwable {
-
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     int offset = 0;
     if (ScanUtil.isLocalIndex(scan)) {
             /*
@@ -106,9 +98,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       scanOffset = (Integer)PInteger.INSTANCE.toObject(scanOffsetBytes);
     }
     RegionScanner innerScanner = s;
+    PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+    boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
     Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
-    Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
+    KeyValueSchema kvSchema = null;
+    ValueBitSet kvSchemaBitSet = null;
+    Expression[] arrayFuncRefs = deserializeArrayPositionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
+    if (arrayFuncRefs != null) {
+        KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
+        for (Expression expression : arrayFuncRefs) {
+            builder.addField(expression);
+        }
+        kvSchema = builder.build();
+        kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
+    }
     TupleProjector tupleProjector = null;
     Region dataRegion = null;
     IndexMaintainer indexMaintainer = null;
@@ -124,12 +128,13 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       if (localIndexBytes == null) {
         localIndexBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD);
       }
+      int clientVersion = ScanUtil.getClientVersion(scan);
       List<IndexMaintainer> indexMaintainers =
           localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
       indexMaintainer = indexMaintainers.get(0);
       viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
       byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
-      tx = MutationState.decodeTransaction(txState);
+      tx = TransactionFactory.getTransactionContext(txState, clientVersion);
     }
 
     final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
@@ -196,13 +201,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
   }
 
-  private Expression[] deserializeArrayPostionalExpressionInfoFromScan(Scan scan, RegionScanner s,
-      Set<KeyValueColumnExpression> arrayKVRefs) {
+  private Expression[] deserializeArrayPositionalExpressionInfoFromScan(Scan scan, RegionScanner s,
+                                                                        Set<KeyValueColumnExpression> arrayKVRefs) {
     byte[] specificArrayIdx = scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX);
     if (specificArrayIdx == null) {
       return null;
     }
-    KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
     ByteArrayInputStream stream = new ByteArrayInputStream(specificArrayIdx);
     try {
       DataInputStream input = new DataInputStream(stream);
@@ -220,10 +224,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         ArrayIndexFunction arrayIdxFunc = new ArrayIndexFunction();
         arrayIdxFunc.readFields(input);
         arrayFuncRefs[i] = arrayIdxFunc;
-        builder.addField(arrayIdxFunc);
       }
-      kvSchema = builder.build();
-      kvSchemaBitSet = ValueBitSet.newInstance(kvSchema);
       return arrayFuncRefs;
     } catch (IOException e) {
       throw new RuntimeException(e);

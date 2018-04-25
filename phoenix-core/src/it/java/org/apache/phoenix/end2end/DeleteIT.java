@@ -17,9 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -32,7 +34,10 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -709,6 +714,41 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     public void testClientSideDeleteAutoCommitOn() throws Exception {
         testDeleteCount(true, 1000);
     }
+
+    @Test
+    public void testPointDeleteWithMultipleImmutableIndexes() throws Exception {
+        testPointDeleteWithMultipleImmutableIndexes(false);
+    }
+
+    @Test
+    public void testPointDeleteWithMultipleImmutableIndexesAfterAlter() throws Exception {
+        testPointDeleteWithMultipleImmutableIndexes(true);
+    }
+
+    private void testPointDeleteWithMultipleImmutableIndexes(boolean alterTable) throws Exception {
+        String tableName = generateUniqueName();
+        String commands = "CREATE TABLE IF NOT EXISTS " + tableName
+                + " (ID INTEGER PRIMARY KEY,double_id DOUBLE,varchar_id VARCHAR (30)) "
+                + (alterTable ? ";ALTER TABLE " + tableName + " set " : "") + "IMMUTABLE_ROWS=true;"
+                + "CREATE INDEX IF NOT EXISTS index_column_varchar_id ON " + tableName + "(varchar_id);"
+                + "CREATE INDEX IF NOT EXISTS index_column_double_id ON " + tableName + "(double_id);" + "UPSERT INTO "
+                + tableName + " VALUES (9000000,0.5,'Sample text extra');" ;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            Statement stm = conn.createStatement();
+            for (String sql : commands.split(";")) {
+                stm.execute(sql);
+            }
+            ResultSet rs = stm.executeQuery("select id,varchar_id,double_id from " + tableName + " WHERE ID=9000000");
+            assertTrue(rs.next());
+            assertEquals(9000000, rs.getInt(1));
+            assertEquals("Sample text extra", rs.getString(2));
+            assertEquals(0.5, rs.getDouble(3),0.01);
+            stm.execute("DELETE FROM " + tableName + " WHERE ID=9000000");
+            assertDeleted(conn, tableName, "index_column_varchar_id", "index_column_double_id", null);
+            stm.close();
+        }
+    }
     
     private void testDeleteCount(boolean autoCommit, Integer limit) throws Exception {
         String tableName = generateUniqueName();
@@ -733,6 +773,67 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             }
         }
 
+    }
+    
+
+    @Test
+    public void testClientSideDeleteShouldNotFailWhenSameColumnPresentInMultipleIndexes()
+            throws Exception {
+        String tableName = generateUniqueName();
+        String indexName1 = generateUniqueName();
+        String indexName2 = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS "
+                        + tableName
+                        + " (pk1 DECIMAL NOT NULL, v1 VARCHAR, v2 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
+        String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
+        String idx2 = "CREATE INDEX " + indexName2 + " ON " + tableName + "(v1, v2)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(idx1);
+            conn.createStatement().execute(idx2);
+            Statement stmt = conn.createStatement();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES (1,'value', 'value2')");
+            conn.commit();
+            conn.setAutoCommit(false);
+            try {
+                conn.createStatement().execute("DELETE FROM " + tableName + " WHERE pk1 > 0");
+            } catch (Exception e) {
+                fail("Should not throw any exception");
+            }
+        }
+    }
+
+    @Test
+    public void testDeleteShouldNotFailWhenTheRowsMoreThanMaxMutationSize() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName1 = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS "
+                        + tableName
+                        + " (pk1 DECIMAL NOT NULL, v1 VARCHAR, v2 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))"
+                        + " IMMUTABLE_ROWS=true";
+        String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,Integer.toString(10));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(idx1);
+            Statement stmt = conn.createStatement();
+            for(int i = 0; i < 20; i++) {
+                stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES ("+i+",'value"+i+"', 'value2')");
+                if (i % 10 == 0) {
+                    conn.commit();
+                }
+            }
+            conn.commit();
+            conn.setAutoCommit(true);
+            try {
+                conn.createStatement().execute("DELETE FROM " + tableName);
+            } catch (Exception e) {
+                fail("Should not throw any exception");
+            }
+        }
     }
 }
 

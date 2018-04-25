@@ -15,14 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.transaction;
 
-import org.apache.phoenix.transaction.TransactionFactory;
+import java.io.Closeable;
 
-public class PhoenixTransactionalProcessor extends DelegateRegionObserver {
-
-    public PhoenixTransactionalProcessor() {
-        super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoProcessor());
-    }
+public interface PhoenixTransactionService extends Closeable {
 
 }

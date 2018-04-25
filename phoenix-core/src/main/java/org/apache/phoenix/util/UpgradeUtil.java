@@ -223,7 +223,7 @@ public class UpgradeUtil {
 
         Scan scan = new Scan();
         scan.setRaw(true);
-        scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
+        scan.setMaxVersions();
         ResultScanner scanner = null;
         HTableInterface source = null;
         HTableInterface target = null;
@@ -603,8 +603,10 @@ public class UpgradeUtil {
                         String indexPhysicalTableName = MetaDataUtil.getViewIndexTableName(viewPTable.getPhysicalName().getString());
                         if (physicalTables.add(indexPhysicalTableName)) {
                             final TableName tableName = TableName.valueOf(indexPhysicalTableName);
-                            admin.disableTable(tableName);
-                            admin.truncateTable(tableName, false);
+                            if(admin.tableExists(tableName)) {
+                                admin.disableTable(tableName);
+                                admin.truncateTable(tableName, false);
+                            }
                         }
                     }
                 }
@@ -696,7 +698,7 @@ public class UpgradeUtil {
                 boolean success = false;
                 Scan scan = new Scan();
                 scan.setRaw(true);
-                scan.setMaxVersions(MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS);
+                scan.setMaxVersions();
                 HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
@@ -1851,6 +1853,8 @@ public class UpgradeUtil {
                 admin.deleteTable(srcTableName);
                 logger.info(String.format("deleting snapshot %s..", snapshotName));
                 admin.deleteSnapshot(snapshotName);
+            } else {
+                logger.info(String.format("Destination Table %s already exists. No migration needed.", destTableName));
             }
         }
     }
@@ -1898,6 +1902,8 @@ public class UpgradeUtil {
             String newPhysicalTablename = SchemaUtil.normalizeIdentifier(
                     SchemaUtil.getPhysicalTableName(oldPhysicalName, readOnlyProps).getNameAsString());
             logger.info(String.format("Upgrading %s %s..", table.getType(), tableName));
+            logger.info(String.format("oldPhysicalName %s newPhysicalTablename %s..", oldPhysicalName, newPhysicalTablename));
+            logger.info(String.format("teanantId %s..", conn.getTenantId()));
             // Upgrade the data or main table
             mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
                     PhoenixRuntime.getCurrentScn(readOnlyProps), tableName, table.getType(),conn.getTenantId());
@@ -1970,6 +1976,7 @@ public class UpgradeUtil {
                 throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
             }
             if (table.getType() == PTableType.VIEW) {
+                logger.info(String.format("Updating link information for view '%s' ..", table.getTableName()));
                 updateLink(conn, oldPhysicalName, newPhysicalTablename,table.getSchemaName(),table.getTableName());
                 conn.commit();
 
@@ -2002,22 +2009,35 @@ public class UpgradeUtil {
         MetaDataUtil.deleteViewIndexSequences(connection, oldPhysicalName, false);
     }
 
-    private static void updateLink(PhoenixConnection conn, String srcTableName, String destTableName, PName schemaName, PName tableName)
-            throws SQLException {
-        PreparedStatement updateLinkStatment = conn.prepareStatement(String.format(UPDATE_LINK,destTableName));
+    private static void updateLink(PhoenixConnection conn, String srcTableName,
+            String destTableName, PName schemaName, PName tableName) throws SQLException {
+        String updateLinkSql = String.format(UPDATE_LINK, destTableName);
+        boolean hasTenantId = conn.getTenantId() != null;
+        if (hasTenantId) {
+            updateLinkSql += " AND TENANT_ID  = ? ";
+        }
+        PreparedStatement updateLinkStatment = conn.prepareStatement(updateLinkSql);
         updateLinkStatment.setString(1, schemaName.getString());
         updateLinkStatment.setString(2, schemaName.getString());
         updateLinkStatment.setString(3, tableName.getString());
         updateLinkStatment.setString(4, srcTableName);
-        
+        if (hasTenantId) {
+            updateLinkStatment.setString(5, conn.getTenantId().getString());
+        }
         updateLinkStatment.execute();
-        PreparedStatement deleteLinkStatment = conn.prepareStatement(DELETE_LINK);
+        String deleteLinkSql = DELETE_LINK;
+        if (hasTenantId) {
+            deleteLinkSql += (" AND TENANT_ID  = ? ");
+        }
+        PreparedStatement deleteLinkStatment = conn.prepareStatement(deleteLinkSql);
         deleteLinkStatment.setString(1, schemaName.getString());
         deleteLinkStatment.setString(2, schemaName.getString());
         deleteLinkStatment.setString(3, tableName.getString());
         deleteLinkStatment.setString(4, srcTableName);
+        if (hasTenantId) {
+            deleteLinkStatment.setString(5, conn.getTenantId().getString());
+        }
         deleteLinkStatment.execute();
-        
     }
     
     public static void mapChildViewsToNamespace(PhoenixConnection conn, String table, Properties props)

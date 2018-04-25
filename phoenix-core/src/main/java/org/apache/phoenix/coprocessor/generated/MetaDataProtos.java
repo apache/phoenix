@@ -14126,6 +14126,16 @@ public final class MetaDataProtos {
      * <code>required int64 version = 1;</code>
      */
     long getVersion();
+
+    // optional int64 systemCatalogTimestamp = 2;
+    /**
+     * <code>optional int64 systemCatalogTimestamp = 2;</code>
+     */
+    boolean hasSystemCatalogTimestamp();
+    /**
+     * <code>optional int64 systemCatalogTimestamp = 2;</code>
+     */
+    long getSystemCatalogTimestamp();
   }
   /**
    * Protobuf type {@code GetVersionResponse}
@@ -14181,6 +14191,11 @@ public final class MetaDataProtos {
             case 8: {
               bitField0_ |= 0x00000001;
               version_ = input.readInt64();
+              break;
+            }
+            case 16: {
+              bitField0_ |= 0x00000002;
+              systemCatalogTimestamp_ = input.readInt64();
               break;
             }
           }
@@ -14239,8 +14254,25 @@ public final class MetaDataProtos {
       return version_;
     }
 
+    // optional int64 systemCatalogTimestamp = 2;
+    public static final int SYSTEMCATALOGTIMESTAMP_FIELD_NUMBER = 2;
+    private long systemCatalogTimestamp_;
+    /**
+     * <code>optional int64 systemCatalogTimestamp = 2;</code>
+     */
+    public boolean hasSystemCatalogTimestamp() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>optional int64 systemCatalogTimestamp = 2;</code>
+     */
+    public long getSystemCatalogTimestamp() {
+      return systemCatalogTimestamp_;
+    }
+
     private void initFields() {
       version_ = 0L;
+      systemCatalogTimestamp_ = 0L;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -14261,6 +14293,9 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         output.writeInt64(1, version_);
       }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeInt64(2, systemCatalogTimestamp_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -14273,6 +14308,10 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(1, version_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(2, systemCatalogTimestamp_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -14302,6 +14341,11 @@ public final class MetaDataProtos {
         result = result && (getVersion()
             == other.getVersion());
       }
+      result = result && (hasSystemCatalogTimestamp() == other.hasSystemCatalogTimestamp());
+      if (hasSystemCatalogTimestamp()) {
+        result = result && (getSystemCatalogTimestamp()
+            == other.getSystemCatalogTimestamp());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -14318,6 +14362,10 @@ public final class MetaDataProtos {
       if (hasVersion()) {
         hash = (37 * hash) + VERSION_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getVersion());
+      }
+      if (hasSystemCatalogTimestamp()) {
+        hash = (37 * hash) + SYSTEMCATALOGTIMESTAMP_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getSystemCatalogTimestamp());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -14430,6 +14478,8 @@ public final class MetaDataProtos {
         super.clear();
         version_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000001);
+        systemCatalogTimestamp_ = 0L;
+        bitField0_ = (bitField0_ & ~0x00000002);
         return this;
       }
 
@@ -14462,6 +14512,10 @@ public final class MetaDataProtos {
           to_bitField0_ |= 0x00000001;
         }
         result.version_ = version_;
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.systemCatalogTimestamp_ = systemCatalogTimestamp_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -14480,6 +14534,9 @@ public final class MetaDataProtos {
         if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance()) return this;
         if (other.hasVersion()) {
           setVersion(other.getVersion());
+        }
+        if (other.hasSystemCatalogTimestamp()) {
+          setSystemCatalogTimestamp(other.getSystemCatalogTimestamp());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -14541,6 +14598,39 @@ public final class MetaDataProtos {
       public Builder clearVersion() {
         bitField0_ = (bitField0_ & ~0x00000001);
         version_ = 0L;
+        onChanged();
+        return this;
+      }
+
+      // optional int64 systemCatalogTimestamp = 2;
+      private long systemCatalogTimestamp_ ;
+      /**
+       * <code>optional int64 systemCatalogTimestamp = 2;</code>
+       */
+      public boolean hasSystemCatalogTimestamp() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
+      }
+      /**
+       * <code>optional int64 systemCatalogTimestamp = 2;</code>
+       */
+      public long getSystemCatalogTimestamp() {
+        return systemCatalogTimestamp_;
+      }
+      /**
+       * <code>optional int64 systemCatalogTimestamp = 2;</code>
+       */
+      public Builder setSystemCatalogTimestamp(long value) {
+        bitField0_ |= 0x00000002;
+        systemCatalogTimestamp_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int64 systemCatalogTimestamp = 2;</code>
+       */
+      public Builder clearSystemCatalogTimestamp() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        systemCatalogTimestamp_ = 0L;
         onChanged();
         return this;
       }
@@ -17112,51 +17202,52 @@ public final class MetaDataProtos {
       "cheRequest\022\025\n\rclientVersion\030\001 \001(\005\"*\n\022Cle" +
       "arCacheResponse\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n" +
       "\021GetVersionRequest\022\025\n\rclientVersion\030\001 \001(" +
-      "\005\"%\n\022GetVersionResponse\022\017\n\007version\030\001 \002(\003" +
-      "\"\205\001\n\032ClearTableFromCacheRequest\022\020\n\010tenan",
-      "tId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableNa" +
-      "me\030\003 \002(\014\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rcli" +
-      "entVersion\030\005 \001(\005\"\035\n\033ClearTableFromCacheR" +
-      "esponse*\207\005\n\014MutationCode\022\030\n\024TABLE_ALREAD" +
-      "Y_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUM" +
-      "N_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003" +
-      "\022\035\n\031CONCURRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE" +
-      "_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022" +
-      "\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_C" +
-      "OLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t\022\033\n\027",
-      "FUNCTION_ALREADY_EXISTS\020\n\022\026\n\022FUNCTION_NO" +
-      "T_FOUND\020\013\022\030\n\024NEWER_FUNCTION_FOUND\020\014\022\032\n\026F" +
-      "UNCTION_NOT_IN_REGION\020\r\022\031\n\025SCHEMA_ALREAD" +
-      "Y_EXISTS\020\016\022\026\n\022NEWER_SCHEMA_FOUND\020\017\022\024\n\020SC" +
-      "HEMA_NOT_FOUND\020\020\022\030\n\024SCHEMA_NOT_IN_REGION" +
-      "\020\021\022\032\n\026TABLES_EXIST_ON_SCHEMA\020\022\022\035\n\031UNALLO" +
-      "WED_SCHEMA_MUTATION\020\023\022%\n!AUTO_PARTITION_" +
-      "SEQUENCE_NOT_FOUND\020\024\022#\n\037CANNOT_COERCE_AU" +
-      "TO_PARTITION_ID\020\025\022\024\n\020TOO_MANY_INDEXES\020\026\022" +
-      "\020\n\014INVALID_VIEW\020\0272\345\006\n\017MetaDataService\022/\n",
-      "\010getTable\022\020.GetTableRequest\032\021.MetaDataRe" +
-      "sponse\0227\n\014getFunctions\022\024.GetFunctionsReq" +
-      "uest\032\021.MetaDataResponse\0221\n\tgetSchema\022\021.G" +
-      "etSchemaRequest\032\021.MetaDataResponse\0225\n\013cr" +
-      "eateTable\022\023.CreateTableRequest\032\021.MetaDat" +
-      "aResponse\022;\n\016createFunction\022\026.CreateFunc" +
-      "tionRequest\032\021.MetaDataResponse\0227\n\014create" +
-      "Schema\022\024.CreateSchemaRequest\032\021.MetaDataR" +
-      "esponse\0221\n\tdropTable\022\021.DropTableRequest\032" +
-      "\021.MetaDataResponse\0223\n\ndropSchema\022\022.DropS",
-      "chemaRequest\032\021.MetaDataResponse\0227\n\014dropF" +
-      "unction\022\024.DropFunctionRequest\032\021.MetaData" +
-      "Response\0221\n\taddColumn\022\021.AddColumnRequest" +
-      "\032\021.MetaDataResponse\0223\n\ndropColumn\022\022.Drop" +
-      "ColumnRequest\032\021.MetaDataResponse\022?\n\020upda" +
-      "teIndexState\022\030.UpdateIndexStateRequest\032\021" +
-      ".MetaDataResponse\0225\n\nclearCache\022\022.ClearC" +
-      "acheRequest\032\023.ClearCacheResponse\0225\n\ngetV" +
-      "ersion\022\022.GetVersionRequest\032\023.GetVersionR" +
-      "esponse\022P\n\023clearTableFromCache\022\033.ClearTa",
-      "bleFromCacheRequest\032\034.ClearTableFromCach" +
-      "eResponseBB\n(org.apache.phoenix.coproces" +
-      "sor.generatedB\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "\005\"E\n\022GetVersionResponse\022\017\n\007version\030\001 \002(\003" +
+      "\022\036\n\026systemCatalogTimestamp\030\002 \001(\003\"\205\001\n\032Cle",
+      "arTableFromCacheRequest\022\020\n\010tenantId\030\001 \002(" +
+      "\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014" +
+      "\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rclientVersi" +
+      "on\030\005 \001(\005\"\035\n\033ClearTableFromCacheResponse*" +
+      "\207\005\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXISTS" +
+      "\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FO" +
+      "UND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONC" +
+      "URRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_" +
+      "REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALL" +
+      "OWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010",
+      "\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t\022\033\n\027FUNCTION" +
+      "_ALREADY_EXISTS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020" +
+      "\013\022\030\n\024NEWER_FUNCTION_FOUND\020\014\022\032\n\026FUNCTION_" +
+      "NOT_IN_REGION\020\r\022\031\n\025SCHEMA_ALREADY_EXISTS" +
+      "\020\016\022\026\n\022NEWER_SCHEMA_FOUND\020\017\022\024\n\020SCHEMA_NOT" +
+      "_FOUND\020\020\022\030\n\024SCHEMA_NOT_IN_REGION\020\021\022\032\n\026TA" +
+      "BLES_EXIST_ON_SCHEMA\020\022\022\035\n\031UNALLOWED_SCHE" +
+      "MA_MUTATION\020\023\022%\n!AUTO_PARTITION_SEQUENCE" +
+      "_NOT_FOUND\020\024\022#\n\037CANNOT_COERCE_AUTO_PARTI" +
+      "TION_ID\020\025\022\024\n\020TOO_MANY_INDEXES\020\026\022\020\n\014INVAL",
+      "ID_VIEW\020\0272\345\006\n\017MetaDataService\022/\n\010getTabl" +
+      "e\022\020.GetTableRequest\032\021.MetaDataResponse\0227" +
+      "\n\014getFunctions\022\024.GetFunctionsRequest\032\021.M" +
+      "etaDataResponse\0221\n\tgetSchema\022\021.GetSchema" +
+      "Request\032\021.MetaDataResponse\0225\n\013createTabl" +
+      "e\022\023.CreateTableRequest\032\021.MetaDataRespons" +
+      "e\022;\n\016createFunction\022\026.CreateFunctionRequ" +
+      "est\032\021.MetaDataResponse\0227\n\014createSchema\022\024" +
+      ".CreateSchemaRequest\032\021.MetaDataResponse\022" +
+      "1\n\tdropTable\022\021.DropTableRequest\032\021.MetaDa",
+      "taResponse\0223\n\ndropSchema\022\022.DropSchemaReq" +
+      "uest\032\021.MetaDataResponse\0227\n\014dropFunction\022" +
+      "\024.DropFunctionRequest\032\021.MetaDataResponse" +
+      "\0221\n\taddColumn\022\021.AddColumnRequest\032\021.MetaD" +
+      "ataResponse\0223\n\ndropColumn\022\022.DropColumnRe" +
+      "quest\032\021.MetaDataResponse\022?\n\020updateIndexS" +
+      "tate\022\030.UpdateIndexStateRequest\032\021.MetaDat" +
+      "aResponse\0225\n\nclearCache\022\022.ClearCacheRequ" +
+      "est\032\023.ClearCacheResponse\0225\n\ngetVersion\022\022" +
+      ".GetVersionRequest\032\023.GetVersionResponse\022",
+      "P\n\023clearTableFromCache\022\033.ClearTableFromC" +
+      "acheRequest\032\034.ClearTableFromCacheRespons" +
+      "eBB\n(org.apache.phoenix.coprocessor.gene" +
+      "ratedB\016MetaDataProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -17270,7 +17361,7 @@ public final class MetaDataProtos {
           internal_static_GetVersionResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_GetVersionResponse_descriptor,
-              new java.lang.String[] { "Version", });
+              new java.lang.String[] { "Version", "SystemCatalogTimestamp", });
           internal_static_ClearTableFromCacheRequest_descriptor =
             getDescriptor().getMessageTypes().get(18);
           internal_static_ClearTableFromCacheRequest_fieldAccessorTable = new

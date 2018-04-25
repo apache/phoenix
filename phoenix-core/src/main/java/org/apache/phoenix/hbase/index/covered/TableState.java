@@ -21,11 +21,8 @@ package org.apache.phoenix.hbase.index.covered;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -38,22 +35,10 @@ import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
  */
 public interface TableState {
 
-  // use this to get batch ids/ptable stuff
-  /**
-   * WARNING: messing with this can affect the indexing plumbing. Use with caution :)
-   * @return get the current environment in which this table lives.
-   */
-  public RegionCoprocessorEnvironment getEnvironment();
-
   /**
    * @return the current timestamp up-to-which we are releasing table state.
    */
   public long getCurrentTimestamp();
-
-  /**
-   * @return the attributes attached to the current update (e.g. {@link Mutation}).
-   */
-  public Map<String, byte[]> getUpdateAttributes();
 
   /**
    * Get a getter interface for the state of the index row

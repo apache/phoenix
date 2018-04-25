@@ -265,7 +265,8 @@ public abstract class ExplainTable {
         if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
             RowKeySchema schema = tableRef.getTable().getRowKeySchema();
             if (!minMaxRange.isUnbound(bound)) {
-                minMaxIterator = new RowKeyValueIterator(schema, minMaxRange.getRange(bound));
+                // Use scan ranges from ScanRanges since it will have been intersected with minMaxRange
+                minMaxIterator = new RowKeyValueIterator(schema, scanRanges.getScanRange().getRange(bound));
             }
         }
         boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());

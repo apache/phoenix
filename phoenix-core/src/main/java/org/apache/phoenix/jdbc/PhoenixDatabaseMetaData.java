@@ -62,6 +62,7 @@ import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.DelegateResultIterator;
@@ -325,6 +326,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TRANSACTIONAL = "TRANSACTIONAL";
     public static final byte[] TRANSACTIONAL_BYTES = Bytes.toBytes(TRANSACTIONAL);
 
+    public static final String TRANSACTION_PROVIDER = "TRANSACTION_PROVIDER";
+    public static final byte[] TRANSACTION_PROVIDER_BYTES = Bytes.toBytes(TRANSACTION_PROVIDER);
+
     public static final String UPDATE_CACHE_FREQUENCY = "UPDATE_CACHE_FREQUENCY";
     public static final byte[] UPDATE_CACHE_FREQUENCY_BYTES = Bytes.toBytes(UPDATE_CACHE_FREQUENCY);
 
@@ -350,6 +354,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final int MIN_RENEW_LEASE_VERSION = VersionUtil.encodeVersion("1", "1", "3");
     public static final int MIN_NAMESPACE_MAPPED_PHOENIX_VERSION = VersionUtil.encodeVersion("4", "8", "0");
     public static final int MIN_PENDING_ACTIVE_INDEX = VersionUtil.encodeVersion("4", "12", "0");
+    public static final int MIN_PENDING_DISABLE_INDEX = VersionUtil.encodeVersion("4", "14", "0");
+    public static final int MIN_CLIENT_RETRY_INDEX_WRITES = VersionUtil.encodeVersion("4", "14", "0");
+    public static final int MIN_TX_CLIENT_SIDE_MAINTENANCE = VersionUtil.encodeVersion("4", "14", "0");
     
     // Version below which we should turn off essential column family.
     public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");
@@ -374,6 +381,24 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);
     public static final TableName SYSTEM_LINK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CHILD_LINK_NAME);
 
+    
+    //SYSTEM:LOG
+    public static final String SYSTEM_LOG_TABLE = "LOG";
+    public static final String QUERY_ID = "QUERY_ID";
+    public static final String USER = "USER";
+    public static final String CLIENT_IP = "CLIENT_IP";
+    public static final String QUERY = "QUERY";
+    public static final String EXPLAIN_PLAN = "EXPLAIN_PLAN";
+    public static final String TOTAL_EXECUTION_TIME = "TOTAL_EXECUTION_TIME";
+    public static final String NO_OF_RESULTS_ITERATED = "NO_OF_RESULTS_ITERATED";
+    public static final String QUERY_STATUS = "QUERY_STATUS";
+    public static final String EXCEPTION_TRACE = "EXCEPTION_TRACE";
+    public static final String GLOBAL_SCAN_DETAILS = "GLOBAL_SCAN_DETAILS";
+    public static final String SCAN_METRICS_JSON = "SCAN_METRICS_JSON";
+    public static final String START_TIME = "START_TIME";
+    public static final String BIND_PARAMETERS = "BIND_PARAMETERS";
+            
+    
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
         this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
         this.connection = connection;
@@ -478,7 +503,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             appendConjunction(buf);
             buf.append(" TENANT_ID LIKE '" + StringUtil.escapeStringConstant(tenantIdPattern) + "' ");
             if (tenantId != null) {
-                buf.append(" and TENANT_ID + = '" + StringUtil.escapeStringConstant(tenantId.getString()) + "' ");
+                buf.append(" and TENANT_ID = '" + StringUtil.escapeStringConstant(tenantId.getString()) + "' ");
             }
         }
     }
@@ -1290,9 +1315,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     VIEW_STATEMENT + "," +
                     SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
                     SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE + "," +
-                    TRANSACTIONAL + "," +
+                    TRANSACTION_PROVIDER + " IS NOT NULL AS " + TRANSACTIONAL + "," +
                     IS_NAMESPACE_MAPPED + "," +
-                    GUIDE_POSTS_WIDTH +
+                    GUIDE_POSTS_WIDTH + "," +
+                    TransactionProviderNameFunction.NAME + "(" + TRANSACTION_PROVIDER + ") AS TRANSACTION_PROVIDER" +
                     " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                     " where " + COLUMN_NAME + " is null" +
                     " and " + COLUMN_FAMILY + " is null" +
@@ -1332,7 +1358,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     "'' " + INDEX_TYPE + "," +
                     "CAST(null AS BOOLEAN) " + TRANSACTIONAL + "," +
                     "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "," +
-                    "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "\n");
+                    "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "," +
+                    "CAST(null AS VARCHAR) " + TRANSACTION_PROVIDER + "\n");
             buf.append(
                     " from " + SYSTEM_SEQUENCE + "\n");
             StringBuilder whereClause = new StringBuilder();

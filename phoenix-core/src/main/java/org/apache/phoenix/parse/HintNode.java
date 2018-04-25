@@ -104,6 +104,10 @@ public class HintNode {
       * Enforces a serial scan.
       */
      SERIAL,
+        /**
+         * Enforces a forward scan.
+         */
+        FORWARD_SCAN,
     };
 
     private final Map<Hint,String> hints;

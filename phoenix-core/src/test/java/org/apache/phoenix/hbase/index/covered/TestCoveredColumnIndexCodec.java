@@ -176,7 +176,7 @@ public class TestCoveredColumnIndexCodec {
     p.add(kv);
 
     // check the codec for deletes it should send
-    LocalTableState state = new LocalTableState(env, table, p);
+    LocalTableState state = new LocalTableState(table, p);
     Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
     assertFalse("Found index updates without any existing kvs in table!", updates.iterator().next()
         .isValid());
@@ -200,11 +200,11 @@ public class TestCoveredColumnIndexCodec {
     Delete d = new Delete(PK, 2);
     // need to set the timestamp here, as would actually happen on the server, unlike what happens
     // with puts, where the get the constructor specified timestamp for unspecified methods.
-    d.deleteFamily(FAMILY, 2);
+    d.addFamily(FAMILY, 2);
     // setup the next batch of 'current state', basically just ripping out the current state from
     // the last round
     table = new SimpleTableState(new Result(kvs));
-    state = new LocalTableState(env, table, d);
+    state = new LocalTableState(table, d);
     state.setCurrentTimestamp(2);
     // check the cleanup of the current table, after the puts (mocking a 'next' update)
     updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
@@ -221,19 +221,19 @@ public class TestCoveredColumnIndexCodec {
 
     // now with the delete of the columns
     d = new Delete(PK, 2);
-    d.deleteColumns(FAMILY, QUAL, 2);
+    d.addColumns(FAMILY, QUAL, 2);
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
 
     // this delete needs to match timestamps exactly, by contract, to have any effect
     d = new Delete(PK, 1);
-    d.deleteColumn(FAMILY, QUAL, 1);
+    d.addColumn(FAMILY, QUAL, 1);
     ensureNoUpdatesWhenCoveredByDelete(env, codec, kvs, d);
   }
 
   private void ensureNoUpdatesWhenCoveredByDelete(RegionCoprocessorEnvironment env, IndexCodec codec, List<KeyValue> currentState,
       Delete d) throws IOException {
     LocalHBaseState table = new SimpleTableState(new Result(currentState));
-    LocalTableState state = new LocalTableState(env, table, d);
+    LocalTableState state = new LocalTableState(table, d);
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyMap().get(FAMILY));

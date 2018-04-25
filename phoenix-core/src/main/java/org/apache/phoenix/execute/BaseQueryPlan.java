@@ -47,6 +47,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -114,6 +115,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
      * immediately before creating the ResultIterator.
      */
     protected final Expression dynamicFilter;
+    protected final QueryPlan dataPlan;
     protected Long estimatedRows;
     protected Long estimatedSize;
     protected Long estimateInfoTimestamp;
@@ -124,7 +126,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
-            Expression dynamicFilter) {
+            Expression dynamicFilter, QueryPlan dataPlan) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
@@ -137,6 +139,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
         this.dynamicFilter = dynamicFilter;
+        this.dataPlan = dataPlan;
     }
 
 	@Override
@@ -235,18 +238,22 @@ public abstract class BaseQueryPlan implements QueryPlan {
              scan = context.getScan();
          }
          
+         ScanRanges scanRanges = context.getScanRanges();
+
 		/*
 		 * For aggregate queries, we still need to let the AggregationPlan to
 		 * proceed so that we can give proper aggregates even if there are no
 		 * row to be scanned.
 		 */
-        if (context.getScanRanges() == ScanRanges.NOTHING && !getStatement().isAggregate()) {
+        if (scanRanges == ScanRanges.NOTHING && !getStatement().isAggregate()) {
         return getWrappedIterator(caches, ResultIterator.EMPTY_ITERATOR);
         }
         
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
             return newIterator(scanGrouper, scan, caches);
         }
+        
+        ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
@@ -267,11 +274,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
         }
         
-        if (statement.getHint().hasHint(Hint.SMALL)) {
+
+        PhoenixConnection connection = context.getConnection();
+        final int smallScanThreshold = connection.getQueryServices().getProps().getInt(QueryServices.SMALL_SCAN_THRESHOLD_ATTRIB,
+          QueryServicesOptions.DEFAULT_SMALL_SCAN_THRESHOLD);
+
+        if (statement.getHint().hasHint(Hint.SMALL) || (scanRanges.isPointLookup() && scanRanges.getPointLookupCount() < smallScanThreshold)) {
             scan.setSmall(true);
         }
         
-        PhoenixConnection connection = context.getConnection();
 
         // set read consistency
         if (table.getType() != PTableType.SYSTEM) {
@@ -280,7 +291,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // TODO fix this in PHOENIX-2415 Support ROW_TIMESTAMP with transactional tables
         if (!table.isTransactional()) {
 	                // Get the time range of row_timestamp column
-	        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+	        TimeRange rowTimestampRange = scanRanges.getRowTimestampRange();
 	        // Get the already existing time range on the scan.
 	        TimeRange scanTimeRange = scan.getTimeRange();
 	        Long scn = connection.getSCN();

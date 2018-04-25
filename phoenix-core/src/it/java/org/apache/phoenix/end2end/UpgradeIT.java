@@ -442,7 +442,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                 byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
                 byte[] qualifier = UPGRADE_MUTEX;
                 Put put = new Put(row);
-                put.add(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
+                put.addColumn(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
                 sysMutexTable.put(put);
                 sysMutexTable.flushCommits();
             }

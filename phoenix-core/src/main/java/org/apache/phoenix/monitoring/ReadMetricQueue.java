@@ -1,27 +1,21 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
+ * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
+ * applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  */
 package org.apache.phoenix.monitoring;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Queue;
@@ -43,6 +37,8 @@ public class ReadMetricQueue {
     private static final int MAX_QUEUE_SIZE = 20000; // TODO: should this be configurable?
 
     private final ConcurrentMap<MetricKey, Queue<CombinableMetric>> metricsMap = new ConcurrentHashMap<>();
+
+    private final List<ScanMetricsHolder> scanMetricsHolderList = new ArrayList<ScanMetricsHolder>();
 
     private final boolean isRequestMetricsEnabled;
 
@@ -85,7 +81,7 @@ public class ReadMetricQueue {
         }
         return publishedMetrics;
     }
-    
+
     public void clearMetrics() {
         metricsMap.clear(); // help gc
     }
@@ -177,8 +173,18 @@ public class ReadMetricQueue {
         return q;
     }
 
-	public boolean isRequestMetricsEnabled() {
-		return isRequestMetricsEnabled;
-	}
+    public boolean isRequestMetricsEnabled() {
+        return isRequestMetricsEnabled;
+    }
+    
+    public void addScanHolder(ScanMetricsHolder holder){
+        scanMetricsHolderList.add(holder);
+    }
+
+    public List<ScanMetricsHolder> getScanMetricsHolderList() {
+        return scanMetricsHolderList;
+    }
+    
+    
 
 }

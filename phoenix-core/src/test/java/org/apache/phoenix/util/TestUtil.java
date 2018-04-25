@@ -70,6 +70,7 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -227,7 +228,6 @@ public class TestUtil {
     public static final String STABLE_NAME = "STABLE";
     public static final String STABLE_PK_NAME = "ID";
     public static final String STABLE_SCHEMA_NAME = "";
-    public static final String GROUPBYTEST_NAME = "GROUPBYTEST";
     public static final String CUSTOM_ENTITY_DATA_FULL_NAME = "CORE.CUSTOM_ENTITY_DATA";
     public static final String CUSTOM_ENTITY_DATA_NAME = "CUSTOM_ENTITY_DATA";
     public static final String CUSTOM_ENTITY_DATA_SCHEMA_NAME = "CORE";
@@ -796,16 +796,16 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         MutationState mutationState = pconn.getMutationState();
         if (table.isTransactional()) {
-            mutationState.startTransaction();
+            mutationState.startTransaction(table.getTransactionProvider());
         }
         try (HTableInterface htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.put(put);
             Delete delete = new Delete(markerRowKey);
-            delete.deleteColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            delete.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.delete(delete);
             htable.close();
             if (table.isTransactional()) {
@@ -866,6 +866,25 @@ public class TestUtil {
             }
         }
         System.out.println("-----------------------------------------------");
+    }
+
+    public static int getRawRowCount(HTableInterface table) throws IOException {
+        Scan s = new Scan();
+        s.setRaw(true);;
+        s.setMaxVersions();
+        int rows = 0;
+        try (ResultScanner scanner = table.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                rows++;
+                CellScanner cellScanner = result.cellScanner();
+                Cell current = null;
+                while (cellScanner.advance()) {
+                    current = cellScanner.current();
+                }
+            }
+        }
+        return rows;
     }
 
     public static void dumpIndexStatus(Connection conn, String indexName) throws IOException, SQLException {
@@ -1033,4 +1052,31 @@ public class TestUtil {
         return ByteUtil.compare(op, compareResult);
     }
 
+    public static QueryPlan getOptimizeQueryPlan(Connection conn,String sql) throws SQLException {
+        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        QueryPlan queryPlan = statement.optimizeQuery(sql);
+        queryPlan.iterator();
+        return queryPlan;
+    }
+
+    public static void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
+        for(int rowIndex=0; rowIndex < rows.length; rowIndex++) {
+            assertTrue("rowIndex:["+rowIndex+"] rs.next error!",rs.next());
+            for(int columnIndex = 1; columnIndex <= rows[rowIndex].length; columnIndex++) {
+                Object realValue = rs.getObject(columnIndex);
+                Object expectedValue = rows[rowIndex][columnIndex-1];
+                if(realValue == null) {
+                    assertNull("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"]",expectedValue);
+                }
+                else {
+                    assertEquals("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"],realValue:["+
+                            realValue+"],expectedValue:["+expectedValue+"]",
+                            expectedValue,
+                            realValue
+                            );
+                }
+            }
+        }
+        assertTrue(!rs.next());
+    }
 }

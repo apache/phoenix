@@ -23,6 +23,7 @@ import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
 import org.apache.phoenix.pherf.result.impl.CSVResultHandler;
+import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 import java.io.File;
@@ -117,7 +118,7 @@ public class ResultUtil {
         }
     }
 
-    public synchronized void write(ResultHandler resultHandler, DataModelResult dataModelResult)
+    public synchronized void write(ResultHandler resultHandler, DataModelResult dataModelResult, RulesApplier ruleApplier)
             throws Exception {
         ResultFileDetails resultFileDetails = resultHandler.getResultFileDetails();
         switch (resultFileDetails) {
@@ -126,7 +127,7 @@ public class ResultUtil {
         case CSV_DETAILED_FUNCTIONAL:
             List<List<ResultValue>>
                     rowDetails =
-                    getCSVResults(dataModelResult, resultFileDetails);
+                    getCSVResults(dataModelResult, resultFileDetails, ruleApplier);
             for (List<ResultValue> row : rowDetails) {
                 Result
                         result =
@@ -199,7 +200,7 @@ public class ResultUtil {
     }
 
     private List<List<ResultValue>> getCSVResults(DataModelResult dataModelResult,
-            ResultFileDetails resultFileDetails) {
+            ResultFileDetails resultFileDetails, RulesApplier ruleApplier) {
         List<List<ResultValue>> rowList = new ArrayList<>();
 
         for (ScenarioResult result : dataModelResult.getScenarioResult()) {
@@ -207,7 +208,7 @@ public class ResultUtil {
                 for (QueryResult queryResult : querySetResult.getQueryResults()) {
                     switch (resultFileDetails) {
                     case CSV_AGGREGATE_PERFORMANCE:
-                        List<ResultValue> csvResult = queryResult.getCsvRepresentation(this);
+                        List<ResultValue> csvResult = queryResult.getCsvRepresentation(this, result, ruleApplier);
                         rowList.add(csvResult);
                         break;
                     case CSV_DETAILED_PERFORMANCE:

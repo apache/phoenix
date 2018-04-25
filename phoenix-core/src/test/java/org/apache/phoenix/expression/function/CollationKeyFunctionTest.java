@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.text.Collator;
@@ -89,12 +90,13 @@ public class CollationKeyFunctionTest {
 
 	@Test
 	public void testZhSort() throws Exception {
-		testSortOrderNoEquals(chineseChars, "zh", Boolean.FALSE, null, null, new Integer[] { 3, 0, 1, 6, 5, 4, 2 });
+		testSortOrderNoEquals(chineseChars, "zh", Boolean.FALSE, null, null, new Integer[] { 4, 3, 1, 5, 2, 0, 6 });
+
 	}
 
 	@Test
 	public void testZhTwSort() throws Exception {
-		testSortOrderNoEquals(chineseChars, "zh_TW", Boolean.FALSE, null, null, new Integer[] { 0, 3, 4, 1, 5, 2, 6 });
+		testSortOrderNoEquals(chineseChars, "zh_TW", Boolean.FALSE, null, null, new Integer[] { 4, 3, 1, 5, 2, 0, 6 });
 	}
 
 	@Test
@@ -106,7 +108,7 @@ public class CollationKeyFunctionTest {
 	@Test
 	public void testZhStrokeSort() throws Exception {
 		testSortOrderNoEquals(chineseChars, "zh__STROKE", Boolean.FALSE, null, null,
-				new Integer[] { 0, 1, 3, 4, 6, 2, 5 });
+				new Integer[] { 4, 2, 0, 3, 1, 6, 5 });
 	}
 
 	@Test
@@ -118,6 +120,12 @@ public class CollationKeyFunctionTest {
 	@Test
 	public void testUpperCaseCollationKeyBytes() throws Exception {
 		testCollationKeysEqual(new String[] { "abcdef", "ABCDEF", "aBcDeF" }, "en", Boolean.TRUE, null, null);
+	}
+	
+	@Test
+	public void testNullCollationKey() throws Exception {		
+		List<ByteArrayAndInteger> collationKeys = calculateCollationKeys(new String[] { null }, "en", null, null, null);
+		assertNull(collationKeys.get(0).byteArray);
 	}
 
 	@Test

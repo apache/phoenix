@@ -61,8 +61,8 @@ public class TestPerRegionIndexWriteCache {
   Put p = new Put(row);
   Put p2 = new Put(Bytes.toBytes("other row"));
   {
-    p.add(family, qual, val);
-    p2.add(family, qual, val);
+    p.addColumn(family, qual, val);
+    p2.addColumn(family, qual, val);
   }
 
   HRegion r1; // FIXME: Uses private type
