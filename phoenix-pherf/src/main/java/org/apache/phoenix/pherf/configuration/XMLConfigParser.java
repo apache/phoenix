@@ -115,7 +115,7 @@ public class XMLConfigParser {
      */
     // TODO Remove static calls
     public static DataModel readDataModel(Path file) throws JAXBException, XMLStreamException {
-        XMLInputFactory xif = XMLInputFactory.newFactory();
+        XMLInputFactory xif = XMLInputFactory.newInstance();
         xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModel.class);
