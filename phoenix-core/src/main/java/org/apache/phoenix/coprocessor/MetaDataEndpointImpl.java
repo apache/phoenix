@@ -91,6 +91,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -3170,7 +3171,56 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         byte[] tableNameBytes = index.getTableName().getBytes();
         return ByteUtil.concat(tenantIdBytes, SEPARATOR_BYTE_ARRAY, schemaNameBytes, SEPARATOR_BYTE_ARRAY, tableNameBytes);
     }
+  
     
+    /**
+     * Determines whether or not we have a change that needs to be propagated from a base table
+     * to it's views. For example, a change to GUIDE_POSTS_WIDTH does not need to be propogated
+     * since it's only set on the physical table.
+     * @param table the table being altered
+     * @param rowKeyMetaData the filled in values for schemaName and tableName
+     * @param tableMetaData the metadata passed over from the client
+     * @return true if changes need to be propagated to the views and false otherwise.
+     */
+    private static boolean hasChangesToPropagate(PTable table, byte[][] rowKeyMetaData, List<Mutation> tableMetaData) {
+        boolean hasChangesToPropagate = true;
+        byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
+        byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
+        for (Mutation m : tableMetaData) {
+            byte[] key = m.getRow();
+            int pkCount = getVarChars(key, rowKeyMetaData);
+            if (pkCount >= COLUMN_NAME_INDEX
+                    && Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
+                    && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
+                return true;
+            } else {
+                Collection<List<Cell>>cellLists = m.getFamilyCellMap().values();
+                for (List<Cell> cells : cellLists) {
+                    if (cells != null) {
+                        for (Cell cell : cells) {
+                            byte[] qualifier = CellUtil.cloneQualifier(cell);
+                            String columnName = Bytes.toString(qualifier);
+                            try {
+                                // Often Phoenix table properties aren't valid to be set on a view so thus
+                                // do not need to be propogated. Here we check if the column name corresponds
+                                // to a table property and whether that property is valid to set on a view.
+                                TableProperty tableProp = TableProperty.valueOf(columnName);
+                                if (tableProp.propagateToViews()) {
+                                    return true;
+                                } else {
+                                    hasChangesToPropagate = false;
+                                }
+                            } catch (IllegalArgumentException  e) {
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return hasChangesToPropagate;
+    }
+
+
     @Override
     public void addColumn(RpcController controller, final AddColumnRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -3195,37 +3245,40 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     // Size for worst case - all new columns are PK column
                     List<Mutation> mutationsForAddingColumnsToViews = Lists.newArrayListWithExpectedSize(tableMetaData.size() * ( 1 + table.getIndexes().size()));
                     if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
-                        TableViewFinder childViewsResult = new TableViewFinder();
-                        findAllChildViews(region, tenantId, table, childViewsResult, clientTimeStamp, request.getClientVersion());
-                        if (childViewsResult.hasViews()) {
-                            /* 
-                             * Dis-allow if:
-                             * 1) The meta-data for child view/s spans over
-                             * more than one region (since the changes cannot be made in a transactional fashion)
-                             * 
-                             * 2) The base column count is 0 which means that the metadata hasn't been upgraded yet or
-                             * the upgrade is currently in progress.
-                             * 
-                             * 3) If the request is from a client that is older than 4.5 version of phoenix. 
-                             * Starting from 4.5, metadata requests have the client version included in them. 
-                             * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
-                             * 
-                             * 4) Trying to swtich tenancy of a table that has views
-                             */
-                            if (!childViewsResult.allViewsInSingleRegion() 
-                                    || table.getBaseColumnCount() == 0 
-                                    || !request.hasClientVersion()
-                                    || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {
-                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                        EnvironmentEdgeManager.currentTimeMillis(), null);
-                            } else {
-                                mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getViewInfoList().size() * tableMetaData.size());
-                                MetaDataMutationResult mutationResult = addColumnsAndTablePropertiesToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
-                                        childViewsResult, region, locks, request.getClientVersion());
-                                // return if we were not able to add the column successfully
-                                if (mutationResult!=null)
-                                    return mutationResult;
-                            } 
+                        // If change doesn't need to be propagated, don't bother finding children
+                        if (hasChangesToPropagate(table, rowKeyMetaData, tableMetaData)) {
+                            TableViewFinder childViewsResult = new TableViewFinder();
+                            findAllChildViews(region, tenantId, table, childViewsResult, clientTimeStamp, request.getClientVersion());
+                            if (childViewsResult.hasViews()) {
+                                /* 
+                                 * Dis-allow if:
+                                 * 1) The meta-data for child view/s spans over
+                                 * more than one region (since the changes cannot be made in a transactional fashion)
+                                 * 
+                                 * 2) The base column count is 0 which means that the metadata hasn't been upgraded yet or
+                                 * the upgrade is currently in progress.
+                                 * 
+                                 * 3) If the request is from a client that is older than 4.5 version of phoenix. 
+                                 * Starting from 4.5, metadata requests have the client version included in them. 
+                                 * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
+                                 * 
+                                 * 4) Trying to swtich tenancy of a table that has views
+                                 */
+                                if (!childViewsResult.allViewsInSingleRegion() 
+                                        || table.getBaseColumnCount() == 0 
+                                        || !request.hasClientVersion()
+                                        || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {
+                                    return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                            EnvironmentEdgeManager.currentTimeMillis(), null);
+                                } else {
+                                    mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getViewInfoList().size() * tableMetaData.size());
+                                    MetaDataMutationResult mutationResult = addColumnsAndTablePropertiesToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
+                                            childViewsResult, region, locks, request.getClientVersion());
+                                    // return if we were not able to add the column successfully
+                                    if (mutationResult!=null)
+                                        return mutationResult;
+                                } 
+                            }
                         }
                     } else if (type == PTableType.VIEW
                             && EncodedColumnsUtil.usesEncodedColumnNames(table)) {
