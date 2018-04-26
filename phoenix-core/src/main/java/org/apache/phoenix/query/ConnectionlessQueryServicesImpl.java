@@ -166,17 +166,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     protected String getLogTableDDL() {
-        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+        return QueryConstants.CREATE_LOG_METADATA;
     }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
-          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
-    }
-
-    private String setSystemLogDDLProperties(String ddl) {
-        return String.format(ddl,
           props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
     }
 
