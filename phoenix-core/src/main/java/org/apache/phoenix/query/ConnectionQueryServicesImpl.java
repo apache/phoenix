@@ -169,8 +169,8 @@ import org.apache.phoenix.exception.RetriableUpgradeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeInProgressException;
-import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
+import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -2466,17 +2466,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Available for testing
     protected String getLogTableDDL() {
-        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+        return QueryConstants.CREATE_LOG_METADATA;
     }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
-          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
-    }
-
-    private String setSystemLogDDLProperties(String ddl) {
-        return String.format(ddl,
           props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
     }
 
