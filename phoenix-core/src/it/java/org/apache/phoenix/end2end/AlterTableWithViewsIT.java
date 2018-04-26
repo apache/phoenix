@@ -25,6 +25,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -39,12 +40,14 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -166,6 +169,25 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTrue(viewTable2.isImmutableRows());
             // update cache frequency is not propagated to the view since it was altered on the view
             assertEquals(1, viewTable2.getUpdateCacheFrequency());
+
+            long gpw = 1000000;
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POSTS_WIDTH=" + gpw);
+            
+            ResultSet rs;
+            DatabaseMetaData md = conn.getMetaData();
+            rs = md.getTables("", "", StringUtil.escapeLike(tableName), null);
+            assertTrue(rs.next());
+            assertEquals(gpw, rs.getLong(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH));
+            
+            rs = md.getTables(null, "", StringUtil.escapeLike(viewOfTable1), null);
+            assertTrue(rs.next());
+            rs.getLong(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH);
+            assertTrue(rs.wasNull());
+
+            rs = md.getTables(null, "", StringUtil.escapeLike(viewOfTable2), null);
+            assertTrue(rs.next());
+            rs.getLong(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH);
+            assertTrue(rs.wasNull());
         } 
     }
     
