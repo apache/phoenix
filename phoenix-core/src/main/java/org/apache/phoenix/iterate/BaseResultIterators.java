@@ -60,6 +60,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -76,6 +77,7 @@ import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
@@ -170,6 +172,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return plan.getTableRef().getTable();
     }
     
+    abstract protected boolean isSerial();
+    
     protected boolean useStats() {
         /*
          * Don't use guide posts:
@@ -180,7 +184,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (ScanUtil.isAnalyzeTable(scan)) {
             return false;
         }
-        return true;
+        return !isSerial();
     }
     
     private static void initializeScan(QueryPlan plan, Integer perScanLimit, Integer offset, Scan scan) throws SQLException {
@@ -1105,10 +1109,25 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
                 regionIndex++;
             }
-            if (scanRanges.isPointLookup()) {
-                this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
+            if (!scans.isEmpty()) { // Add any remaining scans
+                parallelScans.add(scans);
+            }
+            Long pageLimit = getUnfilteredPageLimit(scan);
+            if (scanRanges.isPointLookup() || pageLimit != null) {
+                // If run in parallel, the limit is pushed to each parallel scan so must be accounted for in all of them
+                int parallelFactor = this.isSerial() ? 1 : parallelScans.size();
+                if (scanRanges.isPointLookup() && pageLimit != null) {
+                    this.estimatedRows = Long.valueOf(Math.min(scanRanges.getPointLookupCount(), pageLimit * parallelFactor));
+                } else if (scanRanges.isPointLookup()) {
+                    this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
+                } else {
+                    this.estimatedRows = Long.valueOf(pageLimit) * parallelFactor;
+                }
                 this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
-                this.estimateInfoTimestamp = computeMinTimestamp(gpsAvailableForAllRegions, estimates, fallbackTs);
+                 // Indication to client that the statistics estimates were not
+                 // calculated based on statistics but instead are based on row
+                 // limits from the query.
+               this.estimateInfoTimestamp = StatisticsUtil.NOT_STATS_BASED_TS;
             } else if (emptyGuidePost) {
                 // In case of an empty guide post, we estimate the number of rows scanned by
                 // using the estimated row size
@@ -1124,14 +1143,31 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 this.estimatedSize = null;
                 this.estimateInfoTimestamp = null;
             }
-            if (!scans.isEmpty()) { // Add any remaining scans
-                parallelScans.add(scans);
-            }
         } finally {
             if (stream != null) Closeables.closeQuietly(stream);
         }
         sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
         return parallelScans;
+    }
+
+    /**
+     * Return row count limit of PageFilter if exists and there is no where
+     * clause filter.
+     * @return
+     */
+    private static Long getUnfilteredPageLimit(Scan scan) {
+        Long pageLimit = null;
+        Iterator<Filter> filters = ScanUtil.getFilterIterator(scan);
+        while (filters.hasNext()) {
+            Filter filter = filters.next();
+            if (filter instanceof BooleanExpressionFilter) {
+                return null;
+            }
+            if (filter instanceof PageFilter) {
+                pageLimit = ((PageFilter)filter).getPageSize();
+            }
+        }
+        return pageLimit;
     }
 
     private static Long computeMinTimestamp(boolean gpsAvailableForAllRegions, 

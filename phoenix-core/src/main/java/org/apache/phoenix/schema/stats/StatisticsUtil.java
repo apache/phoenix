@@ -47,6 +47,12 @@ import com.google.common.collect.Sets;
  * Simple utility class for managing multiple key parts of the statistic
  */
 public class StatisticsUtil {
+    /**
+     * Indication to client that the statistics estimates were not
+     * calculated based on statistics but instead are based on row
+     * limits from the query.
+     */
+    public static final long NOT_STATS_BASED_TS = 0;
     
     private static final Set<TableName> DISABLE_STATS = Sets.newHashSetWithExpectedSize(8);
     // TODO: make this declarative through new DISABLE_STATS column on SYSTEM.CATALOG table.
