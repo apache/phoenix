@@ -73,6 +73,11 @@ public class SerialIterators extends BaseResultIterators {
     }
 
     @Override
+    protected boolean isSerial() {
+        return true;
+    }
+
+    @Override
     protected void submitWork(final List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
             final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, boolean isReverse, final ParallelScanGrouper scanGrouper) {
         ExecutorService executor = context.getConnection().getQueryServices().getExecutor();
@@ -117,14 +122,6 @@ public class SerialIterators extends BaseResultIterators {
         }
     }
 
-    /**
-     * No need to use stats when executing serially
-     */
-    @Override
-    protected boolean useStats() {
-        return false;
-    }
-    
     @Override
     protected String getName() {
         return NAME;
