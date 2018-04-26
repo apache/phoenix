@@ -68,8 +68,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.CostUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -124,7 +124,7 @@ public class ScanPlan extends BaseQueryPlan {
         if (isSerial) {
             serialBytesEstimate = estimate.getFirst();
             serialRowsEstimate = estimate.getSecond();
-            serialEstimateInfoTs = EnvironmentEdgeManager.currentTimeMillis();
+            serialEstimateInfoTs = StatisticsUtil.NOT_STATS_BASED_TS;
         }
     }
 
