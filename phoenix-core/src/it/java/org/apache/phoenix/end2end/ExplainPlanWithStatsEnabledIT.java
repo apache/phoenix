@@ -40,6 +40,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdge;
@@ -118,6 +119,50 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             Estimate info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 0L, info.estimatedBytes);
             assertEquals((Long) 0L, info.estimatedRows);
+            assertTrue(info.estimateInfoTs > 0);
+        }
+    }
+
+    @Test
+    public void testBytesRowsForPointSelectWithLimitGreaterThanPointLookupSize() throws Exception {
+        String sql = "SELECT * FROM " + tableA + " where k in (? ,?) limit 4";
+        List<Object> binds = Lists.newArrayList();
+        binds.add(103); binds.add(104);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 200L, info.estimatedBytes);
+            assertEquals((Long) 2L, info.estimatedRows);
+            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
+        }
+    }
+
+    @Test
+    public void testBytesRowsForSelectWithLimit() throws Exception {
+        String sql = "SELECT * FROM " + tableA + " where c1.a in (?,?) limit 3";
+        String noIndexSQL = "SELECT /*+ NO_INDEX */ * FROM " + tableA + " where c1.a in (?,?) limit 3";
+        List<Object> binds = Lists.newArrayList();
+        binds.add(1); binds.add(2);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 264L, info.estimatedBytes);
+            assertEquals((Long) 3L, info.estimatedRows);
+            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
+
+            info = getByteRowEstimates(conn, noIndexSQL, binds);
+            assertEquals((Long) 634L, info.estimatedBytes);
+            assertEquals((Long) 10L, info.estimatedRows);
+            assertTrue(info.estimateInfoTs > 0);
+        }
+    }
+
+    @Test
+    public void testBytesRowsForSelectWithLimitIgnored() throws Exception {
+        String sql = "SELECT * FROM " + tableA + " where (c1.a > c2.b) limit 1";
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 691L, info.estimatedBytes);
+            assertEquals((Long) 10L, info.estimatedRows);
             assertTrue(info.estimateInfoTs > 0);
         }
     }
@@ -278,7 +323,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             Estimate info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 200L, info.estimatedBytes);
             assertEquals((Long) 2L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
+            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
         }
     }
 
@@ -303,9 +348,9 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 176l, info.estimatedBytes);
-            assertEquals((Long) 2l, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
+            assertEquals((Long) 176L, info.estimatedBytes);
+            assertEquals((Long) 2L, info.estimatedRows);
+            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
         }
     }
 
