@@ -69,6 +69,14 @@ public class ParallelIterators extends BaseResultIterators {
         this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance(), scan, initOneScanPerRegion, caches, dataPlan);
     }  
 
+    /**
+     * No need to use stats when executing serially
+     */
+    @Override
+    protected boolean isSerial() {
+        return false;
+    }
+    
     @Override
     protected void submitWork(final List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
             final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, final boolean isReverse, ParallelScanGrouper scanGrouper) throws SQLException {
