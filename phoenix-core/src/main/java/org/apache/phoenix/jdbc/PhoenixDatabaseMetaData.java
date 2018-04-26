@@ -218,6 +218,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String TYPE_SEQUENCE = "SEQUENCE";
     public static final String SYSTEM_FUNCTION_TABLE = "FUNCTION";
+    public static final String SYSTEM_FUNCTION = SYSTEM_CATALOG_SCHEMA + QueryConstants.NAME_SEPARATOR + "\"FUNCTION\"";
     public static final String SYSTEM_FUNCTION_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE);
     public static final byte[] SYSTEM_FUNCTION_NAME_BYTES = Bytes.toBytes(SYSTEM_FUNCTION_NAME);
     public static final TableName SYSTEM_FUNCTION_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_FUNCTION_NAME);

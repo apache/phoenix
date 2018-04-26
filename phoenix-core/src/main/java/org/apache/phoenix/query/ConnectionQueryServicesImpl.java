@@ -219,6 +219,8 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
+import org.apache.phoenix.schema.SystemStatsSplitPolicy;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
@@ -2979,6 +2981,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0,
               PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + " "
                 + PTinyint.INSTANCE.getSqlTypeName());
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG + " SET " + 
+                    HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n" +
+                    ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=" + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS)
+                    );
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
+                PhoenixDatabaseMetaData.SYSTEM_FUNCTION + " SET " + 
+                    TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() + "',\n" +
+                    HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n" +
+                    ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=" + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS)
+                    );
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
+                    PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " + 
+                    TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() +"'"
+                    );
         }
         return metaConnection;
     }
