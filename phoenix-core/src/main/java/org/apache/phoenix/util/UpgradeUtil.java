@@ -1908,6 +1908,9 @@ public class UpgradeUtil {
             mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
                     PhoenixRuntime.getCurrentScn(readOnlyProps), tableName, table.getType(),conn.getTenantId());
             // clear the cache and get new table
+            conn.removeTable(conn.getTenantId(), tableName,
+                table.getParentName() != null ? table.getParentName().getString() : null,
+                table.getTimeStamp());
             conn.getQueryServices().clearTableFromCache(
                     conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes(),
                     table.getSchemaName().getBytes(), table.getTableName().getBytes(),

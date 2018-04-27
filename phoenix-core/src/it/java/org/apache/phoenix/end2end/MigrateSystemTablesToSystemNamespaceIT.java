@@ -63,7 +63,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
             "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
-            "SYSTEM.MUTEX","SYSTEM.LOG"));
+            "SYSTEM.MUTEX","SYSTEM.LOG", "SYSTEM.CHILD_LINK"));
     private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
             Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
                     "SYSTEM:MUTEX","SYSTEM:LOG", "SYSTEM:CHILD_LINK"));
