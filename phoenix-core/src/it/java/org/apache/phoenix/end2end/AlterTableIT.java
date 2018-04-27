@@ -117,12 +117,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
 
-        try {
-            String ddl = "CREATE TABLE  " + dataTableFullName +
-                    "  (a_string varchar not null, a_binary varbinary not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + tableDDLOptions;
-            createTestTable(getUrl(), ddl);
+        String ddl = "CREATE TABLE  " + dataTableFullName +
+                "  (a_string varchar not null, a_binary varbinary not null, col1 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + tableDDLOptions;
+        createTestTable(getUrl(), ddl);
+        
+        conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET DISABLE_WAL = true");
 
+        try {
             ddl = "ALTER TABLE " + dataTableFullName + " ADD b_string VARCHAR NULL PRIMARY KEY";
             PreparedStatement stmt = conn.prepareStatement(ddl);
             stmt.execute();

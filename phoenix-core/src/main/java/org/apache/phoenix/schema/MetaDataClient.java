@@ -3261,16 +3261,18 @@ public class MetaDataClient {
                 int position = table.getColumns().size();
 
                 List<PColumn> currentPKs = table.getPKColumns();
-                PColumn lastPK = currentPKs.get(currentPKs.size()-1);
-                // Disallow adding columns if the last column is VARBIANRY.
-                if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
-                    .setColumnName(lastPK.getName().getString()).build().buildException();
-                }
-                // Disallow adding columns if last column is fixed width and nullable.
-                if (lastPK.isNullable() && lastPK.getDataType().isFixedWidth()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULLABLE_FIXED_WIDTH_LAST_PK)
-                    .setColumnName(lastPK.getName().getString()).build().buildException();
+                if (numCols > 0) {
+                    PColumn lastPK = currentPKs.get(currentPKs.size()-1);
+                    // Disallow adding columns if the last column is VARBIANRY.
+                    if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
+                        .setColumnName(lastPK.getName().getString()).build().buildException();
+                    }
+                    // Disallow adding columns if last column is fixed width and nullable.
+                    if (lastPK.isNullable() && lastPK.getDataType().isFixedWidth()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULLABLE_FIXED_WIDTH_LAST_PK)
+                        .setColumnName(lastPK.getName().getString()).build().buildException();
+                    }
                 }
 
                 MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
