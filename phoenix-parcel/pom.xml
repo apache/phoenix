@@ -48,7 +48,7 @@
     <parcel.package.version>${phoenix.version}+${cdh.version}+${parcel.patch.count}</parcel.package.version>
     <parcel.component.version>${phoenix.version}-${cdh.version}</parcel.component.version>
     <parcel.component.release>${cdh.version}.p${parcel.release}</parcel.component.release>
-    <parcel.depends>CDH (= ${cdh.minor.version})</parcel.depends>
+    <parcel.depends>CDH (&gt;= ${cdh.minor.version}.0), CDH (&lt;= ${cdh.minor.version}.999)</parcel.depends>
   </properties>
 
   <build>

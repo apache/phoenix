@@ -27,7 +27,7 @@
     },
     "depends": "${parcel.depends}",
     "provides": [
-        "phoenix"
+        "hbase-plugin"
     ],
     "setActiveSymlink": true,
     "users": {}
