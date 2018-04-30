@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.query;
 
+
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 
 import java.math.BigDecimal;
@@ -26,6 +27,8 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
+import org.apache.phoenix.schema.SystemStatsSplitPolicy;
 import org.apache.phoenix.schema.TableProperty;
 
 /**
@@ -219,15 +222,18 @@ public interface QueryConstants {
     public static final String CREATE_STATS_TABLE_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"(\n" +
             // PK columns
-                    PHYSICAL_NAME + " VARCHAR NOT NULL," + COLUMN_FAMILY + " VARCHAR,"
-                    + GUIDE_POST_KEY + " VARBINARY," + GUIDE_POSTS_WIDTH + " BIGINT,"
-                    + LAST_STATS_UPDATE_TIME + " DATE, " + GUIDE_POSTS_ROW_COUNT + " BIGINT, "
-                    + "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + PHYSICAL_NAME + ","
-                    + COLUMN_FAMILY + "," + GUIDE_POST_KEY + "))\n" +
-                    // Install split policy to prevent a physical table's stats from being split
-                    // across regions.
-                    HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName()
-                    + "',\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+            PHYSICAL_NAME  + " VARCHAR NOT NULL," +
+            COLUMN_FAMILY + " VARCHAR," +
+            GUIDE_POST_KEY  + " VARBINARY," +
+            GUIDE_POSTS_WIDTH + " BIGINT," +
+            LAST_STATS_UPDATE_TIME+ " DATE, "+
+            GUIDE_POSTS_ROW_COUNT+ " BIGINT, "+
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY ("
+            + PHYSICAL_NAME + ","
+            + COLUMN_FAMILY + ","+ GUIDE_POST_KEY+"))\n" +
+            // Install split policy to prevent a physical table's stats from being split across regions.
+            HTableDescriptor.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() + "',\n" + 
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 
     public static final String CREATE_SEQUENCE_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" + TENANT_ID
@@ -245,46 +251,53 @@ public interface QueryConstants {
 
     public static final String CREATE_FUNCTION_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_FUNCTION_TABLE + "\"(\n" +
-            // Pk columns
-                    TENANT_ID + " VARCHAR NULL," + FUNCTION_NAME + " VARCHAR NOT NULL, \n"
-                    + NUM_ARGS + " INTEGER, \n" +
-                    // Function metadata (will be null for argument row)
-                    CLASS_NAME + " VARCHAR, \n" + JAR_PATH + "  VARCHAR, \n" + RETURN_TYPE
-                    + " VARCHAR, \n" +
-                    // Argument metadata (will be null for function row)
-                    TYPE + " VARCHAR, \n" + ARG_POSITION + " VARBINARY, \n" + IS_ARRAY
-                    + " BOOLEAN, \n" + IS_CONSTANT + " BOOLEAN, \n" + DEFAULT_VALUE + " VARCHAR, \n"
-                    + MIN_VALUE + " VARCHAR, \n" + MAX_VALUE + " VARCHAR, \n" + " CONSTRAINT "
-                    + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ", " + FUNCTION_NAME
-                    + ", " + TYPE + ", " + ARG_POSITION + "))\n" + HConstants.VERSIONS + "=%s,\n"
-                    + HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
-                    // Install split policy to prevent a tenant's metadata from being split across
-                    // regions.
-                    HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName()
-                    + "',\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
-
+             // Pk columns
+            TENANT_ID + " VARCHAR NULL," +
+            FUNCTION_NAME + " VARCHAR NOT NULL, \n" +
+            NUM_ARGS + " INTEGER, \n" +
+            // Function metadata (will be null for argument row)
+            CLASS_NAME +  " VARCHAR, \n" +
+            JAR_PATH + "  VARCHAR, \n" +
+            RETURN_TYPE + " VARCHAR, \n" +
+            // Argument metadata (will be null for function row)
+            TYPE + " VARCHAR, \n" +
+            ARG_POSITION + " VARBINARY, \n" +
+            IS_ARRAY + " BOOLEAN, \n" +
+            IS_CONSTANT + " BOOLEAN, \n" +
+            DEFAULT_VALUE + " VARCHAR, \n" +
+            MIN_VALUE + " VARCHAR, \n" +
+            MAX_VALUE + " VARCHAR, \n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ", " + FUNCTION_NAME + ", " + TYPE + ", " + ARG_POSITION + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n"+
+            // Install split policy to prevent a tenant's metadata from being split across regions.
+            HTableDescriptor.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() + "',\n" + 
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+    
     public static final String CREATE_LOG_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"(\n" +
-            // Pk columns
-                    TENANT_ID + " VARCHAR ," + QUERY_ID + " VARCHAR NOT NULL,\n" + USER
-                    + " VARCHAR , \n" + CLIENT_IP + " VARCHAR, \n" +
-                    // Function metadata (will be null for argument row)
-                    QUERY + " VARCHAR, \n" + EXPLAIN_PLAN + " VARCHAR, \n" +
-                    // Argument metadata (will be null for function row)
-                    START_TIME + " TIMESTAMP, \n" + TOTAL_EXECUTION_TIME + " BIGINT, \n"
-                    + NO_OF_RESULTS_ITERATED + " BIGINT, \n" + QUERY_STATUS + " VARCHAR, \n"
-                    + EXCEPTION_TRACE + " VARCHAR, \n" + GLOBAL_SCAN_DETAILS + " VARCHAR, \n"
-                    + BIND_PARAMETERS + " VARCHAR, \n" + SCAN_METRICS_JSON + " VARCHAR, \n"
-                    + " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (QUERY_ID))\n"
-                    + HConstants.VERSIONS + "= " + MetaDataProtocol.DEFAULT_LOG_VERSIONS + ",\n"
-                    + HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
-                    // Install split policy to prevent a tenant's metadata from being split across
-                    // regions.
-                    HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName()
-                    + "',\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE + ",\n"
-                    + HColumnDescriptor.TTL + "=" + MetaDataProtocol.DEFAULT_LOG_TTL + ",\n"
-                    + TableProperty.COLUMN_ENCODED_BYTES.toString() + " = 0";
-
+             // Pk columns
+            TENANT_ID + " VARCHAR ," +
+            QUERY_ID + " VARCHAR NOT NULL,\n" +
+            USER + " VARCHAR , \n" +
+            CLIENT_IP + " VARCHAR, \n" +
+            // Function metadata (will be null for argument row)
+            QUERY +  " VARCHAR, \n" +
+            EXPLAIN_PLAN + " VARCHAR, \n" +
+            // Argument metadata (will be null for function row)
+            START_TIME + " TIMESTAMP, \n" +
+            TOTAL_EXECUTION_TIME + " BIGINT, \n" +
+            NO_OF_RESULTS_ITERATED + " BIGINT, \n" +
+            QUERY_STATUS + " VARCHAR, \n" +
+            EXCEPTION_TRACE + " VARCHAR, \n" +
+            GLOBAL_SCAN_DETAILS + " VARCHAR, \n" +
+            BIND_PARAMETERS + " VARCHAR, \n" +
+            SCAN_METRICS_JSON + " VARCHAR, \n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (QUERY_ID))\n" +
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE+ ",\n" +
+            HColumnDescriptor.TTL + "=" + MetaDataProtocol.DEFAULT_LOG_TTL+",\n"+
+            TableProperty.COLUMN_ENCODED_BYTES.toString()+" = 0";
+    
     public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
     public static final String LAST_SCAN = "LAST_SCAN";

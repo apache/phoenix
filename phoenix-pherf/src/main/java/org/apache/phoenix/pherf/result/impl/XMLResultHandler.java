@@ -18,8 +18,11 @@
 
 package org.apache.phoenix.pherf.result.impl;
 
-import org.apache.phoenix.pherf.result.*;
-import org.apache.phoenix.pherf.result.file.ResultFileDetails;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Marshaller;
@@ -28,11 +31,10 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.transform.stream.StreamSource;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import org.apache.phoenix.pherf.result.DataModelResult;
+import org.apache.phoenix.pherf.result.Result;
+import org.apache.phoenix.pherf.result.ResultValue;
+import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 
 public class XMLResultHandler extends DefaultResultHandler{
 
@@ -74,7 +76,7 @@ public class XMLResultHandler extends DefaultResultHandler{
     }
 
     List<Result> readFromResultFile(File resultsFile) throws Exception {
-        XMLInputFactory xif = XMLInputFactory.newFactory();
+        XMLInputFactory xif = XMLInputFactory.newInstance();
         xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         xif.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModelResult.class);

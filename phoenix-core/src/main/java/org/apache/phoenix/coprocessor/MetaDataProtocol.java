@@ -72,7 +72,6 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP = 0;
     public static final String MIGRATION_IN_PROGRESS = "MigrationInProgress";
 
-    public static final int DEFAULT_LOG_VERSIONS = 10;
     public static final int DEFAULT_LOG_TTL = 7 * 24 * 60 * 60; // 7 days 
     
     // Min system table timestamps for every release.

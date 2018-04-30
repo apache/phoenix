@@ -269,6 +269,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     public static final String ROW_KEY_ORDER_OPTIMIZABLE = "ROW_KEY_ORDER_OPTIMIZABLE";
     public static final byte[] ROW_KEY_ORDER_OPTIMIZABLE_BYTES = Bytes.toBytes(ROW_KEY_ORDER_OPTIMIZABLE);
 
+    private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
+    private static final byte[] PHYSICAL_TABLE_BYTES =
+            new byte[] { PTable.LinkType.PHYSICAL_TABLE.getSerializedValue() };
+
     // KeyValues for Table
     private static final KeyValue TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
     private static final KeyValue TABLE_SEQ_NUM_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
@@ -585,7 +589,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             done.run(builder.build());
         } catch (Throwable t) {
-        	logger.error("getTable failed", t);
+            logger.error("getTable failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -955,9 +959,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                                                                                // compatibility.
         Cell sortOrderKv = colKeyValues[SORT_ORDER_INDEX];
         SortOrder sortOrder =
-        		sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PInteger.INSTANCE
+                sortOrderKv == null ? SortOrder.getDefault() : SortOrder.fromSystemValue(PInteger.INSTANCE
                         .getCodec().decodeInt(sortOrderKv.getValueArray(),
-                        		sortOrderKv.getValueOffset(), SortOrder.getDefault()));
+                                sortOrderKv.getValueOffset(), SortOrder.getDefault()));
 
         Cell arraySizeKv = colKeyValues[ARRAY_SIZE_INDEX];
         Integer arraySize = arraySizeKv == null ? null :
@@ -1521,9 +1525,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return table.getName() == null;
     }
 
-	private static boolean isSchemaDeleted(PSchema schema) {
-		return schema.getSchemaName() == null;
-	}
+    private static boolean isSchemaDeleted(PSchema schema) {
+        return schema.getSchemaName() == null;
+    }
 
     private static boolean isFunctionDeleted(PFunction function) {
         return function.getFunctionName() == null;
@@ -1793,7 +1797,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     for (PTable index : parentTable.getIndexes()) {
                         indexes.add(TableName.valueOf(index.getPhysicalName().getBytes()));
                     }
-
                 } else {
                     // Mapped View
                     cParentPhysicalName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
@@ -2810,8 +2813,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Sort the puts by ordinal position
         Collections.sort(columnPutsForBaseTable);
         for (TableInfo viewInfo : childViewsResult.getResults()) {
+            byte[] tenantId = viewInfo.getTenantId();
+            byte[] schema = viewInfo.getSchemaName();
+            byte[] table = viewInfo.getTableName();
             byte[] viewKey = SchemaUtil.getTableKey(viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName());
             PTable view = doGetTable(viewKey, clientTimeStamp, clientVersion);
+            if (view == null) {
+                logger.warn("Found orphan tenant view row in SYSTEM.CATALOG with tenantId:"
+                    + Bytes.toString(tenantId) + ", schema:"
+                    + Bytes.toString(schema) + ", table:"
+                    + Bytes.toString(table));
+                continue;
+             }
+            
 
             // add the new columns to the child view
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());

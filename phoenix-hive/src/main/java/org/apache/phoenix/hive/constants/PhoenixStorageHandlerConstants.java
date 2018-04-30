@@ -90,13 +90,13 @@ public class PhoenixStorageHandlerConstants {
     public static final String PATERN_MARKER = "$targetPattern$";
     public static final String DATE_PATTERN = "'?\\d{4}-\\d{2}-\\d{2}'?";
     public static final String TIMESTAMP_PATTERN = "'?\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\" +
-            ".?\\d{0,3}'?";
-    public static final String COMMON_OPERATOR_PATTERN = "(\\(?" + COLUMNE_MARKER + "\\)?\\s*" +
+            ".?\\d{0,9}'?";
+    public static final String COMMON_OPERATOR_PATTERN = "(\\(?\"?" + COLUMNE_MARKER + "\"?\\)?\\s*" +
             "(=|>|<|<=|>=)\\s*(" + PATERN_MARKER + "))";
-    public static final String BETWEEN_OPERATOR_PATTERN = "(\\(?" + COLUMNE_MARKER + "\\)?\\s*(" +
+    public static final String BETWEEN_OPERATOR_PATTERN = "(\\(?\"?" + COLUMNE_MARKER + "\"?\\)?\\s*(" +
             "(?i)not)?\\s*(?i)between\\s*(" + PATERN_MARKER + ")\\s*(?i)and\\s*(" + PATERN_MARKER
             + "))";
-    public static final String IN_OPERATOR_PATTERN = "(\\(?" + COLUMNE_MARKER + "\\)?\\s*((?i)" +
+    public static final String IN_OPERATOR_PATTERN = "(\\(?\"?" + COLUMNE_MARKER + "\"?\\)?\\s*((?i)" +
             "not)?\\s*(?i)in\\s*\\((" + PATERN_MARKER + ",?\\s*)+\\))";
 
     public static final String FUNCTION_VALUE_MARKER = "$value$";
