@@ -364,7 +364,8 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
                     maxGetTimestamp = clientTimestamp + 1;
                 }            
             } else {
-                clientTimestamp = maxGetTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                clientTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                maxGetTimestamp = clientTimestamp + 1;
                 clientTimestampBuf = Bytes.toBytes(clientTimestamp);
             }
         }
