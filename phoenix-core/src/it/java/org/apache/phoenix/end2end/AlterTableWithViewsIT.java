@@ -33,6 +33,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Properties;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.client.Table;
@@ -47,7 +48,9 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -863,5 +866,45 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTrue(viewTable.isAppendOnlySchema());
         }
     }
-    
+
+    @Test
+    public void testAlterTableWithIndexesExtendPk() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String tableName = generateUniqueName();
+        String indexName1 = "I_" + generateUniqueName();
+        String indexName2 = "I_" + generateUniqueName();
+
+        try {
+            String ddl = "CREATE TABLE " + tableName +
+            " (ORG_ID CHAR(15) NOT NULL," +
+            " PARTITION_KEY CHAR(3) NOT NULL, " +
+            " ACTIVITY_DATE DATE NOT NULL, " +
+            " FK1_ID CHAR(15) NOT NULL, " +
+            " FK2_ID CHAR(15) NOT NULL, " +
+            " TYPE VARCHAR NOT NULL, " +
+            " IS_OPEN BOOLEAN " +
+            " CONSTRAINT PKVIEW PRIMARY KEY " +
+            "(" +
+            "ORG_ID, PARTITION_KEY, ACTIVITY_DATE, FK1_ID, FK2_ID, TYPE" +
+            "))";
+            createTestTable(getUrl(), ddl);
+            
+            String idx1ddl = "CREATE INDEX " + indexName1 + " ON " + tableName + " (FK1_ID, ACTIVITY_DATE DESC) INCLUDE (IS_OPEN)";
+            PreparedStatement stmt1 = conn.prepareStatement(idx1ddl);
+            stmt1.execute();
+            
+            String idx2ddl = "CREATE INDEX " + indexName2 + " ON " + tableName + " (FK2_ID, ACTIVITY_DATE DESC) INCLUDE (IS_OPEN)";
+            PreparedStatement stmt2 = conn.prepareStatement(idx2ddl);
+            stmt2.execute();
+        
+            ddl = "ALTER TABLE " + tableName + " ADD SOURCE VARCHAR(25) NULL PRIMARY KEY";
+            PreparedStatement stmt3 = conn.prepareStatement(ddl);
+            stmt3.execute();
+        } finally {
+            conn.close();
+        }
+    }
+
 }
