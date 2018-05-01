@@ -17,37 +17,26 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.schema.tuple.Tuple;
 
+public class NonSizeTrackingServerAggregators extends ServerAggregators {
+    public static final ServerAggregators EMPTY_AGGREGATORS = new NonSizeTrackingServerAggregators(new SingleAggregateFunction[0], new Aggregator[0], new Expression[0], 0);
 
-/**
- * 
- * Interface to abstract the incremental calculation of an aggregated value.
- *
- * 
- * @since 0.1
- */
-public interface Aggregator extends Expression {
-    
-    /**
-     * Incrementally aggregate the value with the current row
-     * @param tuple the result containing all the key values of the row
-     * @param ptr the bytes pointer to the underlying result
-     */
-    public void aggregate(Tuple tuple, ImmutableBytesWritable ptr);
-    
-    /**
-     * Get the size in bytes
-     */
-    public int getSize();
-    
-    /**
-     * Determines whether or not we should track the heap size as
-     * this aggregator is executing on the server side.
-     * @return true if the size should be tracked and false
-     * otherwise.
-     */
-    public boolean trackSize();
+    public NonSizeTrackingServerAggregators(SingleAggregateFunction[] functions, Aggregator[] aggregators,
+            Expression[] expressions, int minNullableIndex) {
+        super(functions, aggregators, expressions, minNullableIndex);
+    }
+
+    @Override
+    public void aggregate(Aggregator[] aggregators, Tuple result) {
+        for (int i = 0; i < expressions.length; i++) {
+            if (expressions[i].evaluate(result, ptr) && ptr.getLength() != 0) {
+                aggregators[i].aggregate(result, ptr);
+            }
+            expressions[i].reset();
+        }
+    }
+
 }
