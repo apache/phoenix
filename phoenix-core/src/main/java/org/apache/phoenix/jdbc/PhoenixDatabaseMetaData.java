@@ -291,6 +291,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String ASYNC_REBUILD_TIMESTAMP = "ASYNC_REBUILD_TIMESTAMP";
     public static final byte[] ASYNC_REBUILD_TIMESTAMP_BYTES = Bytes.toBytes(ASYNC_REBUILD_TIMESTAMP);
 
+    public static final String COLUMN_ENCODED_BYTES = "COLUMN_ENCODED_BYTES";
+
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
 

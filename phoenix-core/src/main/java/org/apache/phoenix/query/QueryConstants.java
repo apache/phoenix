@@ -434,7 +434,7 @@ public interface QueryConstants {
             " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (QUERY_ID))\n" +
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE+ ",\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + MetaDataProtocol.DEFAULT_LOG_TTL+",\n"+
-            TableProperty.COLUMN_ENCODED_BYTES.toString()+" = 0";
+            PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES +" = 0";
     
     public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
