@@ -41,6 +41,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -90,6 +91,19 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 		assertTrue(rs.next());
 	}
 
+    private static class MyClock extends EnvironmentEdge {
+        public volatile long time;
+
+        public MyClock (long time) {
+            this.time = time;
+        }
+
+        @Override
+        public long currentTime() {
+            return time;
+        }
+    }
+
 	@Test
 	public void testDuplicateSequences() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
@@ -105,7 +119,28 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 		}
 	}
 
-	@Test
+    @Test
+    public void testDuplicateSequencesAtSameTimestamp() throws Exception {
+        final MyClock clock = new MyClock(1000);
+        EnvironmentEdgeManager.injectEdge(clock);
+        try {
+            String sequenceName = generateSequenceNameWithSchema();
+            
+            
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
+    
+            try {
+                conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
+                Assert.fail("Duplicate sequences");
+            } catch (SequenceAlreadyExistsException e){
+    
+            }
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
+    @Test
 	public void testSequenceNotFound() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
 		
@@ -753,26 +788,31 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         assertSequenceValuesForSingleRow(sequenceName, 1, 2, 3);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1");
         
         assertSequenceValuesForSingleRow(sequenceName, 1, 0, -1);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MINVALUE 10");
         
         assertSequenceValuesForSingleRow(sequenceName, 10, 11, 12);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1 MINVALUE 10 ");
         
         assertSequenceValuesForSingleRow(sequenceName, Long.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE - 2);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MAXVALUE 0");
         
         assertSequenceValuesForSingleRow(sequenceName, Long.MIN_VALUE, Long.MIN_VALUE + 1, Long.MIN_VALUE + 2);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1 MAXVALUE 0");
         
         assertSequenceValuesForSingleRow(sequenceName, 0, -1, -2);
