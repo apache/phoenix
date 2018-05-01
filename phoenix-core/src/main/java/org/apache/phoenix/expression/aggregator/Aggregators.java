@@ -19,7 +19,6 @@ package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
-import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.ValueBitSet;
@@ -83,7 +82,7 @@ abstract public class Aggregators {
      * Aggregate over aggregators
      * @param result the single row Result from scan iteration
      */
-    abstract public long aggregate(Aggregator[] aggregators, Tuple result);
+    abstract public void aggregate(Aggregator[] aggregators, Tuple result);
 
     protected static int calculateSize(Aggregator[] aggregators) {
         

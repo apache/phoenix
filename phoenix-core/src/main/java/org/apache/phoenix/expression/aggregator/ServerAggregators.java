@@ -30,6 +30,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
+import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -38,11 +41,10 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * Aggregators that execute on the server-side
  *
  */
-public class ServerAggregators extends Aggregators {
-    public static final ServerAggregators EMPTY_AGGREGATORS = new ServerAggregators(new SingleAggregateFunction[0], new Aggregator[0], new Expression[0], 0);
-    private final Expression[] expressions;
+public abstract class ServerAggregators extends Aggregators {
+    protected final Expression[] expressions;
     
-    private ServerAggregators(SingleAggregateFunction[] functions, Aggregator[] aggregators, Expression[] expressions, int minNullableIndex) {
+    protected ServerAggregators(SingleAggregateFunction[] functions, Aggregator[] aggregators, Expression[] expressions, int minNullableIndex) {
         super(functions, aggregators, minNullableIndex);
         if (aggregators.length != expressions.length) {
             throw new IllegalArgumentException("Number of aggregators (" + aggregators.length 
@@ -52,18 +54,7 @@ public class ServerAggregators extends Aggregators {
     }
     
     @Override
-    public long aggregate(Aggregator[] aggregators, Tuple result) {
-        long dsize = 0;
-        for (int i = 0; i < expressions.length; i++) {
-            if (expressions[i].evaluate(result, ptr) && ptr.getLength() != 0) {
-                dsize -= aggregators[i].getSize();
-                aggregators[i].aggregate(result, ptr);
-                dsize += aggregators[i].getSize();
-            }
-            expressions[i].reset();
-        }
-        return dsize;
-    }
+    public abstract void aggregate(Aggregator[] aggregators, Tuple result);
     
     /**
      * Serialize an Aggregator into a byte array
@@ -112,9 +103,9 @@ public class ServerAggregators extends Aggregators {
      * @param conf Server side configuration used by HBase
      * @return newly instantiated Aggregators instance
      */
-    public static ServerAggregators deserialize(byte[] b, Configuration conf) {
+    public static ServerAggregators deserialize(byte[] b, Configuration conf, MemoryChunk chunk) {
         if (b == null) {
-            return ServerAggregators.EMPTY_AGGREGATORS;
+            return NonSizeTrackingServerAggregators.EMPTY_AGGREGATORS;
         }
         ByteArrayInputStream stream = new ByteArrayInputStream(b);
         try {
@@ -131,7 +122,20 @@ public class ServerAggregators extends Aggregators {
                 aggregators[i] = aggFunc.getAggregator();
                 expressions[i] = aggFunc.getAggregatorExpression();
             }
-            return new ServerAggregators(functions, aggregators,expressions, minNullableIndex);
+            boolean trackSize = false;
+            if (chunk != null) {
+                for (Aggregator aggregator : aggregators) {
+                    if (aggregator.trackSize()) {
+                        trackSize = true;
+                        break;
+                    }
+                }
+            }
+            return trackSize ?
+                    new SizeTrackingServerAggregators(functions, aggregators,expressions, minNullableIndex, chunk, 
+                            conf.getInt(QueryServices.AGGREGATE_CHUNK_SIZE_INCREASE_ATTRIB, 
+                                    QueryServicesOptions.DEFAULT_AGGREGATE_CHUNK_SIZE_INCREASE)) :
+                    new NonSizeTrackingServerAggregators(functions, aggregators,expressions, minNullableIndex);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
