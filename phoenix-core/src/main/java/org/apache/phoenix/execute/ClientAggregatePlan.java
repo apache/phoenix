@@ -88,7 +88,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // aggregators. We use the Configuration directly here to avoid the expense of creating
         // another one.
         this.serverAggregators = ServerAggregators.deserialize(context.getScan()
-                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration());
+                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration(), null);
     }
 
     @Override

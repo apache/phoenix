@@ -103,7 +103,6 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
@@ -534,31 +533,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         }
-        Aggregators aggregators = ServerAggregators.deserialize(
-                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), conf);
-        Aggregator[] rowAggregators = aggregators.getAggregators();
         boolean hasMore;
-        boolean hasAny = false;
-        Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
-        Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
-        }
         int rowCount = 0;
-        final RegionScanner innerScanner = theScanner;
-        boolean useIndexProto = true;
-        byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-        // for backward compatiblity fall back to look by the old attribute
-        if (indexMaintainersPtr == null) {
-            indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
-            useIndexProto = false;
-        }
-
-        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        boolean hasAny = false;
         boolean acquiredLock = false;
         boolean incrScanRefCount = false;
+        Aggregators aggregators = null;
+        Aggregator[] rowAggregators = null;
+        final RegionScanner innerScanner = theScanner;
         final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
         try (MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
+            aggregators = ServerAggregators.deserialize(
+                    scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), conf, em);
+            rowAggregators = aggregators.getAggregators();
+            Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
+            Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
+            if (logger.isDebugEnabled()) {
+                logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
+            }
+            boolean useIndexProto = true;
+            byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+            // for backward compatiblity fall back to look by the old attribute
+            if (indexMaintainersPtr == null) {
+                indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
+                useIndexProto = false;
+            }
+    
+            byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
             if(needToWrite) {
                 synchronized (lock) {
                     if (isRegionClosingOrSplitting) {
@@ -571,7 +572,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             region.startRegionOperation();
             acquiredLock = true;
-            long size = 0;
             synchronized (innerScanner) {
                 do {
                     List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) : new ArrayList<Cell>();
@@ -803,11 +803,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             commitBatch(region, indexMutations, blockingMemStoreSize);
                             indexMutations.clear();
                         }
-                        size += aggregators.aggregate(rowAggregators, result);
-                        while(size > em.getSize()) {
-                            logger.info("Request: {}, resizing {} by 1024*1024", size, em.getSize());
-                            em.resize(em.getSize() + 1024*1024);
-                        }
+                        aggregators.aggregate(rowAggregators, result);
                         hasAny = true;
                     }
                 } while (hasMore);

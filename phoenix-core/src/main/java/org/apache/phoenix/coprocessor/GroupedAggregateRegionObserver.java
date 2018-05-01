@@ -132,53 +132,56 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         List<Expression> expressions = deserializeGroupByExpressions(expressionBytes, 0);
-        ServerAggregators aggregators =
-                ServerAggregators.deserialize(scan
-                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
-                        .getEnvironment().getConfiguration());
-
-        RegionScanner innerScanner = s;
-        boolean useProto = false;
-        byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
-        useProto = localIndexBytes != null;
-        if (localIndexBytes == null) {
-            localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
-        }
-        List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
-        TupleProjector tupleProjector = null;
-        byte[][] viewConstants = null;
-        ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
-        if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
-            if (dataColumns != null) {
-                tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+        final TenantCache tenantCache = GlobalCache.getTenantCache(c.getEnvironment(), ScanUtil.getTenantId(scan));
+        try (MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
+            ServerAggregators aggregators =
+                    ServerAggregators.deserialize(scan
+                            .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
+                            .getEnvironment().getConfiguration(), em);
+    
+            RegionScanner innerScanner = s;
+            boolean useProto = false;
+            byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
+            useProto = localIndexBytes != null;
+            if (localIndexBytes == null) {
+                localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
             }
-            ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
-            innerScanner =
-                    getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
-                            c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
-        } 
-
-        if (j != null) {
-            innerScanner =
-                    new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
-                            c.getEnvironment(), useQualifierAsIndex, useNewValueColumnQualifier);
-        }
-
-        long limit = Long.MAX_VALUE;
-        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
-        if (limitBytes != null) {
-            limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
-        }
-        if (keyOrdered) { // Optimize by taking advantage that the rows are
-                          // already in the required group by key order
-            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
-        } else { // Otherwse, collect them all up in an in memory map
-            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
+            List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
+            TupleProjector tupleProjector = null;
+            byte[][] viewConstants = null;
+            ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+    
+            final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+            final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+            boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
+            if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
+                if (dataColumns != null) {
+                    tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+                    viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+                }
+                ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
+                innerScanner =
+                        getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
+                                c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
+            } 
+    
+            if (j != null) {
+                innerScanner =
+                        new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
+                                c.getEnvironment(), useQualifierAsIndex, useNewValueColumnQualifier);
+            }
+    
+            long limit = Long.MAX_VALUE;
+            byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
+            if (limitBytes != null) {
+                limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
+            }
+            if (keyOrdered) { // Optimize by taking advantage that the rows are
+                              // already in the required group by key order
+                return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
+            } else { // Otherwse, collect them all up in an in memory map
+                return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
+            }
         }
     }
 

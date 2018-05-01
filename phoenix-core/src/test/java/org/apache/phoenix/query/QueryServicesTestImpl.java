@@ -67,6 +67,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final long DEFAULT_INDEX_POPULATION_WAIT_TIME = 0;
     public static final long DEFAULT_SEQUENCE_CACHE_SIZE = 3;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = true;
+    public static final int DEFAULT_AGGREGATE_CHUNK_SIZE_INCREASE = 1000;
     /*
      * Effectively disable running the index rebuild task by having an infinite delay
      * because we want to control it's execution ourselves
@@ -122,6 +123,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS)
                 .setDefaultIndexPopulationWaitTime(DEFAULT_INDEX_POPULATION_WAIT_TIME)
                 .setIndexRebuildTaskInitialDelay(DEFAULT_INDEX_REBUILD_TASK_INITIAL_DELAY)
+                .set(AGGREGATE_CHUNK_SIZE_INCREASE_ATTRIB, DEFAULT_AGGREGATE_CHUNK_SIZE_INCREASE)
                 // setup default configs for Tephra
                 .set(TxConstants.Manager.CFG_DO_PERSIST, false)
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times")

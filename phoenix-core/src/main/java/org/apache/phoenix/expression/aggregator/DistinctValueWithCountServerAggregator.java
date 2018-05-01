@@ -24,14 +24,13 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.iq80.snappy.Snappy;
@@ -157,11 +156,11 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
 
     @Override
     public int getSize() {
-        // TODO make this size correct.??
-        // This size is being called initially at the begin of the scanner open. At that time we any
-        // way can not tell the exact size of the Map. The Aggregators get size from all Aggregator
-        // and stores in a variable for future use. This size of the Aggregators is being used in
-        // Grouped unordered scan. Do we need some changes there in that calculation?
         return super.getSize() + SizedUtil.ARRAY_SIZE + countMapHeapSize();
+    }
+    
+    @Override
+    public boolean trackSize() {
+        return true;
     }
 }
