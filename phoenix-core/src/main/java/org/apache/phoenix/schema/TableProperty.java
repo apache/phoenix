@@ -33,6 +33,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.SchemaUtil;
 
 public enum TableProperty {
@@ -94,6 +95,23 @@ public enum TableProperty {
         }
     },
     
+    TRANSACTION_PROVIDER(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getTransactionProvider();
+        }
+        @Override
+        public Object getValue(Object value) {
+            try {
+                return value == null ? null : TransactionFactory.Provider.valueOf(value.toString());
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_TRANSACTION_PROVIDER)
+                .setMessage(value.toString())
+                .build().buildException());
+            }
+        }
+    },
+
     UPDATE_CACHE_FREQUENCY(PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY, true, true, true) {
 	    @Override
         public Object getValue(Object value) {

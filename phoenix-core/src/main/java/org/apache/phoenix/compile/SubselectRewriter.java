@@ -47,6 +47,11 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
+/*
+ * Class for flattening derived-tables when possible. A derived-table can be
+ * flattened if the merged statement preserves the same semantics as the original
+ * statement.
+ */
 public class SubselectRewriter extends ParseNodeRewriter {
     private final String tableAlias;
     private final Map<String, ParseNode> aliasMap;

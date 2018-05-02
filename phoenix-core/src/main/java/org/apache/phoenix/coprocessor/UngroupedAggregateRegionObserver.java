@@ -95,11 +95,13 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
@@ -113,6 +115,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
@@ -243,6 +246,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
     }
 
+    private void commitBatchWithRetries(final Region region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
+        try {
+            commitBatch(region, localRegionMutations, blockingMemstoreSize);
+        } catch (IOException e) {
+            handleIndexWriteException(localRegionMutations, e, new MutateCommand() {
+                @Override
+                public void doMutation() throws IOException {
+                    commitBatch(region, localRegionMutations, blockingMemstoreSize);
+                }
+            });
+        }
+    }
+
     private void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
       if (mutations.isEmpty()) {
           return;
@@ -251,7 +267,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         Mutation[] mutationArray = new Mutation[mutations.size()];
       // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
       // flush happen which decrease the memstore size and then writes allowed on the region.
-      for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
+      for (int i = 0; blockingMemstoreSize > 0 && region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
           try {
               checkForRegionClosing();
               Thread.sleep(100);
@@ -277,7 +293,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
            }
            if (clientVersionBytes != null) {
-               m.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, clientVersionBytes);
+               m.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
            }
         }
     }
@@ -377,7 +393,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     env, region.getRegionInfo().getTable().getNameAsString(), ts,
                     gp_width_bytes, gp_per_region_bytes);
             return collectStats(s, statsCollector, region, scan, env.getConfiguration());
-        } else if (ScanUtil.isIndexRebuild(scan)) { return rebuildIndices(s, region, scan, env.getConfiguration()); }
+        } else if (ScanUtil.isIndexRebuild(scan)) {
+            return rebuildIndices(s, region, scan, env.getConfiguration());
+        }
+
+        PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+        boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         int offsetToBe = 0;
         if (localIndexScan) {
             /*
@@ -519,7 +540,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             useIndexProto = false;
         }
 
-        byte[] clientVersionBytes = scan.getAttribute(PhoenixIndexCodec.CLIENT_VERSION);
+        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
         boolean acquiredLock = false;
         boolean incrScanRefCount = false;
         final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
@@ -636,7 +657,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         } else if (buildLocalIndex) {
-                            PhoenixTransactionalTable phoenixTransactionalTable = TransactionFactory.getTransactionProvider().getTransactionalTable();
+
+//                            PhoenixTransactionalTable phoenixTransactionalTable = TransactionFactory.getTransactionProvider().getTransactionalTable();
                             for (IndexMaintainer maintainer : indexMaintainers) {
                                 if (!results.isEmpty()) {
                                     result.getKey(ptr);
@@ -648,7 +670,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         valueGetter, ptr, results.get(0).getTimestamp(),
                                         env.getRegion().getRegionInfo().getStartKey(),
                                         env.getRegion().getRegionInfo().getEndKey());
-                                    put = phoenixTransactionalTable.MarkPutAsCommitted(put, ts, ts);
+//                                    put = phoenixTransactionalTable.MarkPutAsCommitted(put, ts, ts);
                                     indexMutations.add(put);
                                 }
                             }
@@ -752,7 +774,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 if (!timeStamps.contains(kvts)) {
                                     Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
                                         kv.getRowLength());
-                                    put.add(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
+                                    put.addColumn(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
                                         ByteUtil.EMPTY_BYTE_ARRAY);
                                     mutations.add(put);
                                 }
@@ -890,16 +912,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState, clientVersionBytes, useIndexProto);
         separateLocalAndRemoteMutations(targetHTable, region, mutations, localRegionMutations, remoteRegionMutations,
             isPKChanging);
-        try {
-            commitBatch(region, localRegionMutations, blockingMemStoreSize);
-        } catch (IOException e) {
-            handleIndexWriteException(localRegionMutations, e, new MutateCommand() {
-                @Override
-                public void doMutation() throws IOException {
-                    commitBatch(region, localRegionMutations, blockingMemStoreSize);
-                }
-            });
-        }
+        commitBatchWithRetries(region, localRegionMutations, blockingMemStoreSize);
         try {
             commitBatchWithHTable(targetHTable, remoteRegionMutations);
         } catch (IOException e) {
@@ -968,35 +981,39 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-            final InternalScanner scanner, final ScanType scanType) throws IOException {
-        // Compaction and split upcalls run with the effective user context of the requesting user.
-        // This will lead to failure of cross cluster RPC if the effective user is not
-        // the login user. Switch to the login user context to ensure we have the expected
-        // security context.
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-                InternalScanner internalScanner = scanner;
-                if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+    public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c,
+            final Store store, final InternalScanner scanner, final ScanType scanType)
+                    throws IOException {
+        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+            final TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+            // Compaction and split upcalls run with the effective user context of the requesting user.
+            // This will lead to failure of cross cluster RPC if the effective user is not
+            // the login user. Switch to the login user context to ensure we have the expected
+            // security context.
+            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override public InternalScanner run() throws Exception {
+                    InternalScanner internalScanner = scanner;
                     try {
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
+                        DelegateRegionCoprocessorEnvironment compactionConfEnv = new DelegateRegionCoprocessorEnvironment(compactionConfig, c.getEnvironment());
                         StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
-                            c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
+                            compactionConfEnv, table.getNameAsString(), clientTimeStamp,
                             store.getFamily().getName());
-                        internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
-                    } catch (IOException e) {
+                        internalScanner =
+                                stats.createCompactionScanner(compactionConfEnv,
+                                    store, scanner);
+                    } catch (Exception e) {
                         // If we can't reach the stats table, don't interrupt the normal
-                      // compaction operation, just log a warning.
-                      if (logger.isWarnEnabled()) {
-                          logger.warn("Unable to collect stats for " + table, e);
-                      }
+                        // compaction operation, just log a warning.
+                        if (logger.isWarnEnabled()) {
+                            logger.warn("Unable to collect stats for " + table, e);
+                        }
                     }
+                    return internalScanner;
                 }
-                return internalScanner;
-            }
-        });
+            });
+        }
+        return scanner;
     }
 
     private static PTable deserializeTable(byte[] b) {
@@ -1017,7 +1034,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             useProto = false;
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
-        byte[] clientVersionBytes = scan.getAttribute(PhoenixIndexCodec.CLIENT_VERSION);
+        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
         boolean hasMore;
         int rowCount = 0;
         try {
@@ -1042,7 +1059,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                     put.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
-                                    put.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, clientVersionBytes);
+                                    put.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(put);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
                                     put.setDurability(Durability.SKIP_WAL);
@@ -1054,7 +1071,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                     del.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
-                                    del.setAttribute(PhoenixIndexCodec.CLIENT_VERSION, clientVersionBytes);
+                                    del.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(del);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
                                     del.setDurability(Durability.SKIP_WAL);
@@ -1063,8 +1080,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
-                                    HConstants.NO_NONCE);
+                            commitBatchWithRetries(region, mutations, -1);
                             uuidValue = ServerCacheClient.generateId();
                             mutations.clear();
                         }
@@ -1073,8 +1089,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE);
+                    commitBatchWithRetries(region, mutations, -1);
                 }
             }
         } catch (IOException e) {
@@ -1368,23 +1383,23 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // This will lead to failure of cross cluster RPC if the effective user is not
         // the login user. Switch to the login user context to ensure we have the expected
         // security context.
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                // If the index is disabled, keep the deleted cells so the rebuild doesn't corrupt the index
-                if (request.isMajor()) {
-                    String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                        try (PhoenixConnection conn =
-                                QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class)) {
-                        String baseTable = fullTableName;
-                        PTable table = PhoenixRuntime.getTableNoCache(conn, baseTable);
+        final String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+        // since we will make a call to syscat, do nothing if we are compacting syscat itself
+        if (request.isMajor() && !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)) {
+            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override
+                public InternalScanner run() throws Exception {
+                    // If the index is disabled, keep the deleted cells so the rebuild doesn't corrupt the index
+                    try (PhoenixConnection conn =
+                            QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class)) {
+                        PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
                         List<PTable> indexes = PTableType.INDEX.equals(table.getType()) ? Lists.newArrayList(table) : table.getIndexes();
                         // FIXME need to handle views and indexes on views as well
                         for (PTable index : indexes) {
                             if (index.getIndexDisableTimestamp() != 0) {
                                 logger.info(
                                     "Modifying major compaction scanner to retain deleted cells for a table with disabled index: "
-                                            + baseTable);
+                                            + fullTableName);
                                 Scan scan = new Scan();
                                 scan.setMaxVersions();
                                 return new StoreScanner(store, store.getScanInfo(), scan, scanners,
@@ -1392,10 +1407,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     HConstants.OLDEST_TIMESTAMP);
                             }
                         }
+                    } catch (Exception e) {
+                        if (e instanceof TableNotFoundException) {
+                            logger.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
+                            // non-Phoenix HBase tables won't be found, do nothing
+                        } else {
+                            logger.error("Unable to modify compaction scanner to retain deleted cells for a table with disabled Index; "
+                                    + fullTableName,
+                                    e);
+                        }
                     }
+                    return s;
                 }
-                return s;
-            }
-        });
+            });
+        }
+        return s;
     }
 }

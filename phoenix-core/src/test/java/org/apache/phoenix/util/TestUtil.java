@@ -780,16 +780,16 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         MutationState mutationState = pconn.getMutationState();
         if (table.isTransactional()) {
-            mutationState.startTransaction();
+            mutationState.startTransaction(table.getTransactionProvider());
         }
         try (HTableInterface htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.put(put);
             Delete delete = new Delete(markerRowKey);
-            delete.deleteColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            delete.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.delete(delete);
             htable.close();
             if (table.isTransactional()) {
@@ -1043,4 +1043,24 @@ public class TestUtil {
         return queryPlan;
     }
 
+    public static void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
+        for(int rowIndex=0; rowIndex < rows.length; rowIndex++) {
+            assertTrue("rowIndex:["+rowIndex+"] rs.next error!",rs.next());
+            for(int columnIndex = 1; columnIndex <= rows[rowIndex].length; columnIndex++) {
+                Object realValue = rs.getObject(columnIndex);
+                Object expectedValue = rows[rowIndex][columnIndex-1];
+                if(realValue == null) {
+                    assertNull("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"]",expectedValue);
+                }
+                else {
+                    assertEquals("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"],realValue:["+
+                            realValue+"],expectedValue:["+expectedValue+"]",
+                            expectedValue,
+                            realValue
+                            );
+                }
+            }
+        }
+        assertTrue(!rs.next());
+    }
 }

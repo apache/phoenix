@@ -41,8 +41,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.StubAbortable;
 import org.apache.phoenix.hbase.index.TableName;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -101,7 +103,7 @@ public class TestParalleIndexWriter {
     Mockito.when(mockRegion.getTableDesc()).thenReturn(mockTableDesc);
     ImmutableBytesPtr tableName = new ImmutableBytesPtr(this.test.getTableName());
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     Multimap<HTableInterfaceReference, Mutation> indexUpdates =
         ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     indexUpdates.put(new HTableInterfaceReference(tableName), m);
@@ -124,7 +126,7 @@ public class TestParalleIndexWriter {
     // setup the writer and failure policy
     TrackingParallelWriterIndexCommitter writer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
     writer.setup(factory, exec, abort, stop, e);
-    writer.write(indexUpdates, true);
+    writer.write(indexUpdates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.test.getTableNameString() + " finished");

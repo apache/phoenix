@@ -169,7 +169,13 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        return execute(statement);
+        if (statement.getOperation().isMutation()) {
+            executeMutation(statement);
+            return false;
+        }
+        executeQuery(statement, createQueryLogger(statement,query));
+        return true;
+        
     }
 
     @Override
@@ -183,7 +189,8 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         if (statement.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(statement.getOperation());
         }
-        return executeQuery(statement);
+        
+        return executeQuery(statement,createQueryLogger(statement,query));
     }
 
     @Override

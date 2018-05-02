@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -1016,20 +1017,100 @@ public class AggregateIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
-        for(int rowIndex=0;rowIndex<rows.length;rowIndex++) {
-            assertTrue(rs.next());
-            for(int columnIndex=1;columnIndex<= rows[rowIndex].length;columnIndex++) {
-                Object realValue=rs.getObject(columnIndex);
-                Object expectedValue=rows[rowIndex][columnIndex-1];
-                if(realValue==null) {
-                    assertTrue(expectedValue==null);
-                }
-                else {
-                    assertTrue(realValue.equals(expectedValue));
-                }
+    @Test
+    public void testGroupByOrderMatchPkColumnOrderBug4690() throws Exception {
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(false, false);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(false, true);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(true, false);
+        this.doTestGroupByOrderMatchPkColumnOrderBug4690(true, true);
+    }
+
+    private void doTestGroupByOrderMatchPkColumnOrderBug4690(boolean desc ,boolean salted) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 integer not null , " +
+                    " pk2 integer not null, " +
+                    " pk3 integer not null," +
+                    " pk4 integer not null,"+
+                    " v integer, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                       "pk1 "+(desc ? "desc" : "")+", "+
+                       "pk2 "+(desc ? "desc" : "")+", "+
+                       "pk3 "+(desc ? "desc" : "")+", "+
+                       "pk4 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "split on(2)");
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (1,8,10,20,30)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (1,8,11,21,31)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (1,9,5 ,22,32)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (1,9,6 ,12,33)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (1,9,6 ,13,34)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (1,9,7 ,8,35)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (2,3,15,25,35)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (2,7,16,26,36)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (2,7,17,27,37)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (3,2,18,28,38)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (3,2,19,29,39)");
+            conn.commit();
+
+            sql = "select pk2,pk1,count(v) from " + tableName + " group by pk2,pk1 order by pk2,pk1";
+            ResultSet rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{2,3,2L},{3,2,1L},{7,2,2L},{8,1,2L},{9,1,4L}});
+
+            sql = "select pk1,pk2,count(v) from " + tableName + " group by pk2,pk1 order by pk1,pk2";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,8,2L},{1,9,4L},{2,3,1L},{2,7,2L},{3,2,2L}});
+
+            sql = "select pk2,pk1,count(v) from " + tableName + " group by pk2,pk1 order by pk2 desc,pk1 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{9,1,4L},{8,1,2L},{7,2,2L},{3,2,1L},{2,3,2L}});
+
+            sql = "select pk1,pk2,count(v) from " + tableName + " group by pk2,pk1 order by pk1 desc,pk2 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{3,2,2L},{2,7,2L},{2,3,1L},{1,9,4L},{1,8,2L}});
+
+
+            sql = "select pk3,pk2,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk3,pk2";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{5,9,1L},{6,9,2L},{7,9,1L},{10,8,1L},{11,8,1L}});
+
+            sql = "select pk2,pk3,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk2,pk3";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{8,10,1L},{8,11,1L},{9,5,1L},{9,6,2L},{9,7,1L}});
+
+            sql = "select pk3,pk2,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk3 desc,pk2 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{11,8,1L},{10,8,1L},{7,9,1L},{6,9,2L},{5,9,1L}});
+
+            sql = "select pk2,pk3,count(v) from " + tableName + " where pk1=1 group by pk3,pk2 order by pk2 desc,pk3 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{9,7,1L},{9,6,2L},{9,5,1L},{8,11,1L},{8,10,1L}});
+
+
+            sql = "select pk4,pk3,pk1,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk4,pk3,pk1";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{8,7,1,1L},{12,6,1,1L},{13,6,1,1L},{22,5,1,1L}});
+
+            sql = "select pk1,pk3,pk4,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk1,pk3,pk4";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,5,22,1L},{1,6,12,1L},{1,6,13,1L},{1,7,8,1L}});
+
+            sql = "select pk4,pk3,pk1,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk4 desc,pk3 desc,pk1 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{22,5,1,1L},{13,6,1,1L},{12,6,1,1L},{8,7,1,1L}});
+
+            sql = "select pk1,pk3,pk4,count(v) from " + tableName + " where pk2=9 group by pk4,pk3,pk1 order by pk1 desc,pk3 desc,pk4 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,7,8,1L},{1,6,13,1L},{1,6,12,1L},{1,5,22,1L}});
+        } finally {
+            if(conn != null) {
+                conn.close();
             }
         }
-        assertTrue(!rs.next());
     }
 }

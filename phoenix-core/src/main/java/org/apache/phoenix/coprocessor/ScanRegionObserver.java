@@ -31,6 +31,8 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.OrderByExpression;
 
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 
 /**
  *
@@ -69,7 +71,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable {
-        NonAggregateRegionScannerFactory nonAggregateROUtil = new NonAggregateRegionScannerFactory(c.getEnvironment(), useNewValueColumnQualifier, encodingScheme);
+        NonAggregateRegionScannerFactory nonAggregateROUtil = new NonAggregateRegionScannerFactory(c.getEnvironment());
         return nonAggregateROUtil.getRegionScanner(scan, s);
     }
 

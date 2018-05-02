@@ -15,14 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.log;
 
-import org.apache.phoenix.transaction.TransactionFactory;
-
-public class PhoenixTransactionalGCProcessor extends DelegateRegionObserver {
-
-    public PhoenixTransactionalGCProcessor() {
-        super(TransactionFactory.getTransactionProvider().getTransactionContext().getGarbageCollector());
-    }
-
+public enum LogLevel {
+    OFF, INFO, DEBUG, TRACE
 }

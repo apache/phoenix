@@ -72,10 +72,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP = 0;
     public static final String MIGRATION_IN_PROGRESS = "MigrationInProgress";
 
-    public static final int DEFAULT_MAX_META_DATA_VERSIONS = 1000;
-    public static final boolean DEFAULT_META_DATA_KEEP_DELETED_CELLS = true;
-    public static final int DEFAULT_MAX_STAT_DATA_VERSIONS = 1;
-    public static final boolean DEFAULT_STATS_KEEP_DELETED_CELLS = false;
+    public static final int DEFAULT_LOG_VERSIONS = 10;
+    public static final int DEFAULT_LOG_TTL = 7 * 24 * 60 * 60; // 7 days 
     
     // Min system table timestamps for every release.
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0 = MIN_TABLE_TIMESTAMP + 3;
@@ -93,7 +91,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // Since there's no upgrade code, keep the version the same as the previous version
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_13_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0 = MIN_TABLE_TIMESTAMP + 28;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0;
     
@@ -118,7 +116,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0, "4.14.x");
     }
     
-    public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER; 
+    public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER;
+     
     
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
@@ -445,6 +444,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
         return iterator.next();
     }
     
+    public static long getPriorUpgradeVersion() {
+        return TIMESTAMP_VERSION_MAP.lowerKey(TIMESTAMP_VERSION_MAP.lastKey());
+    }
+
     public static String getVersion(long serverTimestamp) {
         /*
          * It is possible that when clients are trying to run upgrades concurrently, we could be at an intermediate

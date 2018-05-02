@@ -61,10 +61,10 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     }
 
     public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) throws SQLException {
-        this(ctx, hTable, null);
+        this(ctx, hTable, false);
     }
 
-    public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, PTable pTable) throws SQLException  {
+    public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, boolean isImmutable) throws SQLException  {
         assert(ctx instanceof OmidTransactionContext);
 
         OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
@@ -80,11 +80,11 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
 
         this.tx = omidTransactionContext.getTransaction();
 
-        if (pTable != null && pTable.getType() != PTableType.INDEX) {
-            omidTransactionContext.markDMLFence(pTable);
-        }
+//        if (pTable != null && pTable.getType() != PTableType.INDEX) {
+//            omidTransactionContext.markDMLFence(pTable);
+//        }
 
-        this.conflictFree = (pTable != null && pTable.isImmutableRows());
+        this.conflictFree = isImmutable;
     }
 
     @Override
