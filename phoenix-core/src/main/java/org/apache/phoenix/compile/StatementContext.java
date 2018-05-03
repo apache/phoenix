@@ -98,7 +98,7 @@ public class StatementContext {
     }
 
     public StatementContext(PhoenixStatement statement, Scan scan) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, scan, new SequenceManager(statement));
     }
 
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver) {
