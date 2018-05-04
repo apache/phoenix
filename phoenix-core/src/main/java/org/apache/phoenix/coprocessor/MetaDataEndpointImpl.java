@@ -159,12 +159,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.ProjectedColumnExpression;
-import org.apache.phoenix.expression.RowKeyColumnExpression;
-import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -2950,42 +2945,42 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return null;
     }
     
-    private class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {
-        private boolean columnFound;
-        private final Expression columnExpression;
-
-        public ColumnFinder(Expression columnExpression) {
-            this.columnExpression = columnExpression;
-            columnFound = false;
-        }
-
-        private Void process(Expression expression) {
-            if (expression.equals(columnExpression)) {
-                columnFound = true;
-            }
-            return null;
-        }
-
-        @Override
-        public Void visit(KeyValueColumnExpression expression) {
-            return process(expression);
-        }
-
-        @Override
-        public Void visit(RowKeyColumnExpression expression) {
-            return process(expression);
-        }
-
-        @Override
-        public Void visit(ProjectedColumnExpression expression) {
-            return process(expression);
-        }
-
-        public boolean getColumnFound() {
-            return columnFound;
-        }
-    }
-    
+//    private class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {
+//        private boolean columnFound;
+//        private final Expression columnExpression;
+//
+//        public ColumnFinder(Expression columnExpression) {
+//            this.columnExpression = columnExpression;
+//            columnFound = false;
+//        }
+//
+//        private Void process(Expression expression) {
+//            if (expression.equals(columnExpression)) {
+//                columnFound = true;
+//            }
+//            return null;
+//        }
+//
+//        @Override
+//        public Void visit(KeyValueColumnExpression expression) {
+//            return process(expression);
+//        }
+//
+//        @Override
+//        public Void visit(RowKeyColumnExpression expression) {
+//            return process(expression);
+//        }
+//
+//        @Override
+//        public Void visit(ProjectedColumnExpression expression) {
+//            return process(expression);
+//        }
+//
+//        public boolean getColumnFound() {
+//            return columnFound;
+//        }
+//    }
+//    
 //    private MetaDataMutationResult dropViewsOrViewIndexesIfNeeded(Region region,
 //            PTable basePhysicalTable, List<Mutation> tableMetadata,
 //            List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,

@@ -45,6 +45,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -209,9 +210,12 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         // Confirm that when view index used, the GUIDE_POSTS_WIDTH from the data physical table
         // was used
         sql = "SELECT * FROM " + viewName + " WHERE v2 >= 100";
+        rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
+        String explainPlan = QueryUtil.getExplainPlan(rs);
         stmt = conn1.prepareStatement(sql);
         stmt.executeQuery();
         QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+        PTable table = plan.getTableRef().getTable();
         assertEquals(4, plan.getSplits().size());
     }
     

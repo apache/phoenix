@@ -259,141 +259,81 @@ public class PTableImpl implements PTable {
     }
 
     public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes) throws SQLException {
-        return makePTable(table, timeStamp, indexes, table.getParentSchemaName(), table.getViewStatement());
+        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), timeStamp,
+                table.getSequenceNumber(), getColumnsToClone(table), table.getDefaultFamilyName(), table.getType(),
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), indexes);
     }
 
-    public static PTable makePTable(PTable index, PName indexName, String viewStatement, long updateCacheFrequency, PName tenantId) throws SQLException {
-        return Objects.equal(viewStatement, index.getViewStatement()) ? index : makePTable(index, indexName, index.getTimeStamp(), Lists.newArrayList(index.getPhysicalName()), index.getIndexes(), viewStatement, updateCacheFrequency, tenantId);
+    public static PTable makePTable(PTable index, PName indexName, String viewStatement, long updateCacheFrequency,
+            PName tenantId) throws SQLException {
+        return Objects.equal(viewStatement, index.getViewStatement()) ? index
+                : new PTableImpl(index, index.rowKeyOrderOptimizable(), index.getIndexState(), index.getTimeStamp(),
+                        index.getSequenceNumber(), index.getColumns(), index.getDefaultFamilyName(), index.getType(),
+                        index.getBaseColumnCount(), index.getSchemaName(), indexName,
+                        viewStatement, updateCacheFrequency, tenantId,
+                        index.getIndexes());
     }
     
-    public static PTableImpl makePTable(PTable table, PName tableName, long timeStamp, List<PName> physicalNames, List<PTable> indexes, String viewStatement, long updateCacheFrequency, PName tenantId) throws SQLException {
-            return new PTableImpl(
-                    tenantId, table.getSchemaName(), tableName, table.getType(), table.getIndexState(), timeStamp,
-                    table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table), table.getParentSchemaName(), table.getParentTableName(),
-                    indexes, table.isImmutableRows(), physicalNames, table.getDefaultFamilyName(), viewStatement,
-                    table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                    table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), updateCacheFrequency,
-                    table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
-        }
-
-    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, PName parentSchemaName, String viewStatement) throws SQLException {
-        return makePTable(table, timeStamp, indexes, getColumnsToClone(table), parentSchemaName, viewStatement);
-    }
-
-    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, List<PColumn> columns, PName parentSchemaName, String viewStatement) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table), parentSchemaName, table.getParentTableName(),
-                indexes, table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), viewStatement,
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
-    }
-
     public static PTableImpl makePTable(PTable table, Collection<PColumn> columns) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-                table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), table.getTimeStamp(),
+                table.getSequenceNumber(), columns, table.getDefaultFamilyName(), table.getType(),
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
     }
 
-    // for views, the basePTable is for attributes we inherit from the physical table
-    public static PTableImpl makePTable(PTable table, PTable basePTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount) throws SQLException {
+    /**
+     * Used to create a PTable for views, the basePTable is for attributes we inherit from the physical table
+     */
+    public static PTableImpl makePTable(PTable view, PTable baseTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount) throws SQLException {
+        // if a TableProperty is not valid on a view we set it to the base table value
+        // if a TableProperty is valid on a view and is not mutable on a view we set it to the base table value
+        // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view 
         return new PTableImpl(
-            table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timestamp,
-            table.getSequenceNumber(), table.getPKName(), basePTable.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-            table.getIndexes(), basePTable.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-            table.isWALDisabled(), basePTable.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-            baseTableColumnCount, table.rowKeyOrderOptimizable(), basePTable.getTransactionProvider(), table.getUpdateCacheFrequency(),
-            table.getIndexDisableTimestamp(), table.isNamespaceMapped(), basePTable.getAutoPartitionSeqName(), basePTable.isAppendOnlySchema(),
-            basePTable.getImmutableStorageScheme(), basePTable.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+            view.getTenantId(), view.getSchemaName(), view.getTableName(), view.getType(), view.getIndexState(), timestamp,
+            view.getSequenceNumber(), view.getPKName(), baseTable.getBucketNum(), columns, view.getParentSchemaName(), view.getParentTableName(),
+            view.getIndexes(), baseTable.isImmutableRows(), view.getPhysicalNames(), view.getDefaultFamilyName(), view.getViewStatement(),
+            baseTable.isWALDisabled(), baseTable.isMultiTenant(), baseTable.getStoreNulls(), view.getViewType(), view.getViewIndexId(), view.getIndexType(),
+            baseTableColumnCount, view.rowKeyOrderOptimizable(), baseTable.getTransactionProvider(), view.getUpdateCacheFrequency(),
+            view.getIndexDisableTimestamp(), view.isNamespaceMapped(), baseTable.getAutoPartitionSeqName(), baseTable.isAppendOnlySchema(),
+            baseTable.getImmutableStorageScheme(), baseTable.getEncodingScheme(), view.getEncodedCQCounter(), view.useStatsForParallelization());
     }
     
     public static PTableImpl makePTable(PTable table, PTableType type, Collection<PColumn> columns) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), type, table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-                table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), table.getTimeStamp(),
+                table.getSequenceNumber(), columns, table.getDefaultFamilyName(), type,
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
     }
 
-    public static PTableImpl makePTable(PTable table, Collection<PColumn> columns, PName defaultFamily) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-                table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), defaultFamily, table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+    public static PTableImpl makePTable(PTable table, Collection<PColumn> columns, PName defaultFamily)
+            throws SQLException {
+        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), table.getTimeStamp(),
+                table.getSequenceNumber(), columns, defaultFamily, table.getType(),
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
-                sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(),
-                table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(), table.isWALDisabled(),
-                table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), 
-                table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns)
+            throws SQLException {
+        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), timeStamp,
+                sequenceNumber, columns, table.getDefaultFamilyName(), table.getType(),
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns, boolean isImmutableRows) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
-                sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-                table.getIndexes(), isImmutableRows, table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
-                table.getIndexType(), table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(),
-                table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
-    }
-    
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns, boolean isImmutableRows, boolean isWalDisabled,
-            boolean isMultitenant, boolean storeNulls, TransactionFactory.Provider transactionProvider, long updateCacheFrequency, boolean isNamespaceMapped) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
-                sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-                table.getIndexes(), isImmutableRows, table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                isWalDisabled, isMultitenant, storeNulls, table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), transactionProvider, updateCacheFrequency, table.getIndexDisableTimestamp(), 
-                isNamespaceMapped, table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
-    }
-    
     public static PTableImpl makePTable(PTable table, PIndexState state) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), state, table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table),
-                table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(),
-                table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+        return new PTableImpl(table, table.rowKeyOrderOptimizable(), state, table.getTimeStamp(),
+                table.getSequenceNumber(), getColumnsToClone(table), table.getDefaultFamilyName(), table.getType(),
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
     }
 
     public static PTableImpl makePTable(PTable table, boolean rowKeyOrderOptimizable) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table),
-                table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(),
-                table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), rowKeyOrderOptimizable, table.getTransactionProvider(), table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), 
-                table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
-    }
-
-    public static PTableImpl makePTable(PTable table) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table),
-                table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(),
-                table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), 
-                table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+        return new PTableImpl(table, rowKeyOrderOptimizable, table.getIndexState(), table.getTimeStamp(),
+                table.getSequenceNumber(), getColumnsToClone(table), table.getDefaultFamilyName(), table.getType(),
+                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
+                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
     }
 
     public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
@@ -401,30 +341,50 @@ public class PTableImpl implements PTable {
             Collection<PColumn> columns, PName dataSchemaName, PName dataTableName, List<PTable> indexes,
             boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression,
             boolean disableWAL, boolean multiTenant, boolean storeNulls, ViewType viewType, Short viewIndexId,
-            IndexType indexType, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider, long updateCacheFrequency,
-            long indexDisableTimestamp, boolean isNamespaceMapped, String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme, QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization) throws SQLException {
-        return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName, bucketNum, columns, dataSchemaName,
-                dataTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
-                viewExpression, disableWAL, multiTenant, storeNulls, viewType, viewIndexId,
-                indexType, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, rowKeyOrderOptimizable, transactionProvider,
-                updateCacheFrequency,indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization);
-    }
-
-    public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
-            PIndexState state, long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum,
-            Collection<PColumn> columns, PName dataSchemaName, PName dataTableName, List<PTable> indexes,
-            boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression,
-            boolean disableWAL, boolean multiTenant, boolean storeNulls, ViewType viewType, Short viewIndexId,
-            IndexType indexType, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider, long updateCacheFrequency,
-            int baseColumnCount, long indexDisableTimestamp, boolean isNamespaceMapped,
+            IndexType indexType, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider,
+            long updateCacheFrequency, long indexDisableTimestamp, boolean isNamespaceMapped,
             String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme,
-            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization)
-            throws SQLException {
+            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter,
+            Boolean useStatsForParallelization) throws SQLException {
         return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName,
                 bucketNum, columns, dataSchemaName, dataTableName, indexes, isImmutableRows, physicalNames,
                 defaultFamilyName, viewExpression, disableWAL, multiTenant, storeNulls, viewType, viewIndexId,
-                indexType, baseColumnCount, rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency, 
-                indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization);
+                indexType, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, rowKeyOrderOptimizable, transactionProvider,
+                updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName,
+                isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedCQCounter,
+                useStatsForParallelization);
+    }
+
+    public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
+            PIndexState state, long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum,
+            Collection<PColumn> columns, PName dataSchemaName, PName dataTableName, List<PTable> indexes,
+            boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression,
+            boolean disableWAL, boolean multiTenant, boolean storeNulls, ViewType viewType, Short viewIndexId,
+            IndexType indexType, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider,
+            long updateCacheFrequency, int baseColumnCount, long indexDisableTimestamp, boolean isNamespaceMapped,
+            String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme,
+            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter,
+            Boolean useStatsForParallelization) throws SQLException {
+        return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName,
+                bucketNum, columns, dataSchemaName, dataTableName, indexes, isImmutableRows, physicalNames,
+                defaultFamilyName, viewExpression, disableWAL, multiTenant, storeNulls, viewType, viewIndexId,
+                indexType, baseColumnCount, rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency,
+                indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme,
+                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization);
+    }
+
+    private PTableImpl(PTable table, boolean rowKeyOrderOptimizable, PIndexState state, long timeStamp,
+            long sequenceNumber, Collection<PColumn> columns, PName defaultFamily, PTableType type,
+            int baseTableColumnCount, PName schemaName, PName tableName, String viewStatement,
+            long updateCacheFrequency, PName tenantId, List<PTable> indexes) throws SQLException {
+        init(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, table.getPKName(),
+                table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(), indexes,
+                table.isImmutableRows(), table.getPhysicalNames(), defaultFamily, viewStatement, table.isWALDisabled(),
+                table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
+                table.getIndexType(), baseTableColumnCount, rowKeyOrderOptimizable, table.getTransactionProvider(),
+                updateCacheFrequency, table.getIndexDisableTimestamp(), table.isNamespaceMapped(),
+                table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(),
+                table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
     }
 
     private PTableImpl(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state,
@@ -1224,7 +1184,7 @@ public class PTableImpl implements PTable {
 
     @Override
     public List<PName> getPhysicalNames() {
-        return physicalNames;
+        return !physicalNames.isEmpty() ? physicalNames : Lists.newArrayList(getPhysicalName());
     }
 
     @Override

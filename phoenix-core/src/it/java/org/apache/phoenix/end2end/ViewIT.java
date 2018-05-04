@@ -46,6 +46,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -920,5 +921,26 @@ public class ViewIT extends BaseViewIT {
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1
                 + " (pk1, pk2, col1, col3) VALUES ('testb', 'testa', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
         tenantConn.commit();
+    }
+    
+    @Test
+    public void testUpdatingPropertyOnBaseTable() throws SQLException {
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement()
+                    .execute("create table " + tableName
+                            + "(tenantId CHAR(15) NOT NULL, pk1 integer NOT NULL, v varchar CONSTRAINT PK PRIMARY KEY "
+                            + "(tenantId, pk1)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+            conn.createStatement()
+                    .execute("ALTER TABLE " + tableName + " set IMMUTABLE_ROWS = true");
+            
+            // fetch the latest tables
+            PTable table = PhoenixRuntime.getTableNoCache(conn, viewName);
+            PTable view = PhoenixRuntime.getTableNoCache(conn, viewName);
+            assertEquals("IMMUTABLE_ROWS property set incorrectly", true, table.isImmutableRows());
+            assertEquals("IMMUTABLE_ROWS property set incorrectly", true, view.isImmutableRows());
+        }
     }
 }
