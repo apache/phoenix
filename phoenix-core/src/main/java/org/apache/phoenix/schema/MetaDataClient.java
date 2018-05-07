@@ -73,6 +73,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
@@ -264,6 +265,14 @@ public class MetaDataClient {
                     TABLE_SCHEM + "," +
                     TABLE_NAME + "," +
                     ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() +
+                    ") VALUES (?, ?, ?, ?)";
+
+    private static final String SET_INDEX_SYNC_CREATED_DATE =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    SYNC_INDEX_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?)";
     private static final String CREATE_TABLE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
@@ -2680,6 +2689,14 @@ public class MetaDataClient {
                 setAsync.setString(3, tableName);
                 setAsync.setDate(4, asyncCreatedDate);
                 setAsync.execute();
+            } else {
+                Date syncCreatedDate = new Date(EnvironmentEdgeManager.currentTimeMillis());
+                PreparedStatement setSync = connection.prepareStatement(SET_INDEX_SYNC_CREATED_DATE);
+                setSync.setString(1, tenantIdStr);
+                setSync.setString(2, schemaName);
+                setSync.setString(3, tableName);
+                setSync.setDate(4, syncCreatedDate);
+                setSync.execute();
             }
             tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
             connection.rollback();
