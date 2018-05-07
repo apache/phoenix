@@ -125,7 +125,7 @@ public class IndexTool extends Configured implements Tool {
     private static final Option SNAPSHOT_OPTION = new Option("snap", "snapshot", false,
         "If specified, uses Snapshots for async index building (optional)");
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
-    public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s_INDX_%s";
+    public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
     private Options getOptions() {
         final Options options = new Options();
@@ -375,9 +375,9 @@ public class IndexTool extends Configured implements Tool {
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
             fs = outputPath.getFileSystem(configuration);
-            fs.delete(outputPath, true);           
+            fs.delete(outputPath, true);
  
-            final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, pdataTable.getName().toString(), indexTable);
+            final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
             final Job job = Job.getInstance(configuration, jobName);
             job.setJarByClass(IndexTool.class);
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
