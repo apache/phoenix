@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.RawCellBuilder;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Connection;
@@ -31,6 +30,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 /**
  * Class to encapsulate {@link RegionCoprocessorEnvironment} for phoenix coprocessors. Often we
@@ -41,10 +42,12 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
 
     private final Configuration config;
     private RegionCoprocessorEnvironment delegate;
+    private ConnectionType connectionType;
 
-    public DelegateRegionCoprocessorEnvironment(Configuration config, RegionCoprocessorEnvironment delegate) {
-        this.config = config;
+    public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate, ConnectionType connectionType) {
         this.delegate = delegate;
+        this.connectionType = connectionType;
+        this.config = ConnectionFactory.getTypeSpecificConfiguration(connectionType, delegate.getConfiguration());
     }
 
     @Override
@@ -109,7 +112,7 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
 
     @Override
     public Connection getConnection() {
-        return delegate.getConnection();
+        return ConnectionFactory.getConnection(connectionType, delegate);
     }
 
     @Override

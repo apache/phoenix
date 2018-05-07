@@ -61,6 +61,8 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 import com.google.protobuf.ServiceException;
 
@@ -82,7 +84,7 @@ public class StatisticsWriter implements Closeable {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
         }
-        Table statsWriterTable = env.createConnection(env.getConfiguration()).getTable(
+        Table statsWriterTable = ConnectionFactory.getConnection(ConnectionType.DEFAULT_SERVER_CONNECTION, env).getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
         Table statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,

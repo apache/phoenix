@@ -34,6 +34,8 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 public class IndexWriterUtils {
 
@@ -58,9 +60,9 @@ public class IndexWriterUtils {
    * threads. Currently, HBase doesn't support a custom thread-pool to back the HTable via the
    * coprocesor hooks, so we can't modify this behavior.
    */
-  private static final String INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY =
+  public static final String INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY =
       "index.writer.threads.pertable.max";
-  private static final int DEFAULT_NUM_PER_TABLE_THREADS = Integer.MAX_VALUE;
+  public static final int DEFAULT_NUM_PER_TABLE_THREADS = Integer.MAX_VALUE;
 
   /** Configuration key that HBase uses to set the max number of threads for an HTable */
   public static final String HTABLE_THREAD_KEY = "hbase.htable.threads.max";
@@ -87,19 +89,8 @@ public class IndexWriterUtils {
   }
 
     public static HTableFactory getDefaultDelegateHTableFactory(RegionCoprocessorEnvironment env) {
-        // create a simple delegate factory, setup the way we need
-        Configuration conf = PropertiesUtil.cloneConfig(env.getConfiguration());
-        setHTableThreads(conf);
-        return new CoprocessorHConnectionTableFactory(conf, env);
-    }
-
-    private static void setHTableThreads(Configuration conf) {
-        // set the number of threads allowed per table.
-        int htableThreads =
-                conf.getInt(IndexWriterUtils.INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY,
-                    IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
-        LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
-        IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
+        return new CoprocessorHConnectionTableFactory(env,
+                ConnectionType.INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS);
     }
 
     /**
@@ -107,12 +98,8 @@ public class IndexWriterUtils {
      * instead to avoid tying up the handler
      */
     public static HTableFactory getNoRetriesHTableFactory(RegionCoprocessorEnvironment env) {
-        Configuration conf = PropertiesUtil.cloneConfig(env.getConfiguration());
-        setHTableThreads(conf);
-        // note in HBase 2+, numTries = numRetries + 1
-        // in prior versions, numTries = numRetries
-        conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 1);
-        return new CoprocessorHConnectionTableFactory(conf, env);
+        return new CoprocessorHConnectionTableFactory(env,
+                ConnectionType.INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS_NO_RETRIES);
     }
 
     /**
@@ -122,42 +109,31 @@ public class IndexWriterUtils {
      */
     private static class CoprocessorHConnectionTableFactory implements HTableFactory {
         @GuardedBy("CoprocessorHConnectionTableFactory.this")
-        private Connection connection;
-        private final Configuration conf;
         private RegionCoprocessorEnvironment env;
+        private ConnectionType connectionType;
 
-        CoprocessorHConnectionTableFactory(Configuration conf, RegionCoprocessorEnvironment env) {
-            this.conf = conf;
+        CoprocessorHConnectionTableFactory(RegionCoprocessorEnvironment env, ConnectionType connectionType) {
             this.env = env;
+            this.connectionType = connectionType;
         }
 
-        private synchronized Connection getConnection(Configuration conf) throws IOException {
-            if (connection == null || connection.isClosed()) {
-                connection = env.createConnection(conf);
-            }
-            return connection;
+        private Connection getConnection() throws IOException {
+            return ConnectionFactory.getConnection(connectionType, env);
         }
-
         @Override
         public Table getTable(ImmutableBytesPtr tablename) throws IOException {
-            return getConnection(conf).getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+            return getConnection().getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
         }
 
         @Override
         public synchronized void shutdown() {
-            try {
-                if (connection != null && !connection.isClosed()) {
-                    connection.close();
-                }
-            } catch (Throwable e) {
-                LOG.warn("Error while trying to close the HConnection used by CoprocessorHConnectionTableFactory", e);
-            }
+            // We need not close the cached connections as they are shared across the server.
         }
 
         @Override
         public Table getTable(ImmutableBytesPtr tablename, ExecutorService pool)
                 throws IOException {
-            return getConnection(conf).getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
+            return getConnection().getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
         }
     }
 }
