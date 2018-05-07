@@ -216,7 +216,7 @@ public class PhoenixMRJobSubmitter {
             indexInfo.setTableSchem(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM));
             indexInfo.setTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
             candidateIndexes.put(String.format(IndexTool.INDEX_JOB_NAME_TEMPLATE,
-                indexInfo.getDataTableName(), indexInfo.getTableName()), indexInfo);
+                indexInfo.getTableSchem(), indexInfo.getDataTableName(), indexInfo.getTableName()), indexInfo);
         }
 
         return candidateIndexes;
