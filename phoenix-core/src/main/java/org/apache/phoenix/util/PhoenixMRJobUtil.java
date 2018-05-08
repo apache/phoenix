@@ -52,19 +52,17 @@ public class PhoenixMRJobUtil {
     private static final String ACTIVE_STANDBY_ELECTOR_LOCK = "ActiveStandbyElectorLock";
     private static final String RM_APPS_GET_ENDPOINT = "/ws/v1/cluster/apps";
 
-    // Reduced HBase Client Retries
-    private static final int CLIENT_RETRIES_NUMBER = 2;
-    private static final long CLIENT_PAUSE_TIME = 1000;
-    private static final int ZOOKEEPER_RECOVERY_RETRY_COUNT = 1;
-
     public static final String PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY =
             "phoenix.index.mr.scheduler.capacity.queuename";
     public static final String PHOENIX_INDEX_MR_MAP_MEMORY_PROPERTY =
             "phoenix.index.mr.scheduler.capacity.mapMemoryMB";
+    public static final String PHOENIX_MR_CONCURRENT_MAP_LIMIT_PROPERTY =
+    		"phoenix.mr.concurrent.map.limit";
 
     // Default MR Capacity Scheduler Configurations for Phoenix MR Index Build
     // Jobs
     public static final String DEFAULT_QUEUE_NAME = "default";
+    public static final int DEFAULT_MR_CONCURRENT_MAP_LIMIT = 20;
     public static final int DEFAULT_MAP_MEMROY_MB = 5120;
     public static final String XMX_OPT = "-Xmx";
 
@@ -208,12 +206,6 @@ public class PhoenixMRJobUtil {
         return rmPort;
     }
 
-    public static void updateTimeoutsToFailFast(Configuration conf) {
-        conf.set("hbase.client.retries.number", String.valueOf(CLIENT_RETRIES_NUMBER));
-        conf.set("zookeeper.recovery.retry", String.valueOf(ZOOKEEPER_RECOVERY_RETRY_COUNT));
-        conf.set("hbase.client.pause", String.valueOf(CLIENT_PAUSE_TIME));
-    }
-
     /**
      * This method set the configuration values for Capacity scheduler.
      * @param conf - Configuration to which Capacity Queue information to be added
@@ -221,6 +213,10 @@ public class PhoenixMRJobUtil {
     public static void updateCapacityQueueInfo(Configuration conf) {
         conf.set(MRJobConfig.QUEUE_NAME,
             conf.get(PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY, DEFAULT_QUEUE_NAME));
+
+        conf.setInt(MRJobConfig.JOB_RUNNING_MAP_LIMIT,
+                conf.getInt(PHOENIX_MR_CONCURRENT_MAP_LIMIT_PROPERTY, DEFAULT_MR_CONCURRENT_MAP_LIMIT));
+
         int mapMemoryMB = conf.getInt(PHOENIX_INDEX_MR_MAP_MEMORY_PROPERTY, DEFAULT_MAP_MEMROY_MB);
 
         conf.setInt(MRJobConfig.MAP_MEMORY_MB, mapMemoryMB);
