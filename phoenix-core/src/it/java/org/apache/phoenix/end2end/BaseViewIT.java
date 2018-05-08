@@ -46,7 +46,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -66,7 +65,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 		if (transactional) {
 			optionBuilder.append(" TRANSACTIONAL=true ");
 		}
-		this.schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
+		this.schemaName = "S_" + generateUniqueName();
 		this.tableDDLOptions = optionBuilder.toString();
 		this.tableName = "T_" + generateUniqueName();
         this.fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -167,7 +166,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
         String viewIndexName1 = "I_" + generateUniqueName();
-        String viewIndexPhysicalName = MetaDataUtil.getViewIndexName(schemaName, tableName);
+        String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(fullTableName);
         if (localIndex) {
             conn.createStatement().execute("CREATE LOCAL INDEX " + viewIndexName1 + " on " + viewName + "(k3)");
         } else {
@@ -232,7 +231,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         String physicalTableName;
         if (localIndex) {
-            physicalTableName = tableName;
+            physicalTableName = fullTableName;
             assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER " + fullTableName +" [" + (2) + ",'foo']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));

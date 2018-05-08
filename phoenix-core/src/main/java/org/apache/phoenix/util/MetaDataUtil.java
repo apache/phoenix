@@ -353,23 +353,15 @@ public class MetaDataUtil {
         return getIndexPhysicalName(physicalTableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
-    public static String getViewIndexTableName(String tableName) {
-        return VIEW_INDEX_TABLE_PREFIX + tableName;
+    public static String getViewIndexPhysicalName(String physicalTableName) {
+        return getIndexPhysicalName(physicalTableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
-    public static String getViewIndexSchemaName(String schemaName) {
-        return schemaName;
-    }
-    
-    public static String getViewIndexName(String schemaName, String tableName) {
-        return SchemaUtil.getTableName(getViewIndexSchemaName(schemaName), getViewIndexTableName(tableName));
+    private static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {
+        return Bytes.toBytes(getIndexPhysicalName(Bytes.toString(physicalTableName), indexPrefix));
     }
 
-    public static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {
-        return getIndexPhysicalName(Bytes.toString(physicalTableName), indexPrefix).getBytes();
-    }
-
-    public static String getIndexPhysicalName(String physicalTableName, String indexPrefix) {
+    private static String getIndexPhysicalName(String physicalTableName, String indexPrefix) {
         if (physicalTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalTableName,
                     QueryConstants.NAMESPACE_SEPARATOR);

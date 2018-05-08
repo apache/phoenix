@@ -604,7 +604,7 @@ public class UpgradeUtil {
                             viewPTable = PhoenixRuntime.getTable(globalConnection, fullViewName);
                             globalConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
                         }
-                        String indexPhysicalTableName = MetaDataUtil.getViewIndexTableName(viewPTable.getPhysicalName().getString());
+                        String indexPhysicalTableName = MetaDataUtil.getViewIndexPhysicalName(viewPTable.getPhysicalName().getString());
                         if (physicalTables.add(indexPhysicalTableName)) {
                             final TableName tableName = TableName.valueOf(indexPhysicalTableName);
                             if(admin.tableExists(tableName)) {
