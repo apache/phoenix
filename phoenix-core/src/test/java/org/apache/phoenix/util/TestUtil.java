@@ -832,7 +832,11 @@ public class TestUtil {
     }
 
     public static void createTransactionalTable(Connection conn, String tableName) throws SQLException {
-        conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
+        createTransactionalTable(conn, tableName, "");
+    }
+
+    public static void createTransactionalTable(Connection conn, String tableName, String extraProps) throws SQLException {
+        conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true" + (extraProps.length() == 0 ? "" : ("," + extraProps)));
     }
 
     public static void dumpTable(Table table) throws IOException {

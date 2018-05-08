@@ -81,11 +81,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     protected final boolean localIndex;
     private final String tableDDLOptions;
 	
-    public MutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
+    public MutableIndexIT(Boolean localIndex, String txProvider, Boolean columnEncoded) {
 		this.localIndex = localIndex;
 		StringBuilder optionBuilder = new StringBuilder();
-		if (transactional) {
-			optionBuilder.append("TRANSACTIONAL=true");
+		if (txProvider != null) {
+			optionBuilder.append("TRANSACTIONAL=true," + PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + "='" + txProvider + "'");
 		}
 		if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -107,13 +107,15 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
     
 	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        // Temporarily disable transactional tests
-        return Arrays.asList(new Boolean[][] { 
-                { false, false, false }, { false, false, true },
-                //{ false, true, false }, { false, true, true },
-                { true, false, false }, { true, false, true } });
-                //{ true, true, false }, { true, true, true } });
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] { 
+                { false, null, false }, { false, null, true },
+                //{ false, "TEPHRA", false }, { false, "TEPHRA", true },
+                //{ false, "OMID", false }, { false, "OMID", true },
+                { true, null, false }, { true, null, true },
+                //{ true, "TEPHRA", false }, { true, "TEPHRA", true },
+                //{ true, "OMID", false }, { true, "OMID", true },
+                });
     }
     
     @Test
