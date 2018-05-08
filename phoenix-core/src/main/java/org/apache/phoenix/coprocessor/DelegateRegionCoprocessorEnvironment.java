@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 /**
  * Class to encapsulate {@link RegionCoprocessorEnvironment} for phoenix coprocessors. Often we
@@ -44,10 +45,10 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     private RegionCoprocessorEnvironment delegate;
     private HTableFactory tableFactory;
 
-    public DelegateRegionCoprocessorEnvironment(Configuration config, RegionCoprocessorEnvironment delegate) {
-        this.config = config;
+    public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate, ConnectionType connectionType) {
+        this.config = ServerUtil.ConnectionFactory.getTypeSpecificConfiguration(connectionType, delegate.getConfiguration());
         this.delegate = delegate;
-        this.tableFactory = ServerUtil.getDelegateHTableFactory(this, config);
+        this.tableFactory = ServerUtil.getDelegateHTableFactory(this, connectionType);
     }
 
     @Override
