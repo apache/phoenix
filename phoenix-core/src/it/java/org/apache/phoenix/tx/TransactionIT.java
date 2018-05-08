@@ -45,6 +45,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -151,6 +152,10 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals("Transactional table was not marked as transactional in JDBC API.",
                 "true", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
             assertEquals(txProvider, rs.getString(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER));
+            
+            // Ensure round-trip-ability of TRANSACTION_PROVIDER
+            PTable table = PhoenixRuntime.getTableNoCache(conn, transactTableName);
+            assertEquals(txProvider, table.getTransactionProvider().name());
 
             String nonTransactTableName = generateUniqueName();
             Statement stmt2 = conn.createStatement();
