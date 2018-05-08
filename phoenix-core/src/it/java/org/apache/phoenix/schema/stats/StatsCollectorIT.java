@@ -48,7 +48,6 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -785,7 +784,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             String viewIndex = "VI_" + generateUniqueName();
             ddl = "CREATE INDEX " + viewIndex + " ON " + view + " (b)";
             conn.createStatement().execute(ddl);
-            String viewIndexTableName = MetaDataUtil.getViewIndexTableName(baseTable);
+            String viewIndexTableName = MetaDataUtil.getViewIndexPhysicalName(baseTable);
             statsCollector = getDefaultStatsCollectorForTable(viewIndexTableName);
             statsCollector.init();
             assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
