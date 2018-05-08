@@ -170,34 +170,6 @@
         </configuration>
       </plugin>
       <plugin>
-        <!--Make it so assembly:single does nothing in here -->
-        <artifactId>maven-assembly-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>core</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <attach>false</attach>
-              <finalName>phoenix</finalName>
-              <archive>
-                <index>true</index>
-                <manifest>
-                  <addClasspath>true</addClasspath>
-                  <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                  <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                </manifest>
-              </archive>
-              <descriptors>
-                <descriptor>src/build/phoenix-core.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
-        </executions>      
-      </plugin>
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
