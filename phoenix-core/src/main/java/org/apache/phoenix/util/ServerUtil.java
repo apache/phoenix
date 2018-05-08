@@ -27,7 +27,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -345,16 +344,17 @@ public class ServerUtil {
                 new ConcurrentHashMap<ConnectionType, ClusterConnection>();
 
         public static ClusterConnection getConnection(final ConnectionType connectionType, final Configuration conf, final HRegionServer server) throws IOException {
-            return connections.computeIfAbsent(connectionType, new Function<ConnectionType, ClusterConnection>() {
-                @Override
-                    public ClusterConnection apply(ConnectionType t) {
-                    try {
-                        return new CoprocessorHConnection(getTypeSpecificConfiguration(connectionType, conf), server);
-                    } catch (IOException e) {
-                       throw new RuntimeException(e);
+            ClusterConnection connection = null;
+            if((connection = connections.get(connectionType)) == null) {
+                synchronized (CoprocessorHConnectionTableFactory.class) {
+                    if(connections.get(connectionType) == null) {
+                        connection = new CoprocessorHConnection(conf, server);
+                        connections.put(connectionType, connection);
+                        return connection;
                     }
                 }
-            });
+            }
+            return connection;
         }
 
         public static Configuration getTypeSpecificConfiguration(ConnectionType connectionType, Configuration conf) {
