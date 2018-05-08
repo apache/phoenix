@@ -69,7 +69,7 @@ public class ViewIT extends BaseViewIT {
         String ddl = "CREATE TABLE " + fullTableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) "+ tableDDLOptions;
         conn.createStatement().execute(ddl);
         String fullParentViewName = "V_" + generateUniqueName();
-        ddl = "CREATE VIEW " + fullParentViewName + " (v2 VARCHAR) AS SELECT * FROM " + tableName + " WHERE k > 5";
+        ddl = "CREATE VIEW " + fullParentViewName + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
         try {
             conn.createStatement().execute("UPSERT INTO " + fullParentViewName + " VALUES(1)");
