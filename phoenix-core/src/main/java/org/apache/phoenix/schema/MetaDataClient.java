@@ -682,7 +682,7 @@ public class MetaDataClient {
                             // In this case, we update the parent table which may in turn pull
                             // in indexes to add to this table.
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                            if (addIndexesFromParentTable(result, resolvedTimestamp)) {
+                            if (addIndexesFromParentTable(result, resolvedTimestamp, true)) {
                                 connection.addTable(result.getTable(), resolvedTime);
                             } else {
                                 // if we aren't adding the table, we still need to update the
@@ -808,10 +808,12 @@ public class MetaDataClient {
      * TODO: combine this round trip with the one that updates the cache for the child table.
      * @param result the result from updating the cache for the current table.
      * @param resolvedTimestamp timestamp at which child table was resolved
+     * @param alwaysAddIndexes flag that determines whether we should recalculate
+     *        all indexes that can be used in the view
      * @return true if the PTable contained by result was modified and false otherwise
      * @throws SQLException if the physical table cannot be found
      */
-    private boolean addIndexesFromParentTable(MetaDataMutationResult result, Long resolvedTimestamp) throws SQLException {
+    private boolean addIndexesFromParentTable(MetaDataMutationResult result, Long resolvedTimestamp, boolean alwaysAddIndexes) throws SQLException {
         PTable view = result.getTable();
         // If not a view or if a view directly over an HBase table, there's nothing to do
         if (view.getType() != PTableType.VIEW || view.getViewType() == ViewType.MAPPED) {
@@ -826,7 +828,8 @@ public class MetaDataClient {
         if (parentTable == null) {
             throw new TableNotFoundException(schemaName, tableName);
         }
-        if (!result.wasUpdated() && !parentResult.wasUpdated()) {
+        // if alwaysAddIndexes is false we only add indexes if the parent table or view was updated from the server
+        if (!alwaysAddIndexes && !result.wasUpdated() && !parentResult.wasUpdated()) {
             return false;
         }
         List<PTable> parentTableIndexes = parentTable.getIndexes();
@@ -3259,16 +3262,18 @@ public class MetaDataClient {
                 int position = table.getColumns().size();
 
                 List<PColumn> currentPKs = table.getPKColumns();
-                PColumn lastPK = currentPKs.get(currentPKs.size()-1);
-                // Disallow adding columns if the last column is VARBIANRY.
-                if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
-                    .setColumnName(lastPK.getName().getString()).build().buildException();
-                }
-                // Disallow adding columns if last column is fixed width and nullable.
-                if (lastPK.isNullable() && lastPK.getDataType().isFixedWidth()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULLABLE_FIXED_WIDTH_LAST_PK)
-                    .setColumnName(lastPK.getName().getString()).build().buildException();
+                if (numCols > 0) {
+                    PColumn lastPK = currentPKs.get(currentPKs.size()-1);
+                    // Disallow adding columns if the last column is VARBIANRY.
+                    if (lastPK.getDataType() == PVarbinary.INSTANCE || lastPK.getDataType().isArrayType()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.VARBINARY_LAST_PK)
+                        .setColumnName(lastPK.getName().getString()).build().buildException();
+                    }
+                    // Disallow adding columns if last column is fixed width and nullable.
+                    if (lastPK.isNullable() && lastPK.getDataType().isFixedWidth()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NULLABLE_FIXED_WIDTH_LAST_PK)
+                        .setColumnName(lastPK.getName().getString()).build().buildException();
+                    }
                 }
 
 
@@ -3379,13 +3384,14 @@ public class MetaDataClient {
                                     if (colDef.isPK()) {
                                         PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
                                         ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
-                                        Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
+                                        Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, pkSlotPosition));
                                         ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
                                         PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true, null, willBeImmutableRows);
                                         addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
                                     }
                                 }
                             }
+                            ++pkSlotPosition;
                         }
                         columnMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                         connection.rollback();
@@ -3982,7 +3988,7 @@ public class MetaDataClient {
     }
 
     private PTable addTableToCache(MetaDataMutationResult result) throws SQLException {
-        addIndexesFromParentTable(result, null);
+        addIndexesFromParentTable(result, null, false);
         PTable table = result.getTable();
         connection.addTable(table, TransactionUtil.getResolvedTime(connection, result));
         return table;

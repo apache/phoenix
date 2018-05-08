@@ -26,6 +26,7 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 public class IndexWriterUtils {
 
@@ -50,9 +51,9 @@ public class IndexWriterUtils {
    * threads. Currently, HBase doesn't support a custom thread-pool to back the HTable via the
    * coprocesor hooks, so we can't modify this behavior.
    */
-  private static final String INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY =
+  public static final String INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY =
       "index.writer.threads.pertable.max";
-  private static final int DEFAULT_NUM_PER_TABLE_THREADS = Integer.MAX_VALUE;
+  public static final int DEFAULT_NUM_PER_TABLE_THREADS = Integer.MAX_VALUE;
 
   /** Configuration key that HBase uses to set the max number of threads for an HTable */
   public static final String HTABLE_THREAD_KEY = "hbase.htable.threads.max";
@@ -79,19 +80,7 @@ public class IndexWriterUtils {
   }
 
     public static HTableFactory getDefaultDelegateHTableFactory(CoprocessorEnvironment env) {
-        // create a simple delegate factory, setup the way we need
-        Configuration conf = PropertiesUtil.cloneConfig(env.getConfiguration());
-        setHTableThreads(conf);
-        return ServerUtil.getDelegateHTableFactory(env, conf);
-    }
-
-    private static void setHTableThreads(Configuration conf) {
-        // set the number of threads allowed per table.
-        int htableThreads =
-                conf.getInt(IndexWriterUtils.INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY,
-                    IndexWriterUtils.DEFAULT_NUM_PER_TABLE_THREADS);
-        LOG.trace("Creating HTableFactory with " + htableThreads + " threads for each HTable.");
-        IndexManagementUtil.setIfNotSet(conf, HTABLE_THREAD_KEY, htableThreads);
+        return ServerUtil.getDelegateHTableFactory(env, ConnectionType.INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS);
     }
 
     /**
@@ -99,12 +88,8 @@ public class IndexWriterUtils {
      * instead to avoid tying up the handler
      */
     public static HTableFactory getNoRetriesHTableFactory(CoprocessorEnvironment env) {
-        Configuration conf = PropertiesUtil.cloneConfig(env.getConfiguration());
-        setHTableThreads(conf);
-        // note in HBase 2+, numTries = numRetries + 1
-        // in prior versions, numTries = numRetries
-        conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 1);
-        return ServerUtil.getDelegateHTableFactory(env, conf);
+        return ServerUtil.getDelegateHTableFactory(env,
+            ConnectionType.INDEX_WRITER_CONNECTION_WITH_CUSTOM_THREADS_NO_RETRIES);
     }
 
 }

@@ -217,6 +217,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String TYPE_SEQUENCE = "SEQUENCE";
     public static final String SYSTEM_FUNCTION_TABLE = "FUNCTION";
+    public static final String SYSTEM_FUNCTION = SYSTEM_CATALOG_SCHEMA + QueryConstants.NAME_SEPARATOR + "\"FUNCTION\"";
     public static final String SYSTEM_FUNCTION_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE);
     public static final byte[] SYSTEM_FUNCTION_NAME_BYTES = Bytes.toBytes(SYSTEM_FUNCTION_NAME);
     public static final TableName SYSTEM_FUNCTION_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_FUNCTION_NAME);
@@ -288,6 +289,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String GUIDE_POST_KEY = "GUIDE_POST_KEY";
     public static final String ASYNC_REBUILD_TIMESTAMP = "ASYNC_REBUILD_TIMESTAMP";
     public static final byte[] ASYNC_REBUILD_TIMESTAMP_BYTES = Bytes.toBytes(ASYNC_REBUILD_TIMESTAMP);
+
+    public static final String COLUMN_ENCODED_BYTES = "COLUMN_ENCODED_BYTES";
 
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);

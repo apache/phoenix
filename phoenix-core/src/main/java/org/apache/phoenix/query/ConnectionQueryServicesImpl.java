@@ -170,8 +170,8 @@ import org.apache.phoenix.exception.RetriableUpgradeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeInProgressException;
-import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
+import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -214,6 +214,8 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
+import org.apache.phoenix.schema.SystemStatsSplitPolicy;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
@@ -2481,17 +2483,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Available for testing
     protected String getLogTableDDL() {
-        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+        return QueryConstants.CREATE_LOG_METADATA;
     }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
-          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
-    }
-
-    private String setSystemLogDDLProperties(String ddl) {
-        return String.format(ddl,
           props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
     }
 
@@ -2966,6 +2963,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0,
               PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + " "
                 + PTinyint.INSTANCE.getSqlTypeName());
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG + " SET " + 
+                    HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n" +
+                    HColumnDescriptor.KEEP_DELETED_CELLS + "=" + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS)
+                    );
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
+                PhoenixDatabaseMetaData.SYSTEM_FUNCTION + " SET " + 
+                    HTableDescriptor.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() + "',\n" +
+                    HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n" +
+                    HColumnDescriptor.KEEP_DELETED_CELLS + "=" + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS)
+                    );
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
+                    PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " + 
+                    HTableDescriptor.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() +"'"
+                    );
         }
         return metaConnection;
     }
