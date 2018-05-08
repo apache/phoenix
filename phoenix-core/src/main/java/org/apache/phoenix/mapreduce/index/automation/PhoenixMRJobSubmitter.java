@@ -45,6 +45,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -69,8 +70,28 @@ public class PhoenixMRJobSubmitter {
     // Lock to elect a master node that submits the Phoenix Secondary Index MR Jobs
     private static final String PHOENIX_LOCKS_PARENT =
             "/phoenix/automated-mr-index-build-leader-election";
+    public static final String PHOENIX_MR_CLIENT_SCANNER_TIMEOUT_PERIOD =
+            "phoenix.mr.client.scanner.timeout.period";
+    public static final String PHOENIX_MR_RPC_TIMEOUT =
+            "phoenix.mr.rpc.timeout";
+    public static final String PHOENIX_MR_TASK_TIMEOUT =
+            "phoenix.mr.task.timeout";
+    public static final String PHOENIX_MR_CLIENT_RETRIES_NUMBER =
+            "phoenix.mr.client.retries.number";
+    public static final String PHOENIX_MR_CLIENT_PAUSE =
+            "phoenix.mr.client.retries.number";
+    public static final String PHOENIX_MR_ZK_RECOVERY_RETRY =
+            "phoenix.mr.zk.recovery.retry";
     private static final String AUTO_INDEX_BUILD_LOCK_NAME = "ActiveStandbyElectorLock";
-
+    private static final int DEFAULT_TIMEOUT_IN_MILLIS = 600000;
+    public static final int DEFAULT_MR_CLIENT_SCANNER_TIMEOUT_PERIOD = DEFAULT_TIMEOUT_IN_MILLIS;
+    public static final int DEFAULT_MR_RPC_TIMEOUT = DEFAULT_TIMEOUT_IN_MILLIS;
+    public static final int DEFAULT_MR_TASK_TIMEOUT = DEFAULT_TIMEOUT_IN_MILLIS;
+    // Reduced HBase/Zookeeper Client Retries
+    public static final int DEFAULT_MR_CLIENT_RETRIES_NUMBER = 10;
+    public static final int DEFAULT_MR_CLIENT_PAUSE = 1000;
+    public static final int DEFAULT_MR_ZK_RECOVERY_RETRY = 1;
+    
     public static final String CANDIDATE_INDEX_INFO_QUERY = "SELECT "
             + PhoenixDatabaseMetaData.INDEX_TYPE + ","
             + PhoenixDatabaseMetaData.DATA_TABLE_NAME + ", "
@@ -103,7 +124,28 @@ public class PhoenixMRJobSubmitter {
         }
         this.conf = conf;
 
-        PhoenixMRJobUtil.updateTimeoutsToFailFast(conf);
+        // Have Phoenix specific properties for defaults to enable potential override
+        conf.setLong(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, 
+                conf.getLong(PHOENIX_MR_CLIENT_SCANNER_TIMEOUT_PERIOD,
+                        DEFAULT_MR_CLIENT_SCANNER_TIMEOUT_PERIOD));
+        conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, 
+                conf.getLong(PHOENIX_MR_RPC_TIMEOUT,
+                        DEFAULT_MR_RPC_TIMEOUT));
+        conf.setLong(MRJobConfig.TASK_TIMEOUT, 
+                conf.getLong(PHOENIX_MR_TASK_TIMEOUT,
+                        DEFAULT_MR_TASK_TIMEOUT));
+
+        // Reduced HBase Client Retries
+        conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 
+                conf.getInt(PHOENIX_MR_CLIENT_RETRIES_NUMBER,
+                        DEFAULT_MR_CLIENT_RETRIES_NUMBER));
+        conf.setInt(HConstants.HBASE_CLIENT_PAUSE, 
+                conf.getInt(PHOENIX_MR_CLIENT_PAUSE,
+                        DEFAULT_MR_CLIENT_PAUSE));
+        conf.setInt("zookeeper.recovery.retry", 
+                conf.getInt(PHOENIX_MR_ZK_RECOVERY_RETRY,
+                        DEFAULT_MR_ZK_RECOVERY_RETRY));
+        
         String schedulerType =
                 conf.get(PhoenixMRJobUtil.PHOENIX_MR_SCHEDULER_TYPE_NAME,
                     MR_SCHEDULER_TYPE.NONE.toString());
