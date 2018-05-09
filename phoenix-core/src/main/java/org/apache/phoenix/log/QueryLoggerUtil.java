@@ -30,10 +30,14 @@ import com.google.common.collect.ImmutableMap.Builder;
 
 public class QueryLoggerUtil {
 
-    public static void logInitialDetails(QueryLogger queryLogger, PName tenantId,
-            ConnectionQueryServices queryServices, String query, long startTime, List<Object> bindParameters) {
-        queryLogger.log(QueryLogState.STARTED,
-                getInitialDetails(tenantId, queryServices, query, startTime, bindParameters));
+    public static void logInitialDetails(QueryLogger queryLogger, PName tenantId, ConnectionQueryServices queryServices,
+            String query, long startTime, List<Object> bindParameters) {
+        try {
+            queryLogger.log(QueryLogState.STARTED,
+                    getInitialDetails(tenantId, queryServices, query, startTime, bindParameters));
+        } catch (Exception e) {
+            // Ignore for now
+        }
 
     }
 
@@ -46,15 +50,21 @@ public class QueryLoggerUtil {
         } catch (UnknownHostException e) {
             clientIP = "UnknownHost";
         }
-        queryLogBuilder.put(QueryLogInfo.CLIENT_IP_I, clientIP);
-        queryLogBuilder.put(QueryLogInfo.QUERY_I, query);
+
+        if (clientIP != null) {
+            queryLogBuilder.put(QueryLogInfo.CLIENT_IP_I, clientIP);
+        }
+        if (query != null) {
+            queryLogBuilder.put(QueryLogInfo.QUERY_I, query);
+        }
         queryLogBuilder.put(QueryLogInfo.START_TIME_I, startTime);
         if (bindParameters != null) {
-            queryLogBuilder.put(QueryLogInfo.BIND_PARAMETERS_I, StringUtils.join(bindParameters,","));
+            queryLogBuilder.put(QueryLogInfo.BIND_PARAMETERS_I, StringUtils.join(bindParameters, ","));
         }
         if (tenantId != null) {
             queryLogBuilder.put(QueryLogInfo.TENANT_ID_I, tenantId.getString());
         }
+
         queryLogBuilder.put(QueryLogInfo.USER_I, queryServices.getUserName() != null ? queryServices.getUserName()
                 : queryServices.getUser().getShortName());
         return queryLogBuilder.build();
