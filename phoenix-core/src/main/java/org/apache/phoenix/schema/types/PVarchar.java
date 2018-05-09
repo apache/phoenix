@@ -102,15 +102,17 @@ public class PVarchar extends PDataType<String> {
             SortOrder sortOrder, Integer maxLength, Integer scale,
             Integer desiredMaxLength, Integer desiredScale) {
         if (ptr.getLength() != 0 && desiredMaxLength != null) {
-            if (maxLength == null) {
+            if (maxLength == null || maxLength > desiredMaxLength) {
                 if (value != null) { // Use value if provided
                     maxLength = value.toString().length();
                 } else {
-                    coerceBytes(ptr, value, srcType, maxLength, scale, sortOrder, desiredMaxLength, desiredScale, sortOrder, true);
-                    maxLength = StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
+                    coerceBytes(ptr, value, srcType, maxLength, scale, sortOrder, desiredMaxLength,
+                        desiredScale, sortOrder, true);
+                    maxLength = StringUtil
+                        .calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
                 }
+                return maxLength <= desiredMaxLength;
             }
-            return maxLength <= desiredMaxLength;
         }
         return true;
     }
