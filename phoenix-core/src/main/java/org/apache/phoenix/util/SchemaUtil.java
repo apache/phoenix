@@ -1132,7 +1132,7 @@ public class SchemaUtil {
      * @return the byte representation of the HTable
      */
     public static String getQualifiedTableName(String schemaName, String tableName) {
-        if (schemaName != null) {
+        if (schemaName != null && !schemaName.isEmpty()) {
             return String.format("%s.%s", normalizeIdentifier(schemaName),
                     normalizeIdentifier(tableName));
         } else {
