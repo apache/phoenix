@@ -94,7 +94,12 @@ public class FilteredKeyValueScanner implements ReseekableScanner {
                 break;
             // use a seek hint to find out where we should go
             case SEEK_NEXT_USING_HINT:
-                delegate.seek(KeyValueUtil.ensureKeyValue(filter.getNextCellHint(peeked)));
+                Cell nextCellHint = filter.getNextCellHint(peeked);
+                if(nextCellHint == KeyValue.LOWESTKEY) {
+                    delegate.next();
+                } else {
+                    delegate.seek(KeyValueUtil.ensureKeyValue(nextCellHint));
+                }
             }
         }
     }
