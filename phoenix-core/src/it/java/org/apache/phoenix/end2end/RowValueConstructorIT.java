@@ -48,6 +48,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.DateUtil;
@@ -56,6 +57,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+
+import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 
 
 public class RowValueConstructorIT extends ParallelStatsDisabledIT {
@@ -1645,5 +1649,121 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
         assertTrue(new BigDecimal("2").compareTo(rs.getBigDecimal(2)) == 0);
         assertEquals("value", rs.getString(3));
         assertFalse(rs.next());
+    }
+
+    @Test
+    /**
+     * Verifies that a query with a RVC expression lexographically higher than all values in an OR
+     * clause causes query works see PHOENIX-4734
+     */
+    public void testRVCWithAndClause() throws Exception {
+        final int numItemsInClause = 5;
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+        String fullTableName = SchemaUtil.getTableName("S", "T_" + generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName("S", "V_" + generateUniqueName());
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+            tenantConn.setAutoCommit(false);
+            createBaseTableAndTenantView(tenantConn, fullTableName, fullViewName);
+            loadDataIntoTenantView(tenantConn, fullViewName);
+            List<String> objectIdsList =
+                    selectObjectIdsForInClause(tenantConn, fullViewName, numItemsInClause);
+            StringBuilder querySb = generateQueryToTest(numItemsInClause, fullViewName);
+            PreparedStatement ps = tenantConn.prepareStatement(querySb.toString());
+            int numbBindVarsSet = 0;
+            String objectId = null;
+            for (int i = 0; i < numItemsInClause; i++) {
+                objectId = objectIdsList.get(i);
+                ps.setString((i + 1), objectId);
+                numbBindVarsSet++;
+            }
+            assertEquals(numItemsInClause, numbBindVarsSet);
+            assertEquals("v1000", objectId);
+            ps.setString(numItemsInClause + 1, "z00");
+            ps.setString(numItemsInClause + 2, "v1000"); // This value must match or be
+                                                         // lexographically higher than the highest
+                                                         // value in the IN clause
+            // Query should execute and return 0 results
+            ResultSet rs = ps.executeQuery();
+            assertFalse(
+                "Query should return no results as IN clause and RVC clause are disjoint sets",
+                rs.next());
+        }
+    }
+
+    private StringBuilder generateQueryToTest(int numItemsInClause, String fullViewName) {
+        StringBuilder querySb =
+                new StringBuilder("SELECT OBJECT_ID,OBJECT_DATA2,OBJECT_DATA FROM " + fullViewName);
+        querySb.append(" WHERE ((");
+        List<String> orClauses = Lists.newArrayList();
+        for (int i = 1; i < (numItemsInClause + 1); i++) {
+            orClauses.add("OBJECT_ID = ?");
+        }
+        querySb.append(Joiner.on(" OR ").join(orClauses));
+        querySb.append(") AND (KEY_PREFIX,OBJECT_ID) >  (?,?)) ORDER BY OBJECT_ID LIMIT 125");
+        System.out.println(querySb);
+        return querySb;
+    }
+
+    private List<String> selectObjectIdsForInClause(Connection tenantConn, String fullViewName,
+            int numItemsInClause) throws SQLException {
+        String sqlForObjIds =
+                "SELECT OBJECT_ID FROM " + fullViewName + " ORDER BY OBJECT_ID LIMIT "
+                        + numItemsInClause;
+        PreparedStatement ps = tenantConn.prepareStatement(sqlForObjIds);
+        ResultSet rs = ps.executeQuery();
+        List<String> objectIdsList = Lists.newArrayList();
+        System.out.println("ObjectIds: ");
+        while (rs.next()) {
+            System.out.println("Object Id: " + rs.getString("OBJECT_ID"));
+            objectIdsList.add(rs.getString("OBJECT_ID"));
+        }
+        assertEquals(numItemsInClause, objectIdsList.size());
+        return objectIdsList;
+    }
+
+    private void loadDataIntoTenantView(Connection tenantConn, String fullViewName)
+            throws SQLException {
+        for (int i = 0; i < 2000; i++) {
+            String objectId = "v" + i;
+            String upsert =
+                    "UPSERT INTO " + fullViewName
+                            + " (OBJECT_ID, OBJECT_DATA, OBJECT_DATA2) VALUES ('" + objectId
+                            + "', 'data','data2')";
+            PreparedStatement ps = tenantConn.prepareStatement(upsert);
+            ps.executeUpdate();
+        }
+        tenantConn.commit();
+
+        // Validate Data was loaded correctly
+        PreparedStatement selectStatement =
+                tenantConn.prepareStatement(
+                    "SELECT OBJECT_ID FROM " + fullViewName + " ORDER BY OBJECT_ID");
+        ResultSet rs = selectStatement.executeQuery();
+        int count = 0;
+        while (rs.next()) {
+            count++;
+        }
+        assertEquals(2000, count);
+    }
+
+    private void createBaseTableAndTenantView(Connection tenantConn, String fulTableName,
+            String fullViewName) throws SQLException {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + fulTableName + " (TENANT_ID CHAR(15) NOT NULL,"
+                        + " KEY_PREFIX CHAR(3) NOT NULL," + " CREATED_DATE DATE,"
+                        + " CREATED_BY CHAR(15)," + " SYSTEM_MODSTAMP DATE"
+                        + " CONSTRAINT PK PRIMARY KEY (TENANT_ID,KEY_PREFIX)"
+                        + ") VERSIONS=1, MULTI_TENANT=true, IMMUTABLE_ROWS=TRUE, REPLICATION_SCOPE=1";
+        createTestTable(getUrl(), ddl);
+
+        String tenantViewDdl =
+                "CREATE VIEW IF NOT EXISTS " + fullViewName + " (OBJECT_ID VARCHAR(18) NOT NULL, "
+                        + "OBJECT_DATA VARCHAR(131072), " + "OBJECT_DATA2 VARCHAR(131072), "
+                        + "CONSTRAINT PK PRIMARY KEY (OBJECT_ID)) " + "AS SELECT * FROM "
+                        + fulTableName + " WHERE KEY_PREFIX = 'z00'";
+        // Get tenant specific connection
+        PreparedStatement stmt2 = tenantConn.prepareStatement(tenantViewDdl);
+        stmt2.execute();
     }
 }
