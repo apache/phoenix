@@ -1251,6 +1251,7 @@ public class UpsertCompiler {
             this.useServerTimestamp = useServerTimestamp;
             this.maxSize = maxSize;
             this.maxSizeBytes = maxSizeBytes;
+            queryPlan.getContext().setClientSideUpsertSelect(true);
         }
 
         @Override
