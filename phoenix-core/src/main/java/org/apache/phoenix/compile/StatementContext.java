@@ -85,6 +85,7 @@ public class StatementContext {
     private final ReadMetricQueue readMetricsQueue;
     private final OverAllQueryMetrics overAllQueryMetrics;
     private QueryLogger queryLogger;
+    private boolean isClientSideUpsertSelect;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -315,6 +316,14 @@ public class StatementContext {
 
     public QueryLogger getQueryLogger() {
         return queryLogger;
+    }
+
+    public boolean isClientSideUpsertSelect() {
+        return isClientSideUpsertSelect;
+    }
+
+    public void setClientSideUpsertSelect(boolean isClientSideUpsertSelect) {
+        this.isClientSideUpsertSelect = isClientSideUpsertSelect;
     }
     
 }
