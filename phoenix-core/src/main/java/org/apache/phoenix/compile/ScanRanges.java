@@ -105,6 +105,11 @@ public class ScanRanges {
                     keyRanges.add(KeyRange.getKeyRange(key));
                 }
             }
+            // while doing a point look up if after intersecting with the MinMaxrange there are
+            // no more keyranges left then just return
+            if (keyRanges.isEmpty()) {
+                return NOTHING;
+            }
             ranges = Collections.singletonList(keyRanges);
             useSkipScan = keyRanges.size() > 1;
             // Treat as binary if descending because we've got a separator byte at the end
