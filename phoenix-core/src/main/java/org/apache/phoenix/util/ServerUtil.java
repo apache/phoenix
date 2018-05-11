@@ -351,8 +351,8 @@ public class ServerUtil {
             HConnection connection = null;
             if((connection = connections.get(connectionType)) == null) {
                 synchronized (CoprocessorHConnectionTableFactory.class) {
-                    if(connections.get(connectionType) == null) {
-                        connection = new CoprocessorHConnection(conf, server);
+                    if((connection = connections.get(connectionType)) == null) {
+                        connection = new CoprocessorHConnection(getTypeSpecificConfiguration(connectionType, conf), server);
                         connections.put(connectionType, connection);
                         return connection;
                     }
@@ -410,7 +410,7 @@ public class ServerUtil {
     }
 
     public static Configuration getIndexWriterConfigurationWithCustomThreads(Configuration conf) {
-        Configuration clonedConfig = PropertiesUtil.cloneConfig(conf);
+        Configuration clonedConfig = getIndexWriterConnection(conf);
         setHTableThreads(clonedConfig);
         return clonedConfig;
     }
