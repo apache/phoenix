@@ -37,9 +37,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -366,7 +364,7 @@ public class ServerUtil {
     }
 
     public static Configuration getIndexWriterConfigurationWithCustomThreads(Configuration conf) {
-        Configuration clonedConfig = PropertiesUtil.cloneConfig(conf);
+        Configuration clonedConfig = getIndexWriterConnection(conf);
         setHTableThreads(clonedConfig);
         return clonedConfig;
     }
