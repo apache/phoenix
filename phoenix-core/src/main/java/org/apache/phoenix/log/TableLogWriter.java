@@ -21,23 +21,17 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Map.Entry;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.expression.Determinism;
-import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -49,75 +43,111 @@ public class TableLogWriter implements LogWriter {
     private static final Log LOG = LogFactory.getLog(LogWriter.class);
     private Connection connection;
     private boolean isClosed;
-    private Table table;
+    private PreparedStatement upsertStatement;
     private Configuration config;
+    private Map<MetricType,Integer> metricOrdinals=new HashMap<MetricType,Integer>();
 
     public TableLogWriter(Configuration configuration) {
-        this.config = configuration;
-        try {
-            this.connection = ConnectionFactory.createConnection(configuration);
-            table = this.connection.getTable(SchemaUtil.getPhysicalTableName(
-                    SchemaUtil.getTableNameAsBytes(SYSTEM_CATALOG_SCHEMA, SYSTEM_LOG_TABLE), config));
-        } catch (Exception e) {
-            LOG.warn("Unable to initiate LogWriter for writing query logs to table");
+        this.config=configuration;
+    }
+    
+    private PreparedStatement buildUpsertStatement(Connection conn) throws SQLException {
+        StringBuilder buf = new StringBuilder("UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"(");
+        int queryLogEntries=0;
+        for (QueryLogInfo info : QueryLogInfo.values()) {
+            buf.append(info.columnName);
+            buf.append(',');
+            queryLogEntries++;
         }
+        for (MetricType metric : MetricType.values()) {
+            if (metric.logLevel() != LogLevel.OFF) {
+                metricOrdinals.put(metric, ++queryLogEntries);
+                buf.append(metric.columnName());
+                buf.append(',');
+            }
+        }
+        buf.setLength(buf.length()-1);
+        buf.append(") VALUES (");
+        for (int i = 0; i < QueryLogInfo.values().length; i++) {
+            buf.append("?,");
+        }
+        for (MetricType metric : MetricType.values()) {
+            if (metric.logLevel() != LogLevel.OFF) {
+                buf.append("?,");
+            }
+        }
+        buf.setLength(buf.length()-1);
+        buf.append(")");
+        return conn.prepareStatement(buf.toString());
     }
 
     @Override
-    public void write(RingBufferEvent event) throws SQLException, IOException {
-        if(isClosed()){
+    public void write(RingBufferEvent event) throws SQLException, IOException, ClassNotFoundException {
+        if (isClosed()) {
             LOG.warn("Unable to commit query log as Log committer is already closed");
             return;
         }
-        if (table == null || connection == null) {
-            LOG.warn("Unable to commit query log as connection was not initiated ");
-            return;
-        }
-        ImmutableMap<QueryLogInfo, Object> queryInfo=event.getQueryInfo();
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        Put put =new Put(Bytes.toBytes(event.getQueryId()));
-        for (Entry<QueryLogInfo, Object> entry : queryInfo.entrySet()) {
-            if (entry.getKey().logLevel.ordinal() <= event.getConnectionLogLevel().ordinal()) {
-                LiteralExpression expression = LiteralExpression.newConstant(entry.getValue(), entry.getKey().dataType,
-                        Determinism.ALWAYS);
-                expression.evaluate(null, ptr);
-                put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes(entry.getKey().columnName),
-                        ByteUtil.copyKeyBytesIfNecessary(ptr));
+        if (connection == null) {
+            synchronized (this) {
+                if (connection == null) {
+                    connection = QueryUtil.getConnectionForQueryLog(this.config);
+                    this.upsertStatement = buildUpsertStatement(connection);
+                }
             }
         }
-        
-        if (QueryLogInfo.QUERY_STATUS_I.logLevel.ordinal() <= event.getConnectionLogLevel().ordinal()
-                && (event.getLogState() == QueryLogState.COMPLETED || event.getLogState() == QueryLogState.FAILED)) {
-            LiteralExpression expression = LiteralExpression.newConstant(event.getLogState().toString(),
-                    QueryLogInfo.QUERY_STATUS_I.dataType, Determinism.ALWAYS);
-            expression.evaluate(null, ptr);
-            put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                    Bytes.toBytes(QueryLogInfo.QUERY_STATUS_I.columnName), ByteUtil.copyKeyBytesIfNecessary(ptr));
+
+        ImmutableMap<QueryLogInfo, Object> queryInfoMap = event.getQueryInfo();
+        for (QueryLogInfo info : QueryLogInfo.values()) {
+            if (queryInfoMap.containsKey(info) && info.logLevel.ordinal() <= event.getConnectionLogLevel().ordinal()) {
+                upsertStatement.setObject(info.ordinal() + 1, queryInfoMap.get(info));
+            } else {
+                upsertStatement.setObject(info.ordinal() + 1, null);
+            }
         }
-        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-        table.put(put);
-        
+        Map<MetricType, Long> overAllMetrics = event.getOverAllMetrics();
+        Map<String, Map<MetricType, Long>> readMetrics = event.getReadMetrics();
+
+        for (MetricType metric : MetricType.values()) {
+            if (overAllMetrics != null && overAllMetrics.containsKey(metric)
+                    && metric.isLoggingEnabled(event.getConnectionLogLevel())) {
+                upsertStatement.setObject(metricOrdinals.get(metric), overAllMetrics.get(metric));
+            } else {
+                if (metric.logLevel() != LogLevel.OFF) {
+                    upsertStatement.setObject(metricOrdinals.get(metric), null);
+                }
+            }
+        }
+
+        if (readMetrics != null && !readMetrics.isEmpty()) {
+            for (Map.Entry<String, Map<MetricType, Long>> entry : readMetrics.entrySet()) {
+                upsertStatement.setObject(QueryLogInfo.TABLE_NAME_I.ordinal() + 1, entry.getKey());
+                for (MetricType metric : entry.getValue().keySet()) {
+                    if (metric.isLoggingEnabled(event.getConnectionLogLevel())) {
+                        upsertStatement.setObject(metricOrdinals.get(metric), entry.getValue().get(metric));
+                    }
+                }
+                upsertStatement.executeUpdate();
+            }
+        } else {
+            upsertStatement.executeUpdate();
+        }
+        connection.commit();
     }
     
     @Override
     public void close() throws IOException {
-        if(isClosed()){
-            return;
-        }
-        isClosed=true;
+        if (isClosed()) { return; }
+        isClosed = true;
         try {
-            if (table != null) {
-                table.close();
-            }
-            if (connection != null && !connection.isClosed()) {
-                //It should internally close all the statements
+            if (connection != null) {
+                // It should internally close all the statements
                 connection.close();
             }
-        } catch (IOException e) {
+        } catch (SQLException e) {
             // TODO Ignore?
         }
     }
-    
+
     public boolean isClosed(){
         return isClosed;
     }

@@ -364,9 +364,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                                 function.getTenantId())));
             }
         };
-        this.isRequestLevelMetricsEnabled = JDBCUtil
-                .isCollectingRequestLevelMetricsEnabled(url, info,
-                        this.services.getProps());
+        this.logLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
+                QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
+        this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info,
+                this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize,
                 maxSizeBytes) : new MutationState(mutationState);
         this.metaData = metaData;
@@ -380,8 +381,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.scannerQueue = new LinkedBlockingQueue<>();
         this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
         this.isRunningUpgrade = isRunningUpgrade;
-        this.logLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
-                QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
+        
         this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
                 QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
         GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
