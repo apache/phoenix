@@ -24,10 +24,12 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.memory.DelegatingMemoryManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.monitoring.MemoryMetricsHolder;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.SpoolingMetricsHolder;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
@@ -54,7 +56,10 @@ public class SpoolingResultIteratorTest {
             };
 
         MemoryManager memoryManager = new DelegatingMemoryManager(new GlobalMemoryManager(threshold));
-        ResultIterator scanner = new SpoolingResultIterator(SpoolingMetricsHolder.NO_OP_INSTANCE, MemoryMetricsHolder.NO_OP_INSTANCE, iterator, memoryManager, threshold, maxSizeSpool,"/tmp");
+        ResultIterator scanner = new SpoolingResultIterator(
+                SpoolingMetricsHolder.NO_OP_INSTANCE,
+                new MemoryMetricsHolder(new ReadMetricQueue(LogLevel.OFF), ""), iterator, memoryManager, threshold,
+                maxSizeSpool, "/tmp");
         AssertResults.assertResults(scanner, expectedResults);
     }
 

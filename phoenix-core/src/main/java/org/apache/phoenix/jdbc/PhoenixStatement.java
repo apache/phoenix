@@ -93,7 +93,7 @@ import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.log.QueryLogInfo;
-import org.apache.phoenix.log.QueryLogState;
+import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.optimize.Cost;
@@ -190,8 +190,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.math.IntMath;
@@ -319,10 +317,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         StatementContext context = plan.getContext();
                         context.setQueryLogger(queryLogger);
                         if(queryLogger.isDebugEnabled()){
-                            Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
-                            queryLogBuilder.put(QueryLogInfo.EXPLAIN_PLAN_I, QueryUtil.getExplainPlan(resultIterator));
-                            queryLogBuilder.put(QueryLogInfo.GLOBAL_SCAN_DETAILS_I, context.getScan()!=null?context.getScan().toString():null);
-                            queryLogger.log(QueryLogState.COMPILED, queryLogBuilder.build());
+                            queryLogger.log(QueryLogInfo.EXPLAIN_PLAN_I, QueryUtil.getExplainPlan(resultIterator));
+                            queryLogger.log(QueryLogInfo.GLOBAL_SCAN_DETAILS_I, context.getScan()!=null?context.getScan().toString():null);
                         }
                         context.getOverallQueryMetrics().startQuery();
                         PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
@@ -351,6 +347,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         throw e;
                     }catch (RuntimeException e) {
+                        
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.
                         if (e.getCause() instanceof SQLException) {
@@ -367,11 +364,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 }, PhoenixContextExecutor.inContext());
         }catch (Exception e) {
             if (queryLogger.isDebugEnabled()) {
-                Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
-                queryLogBuilder.put(QueryLogInfo.TOTAL_EXECUTION_TIME_I,
-                        System.currentTimeMillis() - queryLogger.getStartTime());
-                queryLogBuilder.put(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
-                queryLogger.log(QueryLogState.FAILED, queryLogBuilder.build());
+                queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
+                queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
+                queryLogger.sync(null, null);
             }
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);
@@ -1781,7 +1776,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
         QueryLogger queryLogger = QueryLogger.getInstance(connection,isSystemTable);
         QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
-                connection.getQueryServices(), sql, queryLogger.getStartTime(), getParameters());
+                connection.getQueryServices(), sql, getParameters());
         return queryLogger;
     }
     

@@ -356,6 +356,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_COST_BASED_OPTIMIZER_ENABLED = false;
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
+    public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
 
     private final Configuration config;
 

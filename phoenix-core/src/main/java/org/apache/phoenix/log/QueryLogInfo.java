@@ -28,8 +28,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCAN_METRICS_JSON;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TOTAL_EXECUTION_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
 
 import org.apache.phoenix.schema.types.PDataType;
@@ -40,39 +40,33 @@ import org.apache.phoenix.schema.types.PVarchar;
 
 public enum QueryLogInfo {
     
-    CLIENT_IP_I(CLIENT_IP, QueryLogState.STARTED, LogLevel.INFO, PVarchar.INSTANCE),
-    QUERY_I(QUERY,QueryLogState.STARTED, LogLevel.INFO,PVarchar.INSTANCE),
-    BIND_PARAMETERS_I(BIND_PARAMETERS,QueryLogState.STARTED, LogLevel.TRACE,PVarchar.INSTANCE),
-    QUERY_ID_I(QUERY_ID,QueryLogState.STARTED, LogLevel.INFO,PVarchar.INSTANCE),
-    TENANT_ID_I(TENANT_ID,QueryLogState.STARTED, LogLevel.INFO,PVarchar.INSTANCE),
-    START_TIME_I(START_TIME,QueryLogState.STARTED, LogLevel.INFO,PTimestamp.INSTANCE),
-    USER_I(USER,QueryLogState.STARTED, LogLevel.INFO,PVarchar.INSTANCE),
-    EXPLAIN_PLAN_I(EXPLAIN_PLAN,QueryLogState.COMPILED, LogLevel.DEBUG,PVarchar.INSTANCE),
-    GLOBAL_SCAN_DETAILS_I(GLOBAL_SCAN_DETAILS,QueryLogState.COMPILED, LogLevel.DEBUG,PVarchar.INSTANCE),
-    NO_OF_RESULTS_ITERATED_I(NO_OF_RESULTS_ITERATED,QueryLogState.COMPLETED, LogLevel.DEBUG,PLong.INSTANCE),
-    EXCEPTION_TRACE_I(EXCEPTION_TRACE,QueryLogState.COMPLETED, LogLevel.DEBUG,PVarchar.INSTANCE),
-    QUERY_STATUS_I(QUERY_STATUS,QueryLogState.COMPLETED, LogLevel.DEBUG,PVarchar.INSTANCE),
-    TOTAL_EXECUTION_TIME_I(TOTAL_EXECUTION_TIME,QueryLogState.COMPLETED, LogLevel.DEBUG,PLong.INSTANCE),
-    SCAN_METRICS_JSON_I(SCAN_METRICS_JSON,QueryLogState.COMPLETED, LogLevel.DEBUG,PVarchar.INSTANCE);
+    CLIENT_IP_I(CLIENT_IP, LogLevel.INFO, PVarchar.INSTANCE),
+    QUERY_I(QUERY, LogLevel.INFO,PVarchar.INSTANCE),
+    BIND_PARAMETERS_I(BIND_PARAMETERS, LogLevel.TRACE,PVarchar.INSTANCE),
+    QUERY_ID_I(QUERY_ID, LogLevel.INFO,PVarchar.INSTANCE),
+    TENANT_ID_I(TENANT_ID, LogLevel.INFO,PVarchar.INSTANCE),
+    START_TIME_I(START_TIME, LogLevel.INFO,PTimestamp.INSTANCE),
+    USER_I(USER, LogLevel.INFO,PVarchar.INSTANCE),
+    EXPLAIN_PLAN_I(EXPLAIN_PLAN,LogLevel.DEBUG,PVarchar.INSTANCE),
+    GLOBAL_SCAN_DETAILS_I(GLOBAL_SCAN_DETAILS, LogLevel.DEBUG,PVarchar.INSTANCE),
+    NO_OF_RESULTS_ITERATED_I(NO_OF_RESULTS_ITERATED, LogLevel.INFO,PLong.INSTANCE),
+    EXCEPTION_TRACE_I(EXCEPTION_TRACE, LogLevel.DEBUG,PVarchar.INSTANCE),
+    QUERY_STATUS_I(QUERY_STATUS, LogLevel.INFO,PVarchar.INSTANCE),
+    SCAN_METRICS_JSON_I(SCAN_METRICS_JSON, LogLevel.TRACE,PVarchar.INSTANCE), 
+    TABLE_NAME_I(TABLE_NAME, LogLevel.DEBUG,PVarchar.INSTANCE);
     
     public final String columnName;
-    public final QueryLogState logState;
     public final LogLevel logLevel;
     public final PDataType dataType;
 
-    private QueryLogInfo(String columnName, QueryLogState logState, LogLevel logLevel, PDataType dataType) {
+    private QueryLogInfo(String columnName, LogLevel logLevel, PDataType dataType) {
         this.columnName = columnName;
-        this.logState=logState;
         this.logLevel=logLevel;
         this.dataType=dataType;
     }
 
     public String getColumnName() {
         return columnName;
-    }
-
-    public QueryLogState getLogState() {
-        return logState;
     }
 
     public LogLevel getLogLevel() {
