@@ -31,16 +31,18 @@ public interface LogWriter {
      * @param event
      * @throws SQLException
      * @throws IOException
+     * @throws ClassNotFoundException 
      */
-    void write(RingBufferEvent event) throws SQLException, IOException;
+    void write(RingBufferEvent event) throws SQLException, IOException, ClassNotFoundException;
 
     /**
      * will be called when disruptor is getting shutdown
      * 
      * @throws IOException
+     * @throws SQLException 
      */
 
-    void close() throws IOException;
+    void close() throws IOException, SQLException;
 
     /**
      * if writer is closed and cannot write further event

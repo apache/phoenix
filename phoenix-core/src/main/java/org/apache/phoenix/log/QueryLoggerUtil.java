@@ -25,48 +25,36 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PName;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMap.Builder;
-
 public class QueryLoggerUtil {
 
+
     public static void logInitialDetails(QueryLogger queryLogger, PName tenantId, ConnectionQueryServices queryServices,
-            String query, long startTime, List<Object> bindParameters) {
+            String query, List<Object> bindParameters) {
         try {
-            queryLogger.log(QueryLogState.STARTED,
-                    getInitialDetails(tenantId, queryServices, query, startTime, bindParameters));
+            String clientIP;
+            try {
+                clientIP = InetAddress.getLocalHost().getHostAddress();
+            } catch (UnknownHostException e) {
+                clientIP = "UnknownHost";
+            }
+
+            if (clientIP != null) {
+                queryLogger.log(QueryLogInfo.CLIENT_IP_I, clientIP);
+            }
+            if (query != null) {
+                queryLogger.log(QueryLogInfo.QUERY_I, query);
+            }
+            if (bindParameters != null) {
+                queryLogger.log(QueryLogInfo.BIND_PARAMETERS_I, StringUtils.join(bindParameters, ","));
+            }
+            if (tenantId != null) {
+                queryLogger.log(QueryLogInfo.TENANT_ID_I, tenantId.getString());
+            }
+
+            queryLogger.log(QueryLogInfo.USER_I, queryServices.getUserName() != null ? queryServices.getUserName()
+                    : queryServices.getUser().getShortName());
         } catch (Exception e) {
-            // Ignore for now
+            // Ignore
         }
-
-    }
-
-    private static ImmutableMap<QueryLogInfo, Object> getInitialDetails(PName tenantId,
-            ConnectionQueryServices queryServices, String query, long startTime, List<Object> bindParameters) {
-        Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
-        String clientIP;
-        try {
-            clientIP = InetAddress.getLocalHost().getHostAddress();
-        } catch (UnknownHostException e) {
-            clientIP = "UnknownHost";
-        }
-
-        if (clientIP != null) {
-            queryLogBuilder.put(QueryLogInfo.CLIENT_IP_I, clientIP);
-        }
-        if (query != null) {
-            queryLogBuilder.put(QueryLogInfo.QUERY_I, query);
-        }
-        queryLogBuilder.put(QueryLogInfo.START_TIME_I, startTime);
-        if (bindParameters != null) {
-            queryLogBuilder.put(QueryLogInfo.BIND_PARAMETERS_I, StringUtils.join(bindParameters, ","));
-        }
-        if (tenantId != null) {
-            queryLogBuilder.put(QueryLogInfo.TENANT_ID_I, tenantId.getString());
-        }
-
-        queryLogBuilder.put(QueryLogInfo.USER_I, queryServices.getUserName() != null ? queryServices.getUserName()
-                : queryServices.getUser().getShortName());
-        return queryLogBuilder.build();
     }
 }

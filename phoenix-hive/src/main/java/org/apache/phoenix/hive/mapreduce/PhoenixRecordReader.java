@@ -112,11 +112,10 @@ public class PhoenixRecordReader<T extends DBWritable> implements
             String tableName = queryPlan.getTableRef().getTable().getPhysicalName().getString();
             long renewScannerLeaseThreshold = queryPlan.getContext().getConnection()
                     .getQueryServices().getRenewLeaseThresholdMilliSeconds();
-            boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
             for (Scan scan : scans) {
                 scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes
                         .toBytes(true));
-                ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName, scan, isRequestMetricsEnabled);
+                ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName, scan, ctx.getConnection().getLogLevel());
                 final TableResultIterator tableResultIterator = new TableResultIterator(
                         queryPlan.getContext().getConnection().getMutationState(), scan, scanMetricsHolder,
                         renewScannerLeaseThreshold, queryPlan, MapReduceParallelScanGrouper.getInstance());

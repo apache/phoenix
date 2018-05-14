@@ -27,7 +27,7 @@ import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
+import org.apache.phoenix.log.LogLevel;
 
 /**
  * Class that represents the overall metrics associated with a query being executed by the phoenix.
@@ -42,16 +42,15 @@ public class OverAllQueryMetrics {
     private final CombinableMetric queryFailed;
     private final CombinableMetric cacheRefreshedDueToSplits;
 
-    public OverAllQueryMetrics(boolean isMetricsEnabled) {
-        queryWatch = new MetricsStopWatch(isMetricsEnabled);
-        resultSetWatch = new MetricsStopWatch(isMetricsEnabled);
-        numParallelScans = isMetricsEnabled ? new CombinableMetricImpl(NUM_PARALLEL_SCANS) : NoOpRequestMetric.INSTANCE;
-        wallClockTimeMS = isMetricsEnabled ? new CombinableMetricImpl(WALL_CLOCK_TIME_MS) : NoOpRequestMetric.INSTANCE;
-        resultSetTimeMS = isMetricsEnabled ? new CombinableMetricImpl(RESULT_SET_TIME_MS) : NoOpRequestMetric.INSTANCE;
-        queryTimedOut = isMetricsEnabled ? new CombinableMetricImpl(QUERY_TIMEOUT_COUNTER) : NoOpRequestMetric.INSTANCE;
-        queryFailed = isMetricsEnabled ? new CombinableMetricImpl(QUERY_FAILED_COUNTER) : NoOpRequestMetric.INSTANCE;
-        cacheRefreshedDueToSplits = isMetricsEnabled ? new CombinableMetricImpl(CACHE_REFRESH_SPLITS_COUNTER)
-                : NoOpRequestMetric.INSTANCE;
+    public OverAllQueryMetrics(LogLevel connectionLogLevel) {
+        queryWatch = new MetricsStopWatch(WALL_CLOCK_TIME_MS.isLoggingEnabled(connectionLogLevel));
+        resultSetWatch = new MetricsStopWatch(RESULT_SET_TIME_MS.isLoggingEnabled(connectionLogLevel));
+        numParallelScans = MetricUtil.getCombinableMetric(connectionLogLevel, NUM_PARALLEL_SCANS);
+        wallClockTimeMS = MetricUtil.getCombinableMetric(connectionLogLevel, WALL_CLOCK_TIME_MS);
+        resultSetTimeMS = MetricUtil.getCombinableMetric(connectionLogLevel, RESULT_SET_TIME_MS);
+        queryTimedOut = MetricUtil.getCombinableMetric(connectionLogLevel, QUERY_TIMEOUT_COUNTER);
+        queryFailed = MetricUtil.getCombinableMetric(connectionLogLevel, QUERY_FAILED_COUNTER);
+        cacheRefreshedDueToSplits = MetricUtil.getCombinableMetric(connectionLogLevel, CACHE_REFRESH_SPLITS_COUNTER);
     }
 
     public void updateNumParallelScans(long numParallelScans) {

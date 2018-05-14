@@ -15,8 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.log;
+package org.apache.phoenix.monitoring;
 
-public enum LogLevel {
-    OFF,INFO, DEBUG, TRACE
+import org.apache.phoenix.log.LogLevel;
+import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
+
+public class MetricUtil {
+
+    public static CombinableMetric getCombinableMetric(LogLevel connectionLogLevel, MetricType type) {
+        if (!type.isLoggingEnabled(connectionLogLevel)) { return NoOpRequestMetric.INSTANCE; }
+        return new CombinableMetricImpl(type);
+    }
+
 }

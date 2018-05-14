@@ -17,6 +17,6 @@
  */
 package org.apache.phoenix.log;
 
-public enum QueryLogState {
-    STARTED, PLAN, COMPILED, EXECUTION, COMPLETED,FAILED 
+public enum QueryStatus {
+    COMPILED, COMPLETED,FAILED 
 }
