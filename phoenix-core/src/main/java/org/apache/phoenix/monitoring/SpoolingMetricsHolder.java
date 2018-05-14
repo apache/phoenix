@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import org.apache.phoenix.log.LogLevel;
 
 /**
  * Class that encapsulates the various metrics associated with the spooling done by phoenix as part of servicing a
@@ -26,7 +27,7 @@ public class SpoolingMetricsHolder {
 
     private final CombinableMetric spoolFileSizeMetric;
     private final CombinableMetric numSpoolFileMetric;
-    public static final SpoolingMetricsHolder NO_OP_INSTANCE = new SpoolingMetricsHolder(new ReadMetricQueue(false), "");
+    public static final SpoolingMetricsHolder NO_OP_INSTANCE = new SpoolingMetricsHolder(new ReadMetricQueue(LogLevel.OFF), "");
 
     public SpoolingMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
         this.spoolFileSizeMetric = readMetrics.allotMetric(MetricType.SPOOL_FILE_SIZE, tableName);

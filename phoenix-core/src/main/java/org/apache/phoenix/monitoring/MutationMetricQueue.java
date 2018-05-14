@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.phoenix.log.LogLevel;
+
 /**
  * Queue that tracks various writes/mutations related phoenix request metrics.
  */
@@ -81,12 +83,16 @@ public class MutationMetricQueue {
      * Class that holds together the various metrics associated with mutations.
      */
     public static class MutationMetric {
-        private final CombinableMetric numMutations = new CombinableMetricImpl(MUTATION_BATCH_SIZE);
-        private final CombinableMetric mutationsSizeBytes = new CombinableMetricImpl(MUTATION_BYTES);
-        private final CombinableMetric totalCommitTimeForMutations = new CombinableMetricImpl(MUTATION_COMMIT_TIME);
-        private final CombinableMetric numFailedMutations = new CombinableMetricImpl(MUTATION_BATCH_FAILED_SIZE);
+        private final CombinableMetric numMutations;;
+        private final CombinableMetric mutationsSizeBytes;
+        private final CombinableMetric totalCommitTimeForMutations;
+        private final CombinableMetric numFailedMutations;
 
-        public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations) {
+        public MutationMetric(LogLevel connectionLogLevel, long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations) {
+            this.numMutations = MetricUtil.getCombinableMetric(connectionLogLevel,MUTATION_BATCH_SIZE);
+            this.mutationsSizeBytes =MetricUtil.getCombinableMetric(connectionLogLevel,MUTATION_BYTES);
+            this.totalCommitTimeForMutations =MetricUtil.getCombinableMetric(connectionLogLevel,MUTATION_COMMIT_TIME);
+            this.numFailedMutations = MetricUtil.getCombinableMetric(connectionLogLevel,MUTATION_BATCH_FAILED_SIZE);
             this.numMutations.change(numMutations);
             this.mutationsSizeBytes.change(mutationsSizeBytes);
             this.totalCommitTimeForMutations.change(commitTimeForMutations);

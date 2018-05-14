@@ -23,6 +23,8 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_REJECTED_COUNTER;
 
+import org.apache.phoenix.log.LogLevel;
+
 
 /**
  * Class to encapsulate the various metrics associated with submitting and executing a task to the phoenix client
@@ -35,7 +37,7 @@ public class TaskExecutionMetricsHolder {
     private final CombinableMetric taskExecutionTime;
     private final CombinableMetric numTasks;
     private final CombinableMetric numRejectedTasks;
-    public static final TaskExecutionMetricsHolder NO_OP_INSTANCE = new TaskExecutionMetricsHolder(new ReadMetricQueue(false), "");
+    public static final TaskExecutionMetricsHolder NO_OP_INSTANCE = new TaskExecutionMetricsHolder(new ReadMetricQueue(LogLevel.OFF), "");
     
     public TaskExecutionMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
         taskQueueWaitTime = readMetrics.allotMetric(TASK_QUEUE_WAIT_TIME, tableName);

@@ -23,6 +23,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.annotation.Nonnull;
 
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -36,19 +37,23 @@ public class ReadMetricQueue {
 
     private final ConcurrentMap<MetricKey, Queue<CombinableMetric>> metricsMap = new ConcurrentHashMap<>();
 
-    private final boolean isRequestMetricsEnabled;
 
-    public ReadMetricQueue(boolean isRequestMetricsEnabled) {
-        this.isRequestMetricsEnabled = isRequestMetricsEnabled;
+    private LogLevel connectionLogLevel;
+
+    public ReadMetricQueue(LogLevel connectionLogLevel) {
+        this.connectionLogLevel = connectionLogLevel;
     }
 
     public CombinableMetric allotMetric(MetricType type, String tableName) {
-        if (!isRequestMetricsEnabled) { return NoOpRequestMetric.INSTANCE; }
-        MetricKey key = new MetricKey(type, tableName);
-        Queue<CombinableMetric> q = getMetricQueue(key);
-        CombinableMetric metric = getMetric(type);
-        q.offer(metric);
-        return metric;
+        if (type.isLoggingEnabled(connectionLogLevel)) {
+            MetricKey key = new MetricKey(type, tableName);
+            Queue<CombinableMetric> q = getMetricQueue(key);
+            CombinableMetric metric = getMetric(type);
+            q.offer(metric);
+            return metric;
+        } else {
+            return NoOpRequestMetric.INSTANCE;
+        }
     }
 
     @VisibleForTesting

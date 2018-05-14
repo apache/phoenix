@@ -60,11 +60,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixMetricsLog;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -94,6 +95,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         // disable renewing leases as this will force spooling to happen.
         props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
+        props.put(QueryServices.LOG_LEVEL, LogLevel.DEBUG.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // need the non-test driver for some tests that check number of hconnections, etc.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
@@ -352,6 +354,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         insertRowsInTable(tableName, numRows);
         Properties props = new Properties();
         props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "false");
+        props.setProperty(QueryServices.LOG_LEVEL, LogLevel.OFF.name());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         while (rs.next()) {}
@@ -681,7 +684,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private void changeInternalStateForTesting(PhoenixResultSet rs) {
         // get and set the internal state for testing purposes.
-        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(true);
+        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.DEBUG);
         StatementContext ctx = (StatementContext)Whitebox.getInternalState(rs, "context");
         Whitebox.setInternalState(ctx, "readMetricsQueue", testMetricsQueue);
         Whitebox.setInternalState(rs, "readMetricsQueue", testMetricsQueue);
@@ -754,8 +757,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private class TestReadMetricsQueue extends ReadMetricQueue {
 
-        public TestReadMetricsQueue(boolean isRequestMetricsEnabled) {
-            super(isRequestMetricsEnabled);
+        public TestReadMetricsQueue(LogLevel connectionLogLevel) {
+            super(connectionLogLevel);
         }
 
         @Override

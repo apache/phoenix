@@ -437,7 +437,7 @@ public final class QueryUtil {
         }
         return url;
     }
-
+    
     private static int getInt(String key, int defaultValue, Properties props, Configuration conf) {
         if (conf == null) {
             Preconditions.checkNotNull(props);
@@ -487,6 +487,11 @@ public final class QueryUtil {
     
     public static String getViewPartitionClause(String partitionColumnName, long autoPartitionNum) {
         return partitionColumnName  + " " + toSQL(CompareOp.EQUAL) + " " + autoPartitionNum;
+    }
+
+    public static Connection getConnectionForQueryLog(Configuration config) throws ClassNotFoundException, SQLException {
+        //we don't need this connection to upgrade anything or start dispatcher
+        return getConnectionOnServer(config);
     }
     
 }
