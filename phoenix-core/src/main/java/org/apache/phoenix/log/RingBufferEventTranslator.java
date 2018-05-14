@@ -17,14 +17,19 @@
  */
 package org.apache.phoenix.log;
 
+import java.util.Map;
+
+import org.apache.phoenix.monitoring.MetricType;
+
 import com.google.common.collect.ImmutableMap;
 import com.lmax.disruptor.EventTranslator;
 
 class RingBufferEventTranslator implements EventTranslator<RingBufferEvent> {
     private String queryId;
-    private QueryLogState logState;
     private ImmutableMap<QueryLogInfo, Object> queryInfo;
     private LogLevel connectionLogLevel;
+    private Map<String, Map<MetricType, Long>> readMetrics;
+    private Map<MetricType, Long> overAllMetrics;
     
     public RingBufferEventTranslator(String queryId) {
         this.queryId=queryId;
@@ -34,20 +39,22 @@ class RingBufferEventTranslator implements EventTranslator<RingBufferEvent> {
     public void translateTo(RingBufferEvent event, long sequence) {
         event.setQueryId(queryId);
         event.setQueryInfo(queryInfo);
-        event.setLogState(logState);
+        event.setReadMetrics(readMetrics);
+        event.setOverAllMetrics(overAllMetrics);
         event.setConnectionLogLevel(connectionLogLevel);
         clear();
     }
 
     private void clear() {
-        setQueryInfo(null,null,null);
+        setQueryInfo(null,null,null,null);
     }
    
-    public void setQueryInfo(QueryLogState logState, ImmutableMap<QueryLogInfo, Object> queryInfo,
-            LogLevel connectionLogLevel) {
+    public void setQueryInfo(LogLevel logLevel, ImmutableMap<QueryLogInfo, Object> queryInfo, Map<String, Map<MetricType, Long>> readMetrics,
+            Map<MetricType, Long> overAllMetrics) {
         this.queryInfo = queryInfo;
-        this.logState = logState;
-        this.connectionLogLevel = connectionLogLevel;
+        this.connectionLogLevel = logLevel;
+        this.readMetrics = readMetrics;
+        this.overAllMetrics=overAllMetrics;
     }
 
 }
