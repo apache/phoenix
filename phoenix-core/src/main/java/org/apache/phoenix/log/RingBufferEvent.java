@@ -17,14 +17,19 @@
  */
 package org.apache.phoenix.log;
 
+import java.util.Map;
+
+import org.apache.phoenix.monitoring.MetricType;
+
 import com.google.common.collect.ImmutableMap;
 import com.lmax.disruptor.EventFactory;
 
  class RingBufferEvent {
     private String queryId;
-    private QueryLogState logState;
     private LogLevel connectionLogLevel;
     private ImmutableMap<QueryLogInfo, Object> queryInfo;
+    private Map<String, Map<MetricType, Long>> readMetrics;
+    private Map<MetricType, Long> overAllMetrics;
     
     public static final Factory FACTORY = new Factory();
     
@@ -40,7 +45,6 @@ import com.lmax.disruptor.EventFactory;
     }
 
     public void clear() {
-        this.logState=null;
         this.queryInfo=null;
         this.queryId=null;
     }
@@ -52,10 +56,6 @@ import com.lmax.disruptor.EventFactory;
 
     public static Factory getFactory() {
         return FACTORY;
-    }
-    
-    public QueryLogState getLogState() {
-        return logState;
     }
 
     public void setQueryInfo(ImmutableMap<QueryLogInfo, Object> queryInfo) {
@@ -73,12 +73,6 @@ import com.lmax.disruptor.EventFactory;
         
     }
 
-    public void setLogState(QueryLogState logState) {
-        this.logState=logState;
-        
-    }
-
-
     public LogLevel getConnectionLogLevel() {
         return connectionLogLevel;
     }
@@ -86,6 +80,26 @@ import com.lmax.disruptor.EventFactory;
 
     public void setConnectionLogLevel(LogLevel connectionLogLevel) {
         this.connectionLogLevel = connectionLogLevel;
+    }
+
+
+    public Map<String, Map<MetricType, Long>> getReadMetrics() {
+        return readMetrics;
+    }
+
+
+    public void setReadMetrics(Map<String, Map<MetricType, Long>> readMetrics) {
+        this.readMetrics = readMetrics;
+    }
+
+
+    public Map<MetricType, Long> getOverAllMetrics() {
+        return overAllMetrics;
+    }
+
+
+    public void setOverAllMetrics(Map<MetricType, Long> overAllMetrics) {
+        this.overAllMetrics = overAllMetrics;
     }
 
     
