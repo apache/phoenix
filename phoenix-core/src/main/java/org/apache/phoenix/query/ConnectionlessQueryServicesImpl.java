@@ -166,7 +166,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     protected String getLogTableDDL() {
-        return QueryConstants.CREATE_LOG_METADATA;
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+    
+    private String setSystemLogDDLProperties(String ddl) {
+        return String.format(ddl, props.getInt(LOG_SALT_BUCKETS_ATTRIB, QueryServicesOptions.DEFAULT_LOG_SALT_BUCKETS));
+
     }
 
     private String setSystemDDLProperties(String ddl) {

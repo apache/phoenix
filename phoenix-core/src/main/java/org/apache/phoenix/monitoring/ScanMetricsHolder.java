@@ -34,6 +34,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.JsonMapper;
+import org.apache.phoenix.log.LogLevel;
 
 public class ScanMetricsHolder {
 
@@ -52,13 +53,11 @@ public class ScanMetricsHolder {
     private Object scan;
 
     private static final ScanMetricsHolder NO_OP_INSTANCE =
-            new ScanMetricsHolder(new ReadMetricQueue(false), "",null);
+            new ScanMetricsHolder(new ReadMetricQueue(LogLevel.OFF), "",null);
 
     public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
-            Scan scan, boolean isRequestMetricsEnabled) {
-        if (!isRequestMetricsEnabled) {
-            return NO_OP_INSTANCE;
-        }
+            Scan scan, LogLevel connectionLogLevel) {
+        if (connectionLogLevel == LogLevel.OFF) { return NO_OP_INSTANCE; }
         scan.setScanMetricsEnabled(true);
         return new ScanMetricsHolder(readMetrics, tableName, scan);
     }

@@ -31,7 +31,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TOTAL_EXECUTION_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -53,8 +52,10 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
-import org.apache.phoenix.log.QueryLogState;
+import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -77,6 +78,19 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     } 
     
+    private static class MyClock extends EnvironmentEdge {
+        public volatile long time;
+
+        public MyClock (long time) {
+            this.time = time;
+        }
+
+        @Override
+        public long currentTime() {
+            return time;
+        }
+    }
+    
 
     @Test
     public void testDebugLogs() throws Exception {
@@ -97,12 +111,13 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
+        rs = conn.createStatement().executeQuery(logQuery);
+        boolean foundQueryLog = false;
+
         while (rs.next()) {
             if (rs.getString(QUERY_ID).equals(queryId)) {
                 foundQueryLog = true;
@@ -113,11 +128,9 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
                 assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
                 assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
                 assertEquals(rs.getString(QUERY), query);
-                assertEquals(rs.getString(QUERY_STATUS), QueryLogState.COMPLETED.toString());
-                assertTrue(System.currentTimeMillis() - rs.getTimestamp(START_TIME).getTime() > delay);
+                assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
                 assertEquals(rs.getString(TENANT_ID), null);
-                assertTrue(rs.getString(TOTAL_EXECUTION_TIME) != null);
-                assertTrue(rs.getString(SCAN_METRICS_JSON).contains("scanMetrics"));
+                assertTrue(rs.getString(SCAN_METRICS_JSON)==null);
                 assertEquals(rs.getString(EXCEPTION_TRACE),null);
             }else{
                 //confirm we are not logging system queries
@@ -140,7 +153,10 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         String query = "SELECT * FROM " + tableName;
         int count=100;
         for (int i = 0; i < count; i++) {
-            conn.createStatement().executeQuery(query);
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            while(rs.next()){
+                
+            }
         }
         
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
@@ -179,12 +195,12 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         }
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
+        rs = conn.createStatement().executeQuery(logQuery);
+        boolean foundQueryLog = false;
         while (rs.next()) {
             if (rs.getString(QUERY_ID).equals(queryId)) {
                 foundQueryLog = true;
@@ -192,12 +208,10 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
                 assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
                 assertEquals(rs.getString(EXPLAIN_PLAN), null);
                 assertEquals(rs.getString(GLOBAL_SCAN_DETAILS),null);
-                assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 0);
+                assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
                 assertEquals(rs.getString(QUERY), query);
-                assertEquals(rs.getString(QUERY_STATUS),null);
-                assertTrue(System.currentTimeMillis() - rs.getTimestamp(START_TIME).getTime() > delay);
+                assertEquals(rs.getString(QUERY_STATUS),QueryStatus.COMPLETED.toString());
                 assertEquals(rs.getString(TENANT_ID), null);
-                assertTrue(rs.getString(TOTAL_EXECUTION_TIME) == null);
             }
         }
         assertTrue(foundQueryLog);
@@ -223,12 +237,12 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         }
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
+        rs = conn.createStatement().executeQuery(logQuery);
+        boolean foundQueryLog = false;
         while (rs.next()) {
             if (rs.getString(QUERY_ID).equals(queryId)) {
                 foundQueryLog = true;
@@ -256,7 +270,9 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         props.setProperty(QueryServices.LOG_LEVEL, loglevel.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
         assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),loglevel);
-        
+        final MyClock clock = new MyClock(100);
+        EnvironmentEdgeManager.injectEdge(clock);
+        try{
         String query = "SELECT * FROM " + tableName +" where V = ?";
         
         PreparedStatement pstmt = conn.prepareStatement(query);
@@ -271,12 +287,12 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         ResultSet explainRS = conn.createStatement()
                 .executeQuery("Explain " + "SELECT * FROM " + tableName + " where V = 'value5'");
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
         int delay = 5000;
-        
+
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
+        rs = conn.createStatement().executeQuery(logQuery);
+        boolean foundQueryLog = false;
         while (rs.next()) {
             if (rs.getString(QUERY_ID).equals(queryId)) {
                 foundQueryLog = true;
@@ -287,14 +303,18 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
                 assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
                 assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 1);
                 assertEquals(rs.getString(QUERY), query);
-                assertEquals(rs.getString(QUERY_STATUS), QueryLogState.COMPLETED.toString());
-                assertTrue(System.currentTimeMillis() - rs.getTimestamp(START_TIME).getTime() > delay);
+                assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
+                assertTrue(LogLevel.TRACE == loglevel ? rs.getString(SCAN_METRICS_JSON).contains("scanMetrics")
+                        : rs.getString(SCAN_METRICS_JSON) == null);
+                assertEquals(rs.getTimestamp(START_TIME).getTime(),100);
                 assertEquals(rs.getString(TENANT_ID), null);
-                assertTrue(rs.getString(TOTAL_EXECUTION_TIME) != null);
             }
         }
         assertTrue(foundQueryLog);
         conn.close();
+        }finally{
+            EnvironmentEdgeManager.injectEdge(null);
+        }
     }
     
     
@@ -316,14 +336,14 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(e.getErrorCode(), SQLExceptionCode.TABLE_UNDEFINED.getErrorCode());
         }
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        ResultSet rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
+        ResultSet rs = conn.createStatement().executeQuery(logQuery);
+        boolean foundQueryLog = false;
         while (rs.next()) {
-            if (QueryLogState.FAILED.name().equals(rs.getString(QUERY_STATUS))) {
+            if (QueryStatus.FAILED.name().equals(rs.getString(QUERY_STATUS))) {
                 foundQueryLog = true;
                 assertEquals(rs.getString(USER), System.getProperty("user.name"));
                 assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
@@ -332,8 +352,6 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
                 assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 0);
                 assertEquals(rs.getString(QUERY), query);
                 assertTrue(rs.getString(EXCEPTION_TRACE).contains(SQLExceptionCode.TABLE_UNDEFINED.getMessage()));
-                assertTrue(System.currentTimeMillis() - rs.getTimestamp(START_TIME).getTime() > delay);
-                assertTrue(rs.getString(TOTAL_EXECUTION_TIME) != null);
             }
         }
         assertTrue(foundQueryLog);

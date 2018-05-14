@@ -1170,6 +1170,10 @@ public class SchemaUtil {
         Cell isNamespaceMappedCell = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
         return isNamespaceMappedCell!=null && (boolean) PBoolean.INSTANCE.toObject(CellUtil.cloneValue(isNamespaceMappedCell));
     }
+
+    public static boolean isLogTable(String schemaName, String tableName) {
+        return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE.equals(tableName);
+    }
     
 
 }

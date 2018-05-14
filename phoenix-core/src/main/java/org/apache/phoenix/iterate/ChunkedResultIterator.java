@@ -147,7 +147,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             String tableName = tableRef.getTable().getPhysicalName().getString();
             ReadMetricQueue readMetrics = context.getReadMetricsQueue();
             ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName, scan,
-                readMetrics.isRequestMetricsEnabled());
+                    context.getConnection().getLogLevel());
             long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
             ResultIterator singleChunkResultIterator =
                     new SingleChunkResultIterator(new TableResultIterator(mutationState, scan,

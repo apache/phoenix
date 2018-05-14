@@ -2288,7 +2288,7 @@ public class MetaDataClient {
                 }
             }
             // System tables have hard-coded column qualifiers. So we can't use column encoding for them.
-            else if (!SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))) {
+            else if (!SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))|| SchemaUtil.isLogTable(schemaName, tableName)) {
                 /*
                  * Indexes inherit the storage scheme of the parent data tables. Otherwise, we always attempt to 
                  * create tables with encoded column names. 
