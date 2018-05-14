@@ -92,6 +92,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
@@ -2378,7 +2379,9 @@ public class MetaDataClient {
                         cqCounterFamily = defaultFamilyName != null ? defaultFamilyName : DEFAULT_COLUMN_FAMILY;
                     }
                 }
-                Integer encodedCQ =  isPkColumn ? null : cqCounter.getNextQualifier(cqCounterFamily);
+                // Use position as column qualifier if APPEND_ONLY_SCHEMA to prevent gaps in
+                // the column encoding (PHOENIX-4737).
+                Integer encodedCQ =  isPkColumn ? null : isAppendOnlySchema ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounter.getNextQualifier(cqCounterFamily);
                 byte[] columnQualifierBytes = null;
                 try {
                     columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(columnDefName.getColumnName(), encodedCQ, encodingScheme, isPkColumn);
@@ -2389,7 +2392,7 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (cqCounter.increment(cqCounterFamily)) {
+                if (!isAppendOnlySchema && cqCounter.increment(cqCounterFamily)) {
                     changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }
                 if (SchemaUtil.isPKColumn(column)) {
@@ -3351,8 +3354,8 @@ public class MetaDataClient {
                                 } else {
                                     familyName = defaultColumnFamily;
                                 }
-                                encodedCQ = cqCounterToUse.getNextQualifier(familyName);
-                                if (cqCounterToUse.increment(familyName)) {
+                                encodedCQ = table.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounterToUse.getNextQualifier(familyName);
+                                if (!table.isAppendOnlySchema() && cqCounterToUse.increment(familyName)) {
                                     changedCqCounters.put(familyName,
                                         cqCounterToUse.getNextQualifier(familyName));
                                 }

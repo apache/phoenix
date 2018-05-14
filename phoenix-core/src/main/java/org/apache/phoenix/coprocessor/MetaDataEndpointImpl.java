@@ -2566,7 +2566,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     + Bytes.toString(schema) + ", table:"
                     + Bytes.toString(table));
                 continue;
-             }
+            }
+            /*
+             * Disallow adding columns to a base table with APPEND_ONLY_SCHEMA since this
+             * creates a gap in the column positions for every view (PHOENIX-4737).
+             */
+            if (!columnPutsForBaseTable.isEmpty() && view.isAppendOnlySchema()) {
+                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
+            }
             
             ColumnOrdinalPositionUpdateList ordinalPositionList = new ColumnOrdinalPositionUpdateList();
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());
