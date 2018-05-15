@@ -62,6 +62,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
 
     private OmidTransactionProvider() {
+        ;
     }
 
     @Override
@@ -154,7 +155,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
             HBaseOmidClientConfiguration clientConf = new HBaseOmidClientConfiguration();
             clientConf.setConnectionString("localhost:" + port);
             clientConf.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
-            //        clientConf.setHBaseConfiguration(hbaseConf);
+//            clientConf.setHBaseConfiguration(hbaseConf);
             commitTableClient = commitTable.getClient();
 
             transactionManager = HBaseTransactionManager.builder(clientConf).commitTableClient(commitTableClient)

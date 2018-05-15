@@ -63,9 +63,10 @@ public class TransactionFactory {
             return null;
         }
         Provider provider =
-        (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0)
-                ? Provider.OMID
-                : Provider.fromCode(txState[txState.length-1]);
+        //(clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0)
+          //      ? Provider.OMID
+              //  :
+                Provider.fromCode(txState[txState.length-1]);
         return provider.getTransactionProvider().getTransactionContext(txState);
     }
 }
