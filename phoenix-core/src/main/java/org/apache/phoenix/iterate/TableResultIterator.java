@@ -228,6 +228,8 @@ public class TableResultIterator implements ResultIterator {
                             }
                         }
                         lastTuple = scanIterator.next();
+                    } else {
+                        throw e;
                     }
                 }
             }
