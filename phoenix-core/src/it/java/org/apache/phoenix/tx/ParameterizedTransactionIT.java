@@ -347,7 +347,6 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("ALTER TABLE \"SYSTEM\"." + nonTxTableName + " SET TRANSACTIONAL=true");
             fail();
         } catch (SQLException e) {
-            assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
         } finally {
             admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
             admin.close();
