@@ -53,11 +53,11 @@ public class ScanMetricsHolder {
     private Object scan;
 
     private static final ScanMetricsHolder NO_OP_INSTANCE =
-            new ScanMetricsHolder(new ReadMetricQueue(LogLevel.OFF), "",null);
+            new ScanMetricsHolder(new ReadMetricQueue(false,LogLevel.OFF), "",null);
 
     public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
             Scan scan, LogLevel connectionLogLevel) {
-        if (connectionLogLevel == LogLevel.OFF) { return NO_OP_INSTANCE; }
+        if (connectionLogLevel == LogLevel.OFF && !readMetrics.isRequestMetricsEnabled()) { return NO_OP_INSTANCE; }
         scan.setScanMetricsEnabled(true);
         return new ScanMetricsHolder(readMetrics, tableName, scan);
     }

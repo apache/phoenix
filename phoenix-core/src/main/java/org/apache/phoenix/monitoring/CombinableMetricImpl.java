@@ -17,14 +17,16 @@
  */
 package org.apache.phoenix.monitoring;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 public class CombinableMetricImpl implements CombinableMetric {
 
     private final Metric metric;
 
     public CombinableMetricImpl(MetricType type) {
         metric = new NonAtomicMetric(type);
+    }
+    
+    private CombinableMetricImpl(Metric metric) {
+        this.metric = metric;
     }
 
     @Override
@@ -64,7 +66,6 @@ public class CombinableMetricImpl implements CombinableMetric {
 
     @Override
     public CombinableMetric combine(CombinableMetric metric) {
-        checkArgument(this.getClass().equals(metric.getClass()));
         this.metric.change(metric.getValue());
         return this;
     }
@@ -72,6 +73,13 @@ public class CombinableMetricImpl implements CombinableMetric {
     @Override
     public void decrement() {
         metric.decrement();
+    }
+    
+    @Override
+    public CombinableMetric clone(){
+        NonAtomicMetric metric = new NonAtomicMetric(this.metric.getMetricType());
+        metric.change(this.metric.getValue());
+        return new CombinableMetricImpl(metric);
     }
 
 }
