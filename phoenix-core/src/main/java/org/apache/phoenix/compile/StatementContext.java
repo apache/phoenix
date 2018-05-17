@@ -135,8 +135,8 @@ public class StatementContext {
         this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer> emptyMap() : Maps
                 .<PColumn, Integer> newLinkedHashMap();
         this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
-        this.readMetricsQueue = new ReadMetricQueue(connection.getLogLevel());
-        this.overAllQueryMetrics = new OverAllQueryMetrics(connection.getLogLevel());
+        this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
+        this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
     }
 
     /**
