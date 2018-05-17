@@ -27,7 +27,7 @@ public class SpoolingMetricsHolder {
 
     private final CombinableMetric spoolFileSizeMetric;
     private final CombinableMetric numSpoolFileMetric;
-    public static final SpoolingMetricsHolder NO_OP_INSTANCE = new SpoolingMetricsHolder(new ReadMetricQueue(LogLevel.OFF), "");
+    public static final SpoolingMetricsHolder NO_OP_INSTANCE = new SpoolingMetricsHolder(new ReadMetricQueue(false,LogLevel.OFF), "");
 
     public SpoolingMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
         this.spoolFileSizeMetric = readMetrics.allotMetric(MetricType.SPOOL_FILE_SIZE, tableName);
