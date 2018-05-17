@@ -31,8 +31,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.annotation.concurrent.GuardedBy;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -323,8 +321,8 @@ public class ServerUtil {
         }
 
         @Override
-        public synchronized void shutdown() {
-            // We need not close the cached connections as they are shared across the server.
+        public void shutdown() {
+            ConnectionFactory.shutdown();
         }
 
         @Override
@@ -375,6 +373,19 @@ public class ServerUtil {
                 return getNoRetriesIndexWriterConfigurationWithCustomThreads(conf);
             default:
                 return conf;
+            }
+        }
+        
+        public static void shutdown() {
+            synchronized (CoprocessorHConnectionTableFactory.class) {
+                for (HConnection connection : connections.values()) {
+                    try {
+                        connection.close();
+                    } catch (IOException e) {
+                        LOG.warn("Unable to close coprocessor connection", e);
+                    }
+                }
+                connections.clear();
             }
         }
     }
