@@ -40,12 +40,15 @@ public class ReadMetricQueue {
 
     private LogLevel connectionLogLevel;
 
-    public ReadMetricQueue(LogLevel connectionLogLevel) {
+    private boolean isRequestMetricsEnabled;
+
+    public ReadMetricQueue(boolean isRequestMetricsEnabled, LogLevel connectionLogLevel) {
+        this.isRequestMetricsEnabled = isRequestMetricsEnabled;
         this.connectionLogLevel = connectionLogLevel;
     }
 
     public CombinableMetric allotMetric(MetricType type, String tableName) {
-        if (type.isLoggingEnabled(connectionLogLevel)) {
+        if (type.isLoggingEnabled(connectionLogLevel) || isRequestMetricsEnabled) {
             MetricKey key = new MetricKey(type, tableName);
             Queue<CombinableMetric> q = getMetricQueue(key);
             CombinableMetric metric = getMetric(type);
@@ -91,7 +94,8 @@ public class ReadMetricQueue {
         int size = metrics.size();
         if (size == 0) { throw new IllegalArgumentException("Metrics collection needs to have at least one element"); }
         Iterator<CombinableMetric> itr = metrics.iterator();
-        CombinableMetric combinedMetric = itr.next();
+        //Clone first metric for combining so that aggregate always give consistent result
+        CombinableMetric combinedMetric = itr.next().clone();
         while (itr.hasNext()) {
             combinedMetric = combinedMetric.combine(itr.next());
         }
@@ -173,5 +177,9 @@ public class ReadMetricQueue {
         }
         return q;
     }
+    
+    public boolean isRequestMetricsEnabled() {
+         return isRequestMetricsEnabled;
+     }
 
 }
