@@ -101,7 +101,6 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         // disable renewing leases as this will force spooling to happen.
         props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
-        props.put(QueryServices.LOG_LEVEL, LogLevel.DEBUG.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // need the non-test driver for some tests that check number of hconnections, etc.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
@@ -700,7 +699,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private void changeInternalStateForTesting(PhoenixResultSet rs) {
         // get and set the internal state for testing purposes.
-        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.DEBUG);
+        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.OFF,true);
         StatementContext ctx = (StatementContext)Whitebox.getInternalState(rs, "context");
         Whitebox.setInternalState(ctx, "readMetricsQueue", testMetricsQueue);
         Whitebox.setInternalState(rs, "readMetricsQueue", testMetricsQueue);
@@ -766,8 +765,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private class TestReadMetricsQueue extends ReadMetricQueue {
 
-        public TestReadMetricsQueue(LogLevel connectionLogLevel) {
-            super(connectionLogLevel);
+        public TestReadMetricsQueue(LogLevel connectionLogLevel, boolean isRequestMetricsEnabled) {
+            super(isRequestMetricsEnabled, connectionLogLevel);
         }
 
         @Override
