@@ -58,7 +58,7 @@ public class SpoolingResultIteratorTest {
         MemoryManager memoryManager = new DelegatingMemoryManager(new GlobalMemoryManager(threshold));
         ResultIterator scanner = new SpoolingResultIterator(
                 SpoolingMetricsHolder.NO_OP_INSTANCE,
-                new MemoryMetricsHolder(new ReadMetricQueue(LogLevel.OFF), ""), iterator, memoryManager, threshold,
+                new MemoryMetricsHolder(new ReadMetricQueue(false,LogLevel.OFF), ""), iterator, memoryManager, threshold,
                 maxSizeSpool, "/tmp");
         AssertResults.assertResults(scanner, expectedResults);
     }
