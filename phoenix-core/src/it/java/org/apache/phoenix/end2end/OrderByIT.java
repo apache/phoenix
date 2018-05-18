@@ -27,10 +27,10 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.apache.phoenix.util.TestUtil.assertResultSet;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -663,7 +663,6 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             conn = DriverManager.getConnection(getUrl(), props);
 
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                 "ORGANIZATION_ID VARCHAR,"+
                 "CONTAINER_ID VARCHAR,"+
@@ -871,26 +870,25 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testOrderByReverseOptimizationBug3491() throws Exception {
+    public void testOrderByReverseOptimization() throws Exception {
         for(boolean salted: new boolean[]{true,false}) {
-            doTestOrderByReverseOptimizationBug3491(salted,true,true,true);
-            doTestOrderByReverseOptimizationBug3491(salted,true,true,false);
-            doTestOrderByReverseOptimizationBug3491(salted,true,false,true);
-            doTestOrderByReverseOptimizationBug3491(salted,true,false,false);
-            doTestOrderByReverseOptimizationBug3491(salted,false,true,true);
-            doTestOrderByReverseOptimizationBug3491(salted,false,true,false);
-            doTestOrderByReverseOptimizationBug3491(salted,false,false,true);
-            doTestOrderByReverseOptimizationBug3491(salted,false,false,false);
+            doTestOrderByReverseOptimization(salted,true,true,true);
+            doTestOrderByReverseOptimization(salted,true,true,false);
+            doTestOrderByReverseOptimization(salted,true,false,true);
+            doTestOrderByReverseOptimization(salted,true,false,false);
+            doTestOrderByReverseOptimization(salted,false,true,true);
+            doTestOrderByReverseOptimization(salted,false,true,false);
+            doTestOrderByReverseOptimization(salted,false,false,true);
+            doTestOrderByReverseOptimization(salted,false,false,false);
         }
     }
 
-    private void doTestOrderByReverseOptimizationBug3491(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
+    private void doTestOrderByReverseOptimization(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
         Connection conn = null;
         try {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                     "ORGANIZATION_ID INTEGER NOT NULL,"+
                     "CONTAINER_ID INTEGER NOT NULL,"+
@@ -965,26 +963,25 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testOrderByReverseOptimizationWithNUllsLastBug3491() throws Exception{
+    public void testOrderByReverseOptimizationWithNullsLast() throws Exception{
         for(boolean salted: new boolean[]{true,false}) {
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,true,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,true,false);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,false,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,false,false);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,true,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,true,false);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,false,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,false,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,true,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,true,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,false,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,false,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,true,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,true,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,false,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,false,false);
         }
     }
 
-    private void doTestOrderByReverseOptimizationWithNUllsLastBug3491(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
+    private void doTestOrderByReverseOptimizationWithNullsLast(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
         Connection conn = null;
         try {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                     "ORGANIZATION_ID VARCHAR,"+
                     "CONTAINER_ID VARCHAR,"+
