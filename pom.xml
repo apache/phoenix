@@ -123,8 +123,8 @@
     <maven.assembly.version>2.5.2</maven.assembly.version>
 
     <!-- Plugin options -->
-    <numForkedUT>5</numForkedUT>
-    <numForkedIT>5</numForkedIT>
+    <numForkedUT>8</numForkedUT>
+    <numForkedIT>4</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
