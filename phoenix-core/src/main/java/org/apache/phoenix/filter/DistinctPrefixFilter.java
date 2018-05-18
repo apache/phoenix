@@ -30,6 +30,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -38,8 +40,9 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
     private int offset;
     private RowKeySchema schema;
-    private int prefixLengh;
+    private int prefixLength;
     private boolean filterAll = false;
+    private int lastPosition;
     private final ImmutableBytesWritable lastKey = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY, -1, -1);
 
     public DistinctPrefixFilter() {
@@ -47,7 +50,7 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
     public DistinctPrefixFilter(RowKeySchema schema, int prefixLength) {
         this.schema = schema;
-        this.prefixLengh = prefixLength;
+        this.prefixLength = prefixLength;
     }
 
     public void setOffset(int offset) {
@@ -60,13 +63,14 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
         // First determine the prefix based on the schema
         int maxOffset = schema.iterator(v.getRowArray(), v.getRowOffset()+offset, v.getRowLength()-offset, ptr);
-        schema.next(ptr, 0, maxOffset, prefixLengh - 1);
+        int position = schema.next(ptr, 0, maxOffset, prefixLength - 1);
 
         // now check whether we have seen this prefix before
         if (lastKey.getLength() != ptr.getLength() || !Bytes.equals(ptr.get(), ptr.getOffset(),
                 ptr.getLength(), lastKey.get(), lastKey.getOffset(), ptr.getLength())) {
             // if we haven't seen this prefix, include the row and remember this prefix
             lastKey.set(ptr.get(), ptr.getOffset(), ptr.getLength());
+            lastPosition = position - 1;
             return ReturnCode.INCLUDE;
         }
         // we've seen this prefix already, seek to the next
@@ -75,7 +79,8 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
     @Override
     public Cell getNextCellHint(Cell v) throws IOException {
-        PDataType<?> type = schema.getField(prefixLengh-1).getDataType();
+        Field field = schema.getField(prefixLength - 1);
+        PDataType<?> type = field.getDataType();
 
         ImmutableBytesWritable tmp;
         // In the following we make sure we copy the key at most once
@@ -83,8 +88,10 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
         if (offset > 0) {
             // make space to copy the missing offset, also 0-pad here if needed
             // (since we're making a copy anyway)
+            // We need to pad all null columns, otherwise we'll potentially
+            // skip rows.
             byte[] tmpKey = new byte[offset + lastKey.getLength() + 
-                                     (reversed || type.isFixedWidth() ? 0 : 1)];
+                                     (reversed || type.isFixedWidth() || field.getSortOrder() == SortOrder.DESC ? 0 : 1) + (prefixLength - 1 - lastPosition)];
             System.arraycopy(v.getRowArray(), v.getRowOffset(), tmpKey, 0, offset);
             System.arraycopy(lastKey.get(), lastKey.getOffset(), tmpKey, offset, lastKey.getLength());
             tmp = new ImmutableBytesWritable(tmpKey);
@@ -105,7 +112,15 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
                 } else {
                     // pad with a 0x00 byte (makes a copy)
                     tmp = new ImmutableBytesWritable(lastKey);
-                    ByteUtil.nullPad(tmp, tmp.getLength() + 1);
+                    ByteUtil.nullPad(tmp, tmp.getLength() + prefixLength - lastPosition);
+                    // Trim back length if:
+                    // 1) field is descending since the separator byte if 0xFF
+                    // 2) last key has trailing null 
+                    // Otherwise, in both cases we'd potentially be seeking to a row before
+                    // our current key.
+                    if (field.getSortOrder() == SortOrder.DESC || prefixLength - lastPosition > 1) {
+                        tmp.set(tmp.get(),tmp.getOffset(),tmp.getLength()-1);
+                    }
                 }
                 // calculate the next key
                 if (!ByteUtil.nextKey(tmp.get(), tmp.getOffset(), tmp.getLength())) {
@@ -126,7 +141,7 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
     public void write(DataOutput out) throws IOException {
         out.writeByte(VERSION);
         schema.write(out);
-        out.writeInt(prefixLengh);
+        out.writeInt(prefixLength);
     }
 
     @Override
@@ -134,7 +149,7 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
         in.readByte(); // ignore
         schema = new RowKeySchema();
         schema.readFields(in);
-        prefixLengh = in.readInt();
+        prefixLength = in.readInt();
     }
 
     @Override
