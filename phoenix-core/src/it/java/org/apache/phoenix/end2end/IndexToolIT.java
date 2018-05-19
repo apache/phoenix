@@ -21,12 +21,15 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -34,8 +37,16 @@ import java.util.Properties;
 import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -54,7 +65,7 @@ import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-public class IndexToolIT extends BaseTest {
+public class IndexToolIT extends ParallelStatsEnabledIT {
 
     private final boolean localIndex;
     private final boolean transactional;
@@ -85,7 +96,7 @@ public class IndexToolIT extends BaseTest {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static void setup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
@@ -209,6 +220,126 @@ public class IndexToolIT extends BaseTest {
         }
     }
 
+    @Test
+    public void testSaltedVariableLengthPK() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        try (Connection conn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            String dataDDL =
+                    "CREATE TABLE " + dataTableFullName + "(\n"
+                            + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
+                            + "\"info\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"info\".CAP_DATE VARCHAR NULL,\n" + "\"info\".ORG_ID BIGINT NULL,\n"
+                            + "\"info\".ORG_NAME VARCHAR(255) NULL\n" + ") SALT_BUCKETS=3";
+            conn.createStatement().execute(dataDDL);
+
+            String upsert =
+                    "UPSERT INTO " + dataTableFullName
+                            + "(ID,CAR_NUM,CAP_DATE,ORG_ID,ORG_NAME) VALUES('1','car1','2016-01-01 00:00:00',11,'orgname1')";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+
+            String indexDDL =
+                    String.format(
+                        "CREATE %s INDEX %s on %s (\"info\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                        (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
+            conn.createStatement().execute(indexDDL);
+
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+
+            ResultSet rs =
+                    conn.createStatement().executeQuery(
+                        "SELECT ORG_ID,CAP_DATE,CAR_NUM,ORG_NAME FROM " + dataTableFullName
+                                + " WHERE CAR_NUM='car1' AND CAP_DATE>='2016-01-01' AND CAP_DATE<='2016-05-02' LIMIT 10");
+            assertTrue(rs.next());
+            int orgId = rs.getInt(1);
+            assertEquals(11, orgId);
+        }
+    }
+
+    /**
+     * Test presplitting an index table
+     */
+    @Test
+    public void testSplitIndex() throws Exception {
+        if (localIndex) return; // can't split local indexes
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        final TableName dataTN = TableName.valueOf(dataTableFullName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        TableName indexTN = TableName.valueOf(indexTableFullName);
+        try (Connection conn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            String dataDDL =
+                    "CREATE TABLE " + dataTableFullName + "(\n"
+                            + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
+                            + "\"info\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"test\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"info\".CAP_DATE VARCHAR NULL,\n" + "\"info\".ORG_ID BIGINT NULL,\n"
+                            + "\"info\".ORG_NAME VARCHAR(255) NULL\n" + ") COLUMN_ENCODED_BYTES = 0";
+            conn.createStatement().execute(dataDDL);
+
+            String[] carNumPrefixes = new String[] {"a", "b", "c", "d"};
+
+            // split the data table, as the tool splits the index table to have the same # of regions
+            // doesn't really matter what the split points are, we just want a target # of regions
+            int numSplits = carNumPrefixes.length;
+            int targetNumRegions = numSplits + 1;
+            byte[][] splitPoints = new byte[numSplits][];
+            for (String prefix : carNumPrefixes) {
+                splitPoints[--numSplits] = Bytes.toBytes(prefix);
+            }
+            HTableDescriptor dataTD = admin.getTableDescriptor(dataTN);
+            admin.disableTable(dataTN);
+            admin.deleteTable(dataTN);
+            admin.createTable(dataTD, splitPoints);
+            assertEquals(targetNumRegions, admin.getTableRegions(dataTN).size());
+
+            // insert data where index column values start with a, b, c, d
+            int idCounter = 1;
+            try (PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + dataTableFullName
+                + "(ID,\"info\".CAR_NUM,\"test\".CAR_NUM,CAP_DATE,ORG_ID,ORG_NAME) VALUES(?,?,?,'2016-01-01 00:00:00',11,'orgname1')")){
+                for (String carNum : carNumPrefixes) {
+                    for (int i = 0; i < 100; i++) {
+                        ps.setString(1, idCounter++ + "");
+                        ps.setString(2, carNum + "_" + i);
+                        ps.setString(3, "test-" + carNum + "_ " + i);
+                        ps.addBatch();
+                    }
+                }
+                ps.executeBatch();
+                conn.commit();
+            }
+
+            String indexDDL =
+                    String.format(
+                        "CREATE INDEX %s on %s (\"info\".CAR_NUM,\"test\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                        indexTableName, dataTableFullName);
+            conn.createStatement().execute(indexDDL);
+
+            // run with 50% sampling rate, split if data table more than 3 regions
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, "-sp", "50", "-spa", "3");
+
+            assertEquals(targetNumRegions, admin.getTableRegions(indexTN).size());
+            List<Cell> values = new ArrayList<>();
+            // every index region should have been written to, if the index table was properly split uniformly
+            for (HRegion region : getUtility().getHBaseCluster().getRegions(indexTN)) {
+                values.clear();
+                RegionScanner scanner = region.getScanner(new Scan());
+                scanner.next(values);
+                if (values.isEmpty()) {
+                    fail("Region did not have any results: " + region.getRegionInfo());
+                }
+            }
+        }
+    }
+
     public static void assertExplainPlan(boolean localIndex, String actualExplainPlan,
             String dataTableFullName, String indexTableFullName) {
         String expectedExplainPlan;
@@ -257,13 +388,20 @@ public class IndexToolIT extends BaseTest {
 
     public static void runIndexTool(boolean directApi, boolean useSnapshot, String schemaName,
             String dataTableName, String indexTableName) throws Exception {
+        runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, new String[0]);
+    }
+
+    public static void runIndexTool(boolean directApi, boolean useSnapshot, String schemaName,
+            String dataTableName, String indexTableName, String... additionalArgs) throws Exception {
         IndexTool indexingTool = new IndexTool();
         Configuration conf = new Configuration(getUtility().getConfiguration());
         conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         indexingTool.setConf(conf);
         final String[] cmdArgs =
                 getArgValues(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
-        int status = indexingTool.run(cmdArgs);
+        List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
+        cmdArgList.addAll(Arrays.asList(additionalArgs));
+        int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
         assertEquals(0, status);
     }
 }
