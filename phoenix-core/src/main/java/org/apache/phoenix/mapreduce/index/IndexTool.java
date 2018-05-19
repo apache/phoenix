@@ -23,12 +23,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -44,6 +44,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -68,10 +69,14 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
+import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColNames;
 import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -83,6 +88,8 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.EquiDepthStreamHistogram;
+import org.apache.phoenix.util.EquiDepthStreamHistogram.Bucket;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -113,6 +120,24 @@ public class IndexTool extends Configured implements Tool {
     
     private static final Option DIRECT_API_OPTION = new Option("direct", "direct", false,
             "If specified, we avoid the bulk load (optional)");
+
+    private static final double DEFAULT_SPLIT_SAMPLING_RATE = 10.0;
+
+    private static final Option SPLIT_INDEX_OPTION =
+            new Option("sp", "split", true,
+                    "Split the index table before building, to have the same # of regions as the data table.  "
+                    + "The data table is sampled to get uniform index splits across the index values.  "
+                    + "Takes an optional argument specifying the sampling rate,"
+                    + "otherwise defaults to " + DEFAULT_SPLIT_SAMPLING_RATE);
+
+    private static final int DEFAULT_AUTOSPLIT_NUM_REGIONS = 20;
+
+    private static final Option AUTO_SPLIT_INDEX_OPTION =
+            new Option("spa", "autosplit", true,
+                    "Automatically split the index table if the # of data table regions is greater than N. "
+                    + "Takes an optional argument specifying N, otherwise defaults to " + DEFAULT_AUTOSPLIT_NUM_REGIONS
+                    + ".  Can be used in conjunction with -split option to specify the sampling rate");
+
     private static final Option RUN_FOREGROUND_OPTION =
             new Option(
                     "runfg",
@@ -138,6 +163,10 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
         options.addOption(HELP_OPTION);
+        AUTO_SPLIT_INDEX_OPTION.setOptionalArg(true);
+        options.addOption(AUTO_SPLIT_INDEX_OPTION);
+        SPLIT_INDEX_OPTION.setOptionalArg(true);
+        options.addOption(SPLIT_INDEX_OPTION);
         return options;
     }
 
@@ -182,6 +211,13 @@ public class IndexTool extends Configured implements Tool {
                         .getOpt())) {
             throw new IllegalStateException(RUN_FOREGROUND_OPTION.getLongOpt()
                     + " is applicable only for " + DIRECT_API_OPTION.getLongOpt());
+        }
+        boolean splitIndex = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt()) || cmdLine.hasOption(SPLIT_INDEX_OPTION.getOpt());
+        if (splitIndex && !cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())) {
+            throw new IllegalStateException("Must pass an index name for the split index option");
+        }
+        if (splitIndex && cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt())) {
+            throw new IllegalStateException("Cannot split index for a partial rebuild, as the index table is dropped");
         }
         return cmdLine;
     }
@@ -517,6 +553,18 @@ public class IndexTool extends Configured implements Tool {
                     isLocalIndexBuild = true;
                     splitKeysBeforeJob = regionLocator.getStartKeys();
                 }
+                // presplit the index table
+                boolean autosplit = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt());
+                boolean isSalted = pindexTable.getBucketNum() != null; // no need to split salted tables
+                if (!isSalted && IndexType.GLOBAL.equals(pindexTable.getIndexType())
+                        && (autosplit || cmdLine.hasOption(SPLIT_INDEX_OPTION.getOpt()))) {
+                    String nOpt = cmdLine.getOptionValue(AUTO_SPLIT_INDEX_OPTION.getOpt());
+                    int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
+                    String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());
+                    double samplingRate = rateOpt == null ? DEFAULT_SPLIT_SAMPLING_RATE : Double.parseDouble(rateOpt);
+                    LOG.info(String.format("Will split index %s , autosplit=%s , autoSplitNumRegions=%s , samplingRate=%s", indexTable, autosplit, autosplitNumRegions, samplingRate));
+                    splitIndexTable(connection.unwrap(PhoenixConnection.class), qDataTable, pindexTable, autosplit, autosplitNumRegions, samplingRate, configuration);
+                }
             }
             
             PTable pdataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
@@ -581,6 +629,98 @@ public class IndexTool extends Configured implements Tool {
     }
 
     
+
+    private void splitIndexTable(PhoenixConnection pConnection, String qDataTable,
+            PTable pindexTable, boolean autosplit, int autosplitNumRegions, double samplingRate, Configuration configuration)
+            throws SQLException, IOException, IllegalArgumentException, InterruptedException {
+        final PTable pdataTable = PhoenixRuntime.getTable(pConnection, qDataTable);
+        int numRegions;
+        
+
+        try (RegionLocator regionLocator =
+                ConnectionFactory.createConnection(configuration).getRegionLocator(
+                    TableName.valueOf(qDataTable))) {
+            numRegions = regionLocator.getStartKeys().length;
+            if (autosplit && !(numRegions > autosplitNumRegions)) {
+                LOG.info(String.format(
+                    "Will not split index %s because the data table only has %s regions, autoSplitNumRegions=%s",
+                    pindexTable.getPhysicalName(), numRegions, autosplitNumRegions));
+                return; // do nothing if # of regions is too low
+            }
+        }
+        // build a tablesample query to fetch index column values from the data table
+        DataSourceColNames colNames = new DataSourceColNames(pdataTable, pindexTable);
+        String qTableSample = String.format(qDataTable + " TABLESAMPLE(%.2f)", samplingRate);
+        List<String> dataColNames = colNames.getDataColNames();
+        final String dataSampleQuery =
+                QueryUtil.constructSelectStatement(qTableSample, dataColNames, null,
+                    Hint.NO_INDEX, true);
+        IndexMaintainer maintainer = IndexMaintainer.create(pdataTable, pindexTable, pConnection);
+        ImmutableBytesWritable dataRowKeyPtr = new ImmutableBytesWritable();
+        try (final PhoenixResultSet rs =
+                pConnection.createStatement().executeQuery(dataSampleQuery)
+                        .unwrap(PhoenixResultSet.class);
+                Admin admin = pConnection.getQueryServices().getAdmin()) {
+            EquiDepthStreamHistogram histo = new EquiDepthStreamHistogram(numRegions);
+            ValueGetter getter = getIndexValueGetter(rs, dataColNames);
+            // loop over data table rows - build the index rowkey, put it in the histogram
+            while (rs.next()) {
+                rs.getCurrentRow().getKey(dataRowKeyPtr);
+                // regionStart/EndKey only needed for local indexes, so we pass null
+                byte[] indexRowKey = maintainer.buildRowKey(getter, dataRowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP);
+                histo.addValue(indexRowKey);
+            }
+            List<Bucket> buckets = histo.computeBuckets();
+            // do the split
+            // to get the splits, we just need the right bound of every histogram bucket, excluding the last
+            byte[][] splitPoints = new byte[buckets.size() - 1][];
+            int splitIdx = 0;
+            for (Bucket b : buckets.subList(0, buckets.size() - 1)) {
+                splitPoints[splitIdx++] = b.getRightBoundExclusive();
+            }
+            // drop table and recreate with appropriate splits
+            TableName indexTN = TableName.valueOf(pindexTable.getPhysicalName().getBytes());
+            HTableDescriptor descriptor = admin.getTableDescriptor(indexTN);
+            admin.disableTable(indexTN);
+            admin.deleteTable(indexTN);
+            admin.createTable(descriptor, splitPoints);
+        }
+    }
+
+    // setup a ValueGetter to get index values from the ResultSet
+    private ValueGetter getIndexValueGetter(final PhoenixResultSet rs, List<String> dataColNames) {
+        // map from data col name to index in ResultSet
+        final Map<String, Integer> rsIndex = new HashMap<>(dataColNames.size());
+        int i = 1;
+        for (String dataCol : dataColNames) {
+            rsIndex.put(SchemaUtil.getEscapedFullColumnName(dataCol), i++);
+        }
+        ValueGetter getter = new ValueGetter() {
+            final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
+            final ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable();
+
+            @Override
+            public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
+                try {
+                    String fullColumnName =
+                            SchemaUtil.getEscapedFullColumnName(SchemaUtil
+                                    .getColumnDisplayName(ref.getFamily(), ref.getQualifier()));
+                    byte[] colVal = rs.getBytes(rsIndex.get(fullColumnName));
+                    valuePtr.set(colVal);
+                } catch (SQLException e) {
+                    throw new IOException(e);
+                }
+                return valuePtr;
+            }
+
+            @Override
+            public byte[] getRowKey() {
+                rs.getCurrentRow().getKey(rowKeyPtr);
+                return ByteUtil.copyKeyBytesIfNecessary(rowKeyPtr);
+            }
+        };
+        return getter;
+    }
 
     private boolean validateSplitForLocalIndex(byte[][] splitKeysBeforeJob, RegionLocator regionLocator) throws Exception {
         if (splitKeysBeforeJob != null
