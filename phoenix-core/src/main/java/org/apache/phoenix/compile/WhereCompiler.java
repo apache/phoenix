@@ -105,9 +105,9 @@ public class WhereCompiler {
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
     public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
-        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), false, subqueryNodes);
+        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), subqueryNodes);
     }
-    
+
     /**
      * Optimize scan ranges by applying dynamically generated filter expressions.
      * @param context the shared context during query compilation
@@ -118,7 +118,7 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */    
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, boolean hashJoinOptimization, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
         ParseNode where = statement.getWhere();
         if (subqueryNodes != null) { // if the subqueryNodes passed in is null, we assume there will be no sub-queries in the WHERE clause.
             SubqueryParseNodeVisitor subqueryVisitor = new SubqueryParseNodeVisitor(context, subqueryNodes);
@@ -156,7 +156,7 @@ public class WhereCompiler {
         if (context.getCurrentTable().getTable().getType() != PTableType.PROJECTED && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
             expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
         }
-        setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily, hashJoinOptimization);
+        setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
 
         return expression;
     }
@@ -249,12 +249,12 @@ public class WhereCompiler {
      * @param context the shared context during query compilation
      * @param whereClause the final where clause expression.
      */
-    private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily, boolean hashJoinOptimization) {
+    private static void setScanFilter(StatementContext context, FilterableStatement statement, Expression whereClause, boolean disambiguateWithFamily) {
         Scan scan = context.getScan();
 
         if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
-        } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause) && !hashJoinOptimization) {
+        } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
             Filter filter = null;
             final Counter counter = new Counter();
             whereClause.accept(new KeyValueExpressionVisitor() {
