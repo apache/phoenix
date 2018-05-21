@@ -261,7 +261,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         PTable table = tableRef.getTable();
         
         if (dynamicFilter != null) {
-            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), false, null);            
+            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), null);
         }
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
