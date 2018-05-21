@@ -216,6 +216,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
         boolean hasKeyRangeExpressions = keyRangeExpressions != null && !keyRangeExpressions.isEmpty();
         if (recompileWhereClause || hasKeyRangeExpressions) {
             StatementContext context = delegate.getContext();
+            // Since we are going to compile the WHERE conditions all over again, we will clear
+            // the old filter, otherwise there would be conflicts and would cause PHOENIX-4692.
+            context.getScan().setFilter(null);
             PTable table = context.getCurrentTable().getTable();
             ParseNode viewWhere = table.getViewStatement() == null ? null : new SQLParser(table.getViewStatement()).parseQuery().getWhere();
             context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (delegate.getStatement()), delegate.getContext().getConnection()));
@@ -223,7 +226,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 postFilter = WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, null);
             }
             if (hasKeyRangeExpressions) {
-                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, true, null);
+                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, null);
             }
         }
 

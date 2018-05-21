@@ -564,4 +564,25 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
+
+    @Test
+    public void testSkipScanJoinOptimization() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String idxName = "IDX_" + tableName;
+            conn.setAutoCommit(true);
+            conn.createStatement().execute(
+                    "create table " + tableName + " (PK1 INTEGER NOT NULL, PK2 INTEGER NOT NULL, " +
+                            " ID1 INTEGER, ID2 INTEGER CONSTRAINT PK PRIMARY KEY(PK1 , PK2))SALT_BUCKETS = 4");
+            conn.createStatement().execute("upsert into " + tableName + " values (1,1,1,1)");
+            conn.createStatement().execute("upsert into " + tableName + " values (2,2,2,2)");
+            conn.createStatement().execute("upsert into " + tableName + " values (2,3,1,2)");
+            conn.createStatement().execute("create view " + viewName + " as select * from " +
+                    tableName + " where PK1 in (1,2)");
+            conn.createStatement().execute("create index " + idxName + " on " + viewName + " (ID1)");
+            ResultSet rs = conn.createStatement().executeQuery("select /*+ INDEX(" + viewName + " " + idxName + ") */ * from " + viewName + " where ID1 = 1 ");
+            assertTrue(rs.next());
+        }
+    }
 }
