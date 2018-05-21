@@ -71,7 +71,7 @@
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
-    <hive.version>3.0.0-SNAPSHOT</hive.version>
+    <hive.version>3.0.0</hive.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>

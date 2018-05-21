@@ -17,6 +17,12 @@
  */
 package org.apache.phoenix.hive;
 
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.Properties;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -37,12 +43,6 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.util.QueryUtil;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.Properties;
 
 public class PhoenixRecordUpdater implements RecordUpdater {
 
@@ -331,6 +331,11 @@ public class PhoenixRecordUpdater implements RecordUpdater {
         // Don't worry about setting raw data size diff.  There is no reasonable way  to calculate
         // that without finding the row we are updating or deleting, which would be a mess.
         return stats;
+    }
+
+    @Override
+    public long getBufferedRowCount() {
+        return numRecords;
     }
 
 }
