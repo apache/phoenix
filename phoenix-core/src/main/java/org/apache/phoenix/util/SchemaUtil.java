@@ -1132,7 +1132,7 @@ public class SchemaUtil {
      * @return the byte representation of the HTable
      */
     public static String getQualifiedTableName(String schemaName, String tableName) {
-        if (schemaName != null) {
+        if (schemaName != null && !schemaName.isEmpty()) {
             return String.format("%s.%s", normalizeIdentifier(schemaName),
                     normalizeIdentifier(tableName));
         } else {
@@ -1169,6 +1169,10 @@ public class SchemaUtil {
     public static boolean isNamespaceMapped(Result currentResult) {
         Cell isNamespaceMappedCell = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
         return isNamespaceMappedCell!=null && (boolean) PBoolean.INSTANCE.toObject(isNamespaceMappedCell.getValue());
+    }
+
+    public static boolean isLogTable(String schemaName, String tableName) {
+        return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE.equals(tableName);
     }
     
 

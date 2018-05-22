@@ -25,6 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.annotation.Nonnull;
 
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -40,19 +41,26 @@ public class ReadMetricQueue {
 
     private final List<ScanMetricsHolder> scanMetricsHolderList = new ArrayList<ScanMetricsHolder>();
 
-    private final boolean isRequestMetricsEnabled;
 
-    public ReadMetricQueue(boolean isRequestMetricsEnabled) {
+    private LogLevel connectionLogLevel;
+
+    private boolean isRequestMetricsEnabled;
+
+    public ReadMetricQueue(boolean isRequestMetricsEnabled, LogLevel connectionLogLevel) {
         this.isRequestMetricsEnabled = isRequestMetricsEnabled;
+        this.connectionLogLevel = connectionLogLevel;
     }
 
     public CombinableMetric allotMetric(MetricType type, String tableName) {
-        if (!isRequestMetricsEnabled) { return NoOpRequestMetric.INSTANCE; }
-        MetricKey key = new MetricKey(type, tableName);
-        Queue<CombinableMetric> q = getMetricQueue(key);
-        CombinableMetric metric = getMetric(type);
-        q.offer(metric);
-        return metric;
+        if (type.isLoggingEnabled(connectionLogLevel) || isRequestMetricsEnabled) {
+            MetricKey key = new MetricKey(type, tableName);
+            Queue<CombinableMetric> q = getMetricQueue(key);
+            CombinableMetric metric = getMetric(type);
+            q.offer(metric);
+            return metric;
+        } else {
+            return NoOpRequestMetric.INSTANCE;
+        }
     }
 
     @VisibleForTesting
@@ -90,7 +98,8 @@ public class ReadMetricQueue {
         int size = metrics.size();
         if (size == 0) { throw new IllegalArgumentException("Metrics collection needs to have at least one element"); }
         Iterator<CombinableMetric> itr = metrics.iterator();
-        CombinableMetric combinedMetric = itr.next();
+        //Clone first metric for combining so that aggregate always give consistent result
+        CombinableMetric combinedMetric = itr.next().clone();
         while (itr.hasNext()) {
             combinedMetric = combinedMetric.combine(itr.next());
         }
@@ -173,10 +182,6 @@ public class ReadMetricQueue {
         return q;
     }
 
-    public boolean isRequestMetricsEnabled() {
-        return isRequestMetricsEnabled;
-    }
-    
     public void addScanHolder(ScanMetricsHolder holder){
         scanMetricsHolderList.add(holder);
     }
@@ -185,6 +190,8 @@ public class ReadMetricQueue {
         return scanMetricsHolderList;
     }
     
-    
+    public boolean isRequestMetricsEnabled() {
+        return isRequestMetricsEnabled;
+    }    
 
 }

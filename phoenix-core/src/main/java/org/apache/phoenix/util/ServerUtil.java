@@ -26,11 +26,10 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -42,15 +41,14 @@ import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.CoprocessorHConnection;
-import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
@@ -66,8 +64,6 @@ import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-import org.jboss.netty.util.internal.ConcurrentHashMap;
-
 
 @SuppressWarnings("deprecation")
 public class ServerUtil {
@@ -319,8 +315,8 @@ public class ServerUtil {
         }
 
         @Override
-        public synchronized void shutdown() {
-            // We need not close the cached connections as they are shared across the server.
+        public void shutdown() {
+            ConnectionFactory.shutdown();
         }
 
         @Override
@@ -343,12 +339,26 @@ public class ServerUtil {
         private static Map<ConnectionType, ClusterConnection> connections =
                 new ConcurrentHashMap<ConnectionType, ClusterConnection>();
 
+        public static void shutdown() {
+            synchronized (CoprocessorHConnectionTableFactory.class) {
+                for (ClusterConnection connection : connections.values()) {
+                    try {
+                        connection.close();
+                    } catch (IOException e) {
+                        LOG.warn("Unable to close coprocessor connection", e);
+                    }
+                }
+                connections.clear();
+            }
+        }
+            
+        
         public static ClusterConnection getConnection(final ConnectionType connectionType, final Configuration conf, final HRegionServer server) throws IOException {
             ClusterConnection connection = null;
             if((connection = connections.get(connectionType)) == null) {
                 synchronized (CoprocessorHConnectionTableFactory.class) {
-                    if(connections.get(connectionType) == null) {
-                        connection = new CoprocessorHConnection(conf, server);
+                    if((connection = connections.get(connectionType)) == null) {
+                        connection = new CoprocessorHConnection(getTypeSpecificConfiguration(connectionType, conf), server);
                         connections.put(connectionType, connection);
                         return connection;
                     }
@@ -406,7 +416,7 @@ public class ServerUtil {
     }
 
     public static Configuration getIndexWriterConfigurationWithCustomThreads(Configuration conf) {
-        Configuration clonedConfig = PropertiesUtil.cloneConfig(conf);
+        Configuration clonedConfig = getIndexWriterConnection(conf);
         setHTableThreads(clonedConfig);
         return clonedConfig;
     }
