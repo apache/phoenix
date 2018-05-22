@@ -21,33 +21,27 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Random;
 
-import com.google.inject.Guice;
-import com.google.inject.Injector;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-
 import org.apache.omid.committable.CommitTable;
 import org.apache.omid.committable.InMemoryCommitTable;
 import org.apache.omid.transaction.HBaseOmidClientConfiguration;
 import org.apache.omid.transaction.HBaseTransactionManager;
-import org.apache.omid.transaction.OmidCompactor;
 import org.apache.omid.tso.TSOMockModule;
 import org.apache.omid.tso.TSOServer;
 import org.apache.omid.tso.TSOServerConfig;
 import org.apache.omid.tso.client.OmidClientConfiguration;
-import org.apache.omid.transaction.OmidSnapshotFilter;
-
 import org.apache.omid.tso.client.TSOClient;
 import org.apache.phoenix.coprocessor.OmidGCProcessor;
 import org.apache.phoenix.coprocessor.OmidTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.tephra.distributed.TransactionService;
-import org.apache.twill.zookeeper.ZKClientService;
+
+import com.google.inject.Guice;
+import com.google.inject.Injector;
 
 public class OmidTransactionProvider implements PhoenixTransactionProvider {
     private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
@@ -155,7 +149,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
             HBaseOmidClientConfiguration clientConf = new HBaseOmidClientConfiguration();
             clientConf.setConnectionString("localhost:" + port);
             clientConf.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
-//            clientConf.setHBaseConfiguration(hbaseConf);
+            clientConf.setHBaseConfiguration(config);
             commitTableClient = commitTable.getClient();
 
             transactionManager = HBaseTransactionManager.builder(clientConf).commitTableClient(commitTableClient)

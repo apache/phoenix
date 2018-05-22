@@ -19,53 +19,32 @@ package org.apache.phoenix.transaction;
 
 import java.sql.SQLException;
 import java.util.HashSet;
-import java.util.Set;
 import java.util.Random;
+import java.util.Set;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.omid.committable.CommitTable;
+import org.apache.omid.proto.TSOProto;
+import org.apache.omid.transaction.AbstractTransaction.VisibilityLevel;
+import org.apache.omid.transaction.HBaseCellId;
+import org.apache.omid.transaction.HBaseTransaction;
+import org.apache.omid.transaction.HBaseTransactionManager;
+import org.apache.omid.transaction.RollbackException;
+import org.apache.omid.transaction.Transaction;
+//import org.apache.omid.tso.TSOMockModule;
+import org.apache.omid.transaction.Transaction.Status;
+import org.apache.omid.transaction.TransactionException;
+//import org.apache.omid.tso.TSOMockModule;
+import org.apache.omid.tso.TSOServer;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.slf4j.Logger;
-import org.apache.omid.committable.CommitTable;
-import org.apache.omid.committable.InMemoryCommitTable;
-import org.apache.omid.proto.TSOProto;
-import org.apache.omid.transaction.AbstractTransaction.VisibilityLevel;
-import org.apache.omid.transaction.CellUtils;
-import org.apache.omid.transaction.HBaseCellId;
-import org.apache.omid.transaction.HBaseOmidClientConfiguration;
-import org.apache.omid.transaction.HBaseTransaction;
-import org.apache.omid.transaction.HBaseTransactionManager;
-import org.apache.omid.transaction.OmidSnapshotFilter;
-import org.apache.omid.transaction.RollbackException;
-import org.apache.omid.transaction.Transaction;
-import org.apache.omid.transaction.TransactionException;
-import org.apache.omid.transaction.TransactionManager;
-//import org.apache.omid.tso.TSOMockModule;
-import org.apache.omid.transaction.Transaction.Status;
-import org.apache.omid.transaction.OmidCompactor;
-import org.apache.omid.tso.TSOMockModule;
-//import org.apache.omid.tso.TSOMockModule;
-import org.apache.omid.tso.TSOServer;
-import org.apache.omid.tso.TSOServerConfig;
-import org.apache.omid.tso.client.OmidClientConfiguration;
-import org.apache.omid.tso.client.OmidClientConfiguration.ConflictDetectionLevel;
-import org.apache.omid.tso.client.TSOClient;
-import org.apache.omid.TestUtils;
-
-import com.google.inject.Guice;
-import com.google.inject.Injector;
-import com.google.protobuf.InvalidProtocolBufferException;
-
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.protobuf.InvalidProtocolBufferException;
 
 public class OmidTransactionContext implements PhoenixTransactionContext {
 
@@ -264,8 +243,8 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     public PhoenixVisibilityLevel getVisibilityLevel() {
         VisibilityLevel visibilityLevel = null;
 
-        assert(tx != null && tx instanceof HBaseTransaction);
-        visibilityLevel = ((HBaseTransaction) tx).getVisibilityLevel();
+        assert(tx != null);
+        visibilityLevel = tx.getVisibilityLevel();
 
         PhoenixVisibilityLevel phoenixVisibilityLevel;
         switch (visibilityLevel) {
@@ -303,8 +282,8 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
             assert (false);
         }
 
-        assert(tx != null && tx instanceof HBaseTransaction);
-        ((HBaseTransaction) tx).setVisibilityLevel(omidVisibilityLevel);
+        assert(tx != null);
+        tx.setVisibilityLevel(omidVisibilityLevel);
 
     }
 

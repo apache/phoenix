@@ -17,14 +17,13 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.omid.committable.CommitTable;
 import org.apache.omid.transaction.OmidSnapshotFilter;
 import org.apache.phoenix.transaction.OmidTransactionProvider;
 
 
 public class OmidTransactionalProcessor extends DelegateRegionObserver {
 
-    public OmidTransactionalProcessor(CommitTable.Client commitTableClient) {
+    public OmidTransactionalProcessor() {
         super(new OmidSnapshotFilter(OmidTransactionProvider.commitTableClient));
     }
 
