@@ -28,8 +28,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -82,6 +80,8 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.protobuf.ServiceException;
 
 
@@ -485,8 +485,8 @@ public class MetaDataUtil {
         return schemaName;
     }
     
-    public static String getViewIndexName(String schemaName, String tableName) {
-        return SchemaUtil.getTableName(getViewIndexSchemaName(schemaName), getViewIndexTableName(tableName));
+    public static String getViewIndexPhysicalName(String physicalTableName) {
+        return getIndexPhysicalName(physicalTableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
     public static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {

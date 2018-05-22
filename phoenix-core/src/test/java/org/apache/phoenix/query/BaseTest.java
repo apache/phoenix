@@ -717,6 +717,18 @@ public abstract class BaseTest {
         TABLE_COUNTER.incrementAndGet();
         return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
+    
+    public static String generateUniqueTableName() {
+        String schemaName = "S_" + "_" + generateUniqueName();
+        String tableName = "T_" + generateUniqueName();
+        return SchemaUtil.getTableName(schemaName, tableName);
+    }
+    
+    public static String generateUniqueViewName() {
+        String schemaName = "S_" + "_" + generateUniqueName();
+        String viewName = "V_" + generateUniqueName();
+        return SchemaUtil.getTableName(schemaName, viewName);
+    }
 
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
     private static final int MAX_SEQ_SUFFIX_VALUE = 1000000;

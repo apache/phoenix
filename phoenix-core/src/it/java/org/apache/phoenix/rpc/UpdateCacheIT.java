@@ -160,7 +160,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
 			conn.commit();
             int numUpsertRpcs = expectedRPCs[0];
 			// verify only 0 or 1 rpc to fetch table metadata, 
-            verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
+            verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong(), false);
             reset(connectionQueryServices);
             
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -186,7 +186,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             // for transactional tables : verify *only* one rpc occurs
 	        // for non-transactional, system tables : verify no rpc occurs
             int numRpcs = expectedRPCs[1]; 
-            verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong());
+            verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong(), false);
 		}
         finally {
         	conn.close();

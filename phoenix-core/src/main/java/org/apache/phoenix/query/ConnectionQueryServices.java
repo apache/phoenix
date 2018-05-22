@@ -79,7 +79,13 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
 
-    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimetamp) throws SQLException;
+    /**
+     * @param tableTimestamp timestamp of table if its present in the client side cache       
+     * @param clientTimetamp if the client connection has an scn, or of the table is transactional the txn write pointer
+     * @param skipAddingParentColumns whether or not to include parent columns for views
+     * @return PTable for the given tenant id, schema and table name
+     */
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimetamp, boolean skipAddingParentColumns) throws SQLException;
     public MetaDataMutationResult getFunctions(PName tenantId, List<Pair<byte[], Long>> functionNameAndTimeStampPairs, long clientTimestamp) throws SQLException;
 
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] tableName, PTableType tableType,

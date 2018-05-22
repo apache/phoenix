@@ -17,16 +17,11 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.hadoop.hbase.regionserver.ConstantSizeRegionSplitPolicy;
-
-import org.apache.phoenix.util.SchemaUtil;
-
-
-public class MetaDataSplitPolicy extends ConstantSizeRegionSplitPolicy {
+public class MetaDataSplitPolicy extends SplitOnLeadingVarCharColumnsPolicy {
 
     @Override
-    protected boolean shouldSplit() {
-        // never split SYSTEM.CATALOG
-        return false;
+    protected int getColumnToSplitAt() {
+        return 2;
     }
+
 }

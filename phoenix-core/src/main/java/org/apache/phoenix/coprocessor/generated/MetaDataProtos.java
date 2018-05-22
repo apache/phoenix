@@ -3957,6 +3957,16 @@ public final class MetaDataProtos {
      * <code>optional int32 clientVersion = 6;</code>
      */
     int getClientVersion();
+
+    // optional bool skipAddingParentColumns = 7;
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    boolean hasSkipAddingParentColumns();
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    boolean getSkipAddingParentColumns();
   }
   /**
    * Protobuf type {@code GetTableRequest}
@@ -4037,6 +4047,11 @@ public final class MetaDataProtos {
             case 48: {
               bitField0_ |= 0x00000020;
               clientVersion_ = input.readInt32();
+              break;
+            }
+            case 56: {
+              bitField0_ |= 0x00000040;
+              skipAddingParentColumns_ = input.readBool();
               break;
             }
           }
@@ -4175,6 +4190,22 @@ public final class MetaDataProtos {
       return clientVersion_;
     }
 
+    // optional bool skipAddingParentColumns = 7;
+    public static final int SKIPADDINGPARENTCOLUMNS_FIELD_NUMBER = 7;
+    private boolean skipAddingParentColumns_;
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    public boolean hasSkipAddingParentColumns() {
+      return ((bitField0_ & 0x00000040) == 0x00000040);
+    }
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    public boolean getSkipAddingParentColumns() {
+      return skipAddingParentColumns_;
+    }
+
     private void initFields() {
       tenantId_ = com.google.protobuf.ByteString.EMPTY;
       schemaName_ = com.google.protobuf.ByteString.EMPTY;
@@ -4182,6 +4213,7 @@ public final class MetaDataProtos {
       tableTimestamp_ = 0L;
       clientTimestamp_ = 0L;
       clientVersion_ = 0;
+      skipAddingParentColumns_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4233,6 +4265,9 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000020) == 0x00000020)) {
         output.writeInt32(6, clientVersion_);
       }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        output.writeBool(7, skipAddingParentColumns_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4265,6 +4300,10 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000020) == 0x00000020)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(6, clientVersion_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(7, skipAddingParentColumns_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4319,6 +4358,11 @@ public final class MetaDataProtos {
         result = result && (getClientVersion()
             == other.getClientVersion());
       }
+      result = result && (hasSkipAddingParentColumns() == other.hasSkipAddingParentColumns());
+      if (hasSkipAddingParentColumns()) {
+        result = result && (getSkipAddingParentColumns()
+            == other.getSkipAddingParentColumns());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4355,6 +4399,10 @@ public final class MetaDataProtos {
       if (hasClientVersion()) {
         hash = (37 * hash) + CLIENTVERSION_FIELD_NUMBER;
         hash = (53 * hash) + getClientVersion();
+      }
+      if (hasSkipAddingParentColumns()) {
+        hash = (37 * hash) + SKIPADDINGPARENTCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getSkipAddingParentColumns());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4477,6 +4525,8 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000010);
         clientVersion_ = 0;
         bitField0_ = (bitField0_ & ~0x00000020);
+        skipAddingParentColumns_ = false;
+        bitField0_ = (bitField0_ & ~0x00000040);
         return this;
       }
 
@@ -4529,6 +4579,10 @@ public final class MetaDataProtos {
           to_bitField0_ |= 0x00000020;
         }
         result.clientVersion_ = clientVersion_;
+        if (((from_bitField0_ & 0x00000040) == 0x00000040)) {
+          to_bitField0_ |= 0x00000040;
+        }
+        result.skipAddingParentColumns_ = skipAddingParentColumns_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4562,6 +4616,9 @@ public final class MetaDataProtos {
         }
         if (other.hasClientVersion()) {
           setClientVersion(other.getClientVersion());
+        }
+        if (other.hasSkipAddingParentColumns()) {
+          setSkipAddingParentColumns(other.getSkipAddingParentColumns());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -4813,6 +4870,39 @@ public final class MetaDataProtos {
       public Builder clearClientVersion() {
         bitField0_ = (bitField0_ & ~0x00000020);
         clientVersion_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional bool skipAddingParentColumns = 7;
+      private boolean skipAddingParentColumns_ ;
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public boolean hasSkipAddingParentColumns() {
+        return ((bitField0_ & 0x00000040) == 0x00000040);
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public boolean getSkipAddingParentColumns() {
+        return skipAddingParentColumns_;
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public Builder setSkipAddingParentColumns(boolean value) {
+        bitField0_ |= 0x00000040;
+        skipAddingParentColumns_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public Builder clearSkipAddingParentColumns() {
+        bitField0_ = (bitField0_ & ~0x00000040);
+        skipAddingParentColumns_ = false;
         onChanged();
         return this;
       }
@@ -17167,87 +17257,88 @@ public final class MetaDataProtos {
       "\030\007 \001(\014\022\034\n\010function\030\010 \003(\0132\n.PFunction\022/\n\024" +
       "sharedTablesToDelete\030\t \003(\0132\021.SharedTable" +
       "State\022\030\n\006schema\030\n \001(\0132\010.PSchema\022\030\n\020autoP" +
-      "artitionNum\030\013 \001(\003\022\023\n\013viewIndexId\030\014 \001(\005\"\222" +
+      "artitionNum\030\013 \001(\003\022\023\n\013viewIndexId\030\014 \001(\005\"\263" +
       "\001\n\017GetTableRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\n" +
       "schemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\026\n\016t" +
       "ableTimestamp\030\004 \002(\003\022\027\n\017clientTimestamp\030\005" +
-      " \002(\003\022\025\n\rclientVersion\030\006 \001(\005\"\212\001\n\023GetFunct" +
-      "ionsRequest\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctio" +
-      "nNames\030\002 \003(\014\022\032\n\022functionTimestamps\030\003 \003(\003",
-      "\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rclientVersi" +
-      "on\030\005 \001(\005\"V\n\020GetSchemaRequest\022\022\n\nschemaNa" +
-      "me\030\001 \002(\t\022\027\n\017clientTimestamp\030\002 \002(\003\022\025\n\rcli" +
-      "entVersion\030\003 \002(\005\"d\n\022CreateTableRequest\022\036" +
-      "\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rclient" +
-      "Version\030\002 \001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r" +
-      "\n\025CreateFunctionRequest\022\036\n\026tableMetadata" +
-      "Mutations\030\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007re" +
-      "place\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023Cr" +
-      "eateSchemaRequest\022\036\n\026tableMetadataMutati",
-      "ons\030\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientV" +
-      "ersion\030\003 \002(\005\"m\n\020DropTableRequest\022\036\n\026tabl" +
-      "eMetadataMutations\030\001 \003(\014\022\021\n\ttableType\030\002 " +
-      "\002(\t\022\017\n\007cascade\030\003 \001(\010\022\025\n\rclientVersion\030\004 " +
-      "\001(\005\"_\n\021DropSchemaRequest\022\037\n\027schemaMetada" +
-      "taMutations\030\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n" +
-      "\rclientVersion\030\003 \002(\005\"I\n\020AddColumnRequest" +
-      "\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rclie" +
-      "ntVersion\030\002 \001(\005\"J\n\021DropColumnRequest\022\036\n\026" +
-      "tableMetadataMutations\030\001 \003(\014\022\025\n\rclientVe",
-      "rsion\030\002 \001(\005\"^\n\023DropFunctionRequest\022\036\n\026ta" +
-      "bleMetadataMutations\030\001 \003(\014\022\020\n\010ifExists\030\002" +
-      " \001(\010\022\025\n\rclientVersion\030\003 \001(\005\"P\n\027UpdateInd" +
-      "exStateRequest\022\036\n\026tableMetadataMutations" +
-      "\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"*\n\021ClearCa" +
-      "cheRequest\022\025\n\rclientVersion\030\001 \001(\005\"*\n\022Cle" +
-      "arCacheResponse\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n" +
-      "\021GetVersionRequest\022\025\n\rclientVersion\030\001 \001(" +
-      "\005\"E\n\022GetVersionResponse\022\017\n\007version\030\001 \002(\003" +
-      "\022\036\n\026systemCatalogTimestamp\030\002 \001(\003\"\205\001\n\032Cle",
-      "arTableFromCacheRequest\022\020\n\010tenantId\030\001 \002(" +
-      "\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014" +
-      "\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rclientVersi" +
-      "on\030\005 \001(\005\"\035\n\033ClearTableFromCacheResponse*" +
-      "\207\005\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXISTS" +
-      "\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FO" +
-      "UND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONC" +
-      "URRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_" +
-      "REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALL" +
-      "OWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010",
-      "\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t\022\033\n\027FUNCTION" +
-      "_ALREADY_EXISTS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020" +
-      "\013\022\030\n\024NEWER_FUNCTION_FOUND\020\014\022\032\n\026FUNCTION_" +
-      "NOT_IN_REGION\020\r\022\031\n\025SCHEMA_ALREADY_EXISTS" +
-      "\020\016\022\026\n\022NEWER_SCHEMA_FOUND\020\017\022\024\n\020SCHEMA_NOT" +
-      "_FOUND\020\020\022\030\n\024SCHEMA_NOT_IN_REGION\020\021\022\032\n\026TA" +
-      "BLES_EXIST_ON_SCHEMA\020\022\022\035\n\031UNALLOWED_SCHE" +
-      "MA_MUTATION\020\023\022%\n!AUTO_PARTITION_SEQUENCE" +
-      "_NOT_FOUND\020\024\022#\n\037CANNOT_COERCE_AUTO_PARTI" +
-      "TION_ID\020\025\022\024\n\020TOO_MANY_INDEXES\020\026\022\020\n\014INVAL",
-      "ID_VIEW\020\0272\345\006\n\017MetaDataService\022/\n\010getTabl" +
-      "e\022\020.GetTableRequest\032\021.MetaDataResponse\0227" +
-      "\n\014getFunctions\022\024.GetFunctionsRequest\032\021.M" +
-      "etaDataResponse\0221\n\tgetSchema\022\021.GetSchema" +
-      "Request\032\021.MetaDataResponse\0225\n\013createTabl" +
-      "e\022\023.CreateTableRequest\032\021.MetaDataRespons" +
-      "e\022;\n\016createFunction\022\026.CreateFunctionRequ" +
-      "est\032\021.MetaDataResponse\0227\n\014createSchema\022\024" +
-      ".CreateSchemaRequest\032\021.MetaDataResponse\022" +
-      "1\n\tdropTable\022\021.DropTableRequest\032\021.MetaDa",
-      "taResponse\0223\n\ndropSchema\022\022.DropSchemaReq" +
-      "uest\032\021.MetaDataResponse\0227\n\014dropFunction\022" +
-      "\024.DropFunctionRequest\032\021.MetaDataResponse" +
-      "\0221\n\taddColumn\022\021.AddColumnRequest\032\021.MetaD" +
-      "ataResponse\0223\n\ndropColumn\022\022.DropColumnRe" +
-      "quest\032\021.MetaDataResponse\022?\n\020updateIndexS" +
-      "tate\022\030.UpdateIndexStateRequest\032\021.MetaDat" +
-      "aResponse\0225\n\nclearCache\022\022.ClearCacheRequ" +
-      "est\032\023.ClearCacheResponse\0225\n\ngetVersion\022\022" +
-      ".GetVersionRequest\032\023.GetVersionResponse\022",
-      "P\n\023clearTableFromCache\022\033.ClearTableFromC" +
-      "acheRequest\032\034.ClearTableFromCacheRespons" +
-      "eBB\n(org.apache.phoenix.coprocessor.gene" +
-      "ratedB\016MetaDataProtosH\001\210\001\001\240\001\001"
+      " \002(\003\022\025\n\rclientVersion\030\006 \001(\005\022\037\n\027skipAddin" +
+      "gParentColumns\030\007 \001(\010\"\212\001\n\023GetFunctionsReq" +
+      "uest\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctionNames\030",
+      "\002 \003(\014\022\032\n\022functionTimestamps\030\003 \003(\003\022\027\n\017cli" +
+      "entTimestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(" +
+      "\005\"V\n\020GetSchemaRequest\022\022\n\nschemaName\030\001 \002(" +
+      "\t\022\027\n\017clientTimestamp\030\002 \002(\003\022\025\n\rclientVers" +
+      "ion\030\003 \002(\005\"d\n\022CreateTableRequest\022\036\n\026table" +
+      "MetadataMutations\030\001 \003(\014\022\025\n\rclientVersion" +
+      "\030\002 \001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r\n\025Creat" +
+      "eFunctionRequest\022\036\n\026tableMetadataMutatio" +
+      "ns\030\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007replace\030\003" +
+      " \001(\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023CreateSch",
+      "emaRequest\022\036\n\026tableMetadataMutations\030\001 \003" +
+      "(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion\030" +
+      "\003 \002(\005\"m\n\020DropTableRequest\022\036\n\026tableMetada" +
+      "taMutations\030\001 \003(\014\022\021\n\ttableType\030\002 \002(\t\022\017\n\007" +
+      "cascade\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\"_\n\021" +
+      "DropSchemaRequest\022\037\n\027schemaMetadataMutat" +
+      "ions\030\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclient" +
+      "Version\030\003 \002(\005\"I\n\020AddColumnRequest\022\036\n\026tab" +
+      "leMetadataMutations\030\001 \003(\014\022\025\n\rclientVersi" +
+      "on\030\002 \001(\005\"J\n\021DropColumnRequest\022\036\n\026tableMe",
+      "tadataMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002" +
+      " \001(\005\"^\n\023DropFunctionRequest\022\036\n\026tableMeta" +
+      "dataMutations\030\001 \003(\014\022\020\n\010ifExists\030\002 \001(\010\022\025\n" +
+      "\rclientVersion\030\003 \001(\005\"P\n\027UpdateIndexState" +
+      "Request\022\036\n\026tableMetadataMutations\030\001 \003(\014\022" +
+      "\025\n\rclientVersion\030\002 \001(\005\"*\n\021ClearCacheRequ" +
+      "est\022\025\n\rclientVersion\030\001 \001(\005\"*\n\022ClearCache" +
+      "Response\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n\021GetVer" +
+      "sionRequest\022\025\n\rclientVersion\030\001 \001(\005\"E\n\022Ge" +
+      "tVersionResponse\022\017\n\007version\030\001 \002(\003\022\036\n\026sys",
+      "temCatalogTimestamp\030\002 \001(\003\"\205\001\n\032ClearTable" +
+      "FromCacheRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nsc" +
+      "hemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017cli" +
+      "entTimestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(" +
+      "\005\"\035\n\033ClearTableFromCacheResponse*\207\005\n\014Mut" +
+      "ationCode\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017T" +
+      "ABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031" +
+      "\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_" +
+      "TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020" +
+      "\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TA",
+      "BLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PAR" +
+      "ENT_TABLE_NOT_FOUND\020\t\022\033\n\027FUNCTION_ALREAD" +
+      "Y_EXISTS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NE" +
+      "WER_FUNCTION_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_" +
+      "REGION\020\r\022\031\n\025SCHEMA_ALREADY_EXISTS\020\016\022\026\n\022N" +
+      "EWER_SCHEMA_FOUND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020" +
+      "\020\022\030\n\024SCHEMA_NOT_IN_REGION\020\021\022\032\n\026TABLES_EX" +
+      "IST_ON_SCHEMA\020\022\022\035\n\031UNALLOWED_SCHEMA_MUTA" +
+      "TION\020\023\022%\n!AUTO_PARTITION_SEQUENCE_NOT_FO" +
+      "UND\020\024\022#\n\037CANNOT_COERCE_AUTO_PARTITION_ID",
+      "\020\025\022\024\n\020TOO_MANY_INDEXES\020\026\022\020\n\014INVALID_VIEW" +
+      "\020\0272\345\006\n\017MetaDataService\022/\n\010getTable\022\020.Get" +
+      "TableRequest\032\021.MetaDataResponse\0227\n\014getFu" +
+      "nctions\022\024.GetFunctionsRequest\032\021.MetaData" +
+      "Response\0221\n\tgetSchema\022\021.GetSchemaRequest" +
+      "\032\021.MetaDataResponse\0225\n\013createTable\022\023.Cre" +
+      "ateTableRequest\032\021.MetaDataResponse\022;\n\016cr" +
+      "eateFunction\022\026.CreateFunctionRequest\032\021.M" +
+      "etaDataResponse\0227\n\014createSchema\022\024.Create" +
+      "SchemaRequest\032\021.MetaDataResponse\0221\n\tdrop",
+      "Table\022\021.DropTableRequest\032\021.MetaDataRespo" +
+      "nse\0223\n\ndropSchema\022\022.DropSchemaRequest\032\021." +
+      "MetaDataResponse\0227\n\014dropFunction\022\024.DropF" +
+      "unctionRequest\032\021.MetaDataResponse\0221\n\tadd" +
+      "Column\022\021.AddColumnRequest\032\021.MetaDataResp" +
+      "onse\0223\n\ndropColumn\022\022.DropColumnRequest\032\021" +
+      ".MetaDataResponse\022?\n\020updateIndexState\022\030." +
+      "UpdateIndexStateRequest\032\021.MetaDataRespon" +
+      "se\0225\n\nclearCache\022\022.ClearCacheRequest\032\023.C" +
+      "learCacheResponse\0225\n\ngetVersion\022\022.GetVer",
+      "sionRequest\032\023.GetVersionResponse\022P\n\023clea" +
+      "rTableFromCache\022\033.ClearTableFromCacheReq" +
+      "uest\032\034.ClearTableFromCacheResponseBB\n(or" +
+      "g.apache.phoenix.coprocessor.generatedB\016" +
+      "MetaDataProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -17271,7 +17362,7 @@ public final class MetaDataProtos {
           internal_static_GetTableRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_GetTableRequest_descriptor,
-              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "TableTimestamp", "ClientTimestamp", "ClientVersion", });
+              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "TableTimestamp", "ClientTimestamp", "ClientVersion", "SkipAddingParentColumns", });
           internal_static_GetFunctionsRequest_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_GetFunctionsRequest_fieldAccessorTable = new

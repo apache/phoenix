@@ -642,7 +642,7 @@ public class MetaDataClient {
                 ConnectionQueryServices queryServices = connection.getQueryServices();
                 result =
                         queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp,
-                            resolvedTimestamp);
+                            resolvedTimestamp, false);
                 // if the table was assumed to be non transactional, but is actually transactional
                 // then re-resolve as of the right timestamp
                 if (result.getTable() != null
@@ -655,7 +655,7 @@ public class MetaDataClient {
                     if (result.getTable().getTimeStamp() >= resolveTimestamp) {
                         result =
                                 queryServices.getTable(tenantId, schemaBytes, tableBytes,
-                                    tableTimestamp, resolveTimestamp);
+                                    tableTimestamp, resolveTimestamp, false);
                     }
                 }
 
