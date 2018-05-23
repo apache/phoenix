@@ -10,7 +10,9 @@
  */
 package org.apache.phoenix.schema.types;
 
-public abstract class BasePrimitiveIntPhoenixArrayToStringTest extends BasePhoenixArrayToStringTest {
+import org.junit.Ignore;
+
+@Ignore public abstract class BasePrimitiveIntPhoenixArrayToStringTest extends BasePhoenixArrayToStringTest {
 
     @Override
     protected Number getElement1() {

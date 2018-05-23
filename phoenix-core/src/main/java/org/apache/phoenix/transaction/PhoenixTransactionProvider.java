@@ -18,6 +18,7 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
@@ -40,12 +41,13 @@ public interface PhoenixTransactionProvider {
         }
     }
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException;
-    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection);
-    
-    public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo);
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo);
+    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException;
+
+    public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) throws SQLException;
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException;
     public Class<? extends RegionObserver> getCoprocessor();
-    
+    public Class<? extends RegionObserver> getGCCoprocessor();
+
     public TransactionFactory.Provider getProvider();
     public boolean isUnsupported(Feature feature);
 }

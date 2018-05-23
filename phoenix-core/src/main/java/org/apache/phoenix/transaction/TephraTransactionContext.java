@@ -71,7 +71,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         this.tx = CODEC.decode(txnBytes);
     }
 
-    public TephraTransactionContext(PhoenixConnection connection) {
+    public TephraTransactionContext(PhoenixConnection connection) throws SQLException {
         PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());  
         assert (client instanceof TephraTransactionClient);
         this.txServiceClient = ((TephraTransactionClient)client).getTransactionClient();
@@ -211,6 +211,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                     .setSchemaName(dataTable.getSchemaName().getString())
                     .setTableName(dataTable.getTableName().getString()).build()
                     .buildException();
+        } finally {
+            // The client expects a transaction to be in progress on the txContext while the
+            // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
+            // finished, we start a new one here.
+            // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+            this.begin();
         }
     }
 

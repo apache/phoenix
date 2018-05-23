@@ -224,5 +224,5 @@ public interface PhoenixTransactionContext {
     public Provider getProvider();
     public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask);
 
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable);
+    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) throws SQLException;
 }

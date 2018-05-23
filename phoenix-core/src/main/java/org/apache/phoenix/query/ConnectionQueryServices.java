@@ -155,5 +155,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public QueryLoggerDisruptor getQueryDisruptor();
     
-    public PhoenixTransactionClient initTransactionClient(TransactionFactory.Provider provider);
+    public PhoenixTransactionClient initTransactionClient(TransactionFactory.Provider provider) throws SQLException;
 }

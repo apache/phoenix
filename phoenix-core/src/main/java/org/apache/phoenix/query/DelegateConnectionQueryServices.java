@@ -367,7 +367,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
     
     @Override
-    public PhoenixTransactionClient initTransactionClient(Provider provider) {
+    public PhoenixTransactionClient initTransactionClient(Provider provider) throws SQLException {
         return getDelegate().initTransactionClient(provider);
     }
 }

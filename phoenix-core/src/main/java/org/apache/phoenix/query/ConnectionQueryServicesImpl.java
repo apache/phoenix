@@ -249,6 +249,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.zookeeper.RetryStrategies;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -931,12 +933,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (!descriptor.hasCoprocessor(coprocessorClass.getName())) {
                     descriptor.addCoprocessor(coprocessorClass.getName(), null, priority - 10, null);
                 }
+                Class<? extends RegionObserver> coprocessorGCClass = provider.getTransactionProvider().getGCCoprocessor();
+                if (coprocessorGCClass != null) {
+                    if (!descriptor.hasCoprocessor(coprocessorGCClass.getName())) {
+                        descriptor.addCoprocessor(coprocessorGCClass.getName(), null, priority - 10, null);
+                    }
+                }
             } else {
                 // Remove all potential transactional coprocessors
                 for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
                     Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
+                    Class<? extends RegionObserver> coprocessorGCClass = provider.getTransactionProvider().getGCCoprocessor();
                     if (coprocessorClass != null && descriptor.hasCoprocessor(coprocessorClass.getName())) {
                         descriptor.removeCoprocessor(coprocessorClass.getName());
+                    }
+                    if (coprocessorGCClass != null && descriptor.hasCoprocessor(coprocessorGCClass.getName())) {
+                        descriptor.removeCoprocessor(coprocessorGCClass.getName());
                     }
                 }
             }
@@ -4645,7 +4657,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) {
+    public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) throws SQLException {
         PhoenixTransactionClient client = txClients[provider.ordinal()];
         if (client == null) {
             client = txClients[provider.ordinal()] = provider.getTransactionProvider().getTransactionClient(config, connectionInfo);

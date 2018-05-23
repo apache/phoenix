@@ -232,6 +232,28 @@
   </build>
 
   <dependencies>
+  <dependency>
+    <groupId>org.apache.omid</groupId>
+    <artifactId>omid-hbase-client</artifactId>
+    <version>${omid.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>org.apache.omid</groupId>
+    <artifactId>omid-hbase-coprocessor</artifactId>
+    <version>${omid.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>org.apache.omid</groupId>
+    <artifactId>omid-tso-server</artifactId>
+    <version>${omid.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>org.apache.omid</groupId>
+    <artifactId>omid-tso-server</artifactId>
+    <version>${omid.version}</version>
+    <type>test-jar</type>
+  </dependency>
+
     <!-- Transaction dependencies -->
     <dependency>
       <groupId>org.apache.tephra</groupId>

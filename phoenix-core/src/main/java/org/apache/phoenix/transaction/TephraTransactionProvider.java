@@ -18,6 +18,7 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
@@ -64,7 +65,7 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     }
     
     @Override
-    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
+    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException {
         return new TephraTransactionContext(connection);
     }
 
@@ -183,6 +184,9 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     public Class<? extends RegionObserver> getCoprocessor() {
         return TephraTransactionalProcessor.class;
     }
+
+    @Override
+    public Class<? extends RegionObserver> getGCCoprocessor() {return null;}
 
     @Override
     public Provider getProvider() {
