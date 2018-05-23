@@ -54,6 +54,7 @@ import org.apache.phoenix.queryserver.register.Registry;
 import org.apache.phoenix.util.InstanceResolver;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.net.InetAddress;
@@ -197,7 +198,7 @@ public final class QueryServer extends Configured implements Tool, Runnable {
               QueryServicesOptions.DEFAULT_QUERY_SERVER_DISABLE_KERBEROS_LOGIN);
 
       // handle secure cluster credentials
-      if (isKerberos && !disableSpnego && !disableLogin) {
+      if (isKerberos && !disableLogin) {
         hostname = Strings.domainNamePointerToHostName(DNS.getDefaultHost(
             getConf().get(QueryServices.QUERY_SERVER_DNS_INTERFACE_ATTRIB, "default"),
             getConf().get(QueryServices.QUERY_SERVER_DNS_NAMESERVER_ATTRIB, "default")));
@@ -230,47 +231,9 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       final HttpServer.Builder builder = new HttpServer.Builder().withPort(port)
           .withHandler(service, getSerialization(getConf()));
 
-      // Enable SPNEGO and Impersonation when using Kerberos
+      // Enable client auth when using Kerberos auth for HBase
       if (isKerberos) {
-        UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
-        LOG.debug("Current user is " + ugi);
-        if (!ugi.hasKerberosCredentials()) {
-          ugi = UserGroupInformation.getLoginUser();
-          LOG.debug("Current user does not have Kerberos credentials, using instead " + ugi);
-        }
-
-        // Make sure the proxyuser configuration is up to date
-        ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
-
-        String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
-        File keytab = new File(keytabPath);
-        String httpKeytabPath = getConf().get(QueryServices.QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB, null);
-        String httpPrincipal = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB, null);
-        // Backwards compat for a configuration key change
-        if (httpPrincipal == null) {
-          httpPrincipal = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB_LEGACY, null);
-        }
-        File httpKeytab = null;
-        if (null != httpKeytabPath)
-          httpKeytab = new File(httpKeytabPath);
-
-        String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
-        String[] additionalAllowedRealms = null;
-        if (null != realmsString) {
-            additionalAllowedRealms = StringUtils.split(realmsString, ',');
-        }
-
-        // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
-        if ((null != httpKeytabPath) && (null != httpPrincipal))
-          builder.withSpnego(httpPrincipal, additionalAllowedRealms)
-              .withAutomaticLogin(httpKeytab)
-              .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
-        else
-          builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
-              .withAutomaticLogin(keytab)
-              .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
-
-
+        configureClientAuthentication(builder, disableSpnego);
       }
       setRemoteUserExtractorIfNecessary(builder, getConf());
 
@@ -290,6 +253,51 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     } finally {
       if (loadBalancerEnabled) {
         unRegister();
+      }
+    }
+  }
+
+  @VisibleForTesting
+  void configureClientAuthentication(final HttpServer.Builder builder, boolean disableSpnego) throws IOException {
+    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+    LOG.debug("Current user is " + ugi);
+    if (!ugi.hasKerberosCredentials()) {
+      ugi = UserGroupInformation.getLoginUser();
+      LOG.debug("Current user does not have Kerberos credentials, using instead " + ugi);
+    }
+
+    // Make sure the proxyuser configuration is up to date
+    ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
+
+    // Always enable impersonation for the proxy user (through standard Hadoop configuration means)
+    builder.withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+
+    // Enable SPNEGO for client authentication unless it's explicitly disabled
+    if (!disableSpnego) {
+      String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
+      File keytab = new File(keytabPath);
+      String httpKeytabPath =
+          getConf().get(QueryServices.QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB, null);
+      String httpPrincipal =
+          getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB, null);
+      // Backwards compat for a configuration key change
+      if (httpPrincipal == null) {
+        httpPrincipal =
+            getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB_LEGACY, null);
+      }
+      File httpKeytab = null;
+      if (null != httpKeytabPath) httpKeytab = new File(httpKeytabPath);
+
+      String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
+      String[] additionalAllowedRealms = null;
+      if (null != realmsString) {
+        additionalAllowedRealms = StringUtils.split(realmsString, ',');
+      }
+      if ((null != httpKeytabPath) && (null != httpPrincipal)) {
+        builder.withSpnego(httpPrincipal, additionalAllowedRealms).withAutomaticLogin(httpKeytab);
+      } else {
+        builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
+            .withAutomaticLogin(keytab);
       }
     }
   }
