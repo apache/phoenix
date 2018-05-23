@@ -21,6 +21,8 @@ import java.io.IOException;
 
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
+
+
 public class TransactionFactory {
     public enum Provider {
         TEPHRA((byte)1, TephraTransactionProvider.getInstance()),
@@ -46,7 +48,7 @@ public class TransactionFactory {
         }
         
         public static Provider getDefault() {
-            return OMID;
+            return TEPHRA;
         }
 
         public PhoenixTransactionProvider getTransactionProvider()  {
@@ -62,11 +64,9 @@ public class TransactionFactory {
         if (txState == null || txState.length == 0) {
             return null;
         }
-        Provider provider =
-        (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0)
+        Provider provider = (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) 
                 ? Provider.OMID
-                :
-                Provider.fromCode(txState[txState.length-1]);
+                : Provider.fromCode(txState[txState.length-1]);
         return provider.getTransactionProvider().getTransactionContext(txState);
     }
 }

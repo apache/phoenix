@@ -23,7 +23,6 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.slf4j.Logger;
 
 public interface PhoenixTransactionContext {
     public static PhoenixTransactionContext NULL_CONTEXT = new PhoenixTransactionContext() {
@@ -102,7 +101,7 @@ public interface PhoenixTransactionContext {
 
         @Override
         public void markDMLFence(PTable dataTable) {
-
+            
         }
 
         @Override
@@ -119,21 +118,13 @@ public interface PhoenixTransactionContext {
         SNAPSHOT,
         SNAPSHOT_EXCLUDE_CURRENT,
         SNAPSHOT_ALL
-
-    }
+      }
 
     public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "tephra.tx.rollback"; //"phoenix.tx.rollback"; 
 
     public static final String PROPERTY_TTL = "dataset.table.ttl";
 
     public static final String READ_NON_TX_DATA = "data.tx.read.pre.existing";
-
-//    /**
-//     * Set the in memory client connection to the transaction manager (for testing purpose)
-//     *
-//     * @param config
-//     */
-//    public void setInMemoryTransactionClient(Configuration config);
 
     /**
      * Starts a transaction

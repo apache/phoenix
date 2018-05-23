@@ -25,8 +25,14 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
@@ -1087,7 +1093,7 @@ public class MutationState implements SQLCloseable {
                                 hTable = new MetaDataAwareHTable(hTable, origTableRef);
                             }
 
-                         hTable = phoenixTransactionContext.getTransactionalTable(hTable, table.isImmutableRows());
+                            hTable = phoenixTransactionContext.getTransactionalTable(hTable, table.isImmutableRows());
                         }
                         
                         numMutations = mutationList.size();

@@ -72,7 +72,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     @Parameters(name="TransactionIT_provider={0}") // name is used by failsafe as file name in reports
     public static Collection<String[]> data() {
         return Arrays.asList(new String[][] {     
-                 {"TEPHRA",/*"OMID"*/}});
+                 {"TEPHRA"/*,"OMID"*/}});
     }
     
     @Test

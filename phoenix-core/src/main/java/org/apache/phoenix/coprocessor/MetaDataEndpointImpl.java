@@ -982,7 +982,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             transactionalKv.getValueOffset(), 
                             transactionalKv.getValueLength()))) {
                 // For backward compat, prior to client setting TRANSACTION_PROVIDER
-                transactionProvider = TransactionFactory.Provider.OMID;
+                transactionProvider = TransactionFactory.Provider.TEPHRA;
             }
         } else {
             transactionProvider = TransactionFactory.Provider.fromCode(
