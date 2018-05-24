@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.DoNotRetryRegionException;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -227,10 +228,10 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
                         logger.info("Attempting to split region");
                         admin.splitRegionAsync(hRegion.getRegionName(), Bytes.toBytes(2));
                         return false;
-                    } catch (NotServingRegionException nsre) {
+                    } catch (NotServingRegionException | DoNotRetryRegionException re) {
                         // during split
                         return false;
-                    }
+                    } 
                 }
             });
         } finally {
