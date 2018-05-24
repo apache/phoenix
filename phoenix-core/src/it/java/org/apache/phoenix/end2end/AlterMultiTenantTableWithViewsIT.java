@@ -644,15 +644,18 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
         }
     }
 
-    public static void assertTableDefinition(Connection conn, String tableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, String... columnName) throws Exception {
-        PreparedStatement p = conn.prepareStatement("SELECT * FROM \"SYSTEM\".\"CATALOG\" WHERE TABLE_NAME=? AND TABLE_TYPE=?");
-        p.setString(1, tableName);
-        p.setString(2, tableType.getSerializedValue());
+    public static void assertTableDefinition(Connection conn, String fullTableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, String... columnName) throws Exception {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
+        PreparedStatement p = conn.prepareStatement("SELECT * FROM \"SYSTEM\".\"CATALOG\" WHERE TABLE_SCHEM=? AND TABLE_NAME=? AND TABLE_TYPE=?");
+        p.setString(1, schemaName);
+        p.setString(2, tableName);
+        p.setString(3, tableType.getSerializedValue());
         ResultSet rs = p.executeQuery();
         assertTrue(rs.next());
-        assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in BaseColumnCount"), baseColumnCount, rs.getInt("BASE_COLUMN_COUNT"));
-        assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in columnCount"), columnCount, rs.getInt("COLUMN_COUNT"));
-        assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in sequenceNumber"), sequenceNumber, rs.getInt("TABLE_SEQ_NUM"));
+        assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, "Mismatch in BaseColumnCount"), baseColumnCount, rs.getInt("BASE_COLUMN_COUNT"));
+        assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, "Mismatch in columnCount"), columnCount, rs.getInt("COLUMN_COUNT"));
+        assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, "Mismatch in sequenceNumber"), sequenceNumber, rs.getInt("TABLE_SEQ_NUM"));
         rs.close();
     
         ResultSet parentTableColumnsRs = null; 
@@ -661,26 +664,26 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             parentTableColumnsRs.next();
         }
         
-        ResultSet viewColumnsRs = conn.getMetaData().getColumns(null, null, tableName, null);
+        ResultSet viewColumnsRs = conn.getMetaData().getColumns(null, schemaName, tableName, null);
         for (int i = 0; i < columnName.length; i++) {
             if (columnName[i] != null) {
                 assertTrue(viewColumnsRs.next());
-                assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in columnName: i=" + i), columnName[i], viewColumnsRs.getString(PhoenixDatabaseMetaData.COLUMN_NAME));
+                assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, "Mismatch in columnName: i=" + i), columnName[i], viewColumnsRs.getString(PhoenixDatabaseMetaData.COLUMN_NAME));
                 int viewColOrdinalPos = viewColumnsRs.getInt(PhoenixDatabaseMetaData.ORDINAL_POSITION);
-                assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in ordinalPosition: i=" + i), i+1, viewColOrdinalPos);
+                assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, "Mismatch in ordinalPosition: i=" + i), i+1, viewColOrdinalPos);
                 // validate that all the columns in the base table are present in the view   
                 if (parentTableColumnsRs != null && !parentTableColumnsRs.isAfterLast()) {
                     ResultSetMetaData parentTableColumnsMetadata = parentTableColumnsRs.getMetaData();
                     assertEquals(parentTableColumnsMetadata.getColumnCount(), viewColumnsRs.getMetaData().getColumnCount());
                     int parentTableColOrdinalRs = parentTableColumnsRs.getInt(PhoenixDatabaseMetaData.ORDINAL_POSITION);
-                    assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, "Mismatch in ordinalPosition of view and base table for i=" + i), parentTableColOrdinalRs, viewColOrdinalPos);
+                    assertEquals(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, "Mismatch in ordinalPosition of view and base table for i=" + i), parentTableColOrdinalRs, viewColOrdinalPos);
                     for (int columnIndex = 1; columnIndex < parentTableColumnsMetadata.getColumnCount(); columnIndex++) {
                         String viewColumnValue = viewColumnsRs.getString(columnIndex);
                         String parentTableColumnValue = parentTableColumnsRs.getString(columnIndex);
                         if (!Objects.equal(viewColumnValue, parentTableColumnValue)) {
                             if (parentTableColumnsMetadata.getColumnName(columnIndex).equals(PhoenixDatabaseMetaData.TABLE_NAME)) {
                                 assertEquals(parentTableName, parentTableColumnValue);
-                                assertEquals(tableName, viewColumnValue);
+                                assertEquals(fullTableName, viewColumnValue);
                             } 
                         }
                     }
@@ -688,6 +691,6 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
                 }
             }
         }
-        assertFalse(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, tableName, ""), viewColumnsRs.next());
+        assertFalse(AlterTableWithViewsIT.getSystemCatalogEntriesForTable(conn, fullTableName, ""), viewColumnsRs.next());
     }
 }

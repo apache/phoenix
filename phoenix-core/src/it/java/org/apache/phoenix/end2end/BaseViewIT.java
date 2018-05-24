@@ -22,47 +22,26 @@ import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 
 import org.apache.curator.shaded.com.google.common.collect.Lists;
-import org.apache.curator.shaded.com.google.common.collect.Sets;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.master.AssignmentManager;
-import org.apache.hadoop.hbase.master.HMaster;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -73,8 +52,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public abstract class BaseViewIT extends BaseUniqueNamesOwnClusterIT {
@@ -126,161 +103,6 @@ public abstract class BaseViewIT extends BaseUniqueNamesOwnClusterIT {
                 result = scanner.next();
                 assertTrue(result == null || result.isEmpty());
             }
-        }
-    }
-    
-    /**
-     *  Split SYSTEM.CATALOG at the given split point 
-     */
-    protected void splitRegion(byte[] splitPoint) throws SQLException, IOException, InterruptedException {
-        HBaseAdmin admin =
-                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        MiniHBaseCluster cluster = getUtility().getHBaseCluster();
-        int startNumRegions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME).size();
-        admin.split(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoint);
-        List<HRegion> regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        // wait for the split to happen
-        while (regions.size() != startNumRegions+1) {
-          System.out.println("Waiting for region to split....");
-          Thread.sleep(1000);
-          regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        }
-    }
-    
-    /**
-     * Returns true if the region contains atleast one of the metadata rows we are interested in
-     */
-    protected boolean regionContainsMetadataRows(HRegionInfo regionInfo,
-            List<byte[]> metadataRowKeys) {
-        for (byte[] rowKey : metadataRowKeys) {
-            if (regionInfo.containsRow(rowKey)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    /**
-     * @param fullTableOrViewNames  list of global tables or views 
-     */
-    protected void splitSystemCatalog(List<String> fullTableOrViewNames) throws Exception {
-        Map<String, List<String>> tenantToTableAndViewMap = Maps.newHashMapWithExpectedSize(1);
-        tenantToTableAndViewMap.put(null, fullTableOrViewNames);
-        // move metadata to multiple regions
-        splitSystemCatalog(tenantToTableAndViewMap);
-    }
-
-    /**
-     * Splits SYSTEM.CATALOG into multiple regions based on the table or view names passed in.
-     * Metadata for each table or view is moved to a separate region,
-     * @param tenantToTableAndViewMap map from tenant to tables and views owned by the tenant
-     */
-    protected void splitSystemCatalog(Map<String, List<String>> tenantToTableAndViewMap) throws Exception  {
-        List<byte[]> splitPoints = Lists.newArrayListWithExpectedSize(5);
-        // add the rows keys of the table or view metadata rows
-        Set<String> schemaNameSet=Sets.newHashSetWithExpectedSize(5);
-        for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
-            for (String fullName : entrySet.getValue()) {
-                String schemaName = SchemaUtil.getSchemaNameFromFullName(fullName);
-                // we don't allow SYSTEM.CATALOG to split within a schema, so to ensure each table
-                // or view is on a separate region they need to have a unique schema name
-                assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(schemaName));
-                String tableName = SchemaUtil.getTableNameFromFullName(fullName);
-                splitPoints.add(
-                    SchemaUtil.getTableKey(entrySet.getKey(), "".equals(schemaName) ? null : schemaName, tableName));
-            }
-        }
-        Collections.sort(splitPoints, Bytes.BYTES_COMPARATOR);
-        
-        HBaseAdmin admin =
-                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertTrue("Needs at least two split points ", splitPoints.size() > 1);
-        assertTrue(
-            "Number of split points should be less than or equal to the number of region servers ",
-            splitPoints.size() <= NUM_SLAVES_BASE);
-        HBaseTestingUtility util = getUtility();
-        MiniHBaseCluster cluster = util.getHBaseCluster();
-        HMaster master = cluster.getMaster();
-        AssignmentManager am = master.getAssignmentManager();
-        // No need to split on the first splitPoint since the end key of region boundaries are exclusive
-        for (int i=1; i<splitPoints.size(); ++i) {
-            splitRegion(splitPoints.get(i));
-        }
-        HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
-        Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
-        for (int i=0; i<NUM_SLAVES_BASE; ++i) {
-            availableRegionServers.push(util.getHBaseCluster().getRegionServer(i).getServerName());
-        }
-        List<HRegionInfo> tableRegions =
-                admin.getTableRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        for (HRegionInfo hRegionInfo : tableRegions) {
-            // filter on regions we are interested in
-            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
-                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
-                if (!serverToRegionsList.containsKey(serverName)) {
-                    serverToRegionsList.put(serverName, new ArrayList<HRegionInfo>());
-                }
-                serverToRegionsList.get(serverName).add(hRegionInfo);
-                availableRegionServers.remove(serverName);
-                // Scan scan = new Scan();
-                // scan.setStartRow(hRegionInfo.getStartKey());
-                // scan.setStopRow(hRegionInfo.getEndKey());
-                // HTable primaryTable = new HTable(getUtility().getConfiguration(),
-                // PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-                // ResultScanner resultScanner = primaryTable.getScanner(scan);
-                // for (Result result : resultScanner) {
-                // System.out.println(result);
-                // }
-            }
-        }
-        assertTrue("No region servers available to move regions on to ", !availableRegionServers.isEmpty());
-        for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
-            List<HRegionInfo> regions = entry.getValue();
-            if (regions.size()>1) {
-                for (int i=1; i< regions.size(); ++i) {
-                    moveRegion(regions.get(i), entry.getKey(), availableRegionServers.pop());
-                }
-            }
-        }
-        
-        // verify each region of SYSTEM.CATALOG is on its own region server
-        tableRegions =
-                admin.getTableRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        Set<ServerName> serverNames = Sets.newHashSet();
-        for (HRegionInfo hRegionInfo : tableRegions) {
-            // filter on regions we are interested in
-            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
-                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
-                if (!serverNames.contains(serverName)) {
-                    serverNames.add(serverName);
-                }
-                else {
-                    fail("Multiple regions on "+serverName.getServerName());
-                }
-            }
-        }
-    }
-    
-    /**
-     * Ensures each region of SYSTEM.CATALOG is on a different region server
-     */
-    private void moveRegion(HRegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HBaseTestingUtility util = getUtility();
-        MiniHBaseCluster cluster = util.getHBaseCluster();
-        HMaster master = cluster.getMaster();
-        AssignmentManager am = master.getAssignmentManager();
-   
-        HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
-        HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
-        byte[] encodedRegionNameInBytes = regionInfo.getEncodedNameAsBytes();
-        admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
-        while (dstServer.getOnlineRegion(regionInfo.getRegionName()) == null
-                || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-                || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-                || master.getAssignmentManager().getRegionStates().isRegionsInTransition()) {
-            // wait for the move to be finished
-            Thread.sleep(100);
         }
     }
 

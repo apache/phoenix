@@ -279,7 +279,7 @@ public class PColumnImpl implements PColumn {
         if (column.hasFamilyNameBytes()) {
             familyName = PNameFactory.newName(column.getFamilyNameBytes().toByteArray());
         }
-        PDataType dataType = PDataType.fromSqlTypeName(column.getDataType());
+        PDataType dataType = column.hasDataType() ? PDataType.fromSqlTypeName(column.getDataType()) : null;
         Integer maxLength = null;
         if (column.hasMaxLength()) {
             maxLength = column.getMaxLength();
@@ -335,7 +335,9 @@ public class PColumnImpl implements PColumn {
         if (column.getFamilyName() != null) {
             builder.setFamilyNameBytes(ByteStringer.wrap(column.getFamilyName().getBytes()));
         }
-        builder.setDataType(column.getDataType().getSqlTypeName());
+        if (column.getDataType()!=null) {
+            builder.setDataType(column.getDataType().getSqlTypeName());
+        }
         if (column.getMaxLength() != null) {
             builder.setMaxLength(column.getMaxLength());
         }
@@ -344,7 +346,9 @@ public class PColumnImpl implements PColumn {
         }
         builder.setNullable(column.isNullable());
         builder.setPosition(column.getPosition());
-        builder.setSortOrder(column.getSortOrder().getSystemValue());
+        if (column.getSortOrder()!=null) {
+            builder.setSortOrder(column.getSortOrder().getSystemValue());
+        }
         if (column.getArraySize() != null) {
             builder.setArraySize(column.getArraySize());
         }

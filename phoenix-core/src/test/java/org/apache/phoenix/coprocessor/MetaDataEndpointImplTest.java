@@ -2,6 +2,7 @@ package org.apache.phoenix.coprocessor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -129,8 +130,8 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
 
     @Test
     public void testDroppingAColumn() throws Exception {
-        String baseTable = "PARENT";
-        String childView = "CHILD";
+        String baseTable = generateUniqueName();
+        String childView = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat = "CREATE TABLE " + baseTable + " (A VARCHAR PRIMARY KEY, B VARCHAR, C VARCHAR)";
         conn.createStatement().execute(ddlFormat);
@@ -213,11 +214,10 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         assertColumnNamesAndDefinitionsEqual(PhoenixRuntime.getTable(conn , view.toUpperCase()), expectedViewColumnDefinition);
     }
 
-    @Test(expected = TableNotFoundException.class)
     public void testDropCascade() throws Exception {
-        String baseTable = "PARENT_TABLE";
-        String child = "CHILD";
-        String grandChild = "GRAND_CHILD";
+        String baseTable = generateUniqueName();
+        String child = generateUniqueName();
+        String grandChild = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -235,9 +235,21 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute("DROP TABLE " + baseTable + " CASCADE");
 
         // the tables should no longer exist
-        PhoenixRuntime.getTableNoCache(conn, baseTable);
-        PhoenixRuntime.getTableNoCache(conn, child);
-        PhoenixRuntime.getTableNoCache(conn, grandChild);
+        try {
+            PhoenixRuntime.getTableNoCache(conn, baseTable);
+            fail();
+        }
+        catch(TableNotFoundException e){}
+        try {
+            PhoenixRuntime.getTableNoCache(conn, child);
+            fail();
+        }
+        catch(TableNotFoundException e){}
+        try {
+            PhoenixRuntime.getTableNoCache(conn, grandChild);
+            fail();
+        }
+        catch(TableNotFoundException e){}
     }
 
     @Test

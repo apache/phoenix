@@ -140,17 +140,17 @@ public final class PTableProtos {
      */
     com.google.protobuf.ByteString getFamilyNameBytes();
 
-    // required string dataType = 3;
+    // optional string dataType = 3;
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     boolean hasDataType();
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     java.lang.String getDataType();
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     com.google.protobuf.ByteString
         getDataTypeBytes();
@@ -195,13 +195,13 @@ public final class PTableProtos {
      */
     int getPosition();
 
-    // required int32 sortOrder = 8;
+    // optional int32 sortOrder = 8;
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     boolean hasSortOrder();
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     int getSortOrder();
 
@@ -508,17 +508,17 @@ public final class PTableProtos {
       return familyNameBytes_;
     }
 
-    // required string dataType = 3;
+    // optional string dataType = 3;
     public static final int DATATYPE_FIELD_NUMBER = 3;
     private java.lang.Object dataType_;
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     public boolean hasDataType() {
       return ((bitField0_ & 0x00000004) == 0x00000004);
     }
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     public java.lang.String getDataType() {
       java.lang.Object ref = dataType_;
@@ -535,7 +535,7 @@ public final class PTableProtos {
       }
     }
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     public com.google.protobuf.ByteString
         getDataTypeBytes() {
@@ -615,17 +615,17 @@ public final class PTableProtos {
       return position_;
     }
 
-    // required int32 sortOrder = 8;
+    // optional int32 sortOrder = 8;
     public static final int SORTORDER_FIELD_NUMBER = 8;
     private int sortOrder_;
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     public boolean hasSortOrder() {
       return ((bitField0_ & 0x00000080) == 0x00000080);
     }
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     public int getSortOrder() {
       return sortOrder_;
@@ -830,19 +830,11 @@ public final class PTableProtos {
         memoizedIsInitialized = 0;
         return false;
       }
-      if (!hasDataType()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
       if (!hasNullable()) {
         memoizedIsInitialized = 0;
         return false;
       }
       if (!hasPosition()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
-      if (!hasSortOrder()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -1489,19 +1481,11 @@ public final class PTableProtos {
           
           return false;
         }
-        if (!hasDataType()) {
-          
-          return false;
-        }
         if (!hasNullable()) {
           
           return false;
         }
         if (!hasPosition()) {
-          
-          return false;
-        }
-        if (!hasSortOrder()) {
           
           return false;
         }
@@ -1599,16 +1583,16 @@ public final class PTableProtos {
         return this;
       }
 
-      // required string dataType = 3;
+      // optional string dataType = 3;
       private java.lang.Object dataType_ = "";
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public boolean hasDataType() {
         return ((bitField0_ & 0x00000004) == 0x00000004);
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public java.lang.String getDataType() {
         java.lang.Object ref = dataType_;
@@ -1622,7 +1606,7 @@ public final class PTableProtos {
         }
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public com.google.protobuf.ByteString
           getDataTypeBytes() {
@@ -1638,7 +1622,7 @@ public final class PTableProtos {
         }
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public Builder setDataType(
           java.lang.String value) {
@@ -1651,7 +1635,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public Builder clearDataType() {
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -1660,7 +1644,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public Builder setDataTypeBytes(
           com.google.protobuf.ByteString value) {
@@ -1805,22 +1789,22 @@ public final class PTableProtos {
         return this;
       }
 
-      // required int32 sortOrder = 8;
+      // optional int32 sortOrder = 8;
       private int sortOrder_ ;
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public boolean hasSortOrder() {
         return ((bitField0_ & 0x00000080) == 0x00000080);
       }
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public int getSortOrder() {
         return sortOrder_;
       }
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public Builder setSortOrder(int value) {
         bitField0_ |= 0x00000080;
@@ -1829,7 +1813,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public Builder clearSortOrder() {
         bitField0_ = (bitField0_ & ~0x00000080);
@@ -8850,9 +8834,9 @@ public final class PTableProtos {
     java.lang.String[] descriptorData = {
       "\n\014PTable.proto\032\021PGuidePosts.proto\"\357\002\n\007PC" +
       "olumn\022\027\n\017columnNameBytes\030\001 \002(\014\022\027\n\017family" +
-      "NameBytes\030\002 \001(\014\022\020\n\010dataType\030\003 \002(\t\022\021\n\tmax" +
+      "NameBytes\030\002 \001(\014\022\020\n\010dataType\030\003 \001(\t\022\021\n\tmax" +
       "Length\030\004 \001(\005\022\r\n\005scale\030\005 \001(\005\022\020\n\010nullable\030" +
-      "\006 \002(\010\022\020\n\010position\030\007 \002(\005\022\021\n\tsortOrder\030\010 \002" +
+      "\006 \002(\010\022\020\n\010position\030\007 \002(\005\022\021\n\tsortOrder\030\010 \001" +
       "(\005\022\021\n\tarraySize\030\t \001(\005\022\024\n\014viewConstant\030\n " +
       "\001(\014\022\026\n\016viewReferenced\030\013 \001(\010\022\022\n\nexpressio" +
       "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\022\021\n\tisDyn" +
