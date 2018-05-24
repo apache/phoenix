@@ -26,7 +26,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -391,9 +393,79 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         return new TephraTransactionContext(context, subTask);
     }
     
+    public static class TransactionAwareHTableDelegate extends TransactionAwareHTable implements HTableInterface  {
+        private final HTableInterface delegate;
+        
+        public TransactionAwareHTableDelegate(HTableInterface hTable, TxConstants.ConflictDetection conflictLevel) {
+            super(hTable, conflictLevel);
+            delegate = hTable;
+        }
+        
+        @Override
+        public long incrementColumnValue(byte[] row, byte[] family, byte[] qualifier, long amount, boolean writeToWAL)
+                throws IOException {
+            return delegate.incrementColumnValue(row, family, qualifier, amount, writeToWAL);
+        }
+
+        @Override
+        public Boolean[] exists(List<Get> gets) throws IOException {
+            return delegate.exists(gets);
+        }
+
+        @Override
+        public void setAutoFlush(boolean autoFlush) {
+            delegate.setAutoFlush(autoFlush);
+        }
+
+        @Override
+        public void setAutoFlush(boolean autoFlush, boolean clearBufferOnFail) {
+            delegate.setAutoFlush(autoFlush, clearBufferOnFail);
+        }
+
+        @Override
+        public void setAutoFlushTo(boolean autoFlush) {
+            delegate.setAutoFlushTo(autoFlush);
+        }
+
+        @Override
+        public boolean isAutoFlush() {
+            return delegate.isAutoFlush();
+        }
+
+        @Override
+        public void flushCommits() throws IOException {
+            delegate.flushCommits();
+        }
+
+        @Override
+        public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
+            return delegate.getRowOrBefore(row, family);
+        }
+        
+        @Override
+        public void setRpcTimeout(int i) {
+            delegate.setRpcTimeout(i);
+        }
+
+        @Override
+        public int getRpcTimeout() {
+            return delegate.getRpcTimeout();
+        }
+
+        @Override
+        public void setOperationTimeout(int i) {
+            delegate.setOperationTimeout(i);
+        }
+
+        @Override
+        public int getOperationTimeout() {
+            return delegate.getOperationTimeout();
+        }
+    }
+    
     @Override
     public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
-        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+        TransactionAwareHTableDelegate transactionAwareHTable = new TransactionAwareHTableDelegate(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;
     }
