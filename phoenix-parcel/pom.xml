@@ -38,7 +38,7 @@
     <source.skip>true</source.skip>
     <top.dir>${project.basedir}/..</top.dir>
     <maven.test.skip>true</maven.test.skip>
-    <parcel.patch.count>0</parcel.patch.count>
+    <parcel.patch.count>1</parcel.patch.count>
     <parcel.release>0.${parcel.patch.count}</parcel.release>
     <parcel.folder>APACHE_PHOENIX-${phoenix.version}-${cdh.version}.p${parcel.release}</parcel.folder>
     <parcel.file>${parcel.folder}.parcel</parcel.file>
