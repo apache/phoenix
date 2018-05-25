@@ -132,12 +132,50 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     }
     
     @Test
+    public void testUpsertEmptyArrayModification() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        ResultSet rs;
+        String[] strings = new String[]{"34567"};
+        Array array = conn.createArrayOf("VARCHAR", strings);
+
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (region_name,nullVarChar) SELECT region_name,ARRAY_APPEND(nullVarChar,'34567') FROM " + tableName);
+        conn.commit();
+        
+        rs = conn.createStatement().executeQuery("SELECT nullVarChar FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
     public void testArrayAppendFunctionVarchar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName = initTables(conn);
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(varchars,'34567') FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
+
+        String[] strings = new String[]{"2345", "46345", "23234", "34567"};
+
+        Array array = conn.createArrayOf("VARCHAR", strings);
+
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testUpsertArrayAppendFunctionVarchar() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (region_name,varchars) SELECT region_name,ARRAY_APPEND(varchars,'34567') as varchars FROM " + tableName+ " WHERE region_name = 'SF Bay Area'");
+        conn.commit();
+        
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"2345", "46345", "23234", "34567"};
