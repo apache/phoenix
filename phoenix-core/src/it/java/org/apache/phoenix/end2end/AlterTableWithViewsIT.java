@@ -124,7 +124,10 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
             String tableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
+            String viewOfTable = generateUniqueViewName();
+            // ensure metadata is on multiple regions
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -136,9 +139,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            
-            // move metadata to multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
             
             // adding a new pk column and a new regular column
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
@@ -165,7 +165,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
             
             viewConn.createStatement().execute("ALTER VIEW " + viewOfTable2 + " SET UPDATE_CACHE_FREQUENCY = 1");
@@ -249,7 +249,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
             		"ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
 
             // drop two columns from the base table - shouldn't affect the view at all since we resolve at read time.
@@ -283,7 +283,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256), VIEW_COL3 VARCHAR, VIEW_COL4 DECIMAL, VIEW_COL5 DECIMAL(10,2), VIEW_COL6 VARCHAR, CONSTRAINT pk PRIMARY KEY (VIEW_COL5, VIEW_COL6) ) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn,viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
             
             // upsert single row into view
@@ -419,7 +419,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable.toUpperCase());
             assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
             
             // upsert single row into view
@@ -542,7 +542,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL3 VARCHAR(256), VIEW_COL4 DECIMAL(10,2) CONSTRAINT pk PRIMARY KEY (VIEW_COL3, VIEW_COL4)) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL3", "VIEW_COL4");
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
             
             try {
@@ -609,7 +609,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn2.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn2, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3,  "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
 
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
             
             // upsert single row into both view
@@ -765,7 +765,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                     "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
             viewConn.createStatement().execute(grandChildViewDDL);
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(baseTable, childView, grandChildView));
             
             String addColumnToChildViewDDL =
@@ -826,7 +826,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewDDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + baseTable;
             viewConn2.createStatement().execute(viewDDL);
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(baseTable, view1, view2));
             
             // Drop the column inherited from base table to make it diverged
@@ -901,7 +901,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "+baseTableName);
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
             
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
@@ -938,7 +938,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
 	        ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
 	        viewConn.createStatement().execute(ddl);
 	        
-	        // move metadata to multiple regions
+	        // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
 	        
 	        try {
@@ -978,7 +978,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
             viewConn.createStatement().execute(ddl);
             
-            // move metadata to multiple regions
+            // ensure metadata is on multiple regions
             splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
             
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);

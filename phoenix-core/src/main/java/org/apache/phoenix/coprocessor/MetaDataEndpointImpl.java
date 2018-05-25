@@ -1726,6 +1726,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[][] rowKeyMetaData = new byte[3][];
         byte[] schemaName = null;
         byte[] tableName = null;
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
             int clientVersion = request.getClientVersion();
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
@@ -1891,7 +1892,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             
             getCoprocessorHost().preCreateTable(Bytes.toString(tenantIdBytes),
-                    SchemaUtil.getTableName(schemaName, tableName),
+                    fullTableName,
                     (tableType == PTableType.VIEW) ? null : TableName.valueOf(cPhysicalName),
                     cParentPhysicalName == null ? null : TableName.valueOf(cParentPhysicalName), tableType,
                     /* TODO: During inital create we may not need the family map */
@@ -2109,20 +2110,47 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                 }
                 
-                // the child links are stored in a separate table SYSTEM.CHILD_LINK from 4.14 onwards
+                // From 4.15 the child links are stored in a separate table SYSTEM.CHILD_LINK
                 List<Mutation> childLinkMutations = MetaDataUtil.removeChildLinks(tableMetadata);
-                HTableInterface hTable = null;
-                try {
-                	hTable = env.getTable(SchemaUtil
-	                        .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, env.getConfiguration()));
-                    hTable.batch(childLinkMutations);
-                } catch (Throwable t) {
-                    logger.error("creating child links failed", t);
-                    ProtobufUtil.setControllerException(controller,
-                        ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
-                } finally {
-                    if (hTable != null) {
-                        hTable.close();
+                MetaDataResponse response =
+                        processRemoteRegionMutations(
+                            PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                            childLinkMutations, fullTableName,
+                            MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
+                if (response != null) {
+                    done.run(response);
+                    return;
+                }
+
+                List<Mutation> localMutations =
+                        Lists.newArrayListWithExpectedSize(tableMetadata.size());
+                List<Mutation> remoteMutations = Lists.newArrayListWithExpectedSize(2);
+                // check to see if there are any mutations that should not be applied to this region
+                separateLocalAndRemoteMutations(region, tableMetadata, localMutations, remoteMutations);
+                if (!remoteMutations.isEmpty()) {
+                    // there should only be remote mutations if we are creating a view that uses
+                    // encoded column qualifiers (the remote mutations are to update the encoded
+                    // column qualifier counter on the parent table)
+                    if (parentTable != null && tableType == PTableType.VIEW && parentTable
+                            .getEncodingScheme() != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
+                        response =
+                                processRemoteRegionMutations(
+                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                                    remoteMutations, fullTableName,
+                                    MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
+                        if (response != null) {
+                            done.run(response);
+                            return;
+                        }
+                    }
+                    else {
+                        String msg = "Found unexpected mutations while creating "+fullTableName;
+                        logger.error(msg);
+                        for (Mutation m : remoteMutations) {
+                            logger.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
+                            logger.debug("Mutation family cell map : " + m.getFamilyCellMap());
+                        }
+                        throw new IllegalStateException(msg);
                     }
                 }
                 
@@ -2132,7 +2160,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // primary and then index table locks are held, in that order). For now, we just don't support
                 // indexing on the system table. This is an issue because of the way we manage batch mutation
                 // in the Indexer.
-                mutateRowsWithLocks(region, tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+                mutateRowsWithLocks(region, localMutations, Collections.<byte[]> emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 // Invalidate the cache - the next getTable call will add it
                 // TODO: consider loading the table that was just created here, patching up the parent table, and updating the cache
@@ -2156,7 +2184,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         } catch (Throwable t) {
             logger.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
-                    ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
+                    ServerUtil.createIOException(fullTableName, t));
         }
     }
 
@@ -2207,13 +2235,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
     
 	private void separateLocalAndRemoteMutations(Region region, List<Mutation> mutations,
-			List<Mutation> localRegionMutations, List<Mutation> remoteRegionMutations) {
+			List<Mutation> localMutations, List<Mutation> remoteMutations) {
 		HRegionInfo regionInfo = region.getRegionInfo();
 		for (Mutation mutation : mutations) {
 			if (regionInfo.containsRow(mutation.getRow())) {
-				localRegionMutations.add(mutation);
+				localMutations.add(mutation);
 			} else {
-				remoteRegionMutations.add(mutation);
+				remoteMutations.add(mutation);
 			}
 		}
 	}
@@ -2229,11 +2257,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[] tableName = null;
 
         try {
-            List<Mutation> catalogMutations = ProtobufUtil.getMutations(request);
+            List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
             List<Mutation> childLinkMutations = Lists.newArrayList();
-        	List<Mutation> localRegionMutations = Lists.newArrayList();
-			List<Mutation> remoteRegionMutations = Lists.newArrayList();
-            MetaDataUtil.getTenantIdAndSchemaAndTableName(catalogMutations, rowKeyMetaData);
+            MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
@@ -2244,22 +2270,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(builder.build());
                 return;
             }
+            PTableType pTableType=PTableType.fromSerializedValue(tableType);
             List<byte[]> tableNamesToDelete = Lists.newArrayList();
             List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
-            byte[] parentTableName = MetaDataUtil.getParentTableName(catalogMutations);
+            byte[] parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
             byte[] lockTableName = parentTableName == null ? tableName : parentTableName;
             byte[] lockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, lockTableName);
+            // we only lock the parent table for indexes
             byte[] key =
-                    parentTableName == null ? lockKey : SchemaUtil.getTableKey(tenantIdBytes,
-                        schemaName, tableName);
+                    (parentTableName == null || pTableType == PTableType.VIEW) ? lockKey
+                            : SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
                 return;
             }
-            PTableType ptableType=PTableType.fromSerializedValue(tableType);
-            long clientTimeStamp = MetaDataUtil.getClientTimeStamp(catalogMutations);
+            long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
             byte[] cKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             PTable loadedTable = getTableOnCurrentRegion(env, cKey, new ImmutableBytesPtr(cKey), clientTimeStamp, clientTimeStamp,
                     request.getClientVersion());
@@ -2272,7 +2299,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             getCoprocessorHost().preDropTable(Bytes.toString(tenantIdBytes),
                     SchemaUtil.getTableName(schemaName, tableName),
                     TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
-                    getParentPhysicalTableName(loadedTable), ptableType,loadedTable.getIndexes());
+                    getParentPhysicalTableName(loadedTable), pTableType,loadedTable.getIndexes());
             List<RowLock> locks = Lists.newArrayList();
             try {
                 acquireLock(region, lockKey, locks);
@@ -2283,26 +2310,35 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 result =
                         doDropTable(key, tenantIdBytes, schemaName, tableName, parentTableName,
-                            PTableType.fromSerializedValue(tableType), catalogMutations, childLinkMutations,
+                            PTableType.fromSerializedValue(tableType), tableMetadata, childLinkMutations,
                             invalidateList, tableNamesToDelete, sharedTablesToDelete, isCascade, request.getClientVersion());
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
                 }
-				Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env)
-						.getMetaDataCache();
-				// since the mutations in catalogMutations can span multiple
-				// regions first we first process process mutations local to
-				// this region, then we process the remaining mutations, finally
-				// we process the child link mutations if any of the mutations
-				// fail, we can will clean them up later using
-				// OrphanCleaner.reapOrphans()
-//				separateLocalAndRemoteMutations(region, catalogMutations, localRegionMutations, remoteRegionMutations);
+                Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
+                        GlobalCache.getInstance(this.env).getMetaDataCache();
+
+                List<Mutation> localMutations =
+                        Lists.newArrayListWithExpectedSize(tableMetadata.size());
+                List<Mutation> remoteMutations = Lists.newArrayList();
+                separateLocalAndRemoteMutations(region, tableMetadata, localMutations, remoteMutations);
+                if (!remoteMutations.isEmpty()) {
+                    // there should only be remote mutations if we are creating a view that uses encoded column qualifiers
+                    // (the remote mutations are to update the encoded column qualifier counter on the parent table)
+                    String msg = "Found unexpected mutations while dropping table "+SchemaUtil.getTableName(schemaName, tableName);
+                    logger.error(msg);
+                    for (Mutation m : remoteMutations) {
+                        logger.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
+                        logger.debug("Mutation family cell map : " + m.getFamilyCellMap());
+                    }
+                    throw new IllegalStateException(msg);
+                }
 				// drop rows from catalog on this region
-				mutateRowsWithLocks(region, catalogMutations, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
+				mutateRowsWithLocks(region, tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
 						HConstants.NO_NONCE);
 
-                long currentTime = MetaDataUtil.getClientTimeStamp(catalogMutations);
+				long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
                     metaDataCache.put(ckey, newDeletedTableMarker(currentTime));
                 }
@@ -2310,14 +2346,22 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     ImmutableBytesPtr parentCacheKey = new ImmutableBytesPtr(lockKey);
                     metaDataCache.invalidate(parentCacheKey);
                 }
+
+                // drop all child links
+                MetaDataResponse response =
+                        processRemoteRegionMutations(
+                            PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                            childLinkMutations, SchemaUtil.getTableName(schemaName, tableName),
+                            MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
+                if (response!=null) {
+                    done.run(response);
+                    return;
+                }
+
                 done.run(MetaDataMutationResult.toProto(result));
                 return;
             } finally {
                 releaseRowLocks(region, locks);
-                // drop rows from catalog on remote regions
-                processMutations(controller, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, SchemaUtil.getTableName(schemaName, tableName), remoteRegionMutations);
-                // drop all child links 
-                processMutations(controller, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, SchemaUtil.getTableName(schemaName, tableName), childLinkMutations);
             }
         } catch (Throwable t) {
           logger.error("dropTable failed", t);
@@ -2343,21 +2387,22 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return rowLock;
     }
 
-	private void processMutations(RpcController controller, byte[] systemTableName, String droppedTableName,
-			List<Mutation> childLinkMutations) throws IOException {
-		HTableInterface hTable = null;
-		try {
-			hTable = env.getTable(SchemaUtil.getPhysicalTableName(systemTableName, env.getConfiguration()));
-			hTable.batch(childLinkMutations);
-		} catch (Throwable t) {
-			logger.error("dropTable failed", t);
-			ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(droppedTableName, t));
-		} finally {
-			if (hTable != null) {
-				hTable.close();
-			}
-		}
-	}
+    private MetaDataResponse processRemoteRegionMutations(byte[] systemTableName,
+            List<Mutation> remoteMutations, String tableName,
+            MetaDataProtos.MutationCode mutationCode) throws IOException {
+        MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
+        try (HTableInterface hTable =
+                env.getTable(
+                    SchemaUtil.getPhysicalTableName(systemTableName, env.getConfiguration()))) {
+            hTable.batch(remoteMutations);
+        } catch (Throwable t) {
+            logger.error("Unable to write mutations to " + Bytes.toString(systemTableName), t);
+            builder.setReturnCode(mutationCode);
+            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+            return builder.build();
+        }
+        return null;
+    }
 	
 	public class ScannerAdaptor {
 		private boolean useHTable;
@@ -2558,13 +2603,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private MetaDataMutationResult
-    mutateColumn(List<Mutation> tableMetadata, ColumnMutator mutator, int clientVersion) throws IOException {
+    mutateColumn(MutatateColumnType mutateColumnType, List<Mutation> tableMetadata, ColumnMutator mutator, int clientVersion) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
             Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
@@ -2643,13 +2689,42 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
                 result = mutator.updateMutation(table, rowKeyMetaData, tableMetadata, region,
                             invalidateList, locks, clientTimeStamp);
-                // if the update mutation caused tables to be deleted, the mutation code returned will be MutationCode.TABLE_ALREADY_EXISTS 
-                if (result != null && result.getMutationCode()!=MutationCode.TABLE_ALREADY_EXISTS) {
+                // if the update mutation caused tables to be deleted, the mutation code returned
+                // will be MutationCode.TABLE_ALREADY_EXISTS
+                if (result != null
+                        && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
+                }
+
+                Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
+                        GlobalCache.getInstance(this.env).getMetaDataCache();
+
+                List<Mutation> localMutations =
+                        Lists.newArrayListWithExpectedSize(tableMetadata.size());
+                List<Mutation> remoteMutations = Lists.newArrayList();
+                separateLocalAndRemoteMutations(region, tableMetadata, localMutations,
+                    remoteMutations);
+                if (!remoteMutations.isEmpty()) {
+                    // there should only be remote mutations if we are adding a column to a view that uses encoded column qualifiers
+                    // (the remote mutations are to update the encoded column qualifier counter on the parent table)
+                    if (mutateColumnType == MutatateColumnType.ADD_COLUMN && type == PTableType.VIEW && table
+                            .getEncodingScheme() != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
+                        processRemoteRegionMutations(
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, remoteMutations,
+                            fullTableName, MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
+                    }
+                    else {
+                        String msg = "Found unexpected mutations while adding or dropping column to "+fullTableName;
+                        logger.error(msg);
+                        for (Mutation m : remoteMutations) {
+                            logger.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
+                            logger.debug("Mutation family cell map : " + m.getFamilyCellMap());
+                        }
+                        throw new IllegalStateException(msg);
+                    }
                 }
                 mutateRowsWithLocks(region, tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
                 // Invalidate from cache
-                Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 for (ImmutableBytesPtr invalidateKey : invalidateList) {
                     metaDataCache.invalidate(invalidateKey);
                 }
@@ -2667,7 +2742,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region,locks);
             }
         } catch (Throwable t) {
-            ServerUtil.throwIOException(SchemaUtil.getTableName(schemaName, tableName), t);
+            ServerUtil.throwIOException(fullTableName, t);
             return null; // impossible
         }
     }
@@ -3120,13 +3195,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return 0;
     }
 
+    private enum MutatateColumnType {
+        ADD_COLUMN, DROP_COLUMN
+    }
+
     @Override
     public void addColumn(RpcController controller, final AddColumnRequest request,
             RpcCallback<MetaDataResponse> done) {
         try {
             List<Mutation> tableMetaData = ProtobufUtil.getMutations(request);
 
-            MetaDataMutationResult result = mutateColumn(tableMetaData, new ColumnMutator() {
+            MetaDataMutationResult result = mutateColumn(MutatateColumnType.ADD_COLUMN, tableMetaData, new ColumnMutator() {
                 @Override
                 public MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
                         List<Mutation> tableMetaData, Region region, List<ImmutableBytesPtr> invalidateList,
@@ -3158,7 +3237,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                              * Starting from 4.5, metadata requests have the client version included in them. 
                              * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
                              * 
-                             * 3) Trying to swtich tenancy of a table that has views
+                             * 3) Trying to switch tenancy of a table that has views
                              */
                             if (table.getBaseColumnCount() == 0 
                                     || !request.hasClientVersion()
@@ -3424,7 +3503,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         final List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
         try {
             tableMetaData = ProtobufUtil.getMutations(request);
-            MetaDataMutationResult result = mutateColumn(tableMetaData, new ColumnMutator() {
+            MetaDataMutationResult result = mutateColumn(MutatateColumnType.DROP_COLUMN, tableMetaData, new ColumnMutator() {
                 @Override
                 public MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
                         List<Mutation> tableMetaData, Region region,
@@ -4252,8 +4331,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         HConstants.NO_NONCE);
 
                 // Invalidate the cache - the next getSchema call will add it
-                Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env)
-                        .getMetaDataCache();
+                Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
+                        GlobalCache.getInstance(this.env).getMetaDataCache();
                 if (cacheKey != null) {
                     metaDataCache.invalidate(cacheKey);
                 }
@@ -4365,7 +4444,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 @Override
                 public Void run() throws Exception {
                     final Call rpcContext = RpcUtil.getRpcContext();
-                    // Setting RPC context as null so that user can be resetted
+                    // Setting RPC context as null so that user can be reseted
                     try {
                         RpcUtil.setRpcContext(null);
                         region.mutateRowsWithLocks(mutations, rowsToLock, nonceGroup, nonce);
