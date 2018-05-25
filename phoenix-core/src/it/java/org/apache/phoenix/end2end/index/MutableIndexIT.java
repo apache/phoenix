@@ -34,15 +34,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import jline.internal.Log;
-
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
@@ -59,7 +55,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -74,6 +69,8 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.primitives.Doubles;
+
+import jline.internal.Log;
 
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
@@ -110,10 +107,10 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] { 
                 { false, null, false }, { false, null, true },
-                //{ false, "TEPHRA", false }, { false, "TEPHRA", true },
+                { false, "TEPHRA", false }, { false, "TEPHRA", true },
                 //{ false, "OMID", false }, { false, "OMID", true },
                 { true, null, false }, { true, null, true },
-                //{ true, "TEPHRA", false }, { true, "TEPHRA", true },
+                { true, "TEPHRA", false }, { true, "TEPHRA", true },
                 //{ true, "OMID", false }, { true, "OMID", true },
                 });
     }

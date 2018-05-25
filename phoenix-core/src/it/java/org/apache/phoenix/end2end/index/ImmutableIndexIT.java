@@ -111,9 +111,9 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     public static Collection<Boolean[]> data() {
 		return Arrays.asList(new Boolean[][] { 
 				{ false, false, false }, { false, false, true },
-				//{ false, true, false }, { false, true, true },
-				{ true, false, false }, { true, false, true } });
-         //       { true, true, false }, { true, true, true } });
+				{ false, true, false }, { false, true, true },
+				{ true, false, false }, { true, false, true },
+                { true, true, false }, { true, true, true } });
     }
 
     @Test
