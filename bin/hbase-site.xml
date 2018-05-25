@@ -24,8 +24,4 @@
     <name>hbase.regionserver.wal.codec</name>
     <value>org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec</value>
   </property>
-  <property>
-    <name>phoenix.log.level</name>
-    <value>DEBUG</value>
-  </property>
 </configuration>
