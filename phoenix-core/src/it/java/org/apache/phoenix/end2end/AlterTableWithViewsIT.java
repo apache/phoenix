@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -155,6 +155,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = generateUniqueTableName(); 
             String viewOfTable1 = generateUniqueViewName(); 
             String viewOfTable2 = generateUniqueViewName(); 
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
+            
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -164,9 +166,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(generateDDL("UPDATE_CACHE_FREQUENCY=2", ddlFormat));
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
             
             viewConn.createStatement().execute("ALTER VIEW " + viewOfTable2 + " SET UPDATE_CACHE_FREQUENCY = 1");
             
@@ -234,6 +233,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+            
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL," + " COL2 bigint NOT NULL,"
                             + " COL3 varchar(10)," + " COL4 varchar(10)," + " COL5 varchar(10),"
@@ -248,9 +249,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                         "CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
             		"ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
 
             // drop two columns from the base table - shouldn't affect the view at all since we resolve at read time.
             conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN COL3, COL5");
@@ -269,7 +267,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.setAutoCommit(false);
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
-
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+            
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -282,9 +281,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256), VIEW_COL3 VARCHAR, VIEW_COL4 DECIMAL, VIEW_COL5 DECIMAL(10,2), VIEW_COL6 VARCHAR, CONSTRAINT pk PRIMARY KEY (VIEW_COL5, VIEW_COL6) ) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn,viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?, ?, ?, ?, ?, ?)";
@@ -402,6 +398,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.setAutoCommit(false);
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -418,9 +415,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable.toUpperCase());
             assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?)";
@@ -527,6 +521,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = generateUniqueTableName(); 
             String viewOfTable1 = generateUniqueViewName(); 
             String viewOfTable2 = generateUniqueViewName(); 
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
+            
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                             + " %s ID char(10) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -541,9 +537,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL3 VARCHAR(256), VIEW_COL4 DECIMAL(10,2) CONSTRAINT pk PRIMARY KEY (VIEW_COL3, VIEW_COL4)) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL3", "VIEW_COL4");
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
             
             try {
                 // should fail because there are two view with different pk columns
@@ -594,6 +587,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = generateUniqueTableName(); 
             String viewOfTable1 = generateUniqueViewName(); 
             String viewOfTable2 = generateUniqueViewName();
+            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
+            
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                     + " %s ID char(10) NOT NULL,"
                     + " COL1 integer NOT NULL,"
@@ -609,9 +604,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn2.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn2, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3,  "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
 
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
-            
             // upsert single row into both view
             String dml = "UPSERT INTO " + viewOfTable1 + " VALUES(?,?,?,?,?)";
             PreparedStatement stmt = viewConn.prepareStatement(dml);
@@ -746,6 +738,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         String baseTable = generateUniqueTableName(); 
         String childView = generateUniqueViewName(); 
         String grandChildView = generateUniqueViewName();
+        splitSystemCatalog(Lists.newArrayList(baseTable, childView, grandChildView));
+        
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
@@ -764,9 +758,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String grandChildViewDDL =
                     "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
             viewConn.createStatement().execute(grandChildViewDDL);
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(baseTable, childView, grandChildView));
             
             String addColumnToChildViewDDL =
                     "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
@@ -811,6 +802,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         String baseTable = generateUniqueTableName(); 
         String view1 = generateUniqueViewName(); 
         String view2 = generateUniqueViewName();
+        splitSystemCatalog(Lists.newArrayList(baseTable, view1, view2));
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ;
                 Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2) : conn) {
@@ -825,9 +817,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             
             viewDDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + baseTable;
             viewConn2.createStatement().execute(viewDDL);
-            
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(baseTable, view1, view2));
             
             // Drop the column inherited from base table to make it diverged
             String dropColumn = "ALTER VIEW " + view1 + " DROP COLUMN V2";
@@ -889,6 +878,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
             String baseTableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
+            splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
+            
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTableName + " ("
                             + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -901,12 +892,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "+baseTableName);
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
-            
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            HTableInterface htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
+            Table htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
             assertFalse(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));
             assertFalse(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertFalse(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());

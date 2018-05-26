@@ -718,88 +718,122 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 		continue;
                 	}
                 }
-    			// generate row key
-    			// TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
-    			byte[] rowKey = SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, null);
-    			
-    			// add one cell for each column info
-    			List<Cell> cells = Lists.newArrayListWithCapacity(25);
-    			// DATA_TYPE
-    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES,
-    	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
-    	    	// TYPE_NAME
-    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(TYPE_NAME),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getDataType().getSqlTypeNameBytes()));
-    	    	// COLUMN_SIZE
-    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getMaxLength()!=null ? PInteger.INSTANCE.toBytes(column.getMaxLength()) : ByteUtil.EMPTY_BYTE_ARRAY ));
-    	    	// BUFFER_LENGTH
-    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(BUFFER_LENGTH),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-    	    	// DECIMAL_DIGITS
-    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getScale()!=null ? PInteger.INSTANCE.toBytes(column.getScale()) : ByteUtil.EMPTY_BYTE_ARRAY ));
-    	    	// NUM_PREC_RADIX
-    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(NUM_PREC_RADIX),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-    	    	// NULLABLE
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, NULLABLE_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP,  PInteger.INSTANCE.toBytes(SchemaUtil.getIsNullableInt(column.isNullable()))));
-				// REMARKS 
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(REMARKS),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// COLUMN_DEF 
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(COLUMN_DEF),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// SQL_DATA_TYPE
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SQL_DATA_TYPE),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// SQL_DATETIME_SUB
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SQL_DATETIME_SUB),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// CHAR_OCTET_LENGTH
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(CHAR_OCTET_LENGTH),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// ORDINAL_POSITION
-				int ordinal = column.getPosition() + (isSalted ? 0 : 1) - (tenantColSkipped ? 1 : 0);
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ORDINAL_POSITION_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(ordinal)));
-				String isNullable = column.isNullable() ? Boolean.TRUE.toString() : Boolean.FALSE.toString();
-				// IS_NULLABLE
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(IS_NULLABLE),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PVarchar.INSTANCE.toBytes(isNullable)));
-				// SCOPE_CATALOG
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_CATALOG),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// SCOPE_SCHEMA
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_SCHEMA),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// SCOPE_TABLE
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_TABLE),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// SOURCE_DATA_TYPE
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SOURCE_DATA_TYPE),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// IS_AUTOINCREMENT
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(IS_AUTOINCREMENT),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-				// ARRAY_SIZE
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getArraySize()!=null ? PInteger.INSTANCE.toBytes(column.getArraySize()) : ByteUtil.EMPTY_BYTE_ARRAY ));
-				// COLUMN_FAMILY
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_FAMILY_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getFamilyName()!=null  ? column.getFamilyName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
-				// TYPE_ID
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(TYPE_ID),
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
-				// VIEW_CONSTANT
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant()!=null ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY ));
-				// MULTI_TENANT
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
-				// KEY_SEQ_COLUMN
-				byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+                // generate row key
+                // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
+                byte[] rowKey =
+                        SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, null);
+
+                // add one cell for each column info
+                List<Cell> cells = Lists.newArrayListWithCapacity(25);
+                // DATA_TYPE
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
+                // TYPE_NAME
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    column.getDataType().getSqlTypeNameBytes()));
+                // COLUMN_SIZE
+                cells.add(
+                    KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        column.getMaxLength() != null
+                                ? PInteger.INSTANCE.toBytes(column.getMaxLength())
+                                : ByteUtil.EMPTY_BYTE_ARRAY));
+                // BUFFER_LENGTH
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(BUFFER_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // DECIMAL_DIGITS
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    column.getScale() != null ? PInteger.INSTANCE.toBytes(column.getScale())
+                            : ByteUtil.EMPTY_BYTE_ARRAY));
+                // NUM_PREC_RADIX
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(NUM_PREC_RADIX), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // NULLABLE
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, NULLABLE_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(SchemaUtil.getIsNullableInt(column.isNullable()))));
+                // REMARKS
+                cells.add(
+                    KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(REMARKS),
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                // COLUMN_DEF
+                cells.add(
+                    KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(COLUMN_DEF),
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                // SQL_DATA_TYPE
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(SQL_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // SQL_DATETIME_SUB
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(SQL_DATETIME_SUB), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // CHAR_OCTET_LENGTH
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(CHAR_OCTET_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // ORDINAL_POSITION
+                int ordinal =
+                        column.getPosition() + (isSalted ? 0 : 1) - (tenantColSkipped ? 1 : 0);
+                cells.add(
+                    KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ORDINAL_POSITION_BYTES,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(ordinal)));
+                String isNullable =
+                        column.isNullable() ? Boolean.TRUE.toString() : Boolean.FALSE.toString();
+                // IS_NULLABLE
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(IS_NULLABLE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PVarchar.INSTANCE.toBytes(isNullable)));
+                // SCOPE_CATALOG
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(SCOPE_CATALOG), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // SCOPE_SCHEMA
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(SCOPE_SCHEMA), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // SCOPE_TABLE
+                cells.add(
+                    KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_TABLE),
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                // SOURCE_DATA_TYPE
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(SOURCE_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // IS_AUTOINCREMENT
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(IS_AUTOINCREMENT), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    ByteUtil.EMPTY_BYTE_ARRAY));
+                // ARRAY_SIZE
+                cells.add(
+                    KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        column.getArraySize() != null
+                                ? PInteger.INSTANCE.toBytes(column.getArraySize())
+                                : ByteUtil.EMPTY_BYTE_ARRAY));
+                // COLUMN_FAMILY
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_FAMILY_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getFamilyName() != null
+                            ? column.getFamilyName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
+                // TYPE_ID
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
+                // VIEW_CONSTANT
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant() != null
+                            ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY));
+                // MULTI_TENANT
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
+                // KEY_SEQ_COLUMN
+                byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
 				int pkPos = table.getPKColumns().indexOf(column);
 				if (pkPos!=-1) {
 					short keySeq = (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));

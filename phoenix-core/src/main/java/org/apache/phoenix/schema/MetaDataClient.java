@@ -2539,7 +2539,6 @@ public class MetaDataClient {
                 String tenantIdToUse = connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
                 // When a view adds its own columns, then we need to increase the sequence number of the base table
                 // too since we want clients to get the latest PTable of the base table.
-                // TODO : HANDLE UPDATING THE COUNTER AND SEQUENCE NUMNER OF THE BASE TABLE CORRECTLY AS IT COULD BE ON A DIFFERENT REGION SERVER
                 for (Entry<String, Integer> entry : changedCqCounters.entrySet()) {
                     try (PreparedStatement linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER)) {
                         linkStatement.setString(1, tenantIdToUse);
@@ -3458,7 +3457,6 @@ public class MetaDataClient {
                 String tenantIdToUse = connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
                 if (!changedCqCounters.isEmpty()) {
                     PreparedStatement linkStatement;
-                    // TODO : HANDLE UPDATING THE COUNTER AND SEQUENCE NUMNER OF THE BASE TABLE CORRECTLY AS IT COULD BE ON A DIFFERENT REGION SERVER
                         linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER);
                         for (Entry<String, Integer> entry : changedCqCounters.entrySet()) {    
                             linkStatement.setString(1, tenantIdToUse);
