@@ -2447,6 +2447,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
     }
     
+    
     // Available for testing
     protected void setUpgradeRequired() {
         this.upgradeRequired.set(true);

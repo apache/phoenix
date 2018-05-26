@@ -445,6 +445,7 @@ public class ViewIT extends BaseViewIT {
     }
 
 
+    @Test
     public void testDropOfColumnOnParentTableInvalidatesView() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String fullTableName = generateUniqueTableName();
@@ -465,7 +466,7 @@ public class ViewIT extends BaseViewIT {
 	        fail();
         }
         catch (SQLException e) {
-        	assertEquals(SQLExceptionCode.INVALID_VIEW, e.getErrorCode());
+        	assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
         }
     }
    
@@ -487,8 +488,17 @@ public class ViewIT extends BaseViewIT {
         
         // move metadata to multiple regions
         splitSystemCatalog(Lists.newArrayList(fullTableName, fullViewName1, fullViewName2));
+        
+        // dropping base table without cascade should fail
+        try {
+            conn.createStatement().execute("DROP TABLE " + fullTableName );
+            fail();
+        }
+        catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
 
-        // Execute DROP...CASCADE
+        // drop table cascade should succeed
         conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
         
         validateViewDoesNotExist(conn, fullViewName1);

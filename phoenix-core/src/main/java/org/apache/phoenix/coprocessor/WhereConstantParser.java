@@ -21,7 +21,6 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 
@@ -69,7 +68,7 @@ public class WhereConstantParser {
         catch (ColumnNotFoundException e) {
         	// if we could not find a column used in the view statement (which means its was dropped)
         	// this view is not valid any more
-        	return new Pair<PTable, MutationCode>(null, MutationCode.INVALID_VIEW);
+        	return new Pair<PTable, MutationCode>(null, MutationCode.TABLE_NOT_FOUND);
         }
         CreateTableCompiler.ViewWhereExpressionVisitor visitor =
             new CreateTableCompiler.ViewWhereExpressionVisitor(view, viewColumnConstantsToBe);

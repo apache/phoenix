@@ -25,36 +25,17 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
 
 public class TableInfo {
-    private byte[] row;
+
     private final byte[] tenantId;
     private final byte[] schema;
     private final byte[] name;
 
-    public TableInfo(byte[] row, byte[] tenantId, byte[] schema, byte[] name) {
-        this.row = row;
+    public TableInfo(byte[] tenantId, byte[] schema, byte[] name) {
         this.tenantId = tenantId;
         this.schema = schema;
         this.name = name;
     }
     
-    public TableInfo(byte[] tenantId, byte[] schema, byte[] name) {
-        this(null, tenantId, schema, name);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        TableInfo tableInfo = (TableInfo) o;
-        return Arrays.equals(name, tableInfo.name);
-
-    }
-
-    @Override
-    public int hashCode() {
-        return Arrays.hashCode(name);
-    }
-
     public byte[] getRowKeyPrefix() {
         return ByteUtil.concat(tenantId, SEPARATOR_BYTE_ARRAY, schema, SEPARATOR_BYTE_ARRAY, name);
     }
@@ -64,10 +45,6 @@ public class TableInfo {
         return Bytes.toString(getRowKeyPrefix());
     }
     
-    public byte[] getRow() {
-        return row;
-    }
-
     public byte[] getTenantId() {
         return tenantId;
     }
@@ -78,5 +55,27 @@ public class TableInfo {
 
     public byte[] getTableName() {
         return name;
+    }
+    
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + Arrays.hashCode(name);
+        result = prime * result + Arrays.hashCode(schema);
+        result = prime * result + Arrays.hashCode(tenantId);
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        TableInfo other = (TableInfo) obj;
+        if (!Arrays.equals(name, other.name)) return false;
+        if (!Arrays.equals(schema, other.schema)) return false;
+        if (!Arrays.equals(tenantId, other.tenantId)) return false;
+        return true;
     }
 }

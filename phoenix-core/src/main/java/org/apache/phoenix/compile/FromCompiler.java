@@ -579,12 +579,7 @@ public class FromCompiler {
                 theTable = result.getTable();
                 MutationCode mutationCode = result.getMutationCode();
                 if (theTable == null) {
-					if (mutationCode == MutationCode.INVALID_VIEW) {
-						throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VIEW).setSchemaName(schemaName)
-								.setTableName(tableName).build().buildException();
-					} else {
-						throw new TableNotFoundException(schemaName, tableName, timeStamp);
-					}
+					throw new TableNotFoundException(schemaName, tableName, timeStamp);
                 }
             } else {
                 try {

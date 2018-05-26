@@ -112,11 +112,11 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -587,155 +587,173 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     /**
-     * Used to add the columns present the ancestor hierarchy to the PTable of the given view or view index
-     * @param table PTable of the view or view index 
+     * Used to add the columns present the ancestor hierarchy to the PTable of the given view or
+     * view index
+     * @param table PTable of the view or view index
      */
-	private Pair<PTable, MetaDataProtos.MutationCode> combineColumns(PTable table, long timestamp, int clientVersion) throws SQLException, IOException {
-		// combine columns for view and view indexes
+    private Pair<PTable, MetaDataProtos.MutationCode> combineColumns(PTable table, long timestamp,
+            int clientVersion) throws SQLException, IOException {
+        // combine columns for view and view indexes
         byte[] tenantId =
                 table.getTenantId() != null ? table.getTenantId().getBytes()
                         : ByteUtil.EMPTY_BYTE_ARRAY;
-	    byte[] schemaName = table.getSchemaName().getBytes();
+        byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
-		boolean hasIndexId = table.getViewIndexId() != null;
-		boolean isSalted = table.getBucketNum() != null;
-		if (table.getType() != PTableType.VIEW && !hasIndexId) {
-			return new Pair<PTable, MetaDataProtos.MutationCode>(table, MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
-		}
-		boolean isDiverged = isDivergedView(table);
+        boolean hasIndexId = table.getViewIndexId() != null;
+        boolean isSalted = table.getBucketNum() != null;
+        if (table.getType() != PTableType.VIEW && !hasIndexId) {
+            return new Pair<PTable, MetaDataProtos.MutationCode>(table,
+                    MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+        }
+        boolean isDiverged = isDivergedView(table);
         // here you combine columns from the parent tables the logic is as follows, if the PColumn
         // is in the EXCLUDED_COLUMNS remove it, otherwise priority of keeping duplicate columns is
         // child -> parent
-		List<TableInfo> ancestorList = Lists.newArrayList();
-		TableViewFinderResult viewFinderResult = new TableViewFinderResult();
-		if (PTableType.VIEW == table.getType()) {
-			findAncestorViews(tenantId, schemaName, tableName, viewFinderResult, table.isNamespaceMapped());
-		} else { // is a view index
-			findAncestorViewsOfIndex(tenantId, schemaName, tableName, viewFinderResult, table.isNamespaceMapped());
-		}
-		if (viewFinderResult.getResults().isEmpty()) {
-			// no need to combine columns for local indexes on regular tables
-			return new Pair<PTable, MetaDataProtos.MutationCode>(table, MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
-		}
-		for (TableInfo viewInfo : viewFinderResult.getResults()) {
-			ancestorList.add(viewInfo);
-		}
-		List<PColumn> allColumns = Lists.newArrayList();
-		List<PColumn> excludedColumns = Lists.newArrayList();
-		// add my own columns first in reverse order
-		List<PColumn> myColumns = table.getColumns();
-		for (int i = myColumns.size() - 1; i >= 0; i--) {
-			PColumn pColumn = myColumns.get(i);
-			if (pColumn.isExcluded()) {
-				excludedColumns.add(pColumn);
-			} else if (!pColumn.equals(SaltingUtil.SALTING_COLUMN)) { // skip salted column as it will be added from the base table columns
-				allColumns.add(pColumn);
-			}
-		}
-		
-		// initialize map from with indexed expression to list of required data columns 
-		// then remove the data columns that have not been dropped, so that we get the columns that have been dropped
-		Map<PColumn, List<String>> indexRequiredDroppedDataColMap = Maps.newHashMapWithExpectedSize(table.getColumns().size());
-		if (hasIndexId) {
-		    int indexPosOffset = (isSalted ? 1 : 0) + (table.isMultiTenant() ? 1 : 0) + 1;
-			ColumnNameTrackingExpressionCompiler expressionCompiler = new ColumnNameTrackingExpressionCompiler();
-	        for (int i = indexPosOffset; i < table.getPKColumns().size(); i++) {
-	            PColumn indexColumn = table.getPKColumns().get(i);
-	            try {
-	                expressionCompiler.reset();
-	                String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
-	                ParseNode parseNode  = SQLParser.parseCondition(expressionStr);
-	                parseNode.accept(expressionCompiler);
-	                indexRequiredDroppedDataColMap.put(indexColumn, Lists.newArrayList(expressionCompiler.getDataColumnNames()));
-	            } catch (SQLException e) {
-	                throw new RuntimeException(e); // Impossible
-	            }
-	        }
-		}
-		
-		// now go up from child to parent all the way to the base table:
-		PTable baseTable = null;
-		long maxTableTimestamp = -1;
-		int numPKCols = table.getPKColumns().size();
-		for (int i = 0; i < ancestorList.size(); i++) {
-			TableInfo parentTableInfo = ancestorList.get(i);
+        List<TableInfo> ancestorList = Lists.newArrayList();
+        TableViewFinderResult viewFinderResult = new TableViewFinderResult();
+        if (PTableType.VIEW == table.getType()) {
+            findAncestorViews(tenantId, schemaName, tableName, viewFinderResult,
+                table.isNamespaceMapped());
+        } else { // is a view index
+            findAncestorViewsOfIndex(tenantId, schemaName, tableName, viewFinderResult,
+                table.isNamespaceMapped());
+        }
+        if (viewFinderResult.getResults().isEmpty()) {
+            // no need to combine columns for local indexes on regular tables
+            return new Pair<PTable, MetaDataProtos.MutationCode>(table,
+                    MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+        }
+        for (TableInfo viewInfo : viewFinderResult.getResults()) {
+            ancestorList.add(viewInfo);
+        }
+        List<PColumn> allColumns = Lists.newArrayList();
+        List<PColumn> excludedColumns = Lists.newArrayList();
+        // add my own columns first in reverse order
+        List<PColumn> myColumns = table.getColumns();
+        for (int i = myColumns.size() - 1; i >= 0; i--) {
+            PColumn pColumn = myColumns.get(i);
+            if (pColumn.isExcluded()) {
+                excludedColumns.add(pColumn);
+            } else if (!pColumn.equals(SaltingUtil.SALTING_COLUMN)) { // skip salted column as it
+                                                                      // will be added from the base
+                                                                      // table columns
+                allColumns.add(pColumn);
+            }
+        }
+
+        // initialize map from with indexed expression to list of required data columns
+        // then remove the data columns that have not been dropped, so that we get the columns that
+        // have been dropped
+        Map<PColumn, List<String>> indexRequiredDroppedDataColMap =
+                Maps.newHashMapWithExpectedSize(table.getColumns().size());
+        if (hasIndexId) {
+            int indexPosOffset = (isSalted ? 1 : 0) + (table.isMultiTenant() ? 1 : 0) + 1;
+            ColumnNameTrackingExpressionCompiler expressionCompiler =
+                    new ColumnNameTrackingExpressionCompiler();
+            for (int i = indexPosOffset; i < table.getPKColumns().size(); i++) {
+                PColumn indexColumn = table.getPKColumns().get(i);
+                try {
+                    expressionCompiler.reset();
+                    String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
+                    ParseNode parseNode = SQLParser.parseCondition(expressionStr);
+                    parseNode.accept(expressionCompiler);
+                    indexRequiredDroppedDataColMap.put(indexColumn,
+                        Lists.newArrayList(expressionCompiler.getDataColumnNames()));
+                } catch (SQLException e) {
+                    throw new RuntimeException(e); // Impossible
+                }
+            }
+        }
+
+        // now go up from child to parent all the way to the base table:
+        PTable baseTable = null;
+        long maxTableTimestamp = -1;
+        int numPKCols = table.getPKColumns().size();
+        for (int i = 0; i < ancestorList.size(); i++) {
+            TableInfo parentTableInfo = ancestorList.get(i);
             // if we are currently combining columns for a view index and are looking up its
             // ancestors we do not add the indexes to the ancestor PTable (or else we end up in a
-            // circular loop) 
+            // circular loop)
             // we also don't need to add parent columns of the ancestors as we combine columns from
             // all ancestors
-			PTable pTable =
+            PTable pTable =
                     doGetTable(parentTableInfo.getTenantId(), parentTableInfo.getSchemaName(),
-                        parentTableInfo.getTableName(), timestamp, clientVersion,
-                        hasIndexId, true); 
-			if (pTable == null) {
+                        parentTableInfo.getTableName(), timestamp, clientVersion, hasIndexId, true);
+            if (pTable == null) {
                 throw new TableNotFoundException(
                         "Could not find parent table while combining columns "
                                 + SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
                                     parentTableInfo.getTableName())
                                 + " with tenant id " + parentTableInfo.getTenantId());
-			} else {
-                // only combine columns for view indexes (and not local indexes on regular tables which also have a viewIndexId)
-				if (i == 0 && hasIndexId && pTable.getType() != PTableType.VIEW) {
-					return new Pair<PTable, MetaDataProtos.MutationCode>(table, MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
-				}
-				if (TABLE.equals(pTable.getType())) {
-					baseTable = pTable;
-				}
-				// set the final table timestamp as the max timestamp of the view/view index or its ancestors
-				maxTableTimestamp = Math.max(maxTableTimestamp, pTable.getTimeStamp());
-				if (hasIndexId) {
-					// add all pk columns of parent tables to indexes
-					for (PColumn column : pTable.getPKColumns()) {
-						if (column.isExcluded()) {
-							continue;
-						}
-						column = IndexUtil.getIndexPKColumn(++numPKCols, column);
-						int existingColumnIndex = allColumns.indexOf(column);
-						if (existingColumnIndex == -1) {
-							allColumns.add(0, column);
-						}
-					}
-					for (int j = 0; j < pTable.getColumns().size(); j++) {
-						PColumn tableColumn = pTable.getColumns().get(j);
-						if (tableColumn.isExcluded()) {
-							continue;
-						}
-						String dataColumnName = tableColumn.getName().getString();
+            } else {
+                // only combine columns for view indexes (and not local indexes on regular tables
+                // which also have a viewIndexId)
+                if (i == 0 && hasIndexId && pTable.getType() != PTableType.VIEW) {
+                    return new Pair<PTable, MetaDataProtos.MutationCode>(table,
+                            MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+                }
+                if (TABLE.equals(pTable.getType())) {
+                    baseTable = pTable;
+                }
+                // set the final table timestamp as the max timestamp of the view/view index or its
+                // ancestors
+                maxTableTimestamp = Math.max(maxTableTimestamp, pTable.getTimeStamp());
+                if (hasIndexId) {
+                    // add all pk columns of parent tables to indexes
+                    for (PColumn column : pTable.getPKColumns()) {
+                        if (column.isExcluded()) {
+                            continue;
+                        }
+                        column = IndexUtil.getIndexPKColumn(++numPKCols, column);
+                        int existingColumnIndex = allColumns.indexOf(column);
+                        if (existingColumnIndex == -1) {
+                            allColumns.add(0, column);
+                        }
+                    }
+                    for (int j = 0; j < pTable.getColumns().size(); j++) {
+                        PColumn tableColumn = pTable.getColumns().get(j);
+                        if (tableColumn.isExcluded()) {
+                            continue;
+                        }
+                        String dataColumnName = tableColumn.getName().getString();
                         // remove from list of columns since it has not been dropped
-						for (Entry<PColumn, List<String>> entry : indexRequiredDroppedDataColMap.entrySet()) {
-							entry.getValue().remove(dataColumnName);
-						}
-					}
-				} else {
-					List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(pTable);
-					if (currAncestorTableCols != null) {
-						for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
-							PColumn column = currAncestorTableCols.get(j);
+                        for (Entry<PColumn, List<String>> entry : indexRequiredDroppedDataColMap
+                                .entrySet()) {
+                            entry.getValue().remove(dataColumnName);
+                        }
+                    }
+                } else {
+                    List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(pTable);
+                    if (currAncestorTableCols != null) {
+                        for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
+                            PColumn column = currAncestorTableCols.get(j);
                             // for diverged views we always include pk columns of the base table. We
                             // have to include these pk columns to be able to support adding pk
                             // columns to the diverged view
                             // we only include regular columns that were created before the view
                             // diverged
-							if (isDiverged && column.getFamilyName()!=null && column.getTimestamp() > table.getTimeStamp()) {
-								continue;
-							}
-							// need to check if this column is in the list of excluded (dropped) columns of the view
-							int existingIndex = excludedColumns.indexOf(column);
-							if (existingIndex != -1) {
+                            if (isDiverged && column.getFamilyName() != null
+                                    && column.getTimestamp() > table.getTimeStamp()) {
+                                continue;
+                            }
+                            // need to check if this column is in the list of excluded (dropped)
+                            // columns of the view
+                            int existingIndex = excludedColumns.indexOf(column);
+                            if (existingIndex != -1) {
                                 // if it is, only exclude the column if was created before the
                                 // column was dropped in the view in order to handle the case where
                                 // a base table column is dropped in a view, then dropped in the
                                 // base table and then added back to the base table
-								if (column.getTimestamp() <= excludedColumns.get(existingIndex).getTimestamp()) {
-									continue;
-								}
-							}
-							if (column.isExcluded()) {
-								excludedColumns.add(column);
-							} else {
-								int existingColumnIndex = allColumns.indexOf(column);
-								if (existingColumnIndex != -1) {
+                                if (column.getTimestamp() <= excludedColumns.get(existingIndex)
+                                        .getTimestamp()) {
+                                    continue;
+                                }
+                            }
+                            if (column.isExcluded()) {
+                                excludedColumns.add(column);
+                            } else {
+                                int existingColumnIndex = allColumns.indexOf(column);
+                                if (existingColumnIndex != -1) {
                                     // if the same column exists in a parent and child, we keep the
                                     // latest column
                                     PColumn existingColumn = allColumns.get(existingColumnIndex);
@@ -743,60 +761,66 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         allColumns.remove(existingColumnIndex);
                                         allColumns.add(column);
                                     }
-								} else {
-									allColumns.add(column);
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		// at this point indexRequiredDroppedDataColMap only contain the columns required by a view index that have dropped 
-		for (Entry<PColumn, List<String>> entry : indexRequiredDroppedDataColMap.entrySet()) {
-			if (!entry.getValue().isEmpty()) {
-				PColumn indexColumnToBeDropped = entry.getKey();
-				if (SchemaUtil.isPKColumn(indexColumnToBeDropped)) {
-					// if an indexed column was dropped in an ancestor then we
-					// cannot use this index an more
-					// TODO figure out a way to actually drop this view index
-					return new Pair<PTable, MetaDataProtos.MutationCode>(null, MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
-				} else {
-					allColumns.remove(indexColumnToBeDropped);
-				}
-			}
-		}
-		// lets remove the excluded columns first if the timestamp is newer than
-		// the added column
-		for (PColumn excludedColumn : excludedColumns) {
-			int index = allColumns.indexOf(excludedColumn);
-			if (index != -1) {
-				if (allColumns.get(index).getTimestamp() <= excludedColumn.getTimestamp()) {
-					allColumns.remove(excludedColumn);
-				}
-			}
-		}
-		List<PColumn> columnsToAdd = Lists.newArrayList();
-		int position = isSalted ? 1 : 0;
-		for (int i = allColumns.size() - 1; i >= 0; i--) {
-			PColumn column = allColumns.get(i);
-			if (table.getColumns().contains(column)) {
-				// for views this column is not derived from an ancestor
-				columnsToAdd.add(new PColumnImpl(column, position));
-			} else {
-				columnsToAdd.add(new PColumnImpl(column, true, position));
-			}
-			position++;
-		}
-		// need to have the columns in the PTable to use the WhereCompiler
-		// unfortunately so this needs to be done
-		// twice....
-		// TODO set the view properties correctly instead of just setting them
-		// same as the base table
-		int baseTableColumnCount = isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT : columnsToAdd.size() - myColumns.size();
-		PTableImpl pTable = PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTableTimestamp, baseTableColumnCount);
-		return WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
-	}
+                                } else {
+                                    allColumns.add(column);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // at this point indexRequiredDroppedDataColMap only contain the columns required by a view
+        // index that have dropped
+        for (Entry<PColumn, List<String>> entry : indexRequiredDroppedDataColMap.entrySet()) {
+            if (!entry.getValue().isEmpty()) {
+                PColumn indexColumnToBeDropped = entry.getKey();
+                if (SchemaUtil.isPKColumn(indexColumnToBeDropped)) {
+                    // if an indexed column was dropped in an ancestor then we
+                    // cannot use this index an more
+                    // TODO figure out a way to actually drop this view index
+                    return new Pair<PTable, MetaDataProtos.MutationCode>(null,
+                            MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
+                } else {
+                    allColumns.remove(indexColumnToBeDropped);
+                }
+            }
+        }
+        // lets remove the excluded columns first if the timestamp is newer than
+        // the added column
+        for (PColumn excludedColumn : excludedColumns) {
+            int index = allColumns.indexOf(excludedColumn);
+            if (index != -1) {
+                if (allColumns.get(index).getTimestamp() <= excludedColumn.getTimestamp()) {
+                    allColumns.remove(excludedColumn);
+                }
+            }
+        }
+        List<PColumn> columnsToAdd = Lists.newArrayList();
+        int position = isSalted ? 1 : 0;
+        for (int i = allColumns.size() - 1; i >= 0; i--) {
+            PColumn column = allColumns.get(i);
+            if (table.getColumns().contains(column)) {
+                // for views this column is not derived from an ancestor
+                columnsToAdd.add(new PColumnImpl(column, position));
+            } else {
+                columnsToAdd.add(new PColumnImpl(column, true, position));
+            }
+            position++;
+        }
+        // need to have the columns in the PTable to use the WhereCompiler
+        // unfortunately so this needs to be done
+        // twice....
+        // TODO set the view properties correctly instead of just setting them
+        // same as the base table
+        int baseTableColumnCount =
+                isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
+                        : columnsToAdd.size() - myColumns.size();
+        PTableImpl pTable =
+                PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTableTimestamp,
+                    baseTableColumnCount);
+        return WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
+    }
 
     private PhoenixMetaDataCoprocessorHost getCoprocessorHost() {
         return phoenixAccessCoprocessorHost;
@@ -1289,7 +1313,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   addExcludedColumnToTable(columns, colName, famName, colKv.getTimestamp());
               }
           } else {
-              // CM: should we add the lookup to the parent tables here?
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
@@ -1712,21 +1735,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-            // no need to run OrpanCleaner (which cleans up orphaned views) while creating SYSTEM tables  env.getTable
-            if (Bytes.compareTo(schemaName,PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME_BYTES)!=0) {
-	            HTableInterface systemCatalog = null;
-	            try {
-	            	// can't use SchemaUtil.getPhysicalTableName on server side as we don't know whether 
-	            	// the system tables have been migrated to the system namespaces
-	            	TableName systemCatalogTableName = env.getRegion().getTableDesc().getTableName();
-	                systemCatalog = env.getTable(systemCatalogTableName);
-	                OrphanCleaner.reapOrphans(systemCatalog, tenantIdBytes, schemaName, tableName);
-	            } finally {
-	                if (systemCatalog != null) {
-	                    systemCatalog.close();
-	                }
-	            }
-            }
+            // TODO before creating a table we need to see if the table was previously created and then dropped
+            // and clean up any parent->child links or child views
             boolean isNamespaceMapped = MetaDataUtil.isNameSpaceMapped(tableMetadata, GenericKeyValueBuilder.INSTANCE,
                     new ImmutableBytesWritable());
             final IndexType indexType = MetaDataUtil.getIndexType(tableMetadata, GenericKeyValueBuilder.INSTANCE,
@@ -2171,7 +2181,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private void findAncestorViewsOfIndex(byte[] tenantId, byte[] schemaName, byte[] indexName,
             TableViewFinderResult result, boolean isNamespaceMapped) throws IOException {
-        try (HTableInterface hTable =
+        try (Table hTable =
                 env.getTable(SchemaUtil.getPhysicalTableName(
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
             TableViewFinderResult currentResult =
@@ -2188,7 +2198,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     
     private void findAncestorViews(byte[] tenantId, byte[] schemaName, byte[] tableName,
             TableViewFinderResult result, boolean isNamespaceMapped) throws IOException {
-        try (HTableInterface hTable =
+        try (Table hTable =
                 env.getTable(SchemaUtil.getPhysicalTableName(
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
             ViewFinder.findAllRelatives(hTable, tenantId, schemaName, tableName,
@@ -2202,12 +2212,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private void findAllChildViews(byte[] tenantId, byte[] schemaName, byte[] tableName, TableViewFinderResult result) throws IOException {
-    	HTableInterface hTable = env.getTable(SchemaUtil
-                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, env.getConfiguration()));
-        try {
-            ViewFinder.findAllRelatives(hTable, tenantId, schemaName, tableName, LinkType.CHILD_TABLE, result);
-        } finally {
-            hTable.close();
+        try (Table hTable =
+                env.getTable(SchemaUtil.getPhysicalTableName(
+                    PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                    env.getConfiguration()))) {
+            ViewFinder.findAllRelatives(hTable, tenantId, schemaName, tableName,
+                LinkType.CHILD_TABLE, result);
         }
     }
     
@@ -2377,7 +2387,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<Mutation> remoteMutations, String tableName,
             MetaDataProtos.MutationCode mutationCode) throws IOException {
         MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
-        try (HTableInterface hTable =
+        try (Table hTable =
                 env.getTable(
                     SchemaUtil.getPhysicalTableName(systemTableName, env.getConfiguration()))) {
             hTable.batch(remoteMutations);
@@ -2437,6 +2447,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (results.isEmpty()) { // Should not be possible
                 return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
                         EnvironmentEdgeManager.currentTimeMillis(), null);
+            }
+
+            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+                // check to see if the table has any child views
+                try (Table hTable =
+                        env.getTable(SchemaUtil.getPhysicalTableName(
+                            PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                            env.getConfiguration()))) {
+                    boolean hasChildViews =
+                            ViewFinder.hasChildViews(hTable, tenantId, schemaName, tableName,
+                                clientTimeStamp);
+                    if (hasChildViews && !isCascade) {
+                        // DROP without CASCADE on tables with child views is not permitted
+                        return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                EnvironmentEdgeManager.currentTimeMillis(), null);
+                    }
+                }
             }
 
             // Add to list of HTables to delete, unless it's a view or its a shared index
@@ -2867,7 +2894,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             SchemaUtil.getTableName(schemaName, tableName), TableName.valueOf(cPhysicalTableName),
                             getParentPhysicalTableName(table),type);
 
-                    List<Mutation> additionalTableMetadataMutatinos = Lists.newArrayListWithExpectedSize(2);
+                    List<Mutation> additionalTableMetadataMutations = Lists.newArrayListWithExpectedSize(2);
                     if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
                         TableViewFinderResult childViewsResult = new TableViewFinderResult();
                         findAllChildViews(tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
@@ -2942,7 +2969,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     // We may be adding a DESC column, so if table is already
                                     // able to be rowKeyOptimized, it should continue to be so.
                                     if (table.rowKeyOrderOptimizable()) {
-                                        UpgradeUtil.addRowKeyOrderOptimizableCell(additionalTableMetadataMutatinos, tableHeaderRowKey, clientTimeStamp);
+                                        UpgradeUtil.addRowKeyOrderOptimizableCell(additionalTableMetadataMutations, tableHeaderRowKey, clientTimeStamp);
                                     } else if (table.getType() == PTableType.VIEW){
                                         // Don't allow view PK to diverge from table PK as our upgrade code
                                         // does not handle this.
@@ -2963,7 +2990,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         if (index.rowKeyOrderOptimizable()) {
                                             byte[] indexHeaderRowKey = SchemaUtil.getTableKey(index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes(),
                                                     index.getSchemaName().getBytes(), index.getTableName().getBytes());
-                                            UpgradeUtil.addRowKeyOrderOptimizableCell(additionalTableMetadataMutatinos, indexHeaderRowKey, clientTimeStamp);
+                                            UpgradeUtil.addRowKeyOrderOptimizableCell(additionalTableMetadataMutations, indexHeaderRowKey, clientTimeStamp);
                                         }
                                     }
                                 }
@@ -2982,7 +3009,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                             rowKeyMetaData[TABLE_NAME_INDEX])));
                         }
                     }
-                    tableMetaData.addAll(additionalTableMetadataMutatinos);
+                    tableMetaData.addAll(additionalTableMetadataMutations);
                     return null;
                 }
             }, request.getClientVersion());
@@ -3158,7 +3185,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
                     byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
                     byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
-//                    table = combineColumns(table, clientTimeStamp, request.getClientVersion()).getFirst();
                     boolean isView = table.getType() == PTableType.VIEW;
                     boolean deletePKColumn = false;
                     getCoprocessorHost().preAlterTable(Bytes.toString(tenantId),
