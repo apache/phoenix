@@ -249,8 +249,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.RetryStrategies;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -2070,7 +2068,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         tableProps.put(propName, propValue);
                     } else {
                         if (TableProperty.isPhoenixTableProperty(propName)) {
-                            TableProperty.valueOf(propName).validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
+                            TableProperty tableProp = TableProperty.valueOf(propName);
+                            tableProp.validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
                             if (propName.equals(TTL)) {
                                 newTTL = ((Number)prop.getSecond()).intValue();
                                 // Even though TTL is really a HColumnProperty we treat it specially.
@@ -2079,6 +2078,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
+                            } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER) && propValue != null) {
+                                tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, tableProp.getValue(propValue));
                             }
                         } else {
                             if (MetaDataUtil.isHColumnProperty(propName)) {

@@ -10,9 +10,7 @@
  */
 package org.apache.phoenix.schema.types;
 
-import org.junit.Ignore;
-
-@Ignore public abstract class BasePrimitiveDoublePhoenixArrayToStringTest extends
+public abstract class BasePrimitiveDoublePhoenixArrayToStringTest extends
         BasePhoenixArrayToStringTest {
 
     public BasePrimitiveDoublePhoenixArrayToStringTest() {

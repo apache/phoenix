@@ -18,12 +18,11 @@
 package org.apache.phoenix.transaction;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Random;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.omid.committable.CommitTable;
 import org.apache.omid.proto.TSOProto;
 import org.apache.omid.transaction.AbstractTransaction.VisibilityLevel;
 import org.apache.omid.transaction.HBaseCellId;
@@ -34,8 +33,6 @@ import org.apache.omid.transaction.Transaction;
 //import org.apache.omid.tso.TSOMockModule;
 import org.apache.omid.transaction.Transaction.Status;
 import org.apache.omid.transaction.TransactionException;
-//import org.apache.omid.tso.TSOMockModule;
-import org.apache.omid.tso.TSOServer;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -45,28 +42,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+//import org.apache.omid.tso.TSOMockModule;
 
 public class OmidTransactionContext implements PhoenixTransactionContext {
 
     private static final Logger logger = LoggerFactory.getLogger(OmidTransactionContext.class);
 
-    //private static HBaseTransactionManager transactionManager = null;
-
     private HBaseTransactionManager tm;
     private HBaseTransaction tx;
-
-    private static CommitTable.Client commitTableClient = null;
-    private static final long MAX_NON_TX_TIMESTAMP = (long) (System.currentTimeMillis() * 1.1);
-
-    // For testing
-    private TSOServer tso;
-
-    private Random rand = new Random();
 
     public OmidTransactionContext() {
         this.tx = null;
         this.tm = null;
-        this.tso = null;
     }
 
     public OmidTransactionContext(PhoenixConnection connection) throws SQLException {
@@ -74,7 +61,6 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         assert (client instanceof OmidTransactionProvider.OmidTransactionClient);
         this.tm = ((OmidTransactionProvider.OmidTransactionClient)client).getTransactionClient();
         this.tx = null;
-        this.tso = null;
     }
 
     public OmidTransactionContext(byte[] txnBytes) throws InvalidProtocolBufferException {
@@ -105,8 +91,6 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         } else {
             this.tx = omidTransactionContext.getTransaction();
         }
-
-        this.tso = null;
     }
 
     @Override
@@ -296,9 +280,14 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         transactionBuilder.setTimestamp(tx.getTransactionId());
         transactionBuilder.setEpoch(tx.getEpoch());
 
-        return transactionBuilder.build().toByteArray();
+        byte[] encodedTxBytes = transactionBuilder.build().toByteArray();
+        // Add code of TransactionProvider at end of byte array
+        encodedTxBytes = Arrays.copyOf(encodedTxBytes, encodedTxBytes.length + 1);
+        encodedTxBytes[encodedTxBytes.length - 1] = getProvider().getCode();
+        return encodedTxBytes;
     }
 
+    @Override
     public Provider getProvider() {
         return TransactionFactory.Provider.OMID;
     }
@@ -323,6 +312,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
 
+    @Override
     public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) throws SQLException {
         return new OmidTransactionTable(this, htable, isImmutable);
     }

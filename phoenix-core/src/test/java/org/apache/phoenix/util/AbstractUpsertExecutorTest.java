@@ -43,12 +43,11 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PIntegerArray;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableList;
 
-@Ignore public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionlessQueryTest {
+public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionlessQueryTest {
 
     protected Connection conn;
     protected List<ColumnInfo> columnInfoList;

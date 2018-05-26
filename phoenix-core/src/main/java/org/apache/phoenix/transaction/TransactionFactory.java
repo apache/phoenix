@@ -48,7 +48,7 @@ public class TransactionFactory {
         }
         
         public static Provider getDefault() {
-            return TEPHRA;
+            return OMID;
         }
 
         public PhoenixTransactionProvider getTransactionProvider()  {
@@ -65,7 +65,7 @@ public class TransactionFactory {
             return null;
         }
         Provider provider = (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) 
-                ? Provider.OMID
+                ? Provider.TEPHRA
                 : Provider.fromCode(txState[txState.length-1]);
         return provider.getTransactionProvider().getTransactionContext(txState);
     }

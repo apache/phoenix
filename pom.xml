@@ -124,7 +124,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
-    <numForkedIT>8</numForkedIT>
+    <numForkedIT>4</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 

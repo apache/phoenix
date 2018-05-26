@@ -48,6 +48,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -70,9 +71,9 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="TransactionIT_provider={0}") // name is used by failsafe as file name in reports
-    public static Collection<String[]> data() {
-        return Arrays.asList(new String[][] {     
-                 {"TEPHRA"/*,"OMID"*/}});
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] { 
+                 {"TEPHRA"},{"OMID"}});
     }
     
     @Test
@@ -205,11 +206,11 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true," + tableDDLOptions);
-            if (TransactionFactory.Provider.OMID.name().equals(txProvider)) {
-                fail("Omid shouldn't allow converting a non transactional table to be transactional");
+            if (TransactionFactory.Provider.valueOf(txProvider).getTransactionProvider().isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                fail(txProvider + " should not allow converting a non transactional table to be transactional");
             }
         } catch (SQLException e) { // Should fail for Omid, but not Tephra
-            if (TransactionFactory.Provider.TEPHRA.name().equals(txProvider)) {
+            if (!TransactionFactory.Provider.valueOf(txProvider).getTransactionProvider().isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
                 throw e;
             }
             assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL.getErrorCode(), e.getErrorCode());
@@ -242,7 +243,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         }
         
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
-        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10, " + tableDDLOptions);
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());

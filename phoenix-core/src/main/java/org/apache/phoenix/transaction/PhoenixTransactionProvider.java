@@ -28,7 +28,8 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 
 public interface PhoenixTransactionProvider {
     public enum Feature {
-        ALTER_NONTX_TO_TX(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL);
+        ALTER_NONTX_TO_TX(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL),
+        COLUMN_ENCODING(SQLExceptionCode.UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER);
         
         private final SQLExceptionCode code;
         

@@ -19,6 +19,7 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
@@ -61,7 +62,8 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
 
     @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
-        return new OmidTransactionContext(txnBytes);
+        // Remove last byte (which is used to identify transaction provider)
+        return new OmidTransactionContext(Arrays.copyOf(txnBytes,txnBytes.length-1));
     }
 
     @Override
@@ -69,26 +71,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         return new OmidTransactionContext(connection);
     }
 
-//    @Override
-//    public PhoenixTransactionContext getTransactionContext(PhoenixTransactionContext contex, PhoenixConnection connection, boolean subTask) {
-//        return new OmidTransactionContext(contex, connection, subTask);
-//    }
-//
-//    @Override
-//    public PhoenixTransactionalTable getTransactionalTable() throws SQLException {
-//        return new OmidTransactionTable();
-//    }
-//
-//    @Override
-//    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable) throws SQLException {
-//        return new OmidTransactionTable(ctx, htable);
-//    }
-//
-//    @Override
-//    public PhoenixTransactionalTable getTransactionalTable(PhoenixTransactionContext ctx, HTableInterface htable, PTable pTable) throws SQLException {
-//        return new OmidTransactionTable(ctx, htable, pTable);
-//    }
-
+    @Override
     public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) throws SQLException{
         if (transactionManager == null) {
             try {
@@ -212,6 +195,6 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         // (though it's set in the constructor). I suspect some
         // mysterious class loader issue. The below works fine
         // as a workaround.
-        return (feature == Feature.ALTER_NONTX_TO_TX);
+        return (feature == Feature.ALTER_NONTX_TO_TX || feature == Feature.COLUMN_ENCODING);
     }
 }

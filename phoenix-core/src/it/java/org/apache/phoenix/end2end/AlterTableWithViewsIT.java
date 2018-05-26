@@ -43,6 +43,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -754,7 +755,9 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMakeBaseTableTransactional() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
             String baseTableName = "NONTXNTBL_" + generateUniqueName() + (isMultiTenant ? "0":"1");
             String viewOfTable = baseTableName + "_VIEW";
@@ -777,8 +780,9 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertFalse(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertFalse(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());
             
-            // make the base table transactional
-            conn.createStatement().execute("ALTER TABLE " + baseTableName + " SET TRANSACTIONAL=true");
+            // make the base table transactional and explicitly set TEPHRA as provider since only it
+            // supports transitioning from non transactional to transactional
+            conn.createStatement().execute("ALTER TABLE " + baseTableName + " SET TRANSACTIONAL=true, TRANSACTION_PROVIDER='TEPHRA'");
             // query the view to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM " + viewOfTable);
             htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));

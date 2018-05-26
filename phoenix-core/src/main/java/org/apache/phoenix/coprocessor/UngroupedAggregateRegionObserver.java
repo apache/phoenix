@@ -37,7 +37,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.Map;
 import java.util.concurrent.Callable;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -131,8 +130,6 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
-import org.apache.phoenix.transaction.PhoenixTransactionalTable;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -368,8 +365,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             super.clear();
         }
     }
-
-
+    
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException, SQLException {
         RegionCoprocessorEnvironment env = c.getEnvironment();
@@ -651,8 +647,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         } else if (buildLocalIndex) {
-
-//                            PhoenixTransactionalTable phoenixTransactionalTable = TransactionFactory.getTransactionProvider().getTransactionalTable();
                             for (IndexMaintainer maintainer : indexMaintainers) {
                                 if (!results.isEmpty()) {
                                     result.getKey(ptr);
@@ -664,7 +658,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         valueGetter, ptr, results.get(0).getTimestamp(),
                                         env.getRegion().getRegionInfo().getStartKey(),
                                         env.getRegion().getRegionInfo().getEndKey());
-//                                    put = phoenixTransactionalTable.MarkPutAsCommitted(put, ts, ts);
                                     indexMutations.add(put);
                                 }
                             }
