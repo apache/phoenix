@@ -315,7 +315,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
     public void testTimestampPredicate() throws Exception {
         String testName = "testTimeStampPredicate";
         hbaseTestUtil.getTestFileSystem().createNewFile(new Path(hiveLogDir, testName + ".out"));
-        createFile("10\t2013-01-02 01:01:01.123456\n", new Path(hiveOutputDir, testName + ".out").toString());
+        createFile("10\t2013-01-02 01:01:01.123\n", new Path(hiveOutputDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
 
         StringBuilder sb = new StringBuilder();
@@ -330,9 +330,12 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
                 "   'phoenix.column.mapping' = 'id:ID, ts:TS'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id');" + HiveTestUtil.CRLF);
+        /*
+        Following query only for check that nanoseconds are correctly parsed with over 3 digits.
+         */
         sb.append("INSERT INTO TABLE timeStampTable VALUES (10, \"2013-01-02 01:01:01.123456\");" + HiveTestUtil.CRLF);
-        sb.append("SELECT * from timeStampTable WHERE ts between '2013-01-02 01:01:01.123455' and " +
-                " '2013-01-02 12:01:02.123457789' AND id = 10;" + HiveTestUtil.CRLF);
+        sb.append("SELECT * from timeStampTable WHERE ts between '2012-01-02 01:01:01.123455' and " +
+                " '2015-01-02 12:01:02.123457789' AND id = 10;" + HiveTestUtil.CRLF);
 
         String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();
         createFile(sb.toString(), fullPath);

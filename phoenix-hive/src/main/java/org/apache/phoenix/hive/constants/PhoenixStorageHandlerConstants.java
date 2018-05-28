@@ -101,8 +101,8 @@ public class PhoenixStorageHandlerConstants {
 
     public static final String FUNCTION_VALUE_MARKER = "$value$";
     public static final String DATE_FUNCTION_TEMPLETE = "to_date(" + FUNCTION_VALUE_MARKER + ")";
-    public static final String TIMESTAMP_FUNCTION_TEMPLATE = "to_timestamp(" +
-            FUNCTION_VALUE_MARKER + ")";
+    public static final String TIMESTAMP_FUNCTION_TEMPLATE = "TIMESTAMP" +
+            FUNCTION_VALUE_MARKER;
 
     public static final IntWritable INT_ZERO = new IntWritable(0);
 }
