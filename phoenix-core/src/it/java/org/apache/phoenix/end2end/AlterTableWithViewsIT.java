@@ -738,8 +738,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         String baseTable = generateUniqueTableName(); 
         String childView = generateUniqueViewName(); 
         String grandChildView = generateUniqueViewName();
-        splitSystemCatalog(Lists.newArrayList(baseTable, childView, grandChildView));
-        
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
@@ -758,6 +756,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String grandChildViewDDL =
                     "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
             viewConn.createStatement().execute(grandChildViewDDL);
+            
+            splitSystemCatalog(Lists.newArrayList(baseTable, childView, grandChildView));
             
             String addColumnToChildViewDDL =
                     "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";

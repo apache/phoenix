@@ -227,7 +227,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp, boolean skipCombiningColumns) throws SQLException {
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp, boolean skipAddingIndexes, boolean skipCombiningColumns) throws SQLException {
         // Return result that will cause client to use it's own metadata instead of needing
         // to get anything from the server (since we don't have a connection)
         try {

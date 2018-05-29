@@ -84,7 +84,6 @@ public class ViewIT extends BaseViewIT {
         String fullTableName = generateUniqueTableName();
         String fullParentViewName = generateUniqueViewName();
         String fullViewName = generateUniqueViewName();
-        splitSystemCatalog(Lists.newArrayList(fullTableName, fullParentViewName, fullViewName));
         
         String ddl = "CREATE TABLE " + fullTableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) "+ tableDDLOptions;
         conn.createStatement().execute(ddl);
@@ -92,6 +91,8 @@ public class ViewIT extends BaseViewIT {
         conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullParentViewName + " WHERE k < 9";
         conn.createStatement().execute(ddl);
+        
+        splitSystemCatalog(Lists.newArrayList(fullTableName, fullParentViewName, fullViewName));
         
         try {
             conn.createStatement().execute("UPSERT INTO " + fullParentViewName + " VALUES(1)");
@@ -454,6 +455,7 @@ public class ViewIT extends BaseViewIT {
         conn.createStatement().execute(ddl);
         
         conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
+        // TODO see if its possibel to prevent the dropping of a column thats required by a child view (for its view where clause)
         // the view should be invalid
         try 
         {
@@ -758,13 +760,14 @@ public class ViewIT extends BaseViewIT {
         String fullTableName = generateUniqueTableName();
         String fullViewName1 = generateUniqueViewName();
         String fullViewName2 = generateUniqueViewName();
-        splitSystemCatalog(Lists.newArrayList(fullTableName, fullViewName1, fullViewName2));
         String sql = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))" + tableDDLOptions;
         conn.createStatement().execute(sql);
         sql = "CREATE VIEW " + fullViewName1 + "  AS SELECT * FROM " + fullTableName;
         conn.createStatement().execute(sql);
         sql = "CREATE VIEW " + fullViewName2 + "  AS SELECT * FROM " + fullTableName + " WHERE k1 = 1.0";
         conn.createStatement().execute(sql);
+        
+        splitSystemCatalog(Lists.newArrayList(fullTableName, fullViewName1, fullViewName2));
         
         sql = "SELECT * FROM " + fullViewName1 + " order by k1, k2";
         PreparedStatement stmt = conn.prepareStatement(sql);

@@ -86,6 +86,7 @@ message GetTableRequest {
   required int64 clientTimestamp = 5;
   optional int32 clientVersion = 6;	
   optional bool skipAddingParentColumns = 7;
+  optional bool skipAddingIndexes = 8;
 }
 
 message GetFunctionsRequest {

@@ -24,14 +24,12 @@ import java.sql.SQLException;
 import java.util.BitSet;
 import java.util.List;
 
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MutationCode;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -51,11 +49,11 @@ import com.google.common.collect.Lists;
 
 public class WhereConstantParser {
 
-    static Pair<PTable,MutationCode> addViewInfoToPColumnsIfNeeded(PTable view) throws SQLException {
+    static PTable addViewInfoToPColumnsIfNeeded(PTable view) throws SQLException {
     	boolean[] viewColumnConstantsMatched = new boolean[view.getColumns().size()];
         byte[][] viewColumnConstantsToBe = new byte[view.getColumns().size()][];
         if (view.getViewStatement() == null) {
-        	return new Pair<PTable, MutationCode>(view, MutationCode.TABLE_ALREADY_EXISTS);
+        	return view;
         }
         SelectStatement select = new SQLParser(view.getViewStatement()).parseQuery();
         ParseNode whereNode = select.getWhere();
@@ -68,7 +66,7 @@ public class WhereConstantParser {
         catch (ColumnNotFoundException e) {
         	// if we could not find a column used in the view statement (which means its was dropped)
         	// this view is not valid any more
-        	return new Pair<PTable, MutationCode>(null, MutationCode.TABLE_NOT_FOUND);
+        	return null;
         }
         CreateTableCompiler.ViewWhereExpressionVisitor visitor =
             new CreateTableCompiler.ViewWhereExpressionVisitor(view, viewColumnConstantsToBe);
@@ -103,8 +101,7 @@ public class WhereConstantParser {
 //				return null;
 //			}
 //		}
-        view = PTableImpl.makePTable(view, result);
-        return new Pair<PTable, MutationCode>(view, MutationCode.TABLE_ALREADY_EXISTS);
+        return PTableImpl.makePTable(view, result);
     }
 
     private static PhoenixConnection getConnectionlessConnection() throws SQLException {

@@ -540,7 +540,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             long currentTime = EnvironmentEdgeManager.currentTimeMillis();
             PTable table =
                     doGetTable(tenantId, schemaName, tableName, request.getClientTimestamp(),
-                        request.getClientVersion(), false, request.getSkipAddingParentColumns());
+                        request.getClientVersion(), request.getSkipAddingIndexes(), request.getSkipAddingParentColumns());
             if (table == null) {
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                 builder.setMutationTime(currentTime);
@@ -590,9 +590,55 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
      * Used to add the columns present the ancestor hierarchy to the PTable of the given view or
      * view index
      * @param table PTable of the view or view index
+     * @param skipAddingIndexes if true the returned PTable won't include indexes
+     * @param skipAddingParentColumns if true the returned PTable won't include columns derived from ancestor tables
      */
     private Pair<PTable, MetaDataProtos.MutationCode> combineColumns(PTable table, long timestamp,
-            int clientVersion) throws SQLException, IOException {
+            int clientVersion, boolean skipAddingIndexes, boolean skipAddingParentColumns) throws SQLException, IOException {
+        boolean hasIndexId = table.getViewIndexId() != null;
+        if (table.getType() != PTableType.VIEW && !hasIndexId) {
+            return new Pair<PTable, MetaDataProtos.MutationCode>(table,
+                    MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+        }
+        if (!skipAddingParentColumns) {
+            table = addDerivedColumnsFromAncestors(table, timestamp, clientVersion);
+            if (table==null) {
+                return new Pair<PTable, MetaDataProtos.MutationCode>(table,
+                        MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
+            }
+            // we need to resolve the indexes of views (to get ensure they also have all the columns
+            // derived from their ancestors) 
+            if (!skipAddingIndexes && !table.getIndexes().isEmpty()) {
+                List<PTable> indexes = Lists.newArrayListWithExpectedSize(table.getIndexes().size());
+                for (PTable index : table.getIndexes()) {
+                    byte[] tenantIdBytes =
+                            index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY
+                                    : index.getTenantId().getBytes();
+                    PTable latestIndex =
+                            doGetTable(tenantIdBytes, index.getSchemaName().getBytes(),
+                                index.getTableName().getBytes(), timestamp, clientVersion, true,
+                                false);
+                    if (latestIndex == null) {
+                        throw new TableNotFoundException(
+                                "Could not find index table while combining columns "
+                                        + index.getTableName().getString() + " with tenant id "
+                                        + index.getTenantId());
+                    }
+                    indexes.add(latestIndex);
+                }
+                table = PTableImpl.makePTable(table, table.getTimeStamp(), indexes);
+            }
+        }
+        
+        MetaDataProtos.MutationCode mutationCode =
+                table != null ? MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS
+                        : MetaDataProtos.MutationCode.TABLE_NOT_FOUND;
+        return new Pair<PTable, MetaDataProtos.MutationCode>(table, mutationCode);
+    }
+
+    
+    private PTable addDerivedColumnsFromAncestors(PTable table, long timestamp,
+            int clientVersion) throws IOException, SQLException, TableNotFoundException {
         // combine columns for view and view indexes
         byte[] tenantId =
                 table.getTenantId() != null ? table.getTenantId().getBytes()
@@ -602,8 +648,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         boolean hasIndexId = table.getViewIndexId() != null;
         boolean isSalted = table.getBucketNum() != null;
         if (table.getType() != PTableType.VIEW && !hasIndexId) {
-            return new Pair<PTable, MetaDataProtos.MutationCode>(table,
-                    MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+            return table;
         }
         boolean isDiverged = isDivergedView(table);
         // here you combine columns from the parent tables the logic is as follows, if the PColumn
@@ -620,8 +665,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         if (viewFinderResult.getResults().isEmpty()) {
             // no need to combine columns for local indexes on regular tables
-            return new Pair<PTable, MetaDataProtos.MutationCode>(table,
-                    MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+            return table;
         }
         for (TableInfo viewInfo : viewFinderResult.getResults()) {
             ancestorList.add(viewInfo);
@@ -689,8 +733,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // only combine columns for view indexes (and not local indexes on regular tables
                 // which also have a viewIndexId)
                 if (i == 0 && hasIndexId && pTable.getType() != PTableType.VIEW) {
-                    return new Pair<PTable, MetaDataProtos.MutationCode>(table,
-                            MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+                    return table;
                 }
                 if (TABLE.equals(pTable.getType())) {
                     baseTable = pTable;
@@ -779,8 +822,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // if an indexed column was dropped in an ancestor then we
                     // cannot use this index an more
                     // TODO figure out a way to actually drop this view index
-                    return new Pair<PTable, MetaDataProtos.MutationCode>(null,
-                            MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
+                    return null;
                 } else {
                     allColumns.remove(indexColumnToBeDropped);
                 }
@@ -843,7 +885,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     && (oldTable == null || tableTimeStamp < newTable.getTimeStamp()
                             || (blockWriteRebuildIndex && newTable.getIndexDisableTimestamp() > 0))
                     // only cache the PTable if it has the required indexes,
-                    // the PTable added to the cache doesn't incluyde parent columns as we always call 
+                    // the PTable added to the cache doesn't include parent columns as we always call 
                     // combine columns after looking up the PTable from the cache
                     && !skipAddingIndexes) {
                 if (logger.isDebugEnabled()) {
@@ -856,8 +898,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
                 metaDataCache.put(cacheKey, newTable);
             }
-            if (!skipAddingParentColumns && newTable != null) {
-                newTable = combineColumns(newTable, clientTimeStamp, clientVersion).getFirst();
+            if (newTable != null) {
+                newTable = combineColumns(newTable, clientTimeStamp, clientVersion, skipAddingIndexes, skipAddingParentColumns).getFirst();
             }
         }
         return newTable;
@@ -1584,7 +1626,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp, int clientVersion)
         throws IOException, SQLException {
         Region region = env.getRegion();
-        PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false);
+        PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false, false);
         // We always cache the latest version - fault in if not in cache
         if (table != null || (table = buildTable(key, cacheKey, region, asOfTimeStamp, clientVersion, false, false)) != null) {
             return table;
@@ -1600,15 +1642,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     
     /**
      * Returns a PTable if its found in the cache.
-     *  
+     * @param skipAddingIndexes TODO
      * @param skipAddingParentColumns if true combines columns for views and indexes on views to add the columns 
      * inherited from the parent view hierarchy. 
      */
-   private PTable getTableFromCache(ImmutableBytesPtr cacheKey, long clientTimeStamp, int clientVersion, boolean skipAddingParentColumns) throws SQLException, IOException {
+   private PTable getTableFromCache(ImmutableBytesPtr cacheKey, long clientTimeStamp, int clientVersion, boolean skipAddingIndexes, boolean skipAddingParentColumns) throws SQLException, IOException {
        Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
        PTable table = (PTable)metaDataCache.getIfPresent(cacheKey);
-       if (table!=null && !skipAddingParentColumns)
-           table = combineColumns(table, clientTimeStamp, clientVersion).getFirst();
+       if (table!=null)
+           table = combineColumns(table, clientTimeStamp, clientVersion, skipAddingIndexes, skipAddingParentColumns).getFirst();
        return table;
    }
 
@@ -2410,7 +2452,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(catalogMutations);
         ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
 
-        PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false);
+        PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false, false);
 
         // We always cache the latest version - fault in if not in cache
         if (table != null
@@ -2552,7 +2594,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
-                PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false);
+                PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false, false);
                 if (logger.isDebugEnabled()) {
                     if (table == null) {
                         logger.debug("Table " + Bytes.toStringBinary(key)
@@ -2721,7 +2763,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] schema = viewInfo.getSchemaName();
             byte[] table = viewInfo.getTableName();
             PTable view =
-                    doGetTable(tenantId, schema, table, clientTimeStamp, clientVersion, false,
+                    doGetTable(tenantId, schema, table, clientTimeStamp, clientVersion, true,
                         true); // we don't need to include parent columns as we are only interested
                                // in the columns added by the view itself (also including parent
                                // columns will lead to a circular call which will deadlock)
@@ -3023,8 +3065,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
 
-    private PTable doGetTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTimeStamp, int clientVersion, boolean skipAddingIndexes, boolean skipAddingParentColumns) throws IOException, SQLException {
-        return doGetTable(tenantId, schemaName, tableName, clientTimeStamp, null, clientVersion, skipAddingIndexes, skipAddingParentColumns);
+    private PTable doGetTable(byte[] tenantId, byte[] schemaName, byte[] tableName,
+            long clientTimeStamp, int clientVersion, boolean skipAddingIndexes,
+            boolean skipAddingParentColumns) throws IOException, SQLException {
+        return doGetTable(tenantId, schemaName, tableName, clientTimeStamp, null, clientVersion,
+            skipAddingIndexes, skipAddingParentColumns);
     }
 
     /**
@@ -3052,7 +3097,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 MetaDataMutationResult result =
                         queryServices.getTable(PNameFactory.newName(tenantId), schemaName,
                             tableName, HConstants.LATEST_TIMESTAMP, clientTimeStamp,
-                            skipAddingParentColumns);
+                            skipAddingIndexes, skipAddingParentColumns);
                 return result.getTable();
             } catch (ClassNotFoundException e) {
             }
@@ -3075,7 +3120,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (!wasLocked) {
                 rowLock = acquireLock(region, key, null);
             }
-            PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, skipAddingParentColumns);
+            PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, skipAddingIndexes, skipAddingParentColumns);
             // We only cache the latest, so we'll end up building the table with every call if the
             // client connection has specified an SCN.
             // TODO: If we indicate to the client that we're returning an older version, but there's a
@@ -3095,9 +3140,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 return table;
             }
             // Otherwise, query for an older version of the table - it won't be cached
-            return buildTable(key, cacheKey, region, clientTimeStamp, clientVersion, skipAddingIndexes, skipAddingParentColumns);
+            table = buildTable(key, cacheKey, region, clientTimeStamp, clientVersion, skipAddingIndexes, skipAddingParentColumns);
+            return table;
         } finally {
-            if (!wasLocked) rowLock.release();
+            if (!wasLocked && rowLock!=null) rowLock.release();
         }
     }
 
