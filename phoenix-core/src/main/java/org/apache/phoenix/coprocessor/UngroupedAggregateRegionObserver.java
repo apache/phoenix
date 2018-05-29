@@ -130,6 +130,7 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -658,6 +659,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         valueGetter, ptr, results.get(0).getTimestamp(),
                                         env.getRegion().getRegionInfo().getStartKey(),
                                         env.getRegion().getRegionInfo().getEndKey());
+
+                                    final int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
+                                    final PhoenixTransactionContext txnContext = TransactionFactory.getTransactionContext(txState, clientVersion);
+                                    put = txnContext.markPutAsCommitted(put, ts, ts);
                                     indexMutations.add(put);
                                 }
                             }

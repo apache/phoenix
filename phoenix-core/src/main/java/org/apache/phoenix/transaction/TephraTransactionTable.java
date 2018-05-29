@@ -177,11 +177,6 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
-    public Put MarkPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
-        return put;
-    }
-
-    @Override
     public long incrementColumnValue(byte[] row, byte[] family,
             byte[] qualifier, long amount, boolean writeToWAL)
             throws IOException {

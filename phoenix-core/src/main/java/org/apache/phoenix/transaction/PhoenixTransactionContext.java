@@ -17,10 +17,12 @@
  */
 package org.apache.phoenix.transaction;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
@@ -102,6 +104,11 @@ public interface PhoenixTransactionContext {
         @Override
         public void markDMLFence(PTable dataTable) {
             
+        }
+
+        @Override
+        public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
+            return null;
         }
 
         @Override
@@ -215,6 +222,16 @@ public interface PhoenixTransactionContext {
      * Returns visibility level
      */
     public PhoenixVisibilityLevel getVisibilityLevel();
+
+    /**
+     * Converts put operation to autocommit operation
+     *  @param  put put operation
+     *  @param  timestamp - start timestamp
+     *  @param  commitTimestamp - commit timestamp
+     * @return put operation with metadata
+     * @throws IOException
+     */
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException;
 
     /**
      * Encode transaction

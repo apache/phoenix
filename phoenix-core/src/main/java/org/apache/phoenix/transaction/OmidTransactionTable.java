@@ -185,11 +185,6 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     }
 
     @Override
-    public Put MarkPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
-        return TTable.markPutAsCommitted(put, timestamp, timestamp);
-    }
-
-    @Override
     public long incrementColumnValue(byte[] row, byte[] family,
             byte[] qualifier, long amount, boolean writeToWAL)
             throws IOException {
