@@ -347,7 +347,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
     @Test
     public void testSchemaMetadataScan() throws SQLException {
         String table1 = generateUniqueName();
-        String schema1 = generateUniqueName();
+        String schema1 = "Z_" + generateUniqueName();
         String fullTable1 = schema1 + "." + table1;
         ensureTableCreated(getUrl(), fullTable1, CUSTOM_ENTITY_DATA_FULL_NAME, null);
         String fullTable2 = generateUniqueName();
