@@ -404,11 +404,8 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
     
     @Override
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable, boolean isIndex) {
-        if (isIndex) {
-            return htable;
-        }
-        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) {
+        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isConflictFree ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;
     }

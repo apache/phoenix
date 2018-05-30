@@ -112,7 +112,7 @@ public interface PhoenixTransactionContext {
         }
 
         @Override
-        public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable, boolean isIndex) {
+        public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) {
             return null;
         }
     };
@@ -241,5 +241,5 @@ public interface PhoenixTransactionContext {
     public Provider getProvider();
     public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask);
 
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree, boolean isIndex) throws SQLException;
+    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) throws SQLException;
 }

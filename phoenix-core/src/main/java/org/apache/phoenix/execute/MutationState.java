@@ -305,7 +305,7 @@ public class MutationState implements SQLCloseable {
         HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
             // We're only using this table for reading, so we want it wrapped even if it's an index
-            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows(), false);
+            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows() || table.getType() == PTableType.INDEX);
         }
         return htable;
     }
@@ -1095,7 +1095,7 @@ public class MutationState implements SQLCloseable {
                                 hTable = new MetaDataAwareHTable(hTable, origTableRef);
                             }
 
-                            hTable = phoenixTransactionContext.getTransactionalTable(hTable, table.isImmutableRows(), !tableInfo.isDataTable());
+                            hTable = phoenixTransactionContext.getTransactionalTable(hTable, table.isImmutableRows() || !tableInfo.isDataTable());
                         }
                         
                         numMutations = mutationList.size();

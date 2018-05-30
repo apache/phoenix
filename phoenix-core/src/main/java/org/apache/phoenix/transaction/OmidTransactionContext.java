@@ -321,8 +321,8 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
 
     @Override
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable, boolean isIndex) throws SQLException {
-        return new OmidTransactionTable(this, htable, isImmutable || isIndex);
+    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) throws SQLException {
+        return new OmidTransactionTable(this, htable, isConflictFree);
     }
 
 }

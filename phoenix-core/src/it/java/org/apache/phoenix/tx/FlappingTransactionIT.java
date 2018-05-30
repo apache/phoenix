@@ -226,7 +226,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         PhoenixTransactionContext txContext =
               TransactionFactory.getTransactionProvider(TransactionFactory.Provider.TEPHRA).getTransactionContext(pconn);
         HTableInterface txTable =
-                txContext.getTransactionalTable(htable, false, false);
+                txContext.getTransactionalTable(htable, false);
 
         txContext.begin();
 
@@ -278,7 +278,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         txContext =
               TransactionFactory.getTransactionProvider(TransactionFactory.Provider.TEPHRA).getTransactionContext(pconn);
         txTable =
-              txContext.getTransactionalTable(htable, false, false);
+              txContext.getTransactionalTable(htable, false);
 
         txContext.begin();
         
