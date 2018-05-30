@@ -166,13 +166,13 @@ public class PartialCommitIT extends BaseOwnClusterIT {
     }
     
     @Test
-    public void testNoFailure() {
+    public void testNoFailure() throws SQLException {
         testPartialCommit(singletonList("upsert into " + A_SUCESS_TABLE + " values ('testNoFailure', 'a')"), new int[0], false, singletonList("select count(*) from " + A_SUCESS_TABLE + " where k='testNoFailure'"),
                                         singletonList(new Integer(1)));
     }
     
     @Test
-    public void testUpsertFailure() {
+    public void testUpsertFailure() throws SQLException {
         testPartialCommit(newArrayList("upsert into " + A_SUCESS_TABLE + " values ('testUpsertFailure1', 'a')", 
                                        UPSERT_TO_FAIL, 
                                        "upsert into " + A_SUCESS_TABLE + " values ('testUpsertFailure2', 'b')"), 
@@ -198,7 +198,7 @@ public class PartialCommitIT extends BaseOwnClusterIT {
     }
     
     @Test
-    public void testDeleteFailure() {
+    public void testDeleteFailure() throws SQLException {
         testPartialCommit(newArrayList("upsert into " + A_SUCESS_TABLE + " values ('testDeleteFailure1', 'a')", 
                                        DELETE_TO_FAIL,
                                        "upsert into " + A_SUCESS_TABLE + " values ('testDeleteFailure2', 'b')"), 
@@ -210,9 +210,10 @@ public class PartialCommitIT extends BaseOwnClusterIT {
     
     /**
      * {@link MutationState} keeps mutations ordered lexicographically by table name.
+     * @throws SQLException 
      */
     @Test
-    public void testOrderOfMutationsIsPredicatable() {
+    public void testOrderOfMutationsIsPredicatable() throws SQLException {
         testPartialCommit(newArrayList("upsert into " + C_SUCESS_TABLE + " values ('testOrderOfMutationsIsPredicatable', 'c')", // will fail because c_success_table is after b_failure_table by table sort order
                                        UPSERT_TO_FAIL, 
                                        "upsert into " + A_SUCESS_TABLE + " values ('testOrderOfMutationsIsPredicatable', 'a')"), // will succeed because a_success_table is before b_failure_table by table sort order
@@ -224,7 +225,7 @@ public class PartialCommitIT extends BaseOwnClusterIT {
     }
     
     @Test
-    public void testStatementOrderMaintainedInConnection() {
+    public void testStatementOrderMaintainedInConnection() throws SQLException {
         testPartialCommit(newArrayList("upsert into " + A_SUCESS_TABLE + " values ('testStatementOrderMaintainedInConnection', 'a')", 
                                        "upsert into " + A_SUCESS_TABLE + " select k, c from " + C_SUCESS_TABLE,
                                        DELETE_TO_FAIL,
@@ -238,7 +239,7 @@ public class PartialCommitIT extends BaseOwnClusterIT {
     }
     
     private void testPartialCommit(List<String> statements, int[] expectedUncommittedStatementIndexes, boolean willFail, List<String> countStatementsForVerification,
-                                   List<Integer> expectedCountsForVerification) {
+                                   List<Integer> expectedCountsForVerification) throws SQLException {
         Preconditions.checkArgument(countStatementsForVerification.size() == expectedCountsForVerification.size());
         
         try (Connection con = getConnectionWithTableOrderPreservingMutationState()) {
@@ -276,8 +277,6 @@ public class PartialCommitIT extends BaseOwnClusterIT {
                 }
                 assertEquals(expectedCountsForVerification.get(i).intValue(), rs.getInt(1));
             }
-        } catch (SQLException e) {
-            fail(e.toString());
         }
     }
     

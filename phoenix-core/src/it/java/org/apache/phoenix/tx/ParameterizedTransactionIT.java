@@ -279,7 +279,11 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         }
         htable.put(puts);
         
-        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + " SET TRANSACTIONAL=true");
+        try {
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + " SET TRANSACTIONAL=true");
+        } catch (SQLException e) {
+            
+        }
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes( nonTxTableName));
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));

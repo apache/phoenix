@@ -34,6 +34,7 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -59,6 +60,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
@@ -75,14 +77,26 @@ import com.google.common.primitives.Longs;
 public class PhoenixTxIndexMutationGenerator {
     private final PhoenixIndexCodec codec;
     private final PhoenixIndexMetaData indexMetaData;
+    private final ConnectionQueryServices services;
+    private final byte[] regionStartKey;
+    private final byte[] regionEndKey;
+    private final byte[] tableName;
 
-    public PhoenixTxIndexMutationGenerator(Configuration conf, PhoenixIndexMetaData indexMetaData, byte[] tableName, byte[] regionStartKey, byte[] regionEndKey) {
+    private PhoenixTxIndexMutationGenerator(ConnectionQueryServices services, Configuration conf, PhoenixIndexMetaData indexMetaData, byte[] tableName, byte[] regionStartKey, byte[] regionEndKey) {
+        this.services = services;
         this.indexMetaData = indexMetaData;
-        this.codec = new PhoenixIndexCodec(conf, regionStartKey, regionEndKey, tableName);
+        this.regionStartKey = regionStartKey;
+        this.regionEndKey = regionEndKey;
+        this.tableName = tableName;
+        this.codec = new PhoenixIndexCodec(conf, tableName);
     }
 
-    public PhoenixTxIndexMutationGenerator(Configuration conf, PhoenixIndexMetaData indexMetaData, byte[] tableName) {
-        this(conf, indexMetaData, tableName, null, null);
+    public PhoenixTxIndexMutationGenerator(Configuration conf, PhoenixIndexMetaData indexMetaData, byte[] tableName, byte[] regionStartKey, byte[] regionEndKey) {
+        this(null, conf, indexMetaData, tableName, regionStartKey, regionEndKey);
+    }
+
+    public PhoenixTxIndexMutationGenerator(ConnectionQueryServices services, PhoenixIndexMetaData indexMetaData, byte[] tableName) {
+        this(services, services.getConfiguration(), indexMetaData, tableName, null, null);
     }
 
     private static void addMutation(Map<ImmutableBytesPtr, MultiMutation> mutations, ImmutableBytesPtr row, Mutation m) {
@@ -175,7 +189,7 @@ public class PhoenixTxIndexMutationGenerator {
             scan.addColumn(indexMaintainers.get(0).getDataEmptyKeyValueCF(), emptyKeyValueQualifier);
             ScanRanges scanRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN, KeyRange.EVERYTHING_RANGE, null, true, -1);
             scanRanges.initializeScan(scan);
-            Table txTable = indexMetaData.getTransactionContext().getTransactionalTable(htable, isImmutable);
+            Table txTable = indexMetaData.getTransactionContext().getTransactionalTable(htable, isImmutable, true);
             // For rollback, we need to see all versions, including
             // the last committed version as there may be multiple
             // checkpointed versions.
@@ -309,7 +323,18 @@ public class PhoenixTxIndexMutationGenerator {
     private void generateDeletes(PhoenixIndexMetaData indexMetaData,
             Collection<Pair<Mutation, byte[]>> indexUpdates,
             byte[] attribValue, TxTableState state) throws IOException {
-        Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
+        byte[] regionStartKey = this.regionStartKey;
+        byte[] regionEndKey = this.regionEndKey;
+        if (services != null && indexMetaData.hasLocalIndexes()) {
+            try {
+                HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, state.getCurrentRowKey());
+                regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                regionEndKey = tableRegionLocation.getRegionInfo().getEndKey();
+            } catch (SQLException e) {
+                throw new IOException(e);
+            }
+        }
+        Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData, regionStartKey, regionEndKey);
         for (IndexUpdate delete : deletes) {
             if (delete.isValid()) {
                 delete.getUpdate().setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, attribValue);
@@ -324,7 +349,18 @@ public class PhoenixTxIndexMutationGenerator {
             TxTableState state)
             throws IOException {
         state.applyMutation();
-        Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData);
+        byte[] regionStartKey = this.regionStartKey;
+        byte[] regionEndKey = this.regionEndKey;
+        if (services != null && indexMetaData.hasLocalIndexes()) {
+            try {
+                HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, state.getCurrentRowKey());
+                regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                regionEndKey = tableRegionLocation.getRegionInfo().getEndKey();
+            } catch (SQLException e) {
+                throw new IOException(e);
+            }
+        }
+        Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData, regionStartKey, regionEndKey);
         boolean validPut = false;
         for (IndexUpdate put : puts) {
             if (put.isValid()) {

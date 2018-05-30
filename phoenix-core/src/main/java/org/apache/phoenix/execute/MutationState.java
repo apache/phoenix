@@ -38,10 +38,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -94,10 +93,12 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
@@ -303,7 +304,8 @@ public class MutationState implements SQLCloseable {
     public HTableInterface getHTable(PTable table) throws SQLException {
         HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
-            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows());
+            // We're only using this table for reading, so we want it wrapped even if it's an index
+            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows(), false);
         }
         return htable;
     }
@@ -511,7 +513,7 @@ public class MutationState implements SQLCloseable {
             final long mutationTimestamp, final long serverTimestamp, boolean includeAllIndexes, final boolean sendAll) {
         final PTable table = tableRef.getTable();
         final Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this client-side mechanism
-                includeAllIndexes ?
+                includeAllIndexes || (table.isTransactional() && table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) ?
                          IndexMaintainer.maintainedIndexes(table.getIndexes().iterator()) :
                              (table.isImmutableRows() || table.isTransactional()) ?
                                 IndexMaintainer.maintainedGlobalIndexes(table.getIndexes().iterator()) :
@@ -624,7 +626,7 @@ public class MutationState implements SQLCloseable {
         };
         try {
             PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(indexMetaDataCache, attributes);
-            return new PhoenixTxIndexMutationGenerator(connection.getQueryServices().getConfiguration(), indexMetaData, table.getPhysicalName().getBytes());
+            return new PhoenixTxIndexMutationGenerator(connection.getQueryServices(), indexMetaData, table.getPhysicalName().getBytes());
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
         }
@@ -1093,7 +1095,7 @@ public class MutationState implements SQLCloseable {
                                 hTable = new MetaDataAwareHTable(hTable, origTableRef);
                             }
 
-                            hTable = phoenixTransactionContext.getTransactionalTable(hTable, table.isImmutableRows());
+                            hTable = phoenixTransactionContext.getTransactionalTable(hTable, table.isImmutableRows(), !tableInfo.isDataTable());
                         }
                         
                         numMutations = mutationList.size();

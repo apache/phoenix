@@ -101,6 +101,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -194,10 +195,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        Iterator<PTable> indexesItr;
+        Iterator<PTable> indexesItr = Collections.emptyListIterator();
         boolean onlyLocalIndexes = dataTable.isImmutableRows() || dataTable.isTransactional();
         if (onlyLocalIndexes) {
-            indexesItr = maintainedLocalIndexes(indexes.iterator());
+            if (!dataTable.isTransactional()
+                    || !dataTable.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) {
+                indexesItr = maintainedLocalIndexes(indexes.iterator());
+            }
         } else {
             indexesItr = maintainedIndexes(indexes.iterator());
         }
@@ -284,31 +288,33 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private static List<IndexMaintainer> deserialize(byte[] buf, int offset, int length, boolean useProtoForIndexMaintainer) {
-        ByteArrayInputStream stream = new ByteArrayInputStream(buf, offset, length);
-        DataInput input = new DataInputStream(stream);
         List<IndexMaintainer> maintainers = Collections.emptyList();
-        try {
-            int size = WritableUtils.readVInt(input);
-            boolean isDataTableSalted = size < 0;
-            size = Math.abs(size);
-            RowKeySchema rowKeySchema = new RowKeySchema();
-            rowKeySchema.readFields(input);
-            maintainers = Lists.newArrayListWithExpectedSize(size);
-            for (int i = 0; i < size; i++) {
-                if (useProtoForIndexMaintainer) {
-                  int protoSize = WritableUtils.readVInt(input);
-                  byte[] b = new byte[protoSize];
-                  input.readFully(b);
-                  org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = ServerCachingProtos.IndexMaintainer.parseFrom(b);
-                  maintainers.add(IndexMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
-                } else {
-                    IndexMaintainer maintainer = new IndexMaintainer(rowKeySchema, isDataTableSalted);
-                    maintainer.readFields(input);
-                    maintainers.add(maintainer);
+        if (length > 0) {
+            ByteArrayInputStream stream = new ByteArrayInputStream(buf, offset, length);
+            DataInput input = new DataInputStream(stream);
+            try {
+                int size = WritableUtils.readVInt(input);
+                boolean isDataTableSalted = size < 0;
+                size = Math.abs(size);
+                RowKeySchema rowKeySchema = new RowKeySchema();
+                rowKeySchema.readFields(input);
+                maintainers = Lists.newArrayListWithExpectedSize(size);
+                for (int i = 0; i < size; i++) {
+                    if (useProtoForIndexMaintainer) {
+                      int protoSize = WritableUtils.readVInt(input);
+                      byte[] b = new byte[protoSize];
+                      input.readFully(b);
+                      org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = ServerCachingProtos.IndexMaintainer.parseFrom(b);
+                      maintainers.add(IndexMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                    } else {
+                        IndexMaintainer maintainer = new IndexMaintainer(rowKeySchema, isDataTableSalted);
+                        maintainer.readFields(input);
+                        maintainers.add(maintainer);
+                    }
                 }
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Impossible
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e); // Impossible
         }
         return maintainers;
     }

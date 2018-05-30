@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.omid.transaction.TTable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -405,7 +404,10 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
     
     @Override
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
+    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable, boolean isIndex) {
+        if (isIndex) {
+            return htable;
+        }
         TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;

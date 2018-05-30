@@ -195,6 +195,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         // (though it's set in the constructor). I suspect some
         // mysterious class loader issue. The below works fine
         // as a workaround.
-        return (feature == Feature.ALTER_NONTX_TO_TX || feature == Feature.COLUMN_ENCODING);
+        return true;
+        // return (feature == Feature.ALTER_NONTX_TO_TX || feature == Feature.COLUMN_ENCODING || feature == Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER);
     }
 }

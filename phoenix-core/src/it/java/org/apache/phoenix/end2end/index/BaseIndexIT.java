@@ -255,18 +255,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateIndexAfterUpsertStarted() throws Exception {
-        testCreateIndexAfterUpsertStarted(false, 
+        testCreateIndexAfterUpsertStarted(transactional, 
                 SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
                 SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
-    }
-
-    @Test
-    public void testCreateIndexAfterUpsertStartedTxnl() throws Exception {
-        if (transactional) {
-            testCreateIndexAfterUpsertStarted(true, 
-                    SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
-                    SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
-        }
     }
 
     private void testCreateIndexAfterUpsertStarted(boolean readOwnWrites, String fullTableName, String fullIndexName) throws Exception {

@@ -660,9 +660,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         env.getRegion().getRegionInfo().getStartKey(),
                                         env.getRegion().getRegionInfo().getEndKey());
 
-                                    final int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
-                                    final PhoenixTransactionContext txnContext = TransactionFactory.getTransactionContext(txState, clientVersion);
-                                    put = txnContext.markPutAsCommitted(put, ts, ts);
+                                    if (txState != null) {
+                                        int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
+                                        PhoenixTransactionContext txnContext = TransactionFactory.getTransactionContext(txState, clientVersion);
+                                        put = txnContext.markPutAsCommitted(put, ts, ts);
+                                    }
                                     indexMutations.add(put);
                                 }
                             }
