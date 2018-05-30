@@ -69,17 +69,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.junit.Before;
 import org.junit.Test;
 
 public class UpgradeIT extends ParallelStatsDisabledIT {
-
-    private String tenantId;
-    
-    @Before
-    public void generateTenantId() {
-        tenantId = "T_" + generateUniqueName();
-    }
 
     @Test
     public void testMapTableToNamespaceDuringUpgrade()

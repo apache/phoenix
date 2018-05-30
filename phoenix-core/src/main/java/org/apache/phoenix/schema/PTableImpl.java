@@ -283,7 +283,7 @@ public class PTableImpl implements PTable {
     }
 
     /**
-     * Used to create a PTable for views, the basePTable is for attributes we inherit from the physical table
+     * Used to create a PTable for views or view indexes, the basePTable is for attributes we inherit from the physical table
      */
     public static PTableImpl makePTable(PTable view, PTable baseTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount) throws SQLException {
         // if a TableProperty is not valid on a view we set it to the base table value
@@ -291,7 +291,7 @@ public class PTableImpl implements PTable {
         // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view 
         return new PTableImpl(
             view.getTenantId(), view.getSchemaName(), view.getTableName(), view.getType(), view.getIndexState(), timestamp,
-            view.getSequenceNumber(), view.getPKName(), baseTable.getBucketNum(), columns, view.getParentSchemaName(), view.getParentTableName(),
+            view.getSequenceNumber(), view.getPKName(), view.getBucketNum(), columns, view.getParentSchemaName(), view.getParentTableName(),
             view.getIndexes(), baseTable.isImmutableRows(), view.getPhysicalNames(), view.getDefaultFamilyName(), view.getViewStatement(),
             baseTable.isWALDisabled(), baseTable.isMultiTenant(), baseTable.getStoreNulls(), view.getViewType(), view.getViewIndexId(), view.getIndexType(),
             baseTableColumnCount, view.rowKeyOrderOptimizable(), baseTable.getTransactionProvider(), view.getUpdateCacheFrequency(),

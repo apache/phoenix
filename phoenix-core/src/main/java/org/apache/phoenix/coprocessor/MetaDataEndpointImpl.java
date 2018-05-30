@@ -678,9 +678,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PColumn pColumn = myColumns.get(i);
             if (pColumn.isExcluded()) {
                 excludedColumns.add(pColumn);
-            } else if (!pColumn.equals(SaltingUtil.SALTING_COLUMN)) { // skip salted column as it
-                                                                      // will be added from the base
-                                                                      // table columns
+            } else if (!pColumn.equals(SaltingUtil.SALTING_COLUMN)) { 
+                // skip salted column as it will be added from the base table columns
                 allColumns.add(pColumn);
             }
         }
@@ -744,7 +743,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (hasIndexId) {
                     // add all pk columns of parent tables to indexes
                     for (PColumn column : pTable.getPKColumns()) {
-                        if (column.isExcluded()) {
+                        // don't add the salt column of ancestor tables for view indexes
+                        if (column.equals(SaltingUtil.SALTING_COLUMN) || column.isExcluded()) {
                             continue;
                         }
                         column = IndexUtil.getIndexPKColumn(++numPKCols, column);

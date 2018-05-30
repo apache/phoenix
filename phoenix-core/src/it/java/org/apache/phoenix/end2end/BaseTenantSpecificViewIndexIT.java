@@ -26,16 +26,21 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
-public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
+public class BaseTenantSpecificViewIndexIT extends BaseUniqueNamesOwnClusterIT {
     
     public static final String TENANT1_ID = "tenant1";
     public static final String TENANT2_ID = "tenant2";
@@ -43,16 +48,30 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     
     protected Set<Pair<String, String>> tenantViewsToDelete = newHashSet();
     
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        NUM_SLAVES_BASE = 5;
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
     protected void testUpdatableView(Integer saltBuckets) throws Exception {
         testUpdatableView(saltBuckets, false);
     }
     
     protected void testUpdatableView(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = generateUniqueTableName();
         createBaseTable(tableName, saltBuckets, true);
         Connection conn = createTenantConnection(TENANT1_ID);
         try {
             String viewName = createAndPopulateTenantView(conn, TENANT1_ID, tableName, "");
+            Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
+            tenantToTableMap.put(null, Lists.newArrayList(tableName));
+            tenantToTableMap.put(TENANT1_ID, Lists.newArrayList(viewName));
+            splitSystemCatalog(tenantToTableMap);
             createAndVerifyIndex(conn, viewName, tableName, saltBuckets, TENANT1_ID, "", localIndex);
             verifyViewData(conn, viewName, "");
         } finally {
@@ -61,11 +80,15 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     protected void testUpdatableViewNonString(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = generateUniqueTableName();
         createBaseTable(tableName, saltBuckets, false);
         Connection conn = createTenantConnection(NON_STRING_TENANT_ID);
         try {
             String viewName = createAndPopulateTenantView(conn, NON_STRING_TENANT_ID, tableName, "");
+            Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
+            tenantToTableMap.put(null, Lists.newArrayList(tableName));
+            tenantToTableMap.put(NON_STRING_TENANT_ID, Lists.newArrayList(viewName));
+            splitSystemCatalog(tenantToTableMap);
             createAndVerifyIndexNonStringTenantId(conn, viewName, tableName, NON_STRING_TENANT_ID, "");
             verifyViewData(conn, viewName, "");
         } finally {
@@ -78,7 +101,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     protected void testUpdatableViewsWithSameNameDifferentTenants(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = generateUniqueTableName();
         createBaseTable(tableName, saltBuckets, true);
         Connection conn1 = createTenantConnection(TENANT1_ID);
         Connection conn2 = createTenantConnection(TENANT2_ID);
@@ -89,6 +112,12 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
             // tenant views with same name for two different tables
             String viewName1 = createAndPopulateTenantView(conn1, TENANT1_ID, tableName, prefixForTenant1Data);
             String viewName2 = createAndPopulateTenantView(conn2, TENANT2_ID, tableName, prefixForTenant2Data);
+            
+            Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
+            tenantToTableMap.put(null, Lists.newArrayList(tableName));
+            tenantToTableMap.put(TENANT1_ID, Lists.newArrayList(viewName1));
+            tenantToTableMap.put(TENANT2_ID, Lists.newArrayList(viewName2));
+            splitSystemCatalog(tenantToTableMap);
             
             createAndVerifyIndex(conn1, viewName1, tableName, saltBuckets, TENANT1_ID, prefixForTenant1Data, localIndex);
             createAndVerifyIndex(conn2, viewName2, tableName, saltBuckets, TENANT2_ID, prefixForTenant2Data, localIndex);
@@ -115,7 +144,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
     
     private String createAndPopulateTenantView(Connection conn, String tenantId, String baseTable, String valuePrefix) throws SQLException {
-        String viewName = generateUniqueName();
+        String viewName = generateUniqueViewName();
         String ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE k1 = 1";
         conn.createStatement().execute(ddl);
         tenantViewsToDelete.add(new Pair<String, String>(tenantId, viewName ));
