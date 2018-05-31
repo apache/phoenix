@@ -947,12 +947,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         .getValueArray()[indexStateKv.getValueOffset()]);
         // If client is not yet up to 4.12, then translate PENDING_ACTIVE to ACTIVE (as would have been
         // the value in those versions) since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < PhoenixDatabaseMetaData.MIN_PENDING_ACTIVE_INDEX) {
+        if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < MetaDataProtocol.MIN_PENDING_ACTIVE_INDEX) {
             indexState = PIndexState.ACTIVE;
         }
         // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
         // since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < PhoenixDatabaseMetaData.MIN_PENDING_DISABLE_INDEX) {
+        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < MetaDataProtocol.MIN_PENDING_DISABLE_INDEX) {
             // note: for older clients, we have to rely on the rebuilder to transition PENDING_DISABLE -> DISABLE
             indexState = PIndexState.DISABLE;
         }
@@ -3694,7 +3694,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         GetVersionResponse.Builder builder = GetVersionResponse.newBuilder();
         Configuration config = env.getConfiguration();
         if (isTablesMappingEnabled
-                && PhoenixDatabaseMetaData.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
+                && MetaDataProtocol.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
             logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(

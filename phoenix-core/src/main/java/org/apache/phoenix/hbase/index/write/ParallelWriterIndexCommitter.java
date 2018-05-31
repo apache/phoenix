@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
@@ -35,7 +36,6 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -165,7 +165,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                             }
                         }
                      // if the client can retry index writes, then we don't need to retry here
-                        HTableFactory factory = clientVersion < PhoenixDatabaseMetaData.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesfactory;
+                        HTableFactory factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesfactory;
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations, null);

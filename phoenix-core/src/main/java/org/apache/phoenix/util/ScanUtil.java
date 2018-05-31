@@ -60,7 +60,6 @@ import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -896,7 +895,7 @@ public class ScanUtil {
      *         the server side. To make sure HBase doesn't cancel the leases and close the open
      *         scanners, we need to periodically renew leases. To look at the earliest HBase version
      *         that supports renewing leases, see
-     *         {@link PhoenixDatabaseMetaData#MIN_RENEW_LEASE_VERSION}
+     *         {@link MetaDataProtocol#MIN_RENEW_LEASE_VERSION}
      */
     public static boolean isPacingScannersPossible(StatementContext context) {
         return context.getConnection().getQueryServices().isRenewingLeasesEnabled();

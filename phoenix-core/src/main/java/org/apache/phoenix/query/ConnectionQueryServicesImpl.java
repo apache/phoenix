@@ -341,14 +341,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 @Override
                 public boolean isSupported(ConnectionQueryServices services) {
                     int hbaseVersion = services.getLowestClusterHBaseVersion();
-                    return hbaseVersion < PhoenixDatabaseMetaData.MIN_LOCAL_SI_VERSION_DISALLOW || hbaseVersion > PhoenixDatabaseMetaData.MAX_LOCAL_SI_VERSION_DISALLOW;
+                    return hbaseVersion < MetaDataProtocol.MIN_LOCAL_SI_VERSION_DISALLOW || hbaseVersion > MetaDataProtocol.MAX_LOCAL_SI_VERSION_DISALLOW;
                 }
             },
             Feature.RENEW_LEASE, new FeatureSupported() {
                 @Override
                 public boolean isSupported(ConnectionQueryServices services) {
                     int hbaseVersion = services.getLowestClusterHBaseVersion();
-                    return hbaseVersion >= PhoenixDatabaseMetaData.MIN_RENEW_LEASE_VERSION;
+                    return hbaseVersion >= MetaDataProtocol.MIN_RENEW_LEASE_VERSION;
                 }
             });
     private QueryLoggerDisruptor queryDisruptor;

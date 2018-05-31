@@ -326,6 +326,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
+
     public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
     public static final int MIN_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "6");
     public static final int MIN_RENEW_LEASE_VERSION = VersionUtil.encodeVersion("1", "1", "3");
