@@ -24,7 +24,9 @@ import org.apache.phoenix.transaction.OmidTransactionProvider;
 public class OmidTransactionalProcessor extends DelegateRegionObserver {
 
     public OmidTransactionalProcessor() {
-        super(new OmidSnapshotFilter(OmidTransactionProvider.commitTableClient));
+        // Hack for testing - retrieves the commit table client from the singleton OmidTransactionProvider
+        // TODO: use real commit table and get port from config
+        super(new OmidSnapshotFilter(OmidTransactionProvider.getInstance().getCommitTableClient()));
     }
 
 }

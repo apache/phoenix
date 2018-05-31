@@ -20,7 +20,6 @@ package org.apache.phoenix.transaction;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
@@ -46,18 +45,20 @@ import com.google.inject.Injector;
 
 public class OmidTransactionProvider implements PhoenixTransactionProvider {
     private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
+    public static final String OMID_TSO_PORT = "phoenix.omid.tso.port";
+    public static final String OMID_TSO_CONFLICT_MAP_SIZE = "phoenix.omid.tso.conflict.map.size";
+    public static final String OMID_TSO_TIMESTAMP_TYPE = "phoenix.omid.tso.timestamp.type";
+    public static final int DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE = 1000;
+    public static final String DEFAULT_OMID_TSO_TIMESTAMP_TYPE = "WORLD_TIME";
 
-    private static HBaseTransactionManager transactionManager = null;
-
-    private Random rand = new Random();
-    public static CommitTable.Client commitTableClient = null;
+    private HBaseTransactionManager transactionManager = null;
+    private volatile CommitTable.Client commitTableClient = null;
 
     public static final OmidTransactionProvider getInstance() {
         return INSTANCE;
     }
 
     private OmidTransactionProvider() {
-        ;
     }
 
     @Override
@@ -104,16 +105,25 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         public void close() throws IOException {}
     }
 
+    // For testing only
+    public CommitTable.Client getCommitTableClient() {
+        return commitTableClient;
+    }
+    
     @Override
     public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException{
         TSOServerConfig tsoConfig = new TSOServerConfig();
         TSOServer tso;
 
-        int  port = rand.nextInt(65534) + 1;
+        String portStr = config.get(OMID_TSO_PORT);
+        if (portStr == null) {
+            throw new IllegalArgumentException(OMID_TSO_PORT + " config parameter must be bound");
+        }
+        int  port = Integer.parseInt(portStr);
 
         tsoConfig.setPort(port);
-        tsoConfig.setConflictMapSize(1000);
-        tsoConfig.setTimestampType("WORLD_TIME");
+        tsoConfig.setConflictMapSize(config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));
+        tsoConfig.setTimestampType(config.get(OMID_TSO_TIMESTAMP_TYPE, DEFAULT_OMID_TSO_TIMESTAMP_TYPE));
 
         Injector injector = Guice.createInjector(new TSOMockModule(tsoConfig));
         tso = injector.getInstance(TSOServer.class);
