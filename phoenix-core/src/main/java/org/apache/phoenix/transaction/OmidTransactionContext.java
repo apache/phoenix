@@ -130,4 +130,10 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         // TODO Auto-generated method stub
         return null;
     }
+
+    @Override
+    public HTableInterface getTransactionalTableWriter(HTableInterface htable, PTable table) {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }
