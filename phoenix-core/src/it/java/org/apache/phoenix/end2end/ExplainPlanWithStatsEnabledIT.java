@@ -48,7 +48,6 @@ import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -57,7 +56,6 @@ import com.google.common.collect.Lists;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are enabled.
  */
-@Ignore
 public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
     private static String tableA;
@@ -467,9 +465,9 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         String tenant3 = "tenant3";
         String tenant4 = "tenant4";
         MyClock clock = new MyClock(1000);
+        
         createMultitenantTableAndViews(tenant1View, tenant2View, tenant3View, tenant4View, tenant1, tenant2,
             tenant3, tenant4, multiTenantBaseTable, clock);
-
         // query the entire multitenant table
         String sql = "SELECT * FROM " + multiTenantBaseTable + " WHERE ORGID >= ?";
         List<Object> binds = Lists.newArrayList();
@@ -518,6 +516,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             // Update tenant1 view
             try (Connection conn = getTenantConnection(tenant2)) {
                 // upsert a few rows for tenantView
+                clock.setAdvance(false);
                 conn.createStatement()
                         .executeUpdate("UPSERT INTO " + tenant2View + " VALUES (11, 11, 11)");
                 conn.createStatement()
@@ -912,6 +911,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                     "upsert into " + multiTenantTable + " values ('" + tenant3 + "',6,10,10)");
                 conn.commit();
             }
+            clock.setAdvance(false);
             try (Connection conn = getTenantConnection(tenant1)) {
                 conn.createStatement().execute(
                     "CREATE VIEW " + tenant1View + " AS SELECT * FROM " + multiTenantTable);
@@ -938,6 +938,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
     private static class MyClock extends EnvironmentEdge {
         public volatile long time;
+        private boolean shouldAdvance = true;
 
         public MyClock(long time) {
             this.time = time;
@@ -945,9 +946,15 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
         @Override
         public long currentTime() {
-            return time;
+            if(shouldAdvance) {
+                return time++;
+            } else {
+                return time;
+            }
         }
-
+        public void setAdvance(boolean val) {
+            shouldAdvance = val;
+        }
         public void advanceTime(long t) {
             this.time += t;
         }

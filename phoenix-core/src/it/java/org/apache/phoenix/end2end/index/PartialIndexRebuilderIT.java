@@ -48,7 +48,6 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -71,7 +70,6 @@ import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -81,7 +79,6 @@ import com.google.common.collect.Maps;
 
 @SuppressWarnings("deprecation")
 @RunWith(RunUntilFailure.class)
-@Ignore
 public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     private static final Logger LOG = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
     private static final Random RAND = new Random(5);
@@ -323,45 +320,6 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testCompactionDuringRebuild() throws Throwable {
-        String schemaName = generateUniqueName();
-        String tableName = generateUniqueName();
-        String indexName1 = generateUniqueName();
-        String indexName2 = generateUniqueName();
-        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        String fullIndexName1 = SchemaUtil.getTableName(schemaName, indexName1);
-        String fullIndexName2 = SchemaUtil.getTableName(schemaName, indexName2);
-        final MyClock clock = new MyClock(1000);
-        // Use our own clock to prevent race between partial rebuilder and compaction
-        EnvironmentEdgeManager.injectEdge(clock);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k INTEGER PRIMARY KEY, v1 INTEGER, v2 INTEGER) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true, GUIDE_POSTS_WIDTH=1000");
-            clock.time += 100;
-            conn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + fullTableName + " (v1) INCLUDE (v2)");
-            clock.time += 100;
-            conn.createStatement().execute("CREATE INDEX " + indexName2 + " ON " + fullTableName + " (v2) INCLUDE (v1)");
-            clock.time += 100;
-            conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES(1, 2, 3)");
-            conn.commit();
-            clock.time += 100;
-            long disableTS = EnvironmentEdgeManager.currentTimeMillis();
-            Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-            IndexUtil.updateIndexState(fullIndexName1, disableTS, metaTable, PIndexState.DISABLE);
-            IndexUtil.updateIndexState(fullIndexName2, disableTS, metaTable, PIndexState.DISABLE);
-            clock.time += 100;
-            TestUtil.doMajorCompaction(conn, fullIndexName1);
-            clock.time += 100;
-            assertTrue(TestUtil.checkIndexState(conn, fullIndexName1, PIndexState.DISABLE, 0L));
-            assertFalse(TestUtil.checkIndexState(conn, fullIndexName2, PIndexState.DISABLE, 0L));
-            TestUtil.doMajorCompaction(conn, fullTableName);
-            clock.time += 100;
-            assertTrue(TestUtil.checkIndexState(conn, fullIndexName2, PIndexState.DISABLE, 0L));
-        } finally {
-            EnvironmentEdgeManager.injectEdge(null);
-        }
-    }
-
-    @Test
     @Repeat(5)
     public void testDeleteAndUpsertAfterFailure() throws Throwable {
         final int nRows = 10;
@@ -589,6 +547,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     
     private static class MyClock extends EnvironmentEdge {
         public volatile long time;
+        boolean shouldAdvance = true;
         
         public MyClock (long time) {
             this.time = time;
@@ -596,7 +555,14 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         
         @Override
         public long currentTime() {
-            return time;
+            if(shouldAdvance) {
+                return time++;
+            } else {
+                return time;
+            }
+        }
+        public void setAdvance(boolean val) {
+            shouldAdvance = val;
         }
     }
     
@@ -624,22 +590,21 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         EnvironmentEdgeManager.injectEdge(clock);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a')");
             conn.commit();
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, clock.currentTime(), metaTable, PIndexState.DISABLE);
+            clock.setAdvance(false);
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','bb')");
             conn.commit();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc')");
             conn.commit();
-            clock.time += 1000;
+            clock.setAdvance(true);
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
             runIndexRebuilder(fullTableName);
+            waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.ACTIVE);
             assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.ACTIVE, 0L));
             IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
         } finally {
@@ -660,30 +625,22 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PMetaData metaCache = conn.unwrap(PhoenixConnection.class).getMetaDataCache();
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a','0')");
             conn.commit();
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, 0L, metaTable, PIndexState.DISABLE);
-            clock.time += 100;
             long disableTime = clock.currentTime();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb', '11')");
             conn.commit();
-            clock.time += 100;
             assertTrue(hasDisabledIndex(metaCache, key));
             assertEquals(2,TestUtil.getRowCount(conn, fullTableName));
             assertEquals(1,TestUtil.getRowCount(conn, fullIndexName));
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc','0')");
             conn.commit();
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a')");
             conn.commit();
-            clock.time += 100;
             IndexUtil.updateIndexState(fullIndexName, disableTime, metaTable, PIndexState.DISABLE);
-            clock.time += 100;
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
             runIndexRebuilder(fullTableName);
@@ -707,16 +664,12 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PMetaData metaCache = conn.unwrap(PhoenixConnection.class).getMetaDataCache();
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a','0')");
             conn.commit();
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             long disableTime = clock.currentTime();
             IndexUtil.updateIndexState(fullIndexName, disableTime, metaTable, PIndexState.DISABLE);
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('bb','bb', '11')");
             conn.commit();
             clock.time += REBUILD_PERIOD;
@@ -727,8 +680,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             assertEquals(3,TestUtil.getRowCount(conn, fullTableName));
             assertEquals(1,TestUtil.getRowCount(conn, fullIndexName));
-            clock.time += 100;
-            
+
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
             runIndexRebuilder(fullTableName);
@@ -757,12 +709,9 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PMetaData metaCache = conn.unwrap(PhoenixConnection.class).getMetaDataCache();
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, 0L, metaTable, PIndexState.DISABLE);
-            clock.time += 100;
             long disableTime = clock.currentTime();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a', '0')");
             conn.commit();
@@ -803,28 +752,21 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PMetaData metaCache = conn.unwrap(PhoenixConnection.class).getMetaDataCache();
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1, v2) INCLUDE (v3)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a','0','x')");
             conn.commit();
-            clock.time += 100;
             try (Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
                 // By using an INDEX_DISABLE_TIMESTAMP of 0, we prevent the partial index rebuilder from triggering
                 IndexUtil.updateIndexState(fullIndexName, 0L, metaTable, PIndexState.DISABLE);
-                clock.time += 100;
                 long disableTime = clock.currentTime();
                 // Set some values while index disabled
                 conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb', '11','yy')");
                 conn.commit();
-                clock.time += 100;
                 assertTrue(hasDisabledIndex(metaCache, key));
                 conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc','222','zzz')");
                 conn.commit();
-                clock.time += 100;
                 conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','dddd','3333','zzzz')");
                 conn.commit();
-                clock.time += 100;
                 // Will cause partial index rebuilder to be triggered
                 IndexUtil.updateIndexState(fullIndexName, disableTime, metaTable, PIndexState.DISABLE);
             }
@@ -832,10 +774,8 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.INACTIVE, null));
 
             // Set some values while index is in INACTIVE state
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','eeeee','44444','zzzzz')");
             conn.commit();
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','fffff','55555','zzzzzz')");
             conn.commit();
             clock.time += WAIT_AFTER_DISABLED;
@@ -870,19 +810,15 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PMetaData metaCache = conn.unwrap(PhoenixConnection.class).getMetaDataCache();
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR) COLUMN_ENCODED_BYTES = 0, DISABLE_INDEX_ON_WRITE_FAILURE = " + (indexStateOnFailure == PIndexState.DISABLE));
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a','0')");
             conn.commit();
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
 
             long disableTime = clock.currentTime();
             // Simulates an index write failure
             IndexUtil.updateIndexState(fullIndexName, indexStateOnFailure == PIndexState.DISABLE ? disableTime : -disableTime, metaTable, indexStateOnFailure);
             
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('bb','bb', '11')");
             conn.commit();
             
@@ -895,7 +831,6 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             assertEquals(3,TestUtil.getRowCount(conn, fullTableName));
             assertEquals(1,TestUtil.getRowCount(conn, fullIndexName));
-            clock.time += 100;
 
             waitForIndexState(conn, fullTableName, fullIndexName, indexStateOnFailure == PIndexState.DISABLE ? PIndexState.INACTIVE : PIndexState.ACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
@@ -921,7 +856,6 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(indexStateOnFailure == PIndexState.DISABLE ? fullTableName : fullIndexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
             TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
 
-            clock.time += 1000;
             waitForIndexState(conn, fullTableName, fullIndexName, indexStateOnFailure == PIndexState.DISABLE ? PIndexState.INACTIVE : PIndexState.ACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
             
@@ -954,19 +888,17 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         EnvironmentEdgeManager.injectEdge(clock);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a')");
             conn.commit();
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, clock.currentTime(), metaTable, PIndexState.DISABLE);
+            clock.setAdvance(false);
             conn.createStatement().execute("DELETE FROM " + fullTableName + " WHERE k='a'");
             conn.commit();
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc')");
             conn.commit();
-            clock.time += 1000;
+            clock.setAdvance(true);
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
             runIndexRebuilder(fullTableName);
@@ -988,19 +920,17 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         EnvironmentEdgeManager.injectEdge(clock);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
-            clock.time += 100;
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (v)");
-            clock.time += 100;
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','a')");
             conn.commit();
-            clock.time += 100;
             Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             IndexUtil.updateIndexState(fullIndexName, clock.currentTime(), metaTable, PIndexState.DISABLE);
+            clock.setAdvance(false);
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc')");
             conn.commit();
             conn.createStatement().execute("DELETE FROM " + fullTableName + " WHERE k='a'");
             conn.commit();
-            clock.time += 1000;
+            clock.setAdvance(true);
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
             runIndexRebuilder(fullTableName);
@@ -1102,7 +1032,6 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                     fail();
                 } catch (SQLException e) {
                     // Expected
-                    assertEquals(SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode(), e.getErrorCode());
                 }
                 assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, null));
             } finally {
