@@ -103,7 +103,6 @@ class ViewFinder {
                     // do not links from indexes to their physical table
                     continue;
                 }
-                viewTenantId = viewTenantId==null ? new byte[]{} : viewTenantId;
                 byte[] viewSchemaName = SchemaUtil.getSchemaNameFromFullName(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
                 byte[] viewName = SchemaUtil.getTableNameFromFullName(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
                 tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));

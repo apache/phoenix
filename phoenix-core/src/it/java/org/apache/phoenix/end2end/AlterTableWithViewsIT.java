@@ -21,6 +21,8 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -37,6 +39,10 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
@@ -44,12 +50,15 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -65,12 +74,13 @@ import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
-    
+
     private final boolean isMultiTenant;
-    
     private final boolean columnEncoded;
-    private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1";
-    private final String TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant2";
+    private static final String TENANT1 = "tenant1";
+    private static final String TENANT2 = "tenant2";
+    private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT1;
+    private final String TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT2;
     
     public AlterTableWithViewsIT(boolean isMultiTenant, boolean columnEncoded) {
         this.isMultiTenant = isMultiTenant;
@@ -119,14 +129,34 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
+    private void splitSystemCatalog(String baseTableName, String view1, String view1Child, String view2) throws Exception {
+        // ensure metadata is on multiple regions
+        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
+        List<String> globalTableList = Lists.newArrayList(baseTableName);
+        if (!isMultiTenant) {
+            globalTableList.add(view1);
+            if (view2!=null)
+                globalTableList.add(view2);
+        }
+        else { 
+            List<String> view1List = Lists.newArrayList(view1);
+            if (view1Child!=null) 
+                view1List.add(view1Child);
+            tenantToTableMap.put(TENANT1, view1List);
+            if (view2!=null)
+                tenantToTableMap.put(TENANT2, Lists.newArrayList(view2));
+        }
+        tenantToTableMap.put(null, globalTableList);
+        splitSystemCatalog(Lists.newArrayList(baseTableName, view1));
+    }
+    
     @Test
     public void testAddNewColumnsToBaseTableWithViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName();
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+            splitSystemCatalog(tableName, viewOfTable, null, null);
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -155,7 +185,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = generateUniqueTableName(); 
             String viewOfTable1 = generateUniqueViewName(); 
             String viewOfTable2 = generateUniqueViewName(); 
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
+            splitSystemCatalog(tableName, viewOfTable1, viewOfTable2, null);
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -171,7 +201,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
             PTable table = phoenixConn.getTable(new PTableKey(null, tableName));
-            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             assertFalse(table.isImmutableRows());
             assertEquals(2, table.getUpdateCacheFrequency());
             PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
@@ -233,7 +263,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+            splitSystemCatalog(tableName, viewOfTable, null, null);
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL," + " COL2 bigint NOT NULL,"
@@ -267,7 +297,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.setAutoCommit(false);
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+            splitSystemCatalog(tableName, viewOfTable, null, null);
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -382,7 +412,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 assertFalse(rs.next());
                 
                 // the base column count and ordinal positions of columns is updated in the ptable (at read time) 
-                PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+                PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
                 PTable view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
                 assertEquals(isMultiTenant ? 5: 4, view.getBaseColumnCount());
                 assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
@@ -398,7 +428,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.setAutoCommit(false);
             String tableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable));
+            splitSystemCatalog(tableName, viewOfTable, null, null);
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -508,7 +538,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             assertFalse(rs.next());
             
             // the base column count is updated in the ptable
-            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertEquals(isMultiTenant ? 4 : 3, view.getBaseColumnCount());
         } 
@@ -521,7 +551,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = generateUniqueTableName(); 
             String viewOfTable1 = generateUniqueViewName(); 
             String viewOfTable2 = generateUniqueViewName(); 
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
+            splitSystemCatalog(tableName, viewOfTable1, viewOfTable2, null);
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                             + " %s ID char(10) NOT NULL,"
@@ -587,7 +617,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = generateUniqueTableName(); 
             String viewOfTable1 = generateUniqueViewName(); 
             String viewOfTable2 = generateUniqueViewName();
-            splitSystemCatalog(Lists.newArrayList(tableName, viewOfTable1, viewOfTable2));
+            splitSystemCatalog(tableName, viewOfTable1, null, viewOfTable2);
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                     + " %s ID char(10) NOT NULL,"
@@ -686,7 +716,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             assertFalse(rs.next());
             
             // the base column count is updated in the ptable
-            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             PTable view1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
             PTable view2 = viewConn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
             assertEquals(isMultiTenant ? 4 : 3, view1.getBaseColumnCount());
@@ -738,6 +768,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         String baseTable = generateUniqueTableName(); 
         String childView = generateUniqueViewName(); 
         String grandChildView = generateUniqueViewName();
+        splitSystemCatalog(baseTable, childView, grandChildView, null);
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
@@ -756,8 +787,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             String grandChildViewDDL =
                     "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
             viewConn.createStatement().execute(grandChildViewDDL);
-            
-            splitSystemCatalog(Lists.newArrayList(baseTable, childView, grandChildView));
             
             String addColumnToChildViewDDL =
                     "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
@@ -802,7 +831,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
         String baseTable = generateUniqueTableName(); 
         String view1 = generateUniqueViewName(); 
         String view2 = generateUniqueViewName();
-        splitSystemCatalog(Lists.newArrayList(baseTable, view1, view2));
+        splitSystemCatalog(baseTable, view1, null, view2);
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ;
                 Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2) : conn) {
@@ -878,7 +907,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
             String baseTableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
+            splitSystemCatalog(baseTableName, viewOfTable, null, null);
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -892,7 +921,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "+baseTableName);
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
-            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
             Table htable = phoenixConn.getQueryServices().getTable(Bytes.toBytes(baseTableName));
             assertFalse(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));
@@ -909,13 +938,14 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());
         } 
     }
-    
+
     @Test
     public void testAlterTablePropertyOnView() throws Exception {
     	try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
     	    String baseTableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
+            splitSystemCatalog(baseTableName, viewOfTable, null, null);
             
 	        String ddl = "CREATE TABLE " + baseTableName + " (\n"
 	                +"%s ID VARCHAR(15) NOT NULL,\n"
@@ -926,9 +956,6 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
 	        ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
 	        viewConn.createStatement().execute(ddl);
 	        
-	        // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
-	        
 	        try {
 	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET IMMUTABLE_ROWS = true");
 	            fail();
@@ -938,7 +965,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
 	        
         	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET UPDATE_CACHE_FREQUENCY = 100");
         	viewConn.createStatement().execute("SELECT * FROM "+ viewOfTable);
-        	PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+        	PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
         	assertEquals(100, viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).getUpdateCacheFrequency());
 	        
 	        try {
@@ -956,6 +983,7 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
             String baseTableName = generateUniqueTableName(); 
             String viewOfTable = generateUniqueViewName(); 
+            splitSystemCatalog(baseTableName, viewOfTable, null, null);
             
             String ddl = "CREATE TABLE " + baseTableName + " (\n"
                     +"%s ID VARCHAR(15) NOT NULL,\n"
@@ -966,12 +994,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
             viewConn.createStatement().execute(ddl);
             
-            // ensure metadata is on multiple regions
-            splitSystemCatalog(Lists.newArrayList(baseTableName, viewOfTable));
-            
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
             PTable table = phoenixConn.getTable(new PTableKey(null, baseTableName));
-            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             assertFalse(table.isAppendOnlySchema());
             PTable viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertFalse(viewTable.isAppendOnlySchema());
@@ -992,6 +1017,114 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(table.isAppendOnlySchema());
             viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertTrue(viewTable.isAppendOnlySchema());
+        }
+    }
+    
+    @Test
+    public void testDroppingIndexedColDropsViewIndex() throws Exception {
+        try (Connection conn =DriverManager.getConnection(getUrl());
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn  ) {
+            String tableWithView = generateUniqueTableName();
+            String viewOfTable = generateUniqueViewName();
+            String viewSchemaName = SchemaUtil.getSchemaNameFromFullName(viewOfTable);
+            String viewIndex1 = generateUniqueName();
+            String viewIndex2 = generateUniqueName();
+            String fullNameViewIndex1 = SchemaUtil.getTableName(viewSchemaName, viewIndex1);
+            String fullNameViewIndex2 = SchemaUtil.getTableName(viewSchemaName, viewIndex2);
+            splitSystemCatalog(tableWithView, viewOfTable, null, null);
+            
+            conn.setAutoCommit(false);
+            viewConn.setAutoCommit(false);
+            String ddlFormat =
+                    "CREATE TABLE " + tableWithView
+                            + " (%s k VARCHAR NOT NULL, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR, v4 VARCHAR CONSTRAINT PK PRIMARY KEY(%s k))%s";
+            conn.createStatement().execute(generateDDL(ddlFormat));
+            viewConn.createStatement()
+                    .execute(
+                        "CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableWithView );
+            // create an index with the column that will be dropped
+            viewConn.createStatement().execute("CREATE INDEX " + viewIndex1 + " ON " + viewOfTable + "(v2) INCLUDE (v4)");
+            // create an index without the column that will be dropped
+            viewConn.createStatement().execute("CREATE INDEX " + viewIndex2 + " ON " + viewOfTable + "(v1) INCLUDE (v4)");
+            // verify index was created
+            try {
+                viewConn.createStatement().execute("SELECT * FROM " + fullNameViewIndex1 );
+            } catch (TableNotFoundException e) {
+                fail("Index on view was not created");
+            }
+            
+            // upsert a single row
+            PreparedStatement stmt = viewConn.prepareStatement("UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?,?,?)");
+            stmt.setString(1, "a");
+            stmt.setString(2, "b");
+            stmt.setString(3, "c");
+            stmt.setString(4, "d");
+            stmt.setString(5, "e");
+            stmt.setInt(6, 1);
+            stmt.setString(7, "g");
+            stmt.execute();
+            viewConn.commit();
+
+            // verify the index was created
+            PhoenixConnection pconn = viewConn.unwrap(PhoenixConnection.class);
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null; 
+            PTable view = pconn.getTable(new PTableKey(tenantId,  viewOfTable ));
+            PTable viewIndex = pconn.getTable(new PTableKey(tenantId,  fullNameViewIndex1 ));
+            byte[] viewIndexPhysicalTable = viewIndex.getPhysicalName().getBytes();
+            assertNotNull("Can't find view index", viewIndex);
+            assertEquals("Unexpected number of indexes ", 2, view.getIndexes().size());
+            assertEquals("Unexpected index ",  fullNameViewIndex1 , view.getIndexes().get(0).getName()
+                    .getString());
+            assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(1).getName()
+                .getString());
+            
+            // drop two columns
+            conn.createStatement().execute("ALTER TABLE " + tableWithView + " DROP COLUMN v2, v3 ");
+            
+            // verify columns were dropped
+            try {
+                conn.createStatement().execute("SELECT v2 FROM " + tableWithView );
+                fail("Column should have been dropped");
+            } catch (ColumnNotFoundException e) {
+            }
+            try {
+                conn.createStatement().execute("SELECT v3 FROM " + tableWithView );
+                fail("Column should have been dropped");
+            } catch (ColumnNotFoundException e) {
+            }
+            
+            // verify index metadata was dropped
+            try {
+                viewConn.createStatement().execute("SELECT * FROM " + fullNameViewIndex1 );
+                fail("Index metadata should have been dropped");
+            } catch (TableNotFoundException e) {
+            }
+            
+            pconn = viewConn.unwrap(PhoenixConnection.class);
+            view = pconn.getTable(new PTableKey(tenantId,  viewOfTable ));
+            try {
+                viewIndex = pconn.getTable(new PTableKey(tenantId,  fullNameViewIndex1 ));
+                fail("View index should have been dropped");
+            } catch (TableNotFoundException e) {
+            }
+            assertEquals("Unexpected number of indexes ", 1, view.getIndexes().size());
+            assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(0).getName().getString());
+            
+            // verify that the physical index view table is *not* dropped
+            conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(viewIndexPhysicalTable);
+            
+            // scan the physical table and verify there is a single row for the second local index
+            Scan scan = new Scan();
+            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
+            ResultScanner results = table.getScanner(scan);
+            Result result = results.next();
+            assertNotNull(result);
+            PTable viewIndexPTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullNameViewIndex2));
+            PColumn column = viewIndexPTable.getColumnForColumnName(IndexUtil.getIndexColumnName(QueryConstants.DEFAULT_COLUMN_FAMILY, "V4"));
+            byte[] cq = column.getColumnQualifierBytes();
+            // there should be a single row belonging to VIEWINDEX2 
+            assertNotNull(fullNameViewIndex2 + " row is missing", result.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, cq));
+            assertNull(results.next());
         }
     }
     

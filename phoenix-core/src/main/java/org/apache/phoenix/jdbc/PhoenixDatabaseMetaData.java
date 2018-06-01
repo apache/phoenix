@@ -695,9 +695,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 			String tableName = rs.getString(TABLE_NAME);
     		String tenantId = rs.getString(TABLE_CAT);
     		String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-    		// if its a SYSTEM table we prevent the rpc to fetch the table so look it up in the cache
-			PTable table = systemTable ? PhoenixRuntime.getTable(connection, fullTableName)
-					: PhoenixRuntime.getTableNoCache(connection, fullTableName);
+			PTable table = PhoenixRuntime.getTable(connection, fullTableName);
     		boolean isSalted = table.getBucketNum()!=null;
     		boolean tenantColSkipped = false;
     		for (PColumn column : table.getColumns()) {

@@ -41,6 +41,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -160,7 +161,9 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
 			conn.commit();
             int numUpsertRpcs = expectedRPCs[0];
 			// verify only 0 or 1 rpc to fetch table metadata, 
-            verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong(), false, false);
+            verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName) isNull(),
+                eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
             reset(connectionQueryServices);
             
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -186,7 +189,9 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             // for transactional tables : verify *only* one rpc occurs
 	        // for non-transactional, system tables : verify no rpc occurs
             int numRpcs = expectedRPCs[1]; 
-            verify(connectionQueryServices, times(numRpcs)).getTable((PName)isNull(), eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)), anyLong(), anyLong(), false, false);
+            verify(connectionQueryServices, times(numRpcs)).getTable((PName) isNull(),
+                eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
 		}
         finally {
         	conn.close();

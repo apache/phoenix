@@ -94,13 +94,6 @@ public class WhereConstantParser {
                 result.add(column);
             }
         }
-		// ensure that node of the columns in the view where statement were
-		// dropped in any of this views ancestors
-//		for (int i = 0; i < viewColumnConstantsMatched.length; ++i) {
-//			if (viewColumnConstantsToBe[i] != null && !viewColumnConstantsMatched[i]) {
-//				return null;
-//			}
-//		}
         return PTableImpl.makePTable(view, result);
     }
 

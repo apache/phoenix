@@ -87,6 +87,7 @@ message GetTableRequest {
   optional int32 clientVersion = 6;	
   optional bool skipAddingParentColumns = 7;
   optional bool skipAddingIndexes = 8;
+  optional PTable lockedAncestorTable = 9;
 }
 
 message GetFunctionsRequest {

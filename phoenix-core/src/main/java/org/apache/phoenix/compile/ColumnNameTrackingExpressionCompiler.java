@@ -27,20 +27,20 @@ import com.google.common.collect.Lists;
 
 public class ColumnNameTrackingExpressionCompiler extends StatelessTraverseAllParseNodeVisitor {
 
-	private List<String> dataColumnNames = Lists.newArrayListWithExpectedSize(10);
+    private List<String> dataColumnNames = Lists.newArrayListWithExpectedSize(10);
 
     public void reset() {
         this.getDataColumnNames().clear();
     }
 
-	@Override
+    @Override
     public Void visit(ColumnParseNode node) throws SQLException {
-		getDataColumnNames().add(node.getName());
+        getDataColumnNames().add(node.getName());
         return null;
     }
-	
-	public List<String> getDataColumnNames() {
-		return dataColumnNames;
-	}
+
+    public List<String> getDataColumnNames() {
+        return dataColumnNames;
+    }
 
 }

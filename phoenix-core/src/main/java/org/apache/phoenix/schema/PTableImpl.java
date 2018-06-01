@@ -1222,6 +1222,8 @@ public class PTableImpl implements PTable {
      * @param table
      */
     public static PTable createFromProto(PTableProtos.PTable table) {
+        if (table==null)
+            return null;
         PName tenantId = null;
         if(table.hasTenantId()){
             tenantId = PNameFactory.newName(table.getTenantId().toByteArray());

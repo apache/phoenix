@@ -443,7 +443,7 @@ public class ViewIT extends BaseViewIT {
 
 
     @Test
-    public void testDropOfColumnOnParentTableInvalidatesView() throws Exception {
+    public void testDisallowDropOfColumnOnParentTable() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String fullTableName = generateUniqueTableName();
         String viewName = generateUniqueViewName();
@@ -454,16 +454,11 @@ public class ViewIT extends BaseViewIT {
         ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR, v3 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE v1 = 1.0";
         conn.createStatement().execute(ddl);
         
-        conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
-        // TODO see if its possibel to prevent the dropping of a column thats required by a child view (for its view where clause)
-        // the view should be invalid
-        try 
-        {
-	        conn.createStatement().execute("SELECT * FROM " + viewName);
-	        fail();
-        }
-        catch (SQLException e) {
-        	assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+        try {
+            conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
    

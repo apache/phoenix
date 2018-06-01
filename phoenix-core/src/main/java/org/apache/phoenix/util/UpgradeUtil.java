@@ -1911,8 +1911,9 @@ public class UpgradeUtil {
             conn.removeTable(conn.getTenantId(), tableName,
                 table.getParentName() != null ? table.getParentName().getString() : null,
                 table.getTimeStamp());
+            byte[] tenantIdBytes = conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes();
             conn.getQueryServices().clearTableFromCache(
-                    conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes(),
+                    tenantIdBytes,
                     table.getSchemaName().getBytes(), table.getTableName().getBytes(),
                     PhoenixRuntime.getCurrentScn(readOnlyProps));
             MetaDataMutationResult result = new MetaDataClient(conn).updateCache(conn.getTenantId(),schemaName,
@@ -1968,7 +1969,7 @@ public class UpgradeUtil {
                         conn.commit();
                     }
                     conn.getQueryServices().clearTableFromCache(
-                            conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes(),
+                            tenantIdBytes,
                             index.getSchemaName().getBytes(), index.getTableName().getBytes(),
                             PhoenixRuntime.getCurrentScn(readOnlyProps));
                 }
@@ -1982,9 +1983,36 @@ public class UpgradeUtil {
                 logger.info(String.format("Updating link information for view '%s' ..", table.getTableName()));
                 updateLink(conn, oldPhysicalName, newPhysicalTablename,table.getSchemaName(),table.getTableName());
                 conn.commit();
-
+                
+                // if the view is a first level child, then we need to create the PARENT_TABLE link
+                // that was overwritten by the PHYSICAL_TABLE link 
+                if (table.getParentName().equals(table.getPhysicalName())) {
+                    logger.info(String.format("Creaing PARENT link for view '%s' ..", table.getTableName()));
+                    // Add row linking view to its parent 
+                    PreparedStatement linkStatement = conn.prepareStatement(MetaDataClient.CREATE_VIEW_LINK);
+                    linkStatement.setString(1, Bytes.toStringBinary(tenantIdBytes));
+                    linkStatement.setString(2, table.getSchemaName().getString());
+                    linkStatement.setString(3, table.getTableName().getString());
+                    linkStatement.setString(4, table.getParentName().getString());
+                    linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
+                    linkStatement.setString(6, null);
+                    linkStatement.execute();
+                    conn.commit();
+                    
+                    byte[] key = SchemaUtil.getTableKey(tenantIdBytes, schemaName.getBytes(), tableName.getBytes());
+                    HTableInterface systemCatalog = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+                    Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
+                    try (ResultScanner scanner = systemCatalog.getScanner(scan))  {
+                        for (Result result2 = scanner.next(); (result2 != null); result2 = scanner.next()) {
+                            System.out.println(result2);
+                        }
+                    }
+                }
+                
+                
+                
                 conn.getQueryServices().clearTableFromCache(
-                    conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes(),
+                    tenantIdBytes,
                     table.getSchemaName().getBytes(), table.getTableName().getBytes(),
                     PhoenixRuntime.getCurrentScn(readOnlyProps));
             }

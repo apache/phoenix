@@ -17,12 +17,10 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
-
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class TableInfo {
 
@@ -37,7 +35,7 @@ public class TableInfo {
     }
     
     public byte[] getRowKeyPrefix() {
-        return ByteUtil.concat(tenantId, SEPARATOR_BYTE_ARRAY, schema, SEPARATOR_BYTE_ARRAY, name);
+        return SchemaUtil.getTableKey(tenantId, schema, name);
     }
 
     @Override

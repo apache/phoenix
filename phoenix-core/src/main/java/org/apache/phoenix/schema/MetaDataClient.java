@@ -309,7 +309,7 @@ public class MetaDataClient {
                     ") VALUES (?, ?, ?, ?, ?, ?, ?)";
     
     
-    private static final String CREATE_VIEW_LINK =
+    public static final String CREATE_VIEW_LINK =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -642,7 +642,7 @@ public class MetaDataClient {
                 ConnectionQueryServices queryServices = connection.getQueryServices();
                 result =
                         queryServices.getTable(tenantId, schemaBytes, tableBytes, tableTimestamp,
-                            resolvedTimestamp, false, false);
+                            resolvedTimestamp, false, false, null);
                 // if the table was assumed to be non transactional, but is actually transactional
                 // then re-resolve as of the right timestamp
                 if (result.getTable() != null
@@ -655,7 +655,7 @@ public class MetaDataClient {
                     if (result.getTable().getTimeStamp() >= resolveTimestamp) {
                         result =
                                 queryServices.getTable(tenantId, schemaBytes, tableBytes,
-                                    tableTimestamp, resolveTimestamp, false, false);
+                                    tableTimestamp, resolveTimestamp, false, false, null);
                     }
                 }
 

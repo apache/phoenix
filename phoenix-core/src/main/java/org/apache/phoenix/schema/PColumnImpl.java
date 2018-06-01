@@ -209,14 +209,14 @@ public class PColumnImpl implements PColumn {
         return (familyName == null ? "" : familyName.toString() + QueryConstants.NAME_SEPARATOR) + name.toString();
     }
     
-	@Override
-	public int hashCode() {
-	    final int prime = 31;
-	    int result = 1;
-	    result = prime * result + ((familyName == null) ? 0 : familyName.hashCode());
-	    result = prime * result + ((name == null) ? 0 : name.hashCode());
-	    return result;
-	}
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((familyName == null) ? 0 : familyName.hashCode());
+        result = prime * result + ((name == null) ? 0 : name.hashCode());
+        return result;
+    }
 
     @Override
     public boolean equals(Object obj) {
