@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -26,14 +25,18 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-public class SystemCatalogIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class SystemCatalogIT extends BaseTest {
     private HBaseTestingUtility testUtil = null;
 
     @After
@@ -57,13 +60,17 @@ public class SystemCatalogIT {
         TableName systemCatalog = TableName.valueOf("SYSTEM.CATALOG");
         RegionLocator rl = testUtil.getConnection().getRegionLocator(systemCatalog);
         assertEquals(rl.getAllRegionLocations().size(), 1);
+        try {
+            // now attempt to split SYSTEM.CATALOG
+            testUtil.getHBaseAdmin().split(systemCatalog);
 
-        // now attempt to split SYSTEM.CATALOG
-        testUtil.getHBaseAdmin().split(systemCatalog);
-
-        // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
-        testUtil.getHBaseAdmin().disableTable(systemCatalog);
-        testUtil.getHBaseAdmin().enableTable(systemCatalog);
+            // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
+            testUtil.getHBaseAdmin().disableTable(systemCatalog);
+            testUtil.getHBaseAdmin().enableTable(systemCatalog);
+        } catch (DoNotRetryIOException e) {
+            // table is not splittable
+            assert (e.getMessage().contains("NOT splittable"));
+        }
 
         // test again... Must still be exactly one region.
         rl = testUtil.getConnection().getRegionLocator(systemCatalog);
