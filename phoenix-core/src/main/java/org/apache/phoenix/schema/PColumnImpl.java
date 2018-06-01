@@ -95,24 +95,11 @@ public class PColumnImpl implements PColumn {
         return new PColumnImpl(familyName, columnName, timestamp);
     }
     
-    private void init(PName name,
-            PName familyName,
-            PDataType dataType,
-            Integer maxLength,
-            Integer scale,
-            boolean nullable,
-            int position,
-            SortOrder sortOrder,
-            Integer arrSize,
-            byte[] viewConstant,
-        boolean isViewReferenced,
-        String expressionStr,
-        boolean isRowTimestamp,
-        boolean isDynamic,
-        byte[] columnQualifierBytes,
-        long timestamp,
-        boolean derived
-    ) {
+    private void init(PName name, PName familyName, PDataType dataType, Integer maxLength,
+            Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
+            byte[] viewConstant, boolean isViewReferenced, String expressionStr,
+            boolean isRowTimestamp, boolean isDynamic, byte[] columnQualifierBytes, long timestamp,
+            boolean derived) {
     	Preconditions.checkNotNull(sortOrder);
         this.dataType = dataType;
         if (familyName == null) {
