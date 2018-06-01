@@ -71,7 +71,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -587,7 +586,6 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
     
     @Test
-    @Ignore
     public void testLocalIndexAutomaticRepair() throws Exception {
         if (isNamespaceMapped) { return; }
         PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);

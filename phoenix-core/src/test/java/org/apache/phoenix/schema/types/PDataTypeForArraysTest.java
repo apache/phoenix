@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.schema.types;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.Date;
@@ -31,56 +35,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PArrayDataType;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PBooleanArray;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PCharArray;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDateArray;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDecimalArray;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PDoubleArray;
-import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PFloatArray;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PIntegerArray;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PLongArray;
-import org.apache.phoenix.schema.types.PSmallint;
-import org.apache.phoenix.schema.types.PSmallintArray;
-import org.apache.phoenix.schema.types.PTime;
-import org.apache.phoenix.schema.types.PTimeArray;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PTimestampArray;
-import org.apache.phoenix.schema.types.PTinyint;
-import org.apache.phoenix.schema.types.PTinyintArray;
-import org.apache.phoenix.schema.types.PUnsignedDate;
-import org.apache.phoenix.schema.types.PUnsignedDateArray;
-import org.apache.phoenix.schema.types.PUnsignedDouble;
-import org.apache.phoenix.schema.types.PUnsignedDoubleArray;
-import org.apache.phoenix.schema.types.PUnsignedFloat;
-import org.apache.phoenix.schema.types.PUnsignedFloatArray;
-import org.apache.phoenix.schema.types.PUnsignedInt;
-import org.apache.phoenix.schema.types.PUnsignedIntArray;
-import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.apache.phoenix.schema.types.PUnsignedLongArray;
-import org.apache.phoenix.schema.types.PUnsignedSmallint;
-import org.apache.phoenix.schema.types.PUnsignedSmallintArray;
-import org.apache.phoenix.schema.types.PUnsignedTime;
-import org.apache.phoenix.schema.types.PUnsignedTimeArray;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestampArray;
-import org.apache.phoenix.schema.types.PUnsignedTinyint;
-import org.apache.phoenix.schema.types.PUnsignedTinyintArray;
-import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.types.PVarcharArray;
-import org.apache.phoenix.schema.types.PhoenixArray;
-import org.junit.Ignore;
 import org.junit.Test;
-
-import static org.junit.Assert.*;
 
 public class PDataTypeForArraysTest {
 	@Test
@@ -356,7 +311,6 @@ public class PDataTypeForArraysTest {
         assertEquals("abx", Bytes.toString(res));
     }
 	
-	@Ignore
 	public void testVariableLengthArrayWithElementsMoreThanShortMax() {
 	    String[] strArr = new String[(2 * Short.MAX_VALUE) + 100]; 
 	    for(int i = 0 ; i < (2 * Short.MAX_VALUE) + 100; i++ ) {

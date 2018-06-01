@@ -40,7 +40,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Sets;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -71,18 +70,18 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import com.google.common.collect.Sets;
 
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-@Ignore
 public class IndexScrutinyToolIT extends BaseTest {
 
     private String dataTableDdl;
@@ -192,6 +191,7 @@ public class IndexScrutinyToolIT extends BaseTest {
      * Since CURRENT_SCN is set, the scrutiny shouldn't report any issue.
      */
     @Test
+    @Ignore("PHOENIX-4378 Unable to set KEEP_DELETED_CELLS to true on RS scanner")
     public void testScrutinyWhileTakingWrites() throws Exception {
         int id = 0;
         while (id < 1000) {
