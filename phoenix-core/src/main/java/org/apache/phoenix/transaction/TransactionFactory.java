@@ -60,13 +60,21 @@ public class TransactionFactory {
         return provider.getTransactionProvider();
     }
     
-    public static PhoenixTransactionContext getTransactionContext(byte[] txState, int clientVersion) throws IOException {
+    public static PhoenixTransactionProvider getTransactionProvider(byte[] txState, int clientVersion) {
         if (txState == null || txState.length == 0) {
             return null;
         }
         Provider provider = (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) 
                 ? Provider.TEPHRA
                 : Provider.fromCode(txState[txState.length-1]);
-        return provider.getTransactionProvider().getTransactionContext(txState);
+        return provider.getTransactionProvider();
+    }
+    
+    public static PhoenixTransactionContext getTransactionContext(byte[] txState, int clientVersion) throws IOException {
+        PhoenixTransactionProvider provider = getTransactionProvider(txState, clientVersion);
+        if (provider == null) {
+            return null;
+        }
+        return provider.getTransactionContext(txState);
     }
 }

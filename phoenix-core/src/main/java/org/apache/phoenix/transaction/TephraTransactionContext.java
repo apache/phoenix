@@ -27,7 +27,6 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -246,11 +245,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                 this.txContext.addTransactionAware(physicalTxAware);
             }
         }
-    }
-
-    @Override
-    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
-        return put;
     }
 
     @Override

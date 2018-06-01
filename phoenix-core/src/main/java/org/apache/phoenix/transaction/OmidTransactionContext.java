@@ -17,21 +17,18 @@
  */
 package org.apache.phoenix.transaction;
 
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.omid.proto.TSOProto;
 import org.apache.omid.transaction.AbstractTransaction.VisibilityLevel;
 import org.apache.omid.transaction.HBaseCellId;
 import org.apache.omid.transaction.HBaseTransaction;
 import org.apache.omid.transaction.HBaseTransactionManager;
 import org.apache.omid.transaction.RollbackException;
-import org.apache.omid.transaction.TTable;
 import org.apache.omid.transaction.Transaction;
 //import org.apache.omid.tso.TSOMockModule;
 import org.apache.omid.transaction.Transaction.Status;
@@ -304,11 +301,6 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     public void markDMLFence(PTable dataTable) {
         // TODO Auto-generated method stub
         
-    }
-
-    @Override
-    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
-        return TTable.markPutAsCommitted(put, timestamp, timestamp);
     }
 
     /**

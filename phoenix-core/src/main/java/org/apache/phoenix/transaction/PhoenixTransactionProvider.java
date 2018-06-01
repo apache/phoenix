@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -52,4 +53,14 @@ public interface PhoenixTransactionProvider {
 
     public TransactionFactory.Provider getProvider();
     public boolean isUnsupported(Feature feature);
+
+    /**
+     * Converts put operation to autocommit operation
+     *  @param  put put operation
+     *  @param  timestamp - start timestamp
+     *  @param  commitTimestamp - commit timestamp
+     * @return put operation with metadata
+     * @throws IOException
+     */
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException;
 }

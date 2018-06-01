@@ -22,11 +22,13 @@ import java.sql.SQLException;
 import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.omid.committable.CommitTable;
 import org.apache.omid.committable.InMemoryCommitTable;
 import org.apache.omid.transaction.HBaseOmidClientConfiguration;
 import org.apache.omid.transaction.HBaseTransactionManager;
+import org.apache.omid.transaction.TTable;
 import org.apache.omid.tso.TSOMockModule;
 import org.apache.omid.tso.TSOServer;
 import org.apache.omid.tso.TSOServerConfig;
@@ -207,5 +209,10 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         // as a workaround.
         return true;
         // return (feature == Feature.ALTER_NONTX_TO_TX || feature == Feature.COLUMN_ENCODING || feature == Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER);
+    }
+
+    @Override
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
+        return TTable.markPutAsCommitted(put, timestamp, timestamp);
     }
 }
