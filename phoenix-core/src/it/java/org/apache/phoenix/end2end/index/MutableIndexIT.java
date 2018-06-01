@@ -34,6 +34,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import jline.internal.Log;
+
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
@@ -69,8 +71,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.primitives.Doubles;
-
-import jline.internal.Log;
 
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
@@ -852,7 +852,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           List<HRegion> regions = getUtility().getHBaseCluster().getRegions(hbaseTN);
           HRegion hRegion = regions.get(0);
           hRegion.flush(true);
-          HStore store = (HStore) hRegion.getStore(famBytes);
+          HStore store = hRegion.getStore(famBytes);
           store.triggerMajorCompaction();
           store.compactRecentForTestingAssumingDefaultPolicy(1);
 
@@ -860,7 +860,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           regions = getUtility().getHBaseCluster().getRegions(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
           hRegion = regions.get(0);
           hRegion.flush(true);
-          store = (HStore) hRegion.getStore(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+          store = hRegion.getStore(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
           store.triggerMajorCompaction();
           store.compactRecentForTestingAssumingDefaultPolicy(1);
       }
