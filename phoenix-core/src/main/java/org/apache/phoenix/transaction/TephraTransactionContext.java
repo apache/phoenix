@@ -469,5 +469,21 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;
     }
+
+    @Override
+    public HTableInterface getTransactionalTableWriter(HTableInterface htable, PTable table) {
+        boolean isIndex = table.getType() == PTableType.INDEX;
+        TransactionAwareHTableDelegate transactionAwareHTable = new TransactionAwareHTableDelegate(htable, table.isImmutableRows() || isIndex ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+        // Don't add immutable indexes (those are the only ones that would participate
+        // during a commit), as we don't need conflict detection for these.
+        if (isIndex) {
+            transactionAwareHTable.startTx(getTransaction());
+        } else {
+            // Even for immutable, we need to do this so that an abort has the state
+            // necessary to generate the rows to delete.
+            this.addTransactionAware(transactionAwareHTable);
+        }
+        return transactionAwareHTable;
+    }
     
 }

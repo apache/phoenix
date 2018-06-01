@@ -108,6 +108,11 @@ public interface PhoenixTransactionContext {
         public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
             return null;
         }
+
+        @Override
+        public HTableInterface getTransactionalTableWriter(HTableInterface htable, PTable table) {
+            return null;
+        }
     };
     /**
      * 
@@ -225,4 +230,5 @@ public interface PhoenixTransactionContext {
     public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask);
 
     public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable);
+    public HTableInterface getTransactionalTableWriter(HTableInterface htable, PTable table);
 }
