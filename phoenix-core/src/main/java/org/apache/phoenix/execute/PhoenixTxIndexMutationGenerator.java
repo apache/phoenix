@@ -95,7 +95,7 @@ public class PhoenixTxIndexMutationGenerator {
         stored.addAll(m);
     }
 
-    public Collection<Pair<Mutation, byte[]>> getIndexUpdates(HTableInterface htable, Iterator<Mutation> mutationIterator) throws IOException, SQLException {
+    public Collection<Pair<Mutation, byte[]>> getIndexUpdates(HTableInterface htable, Iterator<? extends Mutation> mutationIterator) throws IOException, SQLException {
 
         if (!mutationIterator.hasNext()) {
             return Collections.emptyList();
