@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import static com.google.common.collect.Sets.newLinkedHashSet;
 import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
-import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
@@ -1053,7 +1052,7 @@ public class MetaDataClient {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, statement.getTableType());
 
         boolean isAppendOnlySchema = false;
         long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
@@ -1132,12 +1131,21 @@ public class MetaDataClient {
     }
 
     private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> props, Map<String, Object> tableProps,
-            Map<String, Object> commonFamilyProps) {
+            Map<String, Object> commonFamilyProps, PTableType tableType) throws SQLException {
         // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
         HColumnDescriptor defaultDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         if (!props.isEmpty()) {
             Collection<Pair<String,Object>> propsList = props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
             for (Pair<String,Object> prop : propsList) {
+                if (tableType == PTableType.INDEX && !MetaDataUtil.isPropertyAllowedToBeOutOfSyncAmongColFamsAndIndexes(prop.getFirst())) {
+                    // We disallow index tables from overriding TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE, in order to avoid situations
+                    // where indexes are not in sync with their data table.
+                    // See PHOENIX-3955: Ensure KEEP_DELETED_CELLS, REPLICATION_SCOPE, and TTL properties stay in sync between the
+                    // physical data table and index tables
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                        .setMessage("Property: " + prop.getFirst()).build()
+                        .buildException();
+                }
                 if (defaultDescriptor.getValue(prop.getFirst()) == null) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                 } else {
@@ -1483,7 +1491,7 @@ public class MetaDataClient {
 
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX);
         List<Pair<ParseNode, SortOrder>> indexParseNodeAndSortOrderList = ik.getParseNodeAndSortOrderList();
         List<ColumnName> includedColumns = statement.getIncludeColumns();
         TableRef tableRef = null;
@@ -2481,10 +2489,12 @@ public class MetaDataClient {
                     Map<String,Object> combinedFamilyProps = Maps.newHashMapWithExpectedSize(props.size() + commonFamilyProps.size());
                     combinedFamilyProps.putAll(commonFamilyProps);
                     for (Pair<String,Object> prop : props) {
-                        // Don't allow specifying column families for TTL. TTL can only apply for the all the column families of the table
-                        // i.e. it can't be column family specific.
-                        if (!familyName.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY) && prop.getFirst().equals(TTL)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL).build().buildException();
+                        // Don't allow specifying column families for TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE.
+                        // These properties can only be applied for all column families of a table and can't be column family specific.
+                        if (!familyName.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY) && !MetaDataUtil.isPropertyAllowedToBeOutOfSyncAmongColFamsAndIndexes(prop.getFirst())) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY)
+                                .setMessage("Property: " + prop.getFirst()).build()
+                                .buildException();
                         }
                         combinedFamilyProps.put(prop.getFirst(), prop.getSecond());
                     }

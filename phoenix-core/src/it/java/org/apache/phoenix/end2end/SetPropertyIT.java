@@ -251,7 +251,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn1.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -728,7 +728,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
