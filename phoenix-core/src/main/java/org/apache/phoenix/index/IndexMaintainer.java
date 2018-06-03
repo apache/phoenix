@@ -184,16 +184,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr, PhoenixConnection connection) {
         List<PTable> indexes = dataTable.getIndexes();
-        serialize(dataTable, ptr, indexes, connection);
+        serializeServerMaintainedIndexes(dataTable, ptr, indexes, connection);
     }
 
-    /**
-     * For client-side to serialize all IndexMaintainers for a given table
-     * @param dataTable data table
-     * @param ptr bytes pointer to hold returned serialized value
-     * @param indexes indexes to serialize
-     */
-    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
+    public static void serializeServerMaintainedIndexes(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
         Iterator<PTable> indexesItr = Collections.emptyListIterator();
         boolean onlyLocalIndexes = dataTable.isImmutableRows() || dataTable.isTransactional();
@@ -205,15 +199,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         } else {
             indexesItr = maintainedIndexes(indexes.iterator());
         }
-        if (!indexesItr.hasNext()) {
+    
+        serialize(dataTable, ptr, Lists.newArrayList(indexesItr), connection);
+    }
+    /**
+     * For client-side to serialize all IndexMaintainers for a given table
+     * @param dataTable data table
+     * @param ptr bytes pointer to hold returned serialized value
+     * @param indexes indexes to serialize
+     */
+    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
+            List<PTable> indexes, PhoenixConnection connection) {
+        if (indexes.isEmpty()) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return;
         }
-        int nIndexes = 0;
-        while (indexesItr.hasNext()) {
-            nIndexes++;
-            indexesItr.next();
-        }
+        int nIndexes = indexes.size();
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream output = new DataOutputStream(stream);
         try {
@@ -221,11 +222,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
-            indexesItr = onlyLocalIndexes 
-                        ? maintainedLocalIndexes(indexes.iterator())
-                        : maintainedIndexes(indexes.iterator());
-            while (indexesItr.hasNext()) {
-                    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(indexesItr.next().getIndexMaintainer(dataTable, connection));
+            for (PTable index : indexes) {
+                    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(index.getIndexMaintainer(dataTable, connection));
                     byte[] protoBytes = proto.toByteArray();
                     WritableUtils.writeVInt(output, protoBytes.length);
                     output.write(protoBytes);

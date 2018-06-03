@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -198,7 +199,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             ResultSet rs;
 
-            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+            rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(3,rs.getInt(1));
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
@@ -243,7 +244,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         if (iterator.hasNext()) {
             byte[] tableName = iterator.next().getFirst(); // skip data table mutations
             PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
-            boolean clientSideUpdate = !localIndex && (!mutable || transactional);
+            boolean clientSideUpdate = (!localIndex || (transactional && table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))) 
+                    && (!mutable || transactional);
             if (!clientSideUpdate) {
                 assertTrue(table.getType() == PTableType.TABLE); // should be data table
             }
