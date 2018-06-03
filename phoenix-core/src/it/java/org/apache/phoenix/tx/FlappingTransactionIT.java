@@ -136,8 +136,11 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName + " WHERE int_col1 = 1");
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
+            // this succeeds rs = conn2.createStatement().executeQuery("SELECT int_col1 FROM " + fullTableName + " WHERE int_col1 = 1");
+            // this fails rs = conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName + " WHERE int_col1 = 1");
             rs = conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName + " WHERE int_col1 = 1");
-            assertFalse(rs.next());
+            boolean hasNext = rs.next();
+            assertFalse(hasNext);
             
             conn1.commit();
             
