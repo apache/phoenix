@@ -38,7 +38,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
@@ -133,7 +132,6 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     }
     
     private void testRollbackOfUncommittedDelete(String indexDDL, String fullTableName) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = getConnection();
         conn.setAutoCommit(false);
         try {
@@ -179,7 +177,15 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             assertEquals("a2", rs.getString(3));
             assertFalse(rs.next());
             
-            //assert row is delete in index table
+            // assert row is deleted in data table
+            rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY k");
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            // assert row is deleted in index table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY v1");
             assertTrue(rs.next());
             assertEquals("x2", rs.getString(1));
@@ -189,7 +195,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             
             conn.rollback();
             
-            //assert two rows in data table
+            // assert two rows in data table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY k");
             assertTrue(rs.next());
             assertEquals("x1", rs.getString(1));
@@ -201,7 +207,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             assertEquals("a2", rs.getString(3));
             assertFalse(rs.next());
             
-            //assert two rows in index table
+            // assert two rows in index table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY v1");
             assertTrue(rs.next());
             assertEquals("x1", rs.getString(1)); // fails here
@@ -330,7 +336,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 			conn.commit();
 
 	        MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
-	        state.startTransaction(TransactionFactory.Provider.TEPHRA);
+	        // Start a new transaction
+	        stmt.executeQuery("select 1 from " + fullTableName + "1 LIMIT 1").next();
 	        long wp = state.getWritePointer();
 	        conn.createStatement().execute("delete from " + fullTableName + "1 where id1=fk1b AND fk1b=id1");
 	        assertEquals(PhoenixVisibilityLevel.SNAPSHOT, state.getVisibilityLevel());

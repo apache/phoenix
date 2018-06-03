@@ -496,23 +496,23 @@ public class SchemaUtil {
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value, offset, length).toString();
     }
 
-    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {
-        return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
+    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families, boolean isLocalIndex) {
+        return families.isEmpty() ? defaultColumnFamily == null ? (isLocalIndex ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
     }
 
     public static byte[] getEmptyColumnFamily(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
     }
 
     public static String getEmptyColumnFamilyAsString(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY : QueryConstants.DEFAULT_COLUMN_FAMILY) : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
     }
 
     public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR) : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
                 .getName().getBytesPtr();
     }
 

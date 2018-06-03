@@ -574,7 +574,7 @@ public class MutationState implements SQLCloseable {
                         MultiRowMutationState multiRowMutationState = mutations.remove(key);
                         if (multiRowMutationState!=null) {
                             final List<Mutation> deleteMutations = Lists.newArrayList();
-                            generateMutations(tableRef, mutationTimestamp, serverTimestamp, multiRowMutationState, deleteMutations, null);
+                            generateMutations(key, mutationTimestamp, serverTimestamp, multiRowMutationState, deleteMutations, null);
                             if (indexMutations == null) {
                                 indexMutations = deleteMutations;
                             } else {

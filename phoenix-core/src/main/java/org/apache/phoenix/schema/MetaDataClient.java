@@ -3691,7 +3691,7 @@ public class MetaDataClient {
      */
     private static byte[] getNewEmptyColumnFamilyOrNull (PTable table, PColumn columnToDrop) {
         if (table.getType() != PTableType.VIEW && !SchemaUtil.isPKColumn(columnToDrop) && table.getColumnFamilies().get(0).getName().equals(columnToDrop.getFamilyName()) && table.getColumnFamilies().get(0).getColumns().size() == 1) {
-            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()));
+            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()), table.getIndexType() == IndexType.LOCAL);
         }
         // If unchanged, return null
         return null;
