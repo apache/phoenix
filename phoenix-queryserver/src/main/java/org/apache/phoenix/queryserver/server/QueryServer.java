@@ -33,6 +33,7 @@ import org.apache.calcite.avatica.server.RemoteUserExtractor;
 import org.apache.calcite.avatica.server.RemoteUserExtractionException;
 import org.apache.calcite.avatica.server.HttpRequestRemoteUserExtractor;
 import org.apache.calcite.avatica.server.HttpQueryStringParameterRemoteUserExtractor;
+import org.apache.calcite.avatica.server.ServerCustomizer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -52,6 +53,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.loadbalancer.service.LoadBalanceZookeeperConf;
 import org.apache.phoenix.queryserver.register.Registry;
 import org.apache.phoenix.util.InstanceResolver;
+import org.eclipse.jetty.server.Server;
 
 import java.io.File;
 import java.io.IOException;
@@ -61,6 +63,7 @@ import java.net.InetAddress;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -228,14 +231,15 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       Service service = new LocalService(meta);
 
       // Start building the Avatica HttpServer
-      final HttpServer.Builder builder = new HttpServer.Builder().withPort(port)
-          .withHandler(service, getSerialization(getConf()));
+      final HttpServer.Builder<Server> builder = HttpServer.Builder.<Server> newBuilder()
+          .withPort(port).withHandler(service, getSerialization(getConf()));
 
       // Enable client auth when using Kerberos auth for HBase
       if (isKerberos) {
         configureClientAuthentication(builder, disableSpnego);
       }
       setRemoteUserExtractorIfNecessary(builder, getConf());
+      enableServerCustomizersIfNecessary(builder, getConf());
 
       // Build and start the HttpServer
       server = builder.build();
@@ -405,10 +409,28 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     new RemoteUserExtractorFactory.RemoteUserExtractorFactoryImpl();
 
   @VisibleForTesting
+  public void enableServerCustomizersIfNecessary(HttpServer.Builder<Server> builder, Configuration conf) {
+    if (conf.getBoolean(QueryServices.QUERY_SERVER_CUSTOMIZERS_ENABLED,
+            QueryServicesOptions.DEFAULT_QUERY_SERVER_CUSTOMIZERS_ENABLED)) {
+      builder.withServerCustomizers(createServerCustomizers(conf), Server.class);
+    }
+  }
+
+  private static final ServerCustomizersFactory DEFAULT_SERVER_CUSTOMIZERS =
+    new ServerCustomizersFactory.ServerCustomizersFactoryImpl();
+
+  @VisibleForTesting
   RemoteUserExtractor createRemoteUserExtractor(Configuration conf) {
     RemoteUserExtractorFactory factory =
         InstanceResolver.getSingleton(RemoteUserExtractorFactory.class, DEFAULT_USER_EXTRACTOR);
     return factory.createRemoteUserExtractor(conf);
+  }
+
+  @VisibleForTesting
+  List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf) {
+    ServerCustomizersFactory factory =
+      InstanceResolver.getSingleton(ServerCustomizersFactory.class, DEFAULT_SERVER_CUSTOMIZERS);
+    return factory.createServerCustomizers(conf);
   }
 
   /**
