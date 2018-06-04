@@ -251,6 +251,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB = "phoenix.queryserver.spnego.auth.disabled";
     public static final String QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR_ATTRIB = "phoenix.queryserver.withRemoteUserExtractor";
     public static final String QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "phoenix.queryserver.remoteUserExtractor.param";
+    public static final String QUERY_SERVER_CUSTOMIZERS_ENABLED = "phoenix.queryserver.customizers.enabled";
     public static final String QUERY_SERVER_DISABLE_KERBEROS_LOGIN = "phoenix.queryserver.disable.kerberos.login";
 
     // metadata configs
