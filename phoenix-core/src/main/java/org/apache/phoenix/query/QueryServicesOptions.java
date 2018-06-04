@@ -303,6 +303,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR = false;
     public static final String DEFAULT_QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "doAs";
     public static final boolean DEFAULT_QUERY_SERVER_DISABLE_KERBEROS_LOGIN = false;
+    public static final boolean DEFAULT_QUERY_SERVER_CUSTOMIZERS_ENABLED = false;
 
     public static final boolean DEFAULT_RENEW_LEASE_ENABLED = true;
     public static final int DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS =
