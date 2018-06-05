@@ -24,20 +24,25 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 
 public class IndexMetaDataCacheClient {
 
     private final ServerCacheClient serverCache;
-    private TableRef cacheUsingTableRef;
+    private PTable cacheUsingTable;
     
     /**
      * Construct client used to send index metadata to each region server
@@ -45,9 +50,9 @@ public class IndexMetaDataCacheClient {
      * @param connection the client connection
      * @param cacheUsingTableRef table ref to table that will use the cache during its scan
      */
-    public IndexMetaDataCacheClient(PhoenixConnection connection, TableRef cacheUsingTableRef) {
+    public IndexMetaDataCacheClient(PhoenixConnection connection, PTable cacheUsingTable) {
         serverCache = new ServerCacheClient(connection);
-        this.cacheUsingTableRef = cacheUsingTableRef;
+        this.cacheUsingTable = cacheUsingTable;
     }
 
     /**
@@ -75,7 +80,7 @@ public class IndexMetaDataCacheClient {
         /**
          * Serialize and compress hashCacheTable
          */
-        return serverCache.addServerCache(ScanUtil.newScanRanges(mutations), ptr, txState, new IndexMetaDataCacheFactory(), cacheUsingTableRef);
+        return serverCache.addServerCache(ScanUtil.newScanRanges(mutations), ptr, txState, new IndexMetaDataCacheFactory(), cacheUsingTable);
     }
     
     
@@ -91,7 +96,55 @@ public class IndexMetaDataCacheClient {
         /**
          * Serialize and compress hashCacheTable
          */
-        return serverCache.addServerCache(ranges, ptr, txState, new IndexMetaDataCacheFactory(), cacheUsingTableRef);
+        return serverCache.addServerCache(ranges, ptr, txState, new IndexMetaDataCacheFactory(), cacheUsingTable);
     }
-    
+
+    public static ServerCache setMetaDataOnMutations(PhoenixConnection connection, PTable table, List<? extends Mutation> mutations,
+            ImmutableBytesWritable indexMetaDataPtr) throws SQLException {
+        final byte[] tenantIdBytes;
+        if (table.isMultiTenant()) {
+            tenantIdBytes = connection.getTenantId() == null ? null : ScanUtil.getTenantIdBytes(
+                    table.getRowKeySchema(), table.getBucketNum() != null, connection.getTenantId(),
+                    table.getViewIndexId() != null);
+        } else {
+            tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+        }
+        ServerCache cache = null;
+        byte[] attribValue = null;
+        byte[] uuidValue = null;
+        byte[] txState = ByteUtil.EMPTY_BYTE_ARRAY;
+        if (table.isTransactional()) {
+            txState = connection.getMutationState().encodeTransaction();
+        }
+        boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
+        if (hasIndexMetaData) {
+            if (useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)) {
+                IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, table);
+                cache = client.addIndexMetadataCache(mutations, indexMetaDataPtr, txState);
+                uuidValue = cache.getId();
+            } else {
+                attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
+                uuidValue = ServerCacheClient.generateId();
+            }
+        } else if (txState.length == 0) { return null; }
+        // Either set the UUID to be able to access the index metadata from the cache
+        // or set the index metadata directly on the Mutation
+        for (Mutation mutation : mutations) {
+            if (connection.getTenantId() != null) {
+                mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdBytes);
+            }
+            mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+            if (attribValue != null) {
+                mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
+                mutation.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION,
+                        Bytes.toBytes(MetaDataProtocol.PHOENIX_VERSION));
+                if (txState.length > 0) {
+                    mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                }
+            } else if (!hasIndexMetaData && txState.length > 0) {
+                mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+            }
+        }
+        return cache;
+    }
 }
