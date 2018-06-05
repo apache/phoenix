@@ -410,6 +410,9 @@
               <!-- TODO turn back on javadocs - disabled now for testing -->
               <!-- <goal>jar</goal> -->
             </goals>
+            <configuration>
+              <additionalparam>${javadoc.opts}</additionalparam>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -948,6 +951,16 @@
   </dependencyManagement>
 
   <profiles>
+    <!-- disable doclint with 1.8+ JDKs-->
+    <profile>
+      <id>java8-doclint-disabled</id>
+      <activation>
+        <jdk>[1.8,)</jdk>
+      </activation>
+      <properties>
+        <javadoc.opts>-Xdoclint:none</javadoc.opts>
+      </properties>
+    </profile>
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
