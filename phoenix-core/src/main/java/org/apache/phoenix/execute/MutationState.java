@@ -52,7 +52,6 @@ import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -61,10 +60,8 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
-import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
-import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
@@ -95,14 +92,10 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
-import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -500,19 +493,13 @@ public class MutationState implements SQLCloseable {
         return ptr;
     }
 
-    private static List<PTable> getClientMaintainedIndexes(PTable table) {
-        Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this client-side mechanism
-        (table.isImmutableRows() || table.isTransactional()) ? IndexMaintainer.maintainedGlobalIndexes(table
-                .getIndexes().iterator()) : Collections.<PTable> emptyIterator();
-        return Lists.newArrayList(indexIterator);
-    }
-
     private Iterator<Pair<PName, List<Mutation>>> addRowMutations(final TableRef tableRef,
             final MultiRowMutationState values, final long mutationTimestamp, final long serverTimestamp,
             boolean includeAllIndexes, final boolean sendAll) {
         final PTable table = tableRef.getTable();
-        final List<PTable> indexList = includeAllIndexes ? Lists.newArrayList(IndexMaintainer.maintainedIndexes(table
-                .getIndexes().iterator())) : getClientMaintainedIndexes(table);
+        final List<PTable> indexList = includeAllIndexes ? 
+                Lists.newArrayList(IndexMaintainer.maintainedIndexes(table.getIndexes().iterator())) : 
+                    IndexUtil.getClientMaintainedIndexes(table);
         final Iterator<PTable> indexes = indexList.iterator();
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists
@@ -542,9 +529,12 @@ public class MutationState implements SQLCloseable {
                     if (!mutationsPertainingToIndex.isEmpty()) {
                         if (table.isTransactional()) {
                             if (indexMutationsMap == null) {
-                                PhoenixTxIndexMutationGenerator generator = newTxIndexMutationGenerator(table, indexList, mutationsPertainingToIndex.get(0).getAttributesMap());
-                                try (Table htable = connection.getQueryServices().getTable(table.getPhysicalName().getBytes())) {
-                                    Collection<Pair<Mutation, byte[]>> allMutations = generator.getIndexUpdates(htable, mutationsPertainingToIndex.iterator());
+                                PhoenixTxIndexMutationGenerator generator = PhoenixTxIndexMutationGenerator.newGenerator(connection, table,
+                                        indexList, mutationsPertainingToIndex.get(0).getAttributesMap());
+                                try (Table htable = connection.getQueryServices().getTable(
+                                        table.getPhysicalName().getBytes())) {
+                                    Collection<Pair<Mutation, byte[]>> allMutations = generator.getIndexUpdates(htable,
+                                            mutationsPertainingToIndex.iterator());
                                     indexMutationsMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                                     for (Pair<Mutation, byte[]> mutation : allMutations) {
                                         List<Mutation> mutations = indexMutationsMap.get(mutation.getSecond());
@@ -592,43 +582,6 @@ public class MutationState implements SQLCloseable {
             }
 
         };
-    }
-
-    private PhoenixTxIndexMutationGenerator newTxIndexMutationGenerator(PTable table, List<PTable> indexes,
-            Map<String, byte[]> attributes) {
-        final List<IndexMaintainer> indexMaintainers = Lists.newArrayListWithExpectedSize(indexes.size());
-        for (PTable index : indexes) {
-            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
-            indexMaintainers.add(maintainer);
-        }
-        IndexMetaDataCache indexMetaDataCache = new IndexMetaDataCache() {
-
-            @Override
-            public void close() throws IOException {}
-
-            @Override
-            public List<IndexMaintainer> getIndexMaintainers() {
-                return indexMaintainers;
-            }
-
-            @Override
-            public PhoenixTransactionContext getTransactionContext() {
-                return phoenixTransactionContext.newTransactionContext(phoenixTransactionContext, true);
-            }
-
-            @Override
-            public int getClientVersion() {
-                return MetaDataProtocol.PHOENIX_VERSION;
-            }
-
-        };
-        try {
-            PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(indexMetaDataCache, attributes);
-            return new PhoenixTxIndexMutationGenerator(connection.getQueryServices().getConfiguration(), indexMetaData,
-                    table.getPhysicalName().getBytes());
-        } catch (IOException e) {
-            throw new RuntimeException(e); // Impossible
-        }
     }
 
     private void generateMutations(final TableRef tableRef, final long mutationTimestamp, final long serverTimestamp,
@@ -859,66 +812,6 @@ public class MutationState implements SQLCloseable {
         return batchCount;
     }
 
-    private class MetaDataAwareHTable extends DelegateHTable {
-        private final TableRef tableRef;
-        
-        private MetaDataAwareHTable(Table delegate, TableRef tableRef) {
-            super(delegate);
-            this.tableRef = tableRef;
-        }
-
-        /**
-         * Called by Tephra when a transaction is aborted. We have this wrapper so that we get an opportunity to attach
-         * our index meta data to the mutations such that we can also undo the index mutations.
-         */
-        @Override
-        public void delete(List<Delete> deletes) throws IOException {
-            ServerCache cache = null;
-            try {
-                if (deletes.isEmpty()) { return; }
-                // Attach meta data for server maintained indexes
-                PTable table = tableRef.getTable();
-                ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
-                if (table.getIndexMaintainers(indexMetaDataPtr, connection)) {
-                    cache = setMetaDataOnMutations(tableRef, deletes, indexMetaDataPtr);
-                }
-
-                // Send deletes for client maintained indexes
-                List<PTable> indexes = getClientMaintainedIndexes(table);
-                if (!indexes.isEmpty()) {
-                PhoenixTxIndexMutationGenerator generator = newTxIndexMutationGenerator(table, indexes, deletes.get(0)
-                            .getAttributesMap());
-                    Collection<Pair<Mutation, byte[]>> indexUpdates = generator.getIndexUpdates(delegate,
-                            deletes.iterator());
-                    for (PTable index : indexes) {
-                        byte[] physicalName = index.getPhysicalName().getBytes();
-                        try (Table hindex = connection.getQueryServices().getTable(physicalName)) {
-                            List<Mutation> indexDeletes = Lists.newArrayListWithExpectedSize(deletes.size());
-                            for (Pair<Mutation, byte[]> mutationPair : indexUpdates) {
-                                if (Bytes.equals(mutationPair.getSecond(), physicalName)) {
-                                    indexDeletes.add(mutationPair.getFirst());
-                                }
-                                Object[] results = new Object[indexDeletes.size()];
-                                hindex.batch(indexDeletes, results);
-                            }
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            throw new IOException(e);
-                        }
-                    }
-                }
-
-                delegate.delete(deletes);
-            } catch (SQLException e) {
-                throw new IOException(e);
-            } finally {
-                if (cache != null) {
-                    SQLCloseables.closeAllQuietly(Collections.singletonList(cache));
-                }
-            }
-        }
-    }
-
     private static class TableInfo {
 
         private final boolean isDataTable;
@@ -1055,8 +948,9 @@ public class MutationState implements SQLCloseable {
                     TableRef origTableRef = tableInfo.getOrigTableRef();
                     PTable table = origTableRef.getTable();
                     table.getIndexMaintainers(indexMetaDataPtr, connection);
-                    final ServerCache cache = tableInfo.isDataTable() ? setMetaDataOnMutations(origTableRef,
-                            mutationList, indexMetaDataPtr) : null;
+                    final ServerCache cache = tableInfo.isDataTable() ? 
+                            IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
+                                    mutationList, indexMetaDataPtr) : null;
                     // If we haven't retried yet, retry for this case only, as it's possible that
                     // a split will occur after we send the index metadata cache to all known
                     // region servers.
@@ -1066,19 +960,12 @@ public class MutationState implements SQLCloseable {
                     try {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
-                            uncommittedPhysicalNames.add(table.getPhysicalName().getString());
-                            phoenixTransactionContext.markDMLFence(table);
-
-                            // If we have indexes, wrap the HTable in a delegate HTable that
-                            // will attach the necessary index meta data in the event of a
-                            // rollback
-                            if (!table.getIndexes().isEmpty()) {
-                                hTable = new MetaDataAwareHTable(hTable, origTableRef);
+                            if (tableInfo.isDataTable()) {
+                                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
+                                phoenixTransactionContext.markDMLFence(table);
                             }
-
-                            hTable = phoenixTransactionContext.getTransactionalTableWriter(hTable, table);
+                            hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, !tableInfo.isDataTable());
                         }
-
                         numMutations = mutationList.size();
                         GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
                         mutationSizeBytes = calculateMutationSize(mutationList);
@@ -1228,57 +1115,6 @@ public class MutationState implements SQLCloseable {
 
     public byte[] encodeTransaction() throws SQLException {
         return phoenixTransactionContext.encodeTransaction();
-    }
-
-    private ServerCache setMetaDataOnMutations(TableRef tableRef, List<? extends Mutation> mutations,
-            ImmutableBytesWritable indexMetaDataPtr) throws SQLException {
-        PTable table = tableRef.getTable();
-        final byte[] tenantIdBytes;
-        if (table.isMultiTenant()) {
-            tenantIdBytes = connection.getTenantId() == null ? null : ScanUtil.getTenantIdBytes(
-                    table.getRowKeySchema(), table.getBucketNum() != null, connection.getTenantId(),
-                    table.getViewIndexId() != null);
-        } else {
-            tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
-        }
-        ServerCache cache = null;
-        byte[] attribValue = null;
-        byte[] uuidValue = null;
-        byte[] txState = ByteUtil.EMPTY_BYTE_ARRAY;
-        if (table.isTransactional()) {
-            txState = encodeTransaction();
-        }
-        boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
-        if (hasIndexMetaData) {
-            if (IndexMetaDataCacheClient.useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength()
-                    + txState.length)) {
-                IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                cache = client.addIndexMetadataCache(mutations, indexMetaDataPtr, txState);
-                uuidValue = cache.getId();
-            } else {
-                attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
-                uuidValue = ServerCacheClient.generateId();
-            }
-        } else if (txState.length == 0) { return null; }
-        // Either set the UUID to be able to access the index metadata from the cache
-        // or set the index metadata directly on the Mutation
-        for (Mutation mutation : mutations) {
-            if (connection.getTenantId() != null) {
-                mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdBytes);
-            }
-            mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-            if (attribValue != null) {
-                mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
-                mutation.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION,
-                        Bytes.toBytes(MetaDataProtocol.PHOENIX_VERSION));
-                if (txState.length > 0) {
-                    mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-                }
-            } else if (!hasIndexMetaData && txState.length > 0) {
-                mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-            }
-        }
-        return cache;
     }
 
     private void addUncommittedStatementIndexes(Collection<RowMutationState> rowMutations) {

@@ -20,6 +20,7 @@ package org.apache.phoenix.transaction;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
@@ -132,7 +133,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public Table getTransactionalTableWriter(Table htable, PTable table) {
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) {
         // TODO Auto-generated method stub
         return null;
     }

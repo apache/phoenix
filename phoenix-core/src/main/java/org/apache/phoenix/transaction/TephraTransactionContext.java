@@ -20,6 +20,7 @@ package org.apache.phoenix.transaction;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -27,13 +28,23 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.DelegateHTable;
+import org.apache.phoenix.execute.PhoenixTxIndexMutationGenerator;
+import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.transaction.TephraTransactionProvider.TephraTransactionClient;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.SQLCloseables;
 import org.apache.tephra.Transaction;
 import org.apache.tephra.Transaction.VisibilityLevel;
 import org.apache.tephra.TransactionAware;
@@ -400,14 +411,19 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public Table getTransactionalTableWriter(Table htable, PTable table) {
-        boolean isIndex = table.getType() == PTableType.INDEX;
-        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, table.isImmutableRows() || isIndex ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException {
+        // If we have indexes, wrap the HTable in a delegate HTable that
+        // will attach the necessary index meta data in the event of a
+        // rollback
+        TransactionAwareHTable transactionAwareHTable;
         // Don't add immutable indexes (those are the only ones that would participate
         // during a commit), as we don't need conflict detection for these.
         if (isIndex) {
+            transactionAwareHTable = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.NONE);
             transactionAwareHTable.startTx(getTransaction());
         } else {
+            htable = new RollbackHookHTableWrapper(htable, table, connection);
+            transactionAwareHTable = new TransactionAwareHTable(htable, table.isImmutableRows() ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
             // Even for immutable, we need to do this so that an abort has the state
             // necessary to generate the rows to delete.
             this.addTransactionAware(transactionAwareHTable);
@@ -415,4 +431,74 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         return transactionAwareHTable;
     }
     
+    /**
+     * 
+     * Wraps Tephra data table HTables to catch when a rollback occurs so
+     * that index Delete mutations can be generated and applied (as
+     * opposed to storing them in the Tephra change set). This technique
+     * allows the Tephra API to be used directly with HBase APIs and
+     * Phoenix APIs since we can detect the rollback as a callback
+     * when the Tephra rollback is called.
+     *
+     */
+    private static class RollbackHookHTableWrapper extends DelegateHTable {
+        private final PTable table;
+        private final PhoenixConnection connection;
+
+        private RollbackHookHTableWrapper(Table delegate, PTable table, PhoenixConnection connection) {
+            super(delegate);
+            this.table = table;
+            this.connection = connection;
+        }
+
+        /**
+         * Called by Tephra when a transaction is aborted. We have this wrapper so that we get an opportunity to attach
+         * our index meta data to the mutations such that we can also undo the index mutations.
+         */
+        @Override
+        public void delete(List<Delete> deletes) throws IOException {
+            ServerCache cache = null;
+            try {
+                if (deletes.isEmpty()) { return; }
+                // Attach meta data for server maintained indexes
+                ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
+                if (table.getIndexMaintainers(indexMetaDataPtr, connection)) {
+                    cache = IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table, deletes, indexMetaDataPtr);
+                }
+
+                // Send deletes for client maintained indexes
+                List<PTable> indexes = IndexUtil.getClientMaintainedIndexes(table);
+                if (!indexes.isEmpty()) {
+                    PhoenixTxIndexMutationGenerator generator = PhoenixTxIndexMutationGenerator.newGenerator(connection, table, indexes, deletes.get(0)
+                            .getAttributesMap());
+                    Collection<Pair<Mutation, byte[]>> indexUpdates = generator.getIndexUpdates(delegate,
+                            deletes.iterator());
+                    for (PTable index : indexes) {
+                        byte[] physicalName = index.getPhysicalName().getBytes();
+                        try (Table hindex = connection.getQueryServices().getTable(physicalName)) {
+                            List<Mutation> indexDeletes = Lists.newArrayListWithExpectedSize(deletes.size());
+                            for (Pair<Mutation, byte[]> mutationPair : indexUpdates) {
+                                if (Bytes.equals(mutationPair.getSecond(), physicalName)) {
+                                    indexDeletes.add(mutationPair.getFirst());
+                                }
+                                Object[] results = new Object[indexDeletes.size()];
+                                hindex.batch(indexDeletes, results);
+                            }
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException(e);
+                        }
+                    }
+                }
+
+                delegate.delete(deletes);
+            } catch (SQLException e) {
+                throw new IOException(e);
+            } finally {
+                if (cache != null) {
+                    SQLCloseables.closeAllQuietly(Collections.singletonList(cache));
+                }
+            }
+        }
+    }    
 }

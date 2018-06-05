@@ -70,7 +70,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -90,7 +89,7 @@ public class ServerCacheClient {
     private static final Random RANDOM = new Random();
 	public static final String HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER = "hash.join.server.cache.resend.per.server";
     private final PhoenixConnection connection;
-    private final Map<Integer, TableRef> cacheUsingTableRefMap = new ConcurrentHashMap<Integer, TableRef>();
+    private final Map<Integer, PTable> cacheUsingTableMap = new ConcurrentHashMap<Integer, PTable>();
 
     /**
      * Construct client used to create a serialized cached snapshot of a table and send it to each region server
@@ -220,12 +219,12 @@ public class ServerCacheClient {
     }
     
     public ServerCache addServerCache(ScanRanges keyRanges, final ImmutableBytesWritable cachePtr, final byte[] txState,
-            final ServerCacheFactory cacheFactory, final TableRef cacheUsingTableRef) throws SQLException {
-        return addServerCache(keyRanges, cachePtr, txState, cacheFactory, cacheUsingTableRef, false);
+            final ServerCacheFactory cacheFactory, final PTable cacheUsingTable) throws SQLException {
+        return addServerCache(keyRanges, cachePtr, txState, cacheFactory, cacheUsingTable, false);
     }
     
     public ServerCache addServerCache(ScanRanges keyRanges, final ImmutableBytesWritable cachePtr, final byte[] txState,
-            final ServerCacheFactory cacheFactory, final TableRef cacheUsingTableRef, boolean storeCacheOnClient)
+            final ServerCacheFactory cacheFactory, final PTable cacheUsingTable, boolean storeCacheOnClient)
             throws SQLException {
         ConnectionQueryServices services = connection.getQueryServices();
         List<Closeable> closeables = new ArrayList<Closeable>();
@@ -241,7 +240,6 @@ public class ServerCacheClient {
         ExecutorService executor = services.getExecutor();
         List<Future<Boolean>> futures = Collections.emptyList();
         try {
-            final PTable cacheUsingTable = cacheUsingTableRef.getTable();
             List<HRegionLocation> locations = services.getAllTableRegions(cacheUsingTable.getPhysicalName().getBytes());
             int nRegions = locations.size();
             // Size these based on worst case
@@ -257,8 +255,8 @@ public class ServerCacheClient {
                     // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
-                    final byte[] key = getKeyInRegion(entry.getRegion().getStartKey());
-                    final Table htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
+                    final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
+                    final Table htable = services.getTable(cacheUsingTable.getPhysicalName().getBytes());
                     closeables.add(htable);
                     futures.add(executor.submit(new JobCallable<Boolean>() {
                         
@@ -294,7 +292,7 @@ public class ServerCacheClient {
                 future.get(timeoutMs, TimeUnit.MILLISECONDS);
             }
             
-            cacheUsingTableRefMap.put(Bytes.mapKey(cacheId), cacheUsingTableRef);
+            cacheUsingTableMap.put(Bytes.mapKey(cacheId), cacheUsingTable);
             success = true;
         } catch (SQLException e) {
             firstException = e;
@@ -337,9 +335,8 @@ public class ServerCacheClient {
         try {
             ConnectionQueryServices services = connection.getQueryServices();
             Throwable lastThrowable = null;
-            TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
-            final PTable cacheUsingTable = cacheUsingTableRef.getTable();
-            byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
+            final PTable cacheUsingTable = cacheUsingTableMap.get(Bytes.mapKey(cacheId));
+            byte[] tableName = cacheUsingTable.getPhysicalName().getBytes();
             iterateOverTable = services.getTable(tableName);
 
             List<HRegionLocation> locations = services.getAllTableRegions(tableName);
@@ -403,7 +400,7 @@ public class ServerCacheClient {
                         lastThrowable);
             }
         } finally {
-            cacheUsingTableRefMap.remove(cacheId);
+            cacheUsingTableMap.remove(cacheId);
             Closeables.closeQuietly(iterateOverTable);
         }
     }
