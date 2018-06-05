@@ -66,7 +66,10 @@ import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.optimize.Cost;
-import org.apache.phoenix.parse.*;
+import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -494,7 +497,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     cache =
                             parent.hashClient.addHashCache(ranges, iterator,
                                 plan.getEstimatedSize(), hashExpressions, singleValueOnly,
-                                parent.delegate.getTableRef(), keyRangeRhsExpression,
+                                parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
                                 keyRangeRhsValues);
                     long endTime = System.currentTimeMillis();
                     boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
