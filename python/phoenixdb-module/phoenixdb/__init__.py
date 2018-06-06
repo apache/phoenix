@@ -1,11 +1,10 @@
-# Licensed to the Apache Software Foundation (ASF) under one or more
-# contributor license agreements.  See the NOTICE file distributed with
-# this work for additional information regarding copyright ownership.
-# The ASF licenses this file to You under the Apache License, Version 2.0
-# (the "License"); you may not use this file except in compliance with
-# the License.  You may obtain a copy of the License at
+# Copyright 2015 Lukas Lalinsky
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,7 +41,7 @@ For example::
 """
 
 
-def connect(url, max_retries=None, **kwargs):
+def connect(url, max_retries=None, auth=None, **kwargs):
     """Connects to a Phoenix query server.
 
     :param url:
@@ -63,6 +62,6 @@ def connect(url, max_retries=None, **kwargs):
     :returns:
         :class:`~phoenixdb.connection.Connection` object.
     """
-    client = AvaticaClient(url, max_retries=max_retries)
+    client = AvaticaClient(url, max_retries=max_retries, auth=auth)
     client.connect()
     return Connection(client, **kwargs)
