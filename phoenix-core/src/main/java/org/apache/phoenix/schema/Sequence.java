@@ -626,10 +626,10 @@ public class Sequence {
             .build().buildException();
     }
 
-    public static String getCreateTableStatement(int nSaltBuckets) {
+    public static String getCreateTableStatement(String schema, int nSaltBuckets) {
         if (nSaltBuckets <= 0) {
-            return QueryConstants.CREATE_SEQUENCE_METADATA;
+            return schema;
         }
-        return QueryConstants.CREATE_SEQUENCE_METADATA + "," + PhoenixDatabaseMetaData.SALT_BUCKETS + "=" + nSaltBuckets;
+        return schema + "," + PhoenixDatabaseMetaData.SALT_BUCKETS + "=" + nSaltBuckets;
     }
 }
