@@ -40,7 +40,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Addressing;
@@ -159,6 +158,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     protected String getSystemCatalogTableDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
+    }
+
+    protected String getSystemSequenceTableDDL(int nSaltBuckets) {
+        String schema = String.format(setSystemDDLProperties(QueryConstants.CREATE_SEQUENCE_METADATA));
+        return Sequence.getCreateTableStatement(schema, nSaltBuckets);
     }
 
     protected String getFunctionTableDDL() {
@@ -347,7 +351,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 }
                 try {
                     int nSaltBuckets = getSequenceSaltBuckets();
-                    String createTableStatement = Sequence.getCreateTableStatement(nSaltBuckets);
+                    String createTableStatement = getSystemSequenceTableDDL(nSaltBuckets);
                    metaConnection.createStatement().executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.

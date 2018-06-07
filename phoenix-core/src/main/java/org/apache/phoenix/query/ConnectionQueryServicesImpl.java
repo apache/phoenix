@@ -2497,6 +2497,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
     }
 
+    protected String getSystemSequenceTableDDL(int nSaltBuckets) {
+        String schema = String.format(setSystemDDLProperties(QueryConstants.CREATE_SEQUENCE_METADATA));
+        return Sequence.getCreateTableStatement(schema, nSaltBuckets);
+    }
+
     // Available for testing
     protected String getFunctionTableDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
@@ -2707,7 +2712,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void createOtherSystemTables(PhoenixConnection metaConnection, Admin hbaseAdmin) throws SQLException, IOException {
         try {
-            metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
+
+            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
+                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
+            metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
         } catch (TableAlreadyExistsException e) {
             nSequenceSaltBuckets = getSaltBuckets(e);
         }
@@ -3084,7 +3093,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             try {
-                String createSequenceTable = Sequence.getCreateTableStatement(nSaltBuckets);
+                String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
                 metaConnection.createStatement().executeUpdate(createSequenceTable);
                 nSequenceSaltBuckets = nSaltBuckets;
             } catch (NewerTableAlreadyExistsException e) {

@@ -280,6 +280,8 @@ public interface QueryConstants {
             CYCLE_FLAG + " BOOLEAN, \n" +
             LIMIT_REACHED_FLAG + " BOOLEAN \n" +
             " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"+
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
     public static final String CREATE_SYSTEM_SCHEMA = "CREATE SCHEMA " + SYSTEM_CATALOG_SCHEMA;
     public static final String UPGRADE_TABLE_SNAPSHOT_PREFIX = "_UPGRADING_TABLE_";
