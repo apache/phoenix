@@ -125,6 +125,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
@@ -141,12 +142,12 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
                 assertEquals(
-                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
+                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\n" +
                                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                                 "CLIENT MERGE SORT",
                                 QueryUtil.getExplainPlan(rs));
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n"
+                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
 
@@ -169,7 +170,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
 
-            query = "SELECT char_col1, int_col1 from "+indexName;
+            query = "SELECT char_col1, int_col1 from "+fullIndexName;
             try{
                 rs = conn.createStatement().executeQuery(query);
                 fail();
@@ -501,7 +502,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
 
-            query = "SELECT * FROM " + tableName;
+            query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
@@ -1090,6 +1091,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         // Check system tables priorities.
         try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
                 Connection c = DriverManager.getConnection(getUrl())) {
@@ -1128,7 +1130,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             if (!localIndex && mutable) {
                 HTableDescriptor indexTable = admin.getTableDescriptor(
-                        org.apache.hadoop.hbase.TableName.valueOf(indexName));
+                        org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
                 val = indexTable.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + indexTable, val);
                 assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
@@ -1161,7 +1163,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 ddl += "(p1 desc, p2))";
             }
             stmt.executeUpdate(ddl);
-            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + fullIndexName + " on " + fullTableName + "(a)";
+            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " on " + fullTableName + "(a)";
             stmt.executeUpdate(ddl);
 
             // upsert a single row

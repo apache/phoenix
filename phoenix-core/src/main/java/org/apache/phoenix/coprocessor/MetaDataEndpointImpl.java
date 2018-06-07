@@ -166,6 +166,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -2274,11 +2275,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()))) {
             ViewFinder.findAllRelatives(hTable, tenantId, schemaName, tableName,
                 LinkType.PARENT_TABLE, result);
-            // TODO UpgradeUtil.updateLink does not create the child->parent link that was overwritten by the child->physical table link
-            // after that is fixed, we only need to run the following query if namespace mapping is disabled 
-            if (!isNamespaceMapped) {
+            if (!isNamespaceMapped || schemaName.length==0) {
                 // the child->parent link is overwritten by the child->physical table link for first
-                // level children of base table when namespace mapping is disabled, so we need to query for the PHYSICAL_TABLE link
+                // level children of base table when namespace mapping is disabled or if the parent
+                // table doesn't have a schema as both the parent table name and physical table name
+                // are the same.
+                // When namespace mapping is enabled the physical table name is of the form S:T
+                // while the table name is of the form S.T so we need to query for the
+                // PHYSICAL_TABLE link
                 result.addResult(ViewFinder.findBaseTable(hTable, tenantId, schemaName, tableName));
             }
         }
@@ -2361,7 +2365,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 //                    request.getClientVersion());
             PTable loadedTable =
                     doGetTable(tenantIdBytes, schemaName, tableName, clientTimeStamp, null,
-                        request.getClientVersion(), false, true, null);
+                        request.getClientVersion(), false, false, null);
             if (loadedTable == null) {
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                 builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
@@ -3538,9 +3542,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     SchemaUtil.getTableKey(tenantId, index.getSchemaName().getBytes(), index
                             .getTableName().getBytes());
             Pair<String, String> columnToDeleteInfo = new Pair<>(columnToDelete.getFamilyName().getString(), columnToDelete.getName().getString());
+            ColumnReference colDropRef = new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete.getColumnQualifierBytes());
             boolean isColumnIndexed = indexMaintainer.getIndexedColumnInfo().contains(columnToDeleteInfo);
-            // we don't need to handle covered columns that are dropped in an ancestor here as they
-            // are handled in combineColumns
+            boolean isCoveredColumn = indexMaintainer.getCoveredColumns().contains(colDropRef);
             // If index requires this column for its pk, then drop it
             if (isColumnIndexed) {
                 // Drop the index table. The doDropTable will expand
@@ -3592,6 +3596,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     assert(childLinksMutations.isEmpty());
                     invalidateList.add(new ImmutableBytesPtr(indexKey));
                 }
+            }
+            // If the dropped column is a covered index column, invalidate the index
+            else if (isCoveredColumn){
+                invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
         }
         return null;

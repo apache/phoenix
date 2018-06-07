@@ -39,7 +39,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
-class ViewFinder {
+public class ViewFinder {
 
 	// The PHYSICAL_TABLE link from view to the base table overwrites the PARENT_TABLE link (when namespace mapping is disabled)
     static TableViewFinderResult findBaseTable(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table)
@@ -54,7 +54,7 @@ class ViewFinder {
                 HConstants.LATEST_TIMESTAMP);
         }
 
-    static void findAllRelatives(Table systemTable, byte[] tenantId, byte[] schema, byte[] table,
+    public static void findAllRelatives(Table systemTable, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, TableViewFinderResult result) throws IOException {
         findAllRelatives(systemTable, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
     }

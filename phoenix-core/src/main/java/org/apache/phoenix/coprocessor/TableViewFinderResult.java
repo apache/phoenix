@@ -20,18 +20,19 @@ import java.util.List;
 import com.google.common.collect.Lists;
 
 /**
- * Certain operations, such as DROP TABLE are not allowed if there a table has child views. This class wraps the
- * Results of a scanning the Phoenix Metadata for child views for a specific table and stores an additional flag for
- * whether whether SYSTEM.CATALOG has split across multiple regions.
+ * Certain operations, such as DROP TABLE are not allowed if there a table has child views. This
+ * class wraps the Results of a scanning the Phoenix Metadata for child views for a specific table
+ * and stores an additional flag for whether whether SYSTEM.CATALOG has split across multiple
+ * regions.
  */
-class TableViewFinderResult {
+public class TableViewFinderResult {
 
     private List<TableInfo> viewInfoList = Lists.newArrayList();
 
-    TableViewFinderResult() {
+    public TableViewFinderResult() {
     }
 
-    TableViewFinderResult(List<TableInfo> results) {
+    public TableViewFinderResult(List<TableInfo> results) {
         this.viewInfoList = results;
     }
 
@@ -39,7 +40,7 @@ class TableViewFinderResult {
         return !viewInfoList.isEmpty();
     }
 
-    List<TableInfo> getResults() {
+    public List<TableInfo> getResults() {
         return viewInfoList;
     }
 

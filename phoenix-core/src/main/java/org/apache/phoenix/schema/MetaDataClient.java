@@ -3517,9 +3517,9 @@ public class MetaDataClient {
                     if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && ! metaProperties.getNonTxToTx())) {
                         connection.addTable(result.getTable(), resolvedTimeStamp);
                         table = result.getTable();
-                    } else if (metaPropertiesEvaluated.getUpdateCacheFrequency() != null) {
-                        // Force removal from cache as the update cache frequency has changed
-                        // Note that clients outside this JVM won't be affected.
+                    } else  {
+                        // remove the table from the cache, it will be fetched from the server the
+                        // next time it is resolved
                         connection.removeTable(tenantId, fullTableName, null, resolvedTimeStamp);
                     }
                     // Delete rows in view index if we haven't dropped it already

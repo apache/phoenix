@@ -82,12 +82,12 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
@@ -96,6 +96,9 @@ import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.coprocessor.TableViewFinderResult;
+import org.apache.phoenix.coprocessor.ViewFinder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -175,11 +178,6 @@ public class UpgradeUtil {
     private static final String DELETE_LINK = "DELETE FROM " + SYSTEM_CATALOG_SCHEMA + "." + SYSTEM_CATALOG_TABLE
             + " WHERE (" + TABLE_SCHEM + "=? OR (" + TABLE_SCHEM + " IS NULL AND ? IS NULL)) AND " + TABLE_NAME + "=? AND " + COLUMN_FAMILY + "=? AND " + LINK_TYPE + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue();
     
-    private static final String GET_VIEWS_QUERY = "SELECT " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME
-            + " FROM " + SYSTEM_CATALOG_SCHEMA + "." + SYSTEM_CATALOG_TABLE + " WHERE " + COLUMN_FAMILY + " = ? AND "
-            + LINK_TYPE + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + " AND ( " + TABLE_TYPE + "=" + "'"
-            + PTableType.VIEW.getSerializedValue() + "' OR " + TABLE_TYPE + " IS NULL) ORDER BY "+TENANT_ID;
-    
     private UpgradeUtil() {
     }
 
@@ -225,8 +223,8 @@ public class UpgradeUtil {
         scan.setRaw(true);
         scan.setMaxVersions();
         ResultScanner scanner = null;
-        HTableInterface source = null;
-        HTableInterface target = null;
+        Table source = null;
+        Table target = null;
         try {
             source = conn.getQueryServices().getTable(sourceName);
             target = conn.getQueryServices().getTable(targetName);
@@ -646,7 +644,7 @@ public class UpgradeUtil {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
 
         byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE);
-        HTableInterface sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             logger.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
             KeyValue saltKV = KeyValueUtil.newKeyValue(seqTableKey, 
@@ -699,7 +697,7 @@ public class UpgradeUtil {
                 Scan scan = new Scan();
                 scan.setRaw(true);
                 scan.setMaxVersions();
-                HTableInterface seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
+                Table seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
                     logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
@@ -1739,7 +1737,7 @@ public class UpgradeUtil {
         tableMetadata.add(put);
     }
 
-    public static boolean truncateStats(HTableInterface metaTable, HTableInterface statsTable)
+    public static boolean truncateStats(Table metaTable, Table statsTable)
             throws IOException, InterruptedException {
         byte[] statsTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
                 PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE);
@@ -1800,7 +1798,7 @@ public class UpgradeUtil {
         return false;
     }
 
-    private static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String srcTableName,
+    private static void mapTableToNamespace(HBaseAdmin admin, Table metatable, String srcTableName,
             String destTableName, ReadOnlyProps props, Long ts, String phoenixTableName, PTableType pTableType,PName tenantId)
                     throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
                     SQLException {
@@ -1863,7 +1861,7 @@ public class UpgradeUtil {
      * Method to map existing phoenix table to a namespace. Should not be use if tables has views and indexes ,instead
      * use map table utility in psql.py
      */
-    public static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String tableName,
+    public static void mapTableToNamespace(HBaseAdmin admin, Table metatable, String tableName,
             ReadOnlyProps props, Long ts, PTableType pTableType, PName tenantId) throws SnapshotCreationException,
                     IllegalArgumentException, IOException, InterruptedException, SQLException {
         String destTablename = SchemaUtil
@@ -1880,14 +1878,15 @@ public class UpgradeUtil {
                 readOnlyProps)) { throw new IllegalArgumentException(
                         QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled!!"); }
         try (HBaseAdmin admin = conn.getQueryServices().getAdmin();
-                HTableInterface metatable = conn.getQueryServices()
+                Table metatable = conn.getQueryServices()
                         .getTable(SchemaUtil
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, readOnlyProps)
                                 .getName());) {
-            String tableName = SchemaUtil.normalizeIdentifier(srcTable);
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
+            String fullTableName = SchemaUtil.normalizeIdentifier(srcTable);
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+            String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
             // Confirm table is not already upgraded
-            PTable table = PhoenixRuntime.getTable(conn, tableName);
+            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
             
             // Upgrade is not required if schemaName is not present.
             if (schemaName.equals("") && !PTableType.VIEW
@@ -1901,14 +1900,30 @@ public class UpgradeUtil {
             String oldPhysicalName = table.getPhysicalName().getString();
             String newPhysicalTablename = SchemaUtil.normalizeIdentifier(
                     SchemaUtil.getPhysicalTableName(oldPhysicalName, readOnlyProps).getNameAsString());
-            logger.info(String.format("Upgrading %s %s..", table.getType(), tableName));
+            logger.info(String.format("Upgrading %s %s..", table.getType(), fullTableName));
             logger.info(String.format("oldPhysicalName %s newPhysicalTablename %s..", oldPhysicalName, newPhysicalTablename));
             logger.info(String.format("teanantId %s..", conn.getTenantId()));
+
+            TableViewFinderResult childViewsResult = new TableViewFinderResult();
+            try (Table childLinkTable =
+                    conn.getQueryServices()
+                            .getTable(SchemaUtil.getPhysicalName(
+                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, readOnlyProps)
+                                    .getName())) {
+                byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
+                ViewFinder.findAllRelatives(childLinkTable, tenantId, schemaName.getBytes(),
+                    tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
+            }
+
+            // Upgrade all child views
+            if (table.getType() == PTableType.TABLE) mapChildViewsToNamespace(conn.getURL(),
+                conn.getClientInfo(), childViewsResult.getResults());
+
             // Upgrade the data or main table
-            mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
-                    PhoenixRuntime.getCurrentScn(readOnlyProps), tableName, table.getType(),conn.getTenantId());
+            mapTableToNamespace(admin, metatable, fullTableName, newPhysicalTablename, readOnlyProps,
+                    PhoenixRuntime.getCurrentScn(readOnlyProps), fullTableName, table.getType(),conn.getTenantId());
             // clear the cache and get new table
-            conn.removeTable(conn.getTenantId(), tableName,
+            conn.removeTable(conn.getTenantId(), fullTableName,
                 table.getParentName() != null ? table.getParentName().getString() : null,
                 table.getTimeStamp());
             byte[] tenantIdBytes = conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes();
@@ -1916,10 +1931,11 @@ public class UpgradeUtil {
                     tenantIdBytes,
                     table.getSchemaName().getBytes(), table.getTableName().getBytes(),
                     PhoenixRuntime.getCurrentScn(readOnlyProps));
-            MetaDataMutationResult result = new MetaDataClient(conn).updateCache(conn.getTenantId(),schemaName,
-                    SchemaUtil.getTableNameFromFullName(tableName),true);
+            MetaDataMutationResult result =
+                    new MetaDataClient(conn).updateCache(conn.getTenantId(), schemaName, tableName,
+                        true);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { throw new TableNotFoundException(
-              schemaName, tableName); }
+              schemaName, fullTableName); }
             table = result.getTable();
             
             // check whether table is properly upgraded before upgrading indexes
@@ -1975,7 +1991,6 @@ public class UpgradeUtil {
                 }
                 updateIndexesSequenceIfPresent(conn, table);
                 conn.commit();
-
             } else {
                 throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
             }
@@ -1987,7 +2002,7 @@ public class UpgradeUtil {
                 // if the view is a first level child, then we need to create the PARENT_TABLE link
                 // that was overwritten by the PHYSICAL_TABLE link 
                 if (table.getParentName().equals(table.getPhysicalName())) {
-                    logger.info(String.format("Creaing PARENT link for view '%s' ..", table.getTableName()));
+                    logger.info(String.format("Creating PARENT link for view '%s' ..", table.getTableName()));
                     // Add row linking view to its parent 
                     PreparedStatement linkStatement = conn.prepareStatement(MetaDataClient.CREATE_VIEW_LINK);
                     linkStatement.setString(1, Bytes.toStringBinary(tenantIdBytes));
@@ -1998,18 +2013,7 @@ public class UpgradeUtil {
                     linkStatement.setString(6, null);
                     linkStatement.execute();
                     conn.commit();
-                    
-                    byte[] key = SchemaUtil.getTableKey(tenantIdBytes, schemaName.getBytes(), tableName.getBytes());
-                    HTableInterface systemCatalog = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-                    Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
-                    try (ResultScanner scanner = systemCatalog.getScanner(scan))  {
-                        for (Result result2 = scanner.next(); (result2 != null); result2 = scanner.next()) {
-                            System.out.println(result2);
-                        }
-                    }
                 }
-                
-                
                 
                 conn.getQueryServices().clearTableFromCache(
                     tenantIdBytes,
@@ -2071,35 +2075,28 @@ public class UpgradeUtil {
         deleteLinkStatment.execute();
     }
     
-    public static void mapChildViewsToNamespace(PhoenixConnection conn, String table, Properties props)
+    private static void mapChildViewsToNamespace(String connUrl, Properties props, List<TableInfo> viewInfoList)
             throws SQLException, SnapshotCreationException, IllegalArgumentException, IOException,
             InterruptedException {
-        PreparedStatement preparedStatment = conn.prepareStatement(GET_VIEWS_QUERY);
-        preparedStatment.setString(1, SchemaUtil.normalizeIdentifier(table));
-        ResultSet rs = preparedStatment.executeQuery();
         String tenantId = null;
         String prevTenantId = null;
-        PhoenixConnection passedConn = conn;
-        while (rs.next()) {
-            tenantId = rs.getString(1);
+        PhoenixConnection conn = null;
+        for (TableInfo viewInfo : viewInfoList) {
+            tenantId = viewInfo.getTenantId()!=null ? Bytes.toString(viewInfo.getTenantId()) : null;
+            String viewName = SchemaUtil.getTableName(viewInfo.getSchemaName(), viewInfo.getTableName());
             if (prevTenantId != tenantId) {
                 if (tenantId != null) {
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                 } else {
                     props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                 }
-                if (passedConn != conn) {
+                if (conn!=null)
                     conn.close();
-                }
-                conn = DriverManager.getConnection(conn.getURL(), props).unwrap(PhoenixConnection.class);
+                conn = DriverManager.getConnection(connUrl, props).unwrap(PhoenixConnection.class);
             }
-            String viewName=SchemaUtil.getTableName(rs.getString(2), rs.getString(3));
             logger.info(String.format("Upgrading view %s for tenantId %s..", viewName,tenantId));
             UpgradeUtil.upgradeTable(conn, viewName);
             prevTenantId = tenantId;
-        }
-        if (passedConn != conn) {
-            conn.close();
         }
     }
 

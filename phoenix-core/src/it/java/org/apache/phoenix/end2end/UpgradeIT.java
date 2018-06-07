@@ -143,7 +143,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             admin.close();
             PhoenixConnection phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
             UpgradeUtil.upgradeTable(phxConn, phoenixFullTableName);
-            UpgradeUtil.mapChildViewsToNamespace(phxConn, phoenixFullTableName,props);
             phxConn.close();
             props = new Properties();
             phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
@@ -277,7 +276,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.toString(false));
         PhoenixConnection phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         UpgradeUtil.upgradeTable(phxConn, phoenixFullTableName);
-        UpgradeUtil.mapChildViewsToNamespace(phxConn,phoenixFullTableName,props);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         // purge MetaDataCache except for system tables

@@ -579,17 +579,18 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
             conn.createStatement().execute(alterBaseTable);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 2, 4, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V3");
-            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1", "V3", "VIEW_COL1", "VIEW_COL2");
+            // column adds and drops are no longer propagated to child views, when the parent view is resolved the dropped column is excluded
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1",  "V2", "V3", "VIEW_COL1", "VIEW_COL2");
 
             // verify that the dropped columns aren't visible
             try {
-                tenant1Conn.createStatement().execute("SELECT KV from " + view1);
+                conn.createStatement().execute("SELECT V2 from " + baseTable);
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
             try {
-                tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
+                tenant1Conn.createStatement().execute("SELECT V2 from " + view1);
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());

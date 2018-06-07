@@ -35,8 +35,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import jline.internal.Log;
-
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
@@ -74,6 +72,8 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.primitives.Doubles;
+
+import jline.internal.Log;
 
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
@@ -528,7 +528,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        String testTableName = tableName + "_" + System.currentTimeMillis();
+        String testTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName + "_" + System.currentTimeMillis());
         try (Connection conn = getConnection()) {
 	        conn.setAutoCommit(false);
 	        ResultSet rs;
@@ -541,7 +541,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     		conn.commit();
     		
     		//assert values in index table 
-    		rs = stmt.executeQuery("select * from " + fullIndexName);
+            rs = stmt.executeQuery("select * from " + fullIndexName);
     		assertTrue(rs.next());
     		assertEquals(0, Doubles.compare(0, rs.getDouble(1)));
     		assertTrue(rs.wasNull());
@@ -571,7 +571,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     		assertFalse(rs.next());
     		
     		//assert values in index table 
-    		rs = stmt.executeQuery("select * from " + indexName);
+            rs = stmt.executeQuery("select * from " + fullIndexName);
     		assertTrue(rs.next());
     		assertEquals(0, Doubles.compare(1.23, rs.getDouble(1)));
     		assertEquals("cc1", rs.getString(2));
@@ -583,7 +583,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     		conn.commit();
     		
     		//assert values in index table 
-    		rs = stmt.executeQuery("select * from " + indexName);
+            rs = stmt.executeQuery("select * from " + fullIndexName);
     		assertTrue(rs.next());
     		assertEquals(0, Doubles.compare(0, rs.getDouble(1)));
     		assertTrue(rs.wasNull());
@@ -592,7 +592,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     		assertFalse(rs.next());
     		
     		//assert values in data table
-    		rs = stmt.executeQuery("select v1, v2, v3 from " + testTableName);
+            rs = stmt.executeQuery("select v1, v2, v3 from " + testTableName);
     		assertTrue(rs.next());
     		assertEquals("cc1", rs.getString(1));
     		assertEquals(0, Doubles.compare(0, rs.getDouble(2)));

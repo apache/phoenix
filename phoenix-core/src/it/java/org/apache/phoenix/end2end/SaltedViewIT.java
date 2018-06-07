@@ -17,7 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.util.Map;
+
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 
 public class SaltedViewIT extends BaseViewIT {
@@ -25,6 +32,16 @@ public class SaltedViewIT extends BaseViewIT {
 	public SaltedViewIT(boolean transactional) {
 		super(transactional);
 	}
+
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        NUM_SLAVES_BASE = 3;
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
 	/**
      * Salted tests must be in their own test file to ensure that the underlying

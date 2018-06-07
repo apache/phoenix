@@ -40,7 +40,7 @@ public class TableInfo {
 
     @Override
     public String toString() {
-        return Bytes.toString(getRowKeyPrefix());
+        return Bytes.toStringBinary(getRowKeyPrefix());
     }
     
     public byte[] getTenantId() {
