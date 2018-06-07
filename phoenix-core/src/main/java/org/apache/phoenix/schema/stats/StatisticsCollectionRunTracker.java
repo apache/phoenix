@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -38,8 +39,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  */
 public class StatisticsCollectionRunTracker {
     private static volatile StatisticsCollectionRunTracker INSTANCE;
-    private final Set<RegionInfo> updateStatsRegions = Collections
-            .newSetFromMap(new ConcurrentHashMap<RegionInfo, Boolean>());
+    private final Set<ColumnFamilyRegionInfo> updateStatsRegions = Collections
+            .newSetFromMap(new ConcurrentHashMap<ColumnFamilyRegionInfo, Boolean>());
     private final Set<RegionInfo> compactingRegions = Collections
             .newSetFromMap(new ConcurrentHashMap<RegionInfo, Boolean>());
     private final ExecutorService executor;
@@ -101,18 +102,19 @@ public class StatisticsCollectionRunTracker {
 
     /**
      * @param regionInfo for the region to run UPDATE STATISTICS command on.
+     * @param familySet 
      * @return true if UPDATE STATISTICS wasn't already running on the region, false otherwise.
      */
-    public boolean addUpdateStatsCommandRegion(RegionInfo regionInfo) {
-        return updateStatsRegions.add(regionInfo);
+    public boolean addUpdateStatsCommandRegion(RegionInfo regionInfo, Set<byte[]> familySet) {
+        return updateStatsRegions.add(new ColumnFamilyRegionInfo(regionInfo,familySet));
     }
 
     /**
      * @param regionInfo for the region to mark as not running UPDATE STATISTICS command on.
      * @return true if UPDATE STATISTICS was running on the region, false otherwise.
      */
-    public boolean removeUpdateStatsCommandRegion(RegionInfo regionInfo) {
-        return updateStatsRegions.remove(regionInfo);
+    public boolean removeUpdateStatsCommandRegion(RegionInfo regionInfo, Set<byte[]> familySet) {
+        return updateStatsRegions.remove(new ColumnFamilyRegionInfo(regionInfo,familySet));
     }
 
     /**
@@ -122,6 +124,38 @@ public class StatisticsCollectionRunTracker {
      */
     public <T> Future<T> runTask(Callable<T> c) {
         return executor.submit(c);
+    }
+
+    class ColumnFamilyRegionInfo {
+        private RegionInfo regionInfo;
+        private Set<byte[]> familySet;
+
+        public ColumnFamilyRegionInfo(RegionInfo regionInfo, Set<byte[]> familySet) {
+            this.regionInfo = regionInfo;
+            this.familySet = familySet;
+        }
+
+        public RegionInfo getRegionInfo() {
+            return regionInfo;
+        }
+
+        public Set<byte[]> getFamilySet() {
+            return familySet;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == this) { return true; }
+            if (!(obj instanceof ColumnFamilyRegionInfo)) { return false; }
+
+            ColumnFamilyRegionInfo c = (ColumnFamilyRegionInfo)obj;
+            return c.getRegionInfo().equals(this.regionInfo) && ByteUtil.match(this.familySet, c.getFamilySet());
+        }
+
+        @Override
+        public int hashCode() {
+            return this.getRegionInfo().hashCode();
+        }
     }
 
 }

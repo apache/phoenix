@@ -115,7 +115,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -136,7 +135,6 @@ import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -1170,7 +1168,11 @@ public class MetaDataClient {
                 // If the table is a view, then we will end up calling update stats
                 // here for all the view indexes on it. We take care of local indexes later.
                 if (index.getIndexType() != IndexType.LOCAL) {
-                    rowCount += updateStatisticsInternal(table.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                    if(table.getType() != PTableType.VIEW){
+                        rowCount += updateStatisticsInternal(index.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                    }else{
+                        rowCount += updateStatisticsInternal(table.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                    }
                 }
             }
             /*
