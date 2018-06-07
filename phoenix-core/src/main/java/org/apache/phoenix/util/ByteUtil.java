@@ -24,8 +24,10 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -579,7 +581,7 @@ public class ByteUtil {
         }
     }
     
-    public static boolean contains(List<byte[]> keys, byte[] key) {
+    public static boolean contains(Collection<byte[]> keys, byte[] key) {
         for (byte[] k : keys) {
             if (Arrays.equals(k, key)) { return true; }
         }
@@ -591,5 +593,17 @@ public class ByteUtil {
             if (key.compareTo(k) == 0) { return true; }
         }
         return false;
+    }
+
+    public static boolean match(Set<byte[]> keys, Set<byte[]> keys2) {
+        if (keys == keys2) return true;
+        if (keys == null || keys2 == null) return false;
+
+        int size = keys.size();
+        if (keys2.size() != size) return false;
+        for (byte[] k : keys) {
+            if (!contains(keys2, k)) { return false; }
+        }
+        return true;
     }
 }
