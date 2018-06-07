@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.query.QueryServicesTestImpl.DEFAULT_SEQUENCE_CACHE_SIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -38,6 +40,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -202,6 +205,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         String schemaName = getSchemaName(sequenceName);
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        int bucketNum = PhoenixRuntime.getTableNoCache(conn, SYSTEM_CATALOG_SCHEMA + "." + TYPE_SEQUENCE).getBucketNum();
+        assertEquals("Salt bucket for SYSTEM.SEQUENCE should be test default",bucketNum , QueryServicesTestImpl.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
@@ -1405,57 +1410,5 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     private static String getNameWithoutSchema(String tableName) {
     	return tableName.substring(tableName.indexOf(".") + 1, tableName.length());
     }    
-
-    @Test
-    public void testPointInTimeSequence() throws Exception {
-        String seqName = generateSequenceNameWithSchema();    	
-        Properties scnProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
-        Connection beforeSeqConn = DriverManager.getConnection(getUrl(), scnProps);
-
-        ResultSet rs;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SEQUENCE " + seqName + "");
-
-        try {
-            beforeSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
-            fail();
-        } catch (SequenceNotFoundException e) {
-            beforeSeqConn.close();
-        }
-
-        scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
-        Connection afterSeqConn = DriverManager.getConnection(getUrl(), scnProps);
-
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(2, rs.getInt(1));
-
-        conn.createStatement().execute("DROP SEQUENCE " + seqName + "");
-        
-        rs = afterSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(3, rs.getInt(1));
-
-        try {
-            rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-            fail();
-        } catch (SequenceNotFoundException e) { // expected
-        }
-
-        conn.createStatement().execute("CREATE SEQUENCE " + seqName);
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-
-        rs = afterSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(4, rs.getInt(1));
-        afterSeqConn.close();
-    }
 
 }
