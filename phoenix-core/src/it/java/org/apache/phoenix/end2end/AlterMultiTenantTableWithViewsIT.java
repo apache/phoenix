@@ -33,10 +33,8 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
@@ -51,27 +49,17 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.base.Objects;
-import com.google.common.collect.Maps;
 
-public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
+public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = new Properties();
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), tenantProps);
-    }
-    
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        NUM_SLAVES_BASE = 5;
-        Map<String, String> props = Maps.newHashMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     private static long getTableSequenceNumber(PhoenixConnection conn, String tableName) throws SQLException {
@@ -96,18 +84,13 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testAddDropColumnToBaseTablePropagatesToEntireViewHierarchy() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String view2 = generateUniqueViewName();
-        String view3 = generateUniqueViewName();
-        String view4 = generateUniqueViewName();
-        String tenant1 = "tenant1";
-        String tenant2 = "tenant2";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable, view4));
-        tenantToTableMap.put(tenant1, Lists.newArrayList(view1, view2));
-        tenantToTableMap.put(tenant2, Lists.newArrayList(view3));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+		String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+		String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String tenant1 = TENANT1;
+		String tenant2 = TENANT2;
         /*                                     baseTable
                                  /                  |               \ 
                          view1(tenant1)    view3(tenant2)          view4(global)
@@ -189,18 +172,13 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testChangingPKOfBaseTableChangesPKForAllViews() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String view2 = generateUniqueViewName();
-        String view3 = generateUniqueViewName();
-        String view4 = generateUniqueViewName();
-        String tenant1 = "tenant1";
-        String tenant2 = "tenant2";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable, view4));
-        tenantToTableMap.put(tenant1, Lists.newArrayList(view1, view2));
-        tenantToTableMap.put(tenant2, Lists.newArrayList(view3));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+		String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+		String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String tenant1 = TENANT1;
+		String tenant2 = TENANT2;
         /*                                     baseTable
                                  /                  |               \ 
                          view1(tenant1)    view3(tenant2)          view4(global)
@@ -293,21 +271,16 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testAddPKColumnToBaseTableWhoseViewsHaveIndices() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String view2 = generateUniqueViewName();
-        String view2Schema = SchemaUtil.getSchemaNameFromFullName(view2);
-        String view3 = generateUniqueViewName();
-        String view3Schema = SchemaUtil.getSchemaNameFromFullName(view3);
-        String tenant1 = "Tenant1";
-        String tenant2 = "Tenant2";
-        String view2Index = generateUniqueName() + "_IDX";
-        String view3Index = generateUniqueName() + "_IDX";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenant1, Lists.newArrayList(view1, view2));
-        tenantToTableMap.put(tenant2, Lists.newArrayList(view3));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+		String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+		String view2Schema = SCHEMA3;
+		String view3Schema = SCHEMA4;
+		String tenant1 = TENANT1;
+		String tenant2 = TENANT2;
+		String view2Index = generateUniqueName() + "_IDX";
+		String view3Index = generateUniqueName() + "_IDX";
         /*                          baseTable(mutli-tenant)
                                  /                           \                
                          view1(tenant1)                  view3(tenant2, index) 
@@ -440,18 +413,13 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testAddingPkAndKeyValueColumnsToBaseTableWithDivergedView() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String divergedView = generateUniqueViewName();
-        String divergedViewSchemaName = SchemaUtil.getSchemaNameFromFullName(divergedView);
-        String divergedViewIndex = generateUniqueName() + "_IDX";
-        String tenant1 = "tenant1";
-        String tenant2 = "tenant2";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenant1, Lists.newArrayList(view1));
-        tenantToTableMap.put(tenant2, Lists.newArrayList(divergedView));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String divergedView = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+		String divergedViewSchemaName = SchemaUtil.getSchemaNameFromFullName(divergedView);
+		String divergedViewIndex = generateUniqueName() + "_IDX";
+		String tenant1 = TENANT1;
+		String tenant2 = TENANT2;
         
         /*                                     baseTable
                                  /                  |                
@@ -525,13 +493,9 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testAddColumnsToSaltedBaseTableWithViews() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String tenant = "tenant1";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenant, Lists.newArrayList(view1));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl());
         		Connection tenant1Conn = getTenantConnection(tenant)) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
@@ -547,7 +511,7 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
             conn.createStatement().execute(alterBaseTable);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 2, 7, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3", "KV", "PK2");
-            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1", "V2", "V3", "KV", "PK2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5,  "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
 
             // verify that the both columns were added to view1
             tenant1Conn.createStatement().execute("SELECT KV from " + view1);
@@ -557,13 +521,9 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testDropColumnsFromSaltedBaseTableWithViews() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String tenant = "tenant1";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenant, Lists.newArrayList(view1));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl());
         		Connection tenant1Conn = getTenantConnection(tenant)) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
@@ -600,13 +560,9 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testAlteringViewConditionallyModifiesHTableMetadata() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String view1 = generateUniqueViewName();
-        String tenant = "tenant1";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenant, Lists.newArrayList(view1));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
@@ -641,13 +597,9 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testCacheInvalidatedAfterAddingColumnToBaseTableWithViews() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String viewName = generateUniqueViewName();
-        String tenantId = "tenant1";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenantId, Lists.newArrayList(viewName));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String tenantId = TENANT1;
         try (Connection globalConn = DriverManager.getConnection(getUrl())) {
             String tableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true" ;
             globalConn.createStatement().execute(tableDDL);
@@ -670,13 +622,9 @@ public class AlterMultiTenantTableWithViewsIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testCacheInvalidatedAfterDroppingColumnFromBaseTableWithViews() throws Exception {
-        String baseTable = generateUniqueTableName();
-        String viewName = generateUniqueViewName();
-        String tenantId = "tenant1";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseTable));
-        tenantToTableMap.put(tenantId, Lists.newArrayList(viewName));
-        splitSystemCatalog(tenantToTableMap);
+		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+		String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+		String tenantId = TENANT1;
         try (Connection globalConn = DriverManager.getConnection(getUrl())) {
             String tableDDL =
                     "CREATE TABLE "

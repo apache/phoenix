@@ -732,18 +732,6 @@ public abstract class BaseTest {
         return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
     
-    public static String generateUniqueTableName() {
-        String schemaName = "S_" + "_" + generateUniqueName();
-        String tableName = "T_" + generateUniqueName();
-        return SchemaUtil.getTableName(schemaName, tableName);
-    }
-    
-    public static String generateUniqueViewName() {
-        String schemaName = "S_" + generateUniqueName();
-        String viewName = "V_" + generateUniqueName();
-        return SchemaUtil.getTableName(schemaName, viewName);
-    }
-
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
     private static final int MAX_SEQ_SUFFIX_VALUE = 1000000;
 
@@ -1784,7 +1772,7 @@ public abstract class BaseTest {
     /**
      *  Split SYSTEM.CATALOG at the given split point 
      */
-    protected void splitRegion(byte[] splitPoint) throws SQLException, IOException, InterruptedException {
+    protected static void splitRegion(byte[] splitPoint) throws SQLException, IOException, InterruptedException {
         HBaseAdmin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         MiniHBaseCluster cluster = getUtility().getHBaseCluster();
@@ -1794,7 +1782,6 @@ public abstract class BaseTest {
         // wait for the split to happen
         while (regions.size() != startNumRegions+1) {
           System.out.println("Waiting for region to split....");
-          Thread.sleep(1000);
           regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
         }
     }
@@ -1802,7 +1789,7 @@ public abstract class BaseTest {
     /**
      * Returns true if the region contains atleast one of the metadata rows we are interested in
      */
-    protected boolean regionContainsMetadataRows(HRegionInfo regionInfo,
+    protected static boolean regionContainsMetadataRows(HRegionInfo regionInfo,
             List<byte[]> metadataRowKeys) {
         for (byte[] rowKey : metadataRowKeys) {
             if (regionInfo.containsRow(rowKey)) {
@@ -1827,19 +1814,20 @@ public abstract class BaseTest {
      * Metadata for each table or view is moved to a separate region,
      * @param tenantToTableAndViewMap map from tenant to tables and views owned by the tenant
      */
-    protected void splitSystemCatalog(Map<String, List<String>> tenantToTableAndViewMap) throws Exception  {
+    protected static void splitSystemCatalog(Map<String, List<String>> tenantToTableAndViewMap) throws Exception  {
         List<byte[]> splitPoints = Lists.newArrayListWithExpectedSize(5);
         // add the rows keys of the table or view metadata rows
-        Set<String> schemaNameSet=Sets.newHashSetWithExpectedSize(5);
-        for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
+        Set<String> schemaNameSet=Sets.newHashSetWithExpectedSize(15);
+		for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
+			String tenantId = entrySet.getKey();
             for (String fullName : entrySet.getValue()) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(fullName);
                 // we don't allow SYSTEM.CATALOG to split within a schema, so to ensure each table
-                // or view is on a separate region they need to have a unique schema name
-                assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(schemaName));
+                // or view is on a separate region they need to have a unique tenant and schema name
+                assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(tenantId+"."+schemaName));
                 String tableName = SchemaUtil.getTableNameFromFullName(fullName);
-                splitPoints.add(
-                    SchemaUtil.getTableKey(entrySet.getKey(), "".equals(schemaName) ? null : schemaName, tableName));
+				splitPoints.add(
+                    SchemaUtil.getTableKey(tenantId, "".equals(schemaName) ? null : schemaName, tableName));
             }
         }
         Collections.sort(splitPoints, Bytes.BYTES_COMPARATOR);
@@ -1916,7 +1904,7 @@ public abstract class BaseTest {
     /**
      * Ensures each region of SYSTEM.CATALOG is on a different region server
      */
-    private void moveRegion(HRegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
+    private static void moveRegion(HRegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();

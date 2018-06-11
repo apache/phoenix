@@ -739,7 +739,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
                         parentTableInfo.getTableName());
             PName tenanId =
-                    parentTableInfo.getTenantId() != null
+                    (parentTableInfo.getTenantId() != null && parentTableInfo.getTenantId().length!=0)
                             ? PNameFactory.newName(parentTableInfo.getTenantId()) : null;
             PTableKey pTableKey = new PTableKey(tenanId, fullTableName);
             // if we already have the PTable of an ancestor that has been locked, no need to look up
@@ -1652,6 +1652,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return function.getFunctionName() == null;
     }
 
+    //TODO see if we can just use goGetTable instead
     /**
      * Should only be called if key is in the current region
      */
@@ -2319,6 +2320,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         String tableType = request.getTableType();
         byte[] schemaName = null;
         byte[] tableName = null;
+        PTable lockedAncestorTable = PTableImpl.createFromProto(request.getLockedAncestorTable());
 
         try {
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
@@ -2365,7 +2367,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 //                    request.getClientVersion());
             PTable loadedTable =
                     doGetTable(tenantIdBytes, schemaName, tableName, clientTimeStamp, null,
-                        request.getClientVersion(), false, false, null);
+                        request.getClientVersion(), false, false, lockedAncestorTable);
             if (loadedTable == null) {
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                 builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
@@ -2565,7 +2567,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         LinkType linkType = LinkType.fromSerializedValue(kv.getValueArray()[kv.getValueOffset()]);
                         if (rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0 && linkType == LinkType.INDEX_TABLE) {
                             indexNames.add(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-                        } else if (linkType == LinkType.PARENT_TABLE || linkType == LinkType.PHYSICAL_TABLE) {
+                        } else if (tableType == PTableType.VIEW && (linkType == LinkType.PARENT_TABLE || linkType == LinkType.PHYSICAL_TABLE)) {
                             // delete parent->child link for views
                             Cell parentTenantIdCell = MetaDataUtil.getCell(results, PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES);
                             PName parentTenantId = parentTenantIdCell!=null ? PNameFactory.newName(parentTenantIdCell.getValueArray(), parentTenantIdCell.getValueOffset(), parentTenantIdCell.getValueLength()) : null;
@@ -3056,7 +3058,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             dropIndexes(view, region, invalidateList, locks, clientTimeStamp,
                                 view.getSchemaName().getBytes(), view.getTableName().getBytes(),
                                 mutationsForAddingColumnsToViews, existingViewColumn,
-                                tableNamesToDelete, sharedTablesToDelete, clientVersion);
+                                tableNamesToDelete, sharedTablesToDelete, clientVersion, basePhysicalTable);
                     if (result != null) {
                         return result;
                     }
@@ -3483,7 +3485,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     MetaDataMutationResult result = dropIndexes(table, region, invalidateList, locks,
                                         clientTimeStamp, schemaName, tableName,
                                         additionalTableMetaData, columnToDelete,
-                                        tableNamesToDelete, sharedTablesToDelete, request.getClientVersion());
+                                        tableNamesToDelete, sharedTablesToDelete, request.getClientVersion(), null);
                                     if (result != null) {
                                         return result;
                                     }
@@ -3524,7 +3526,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private MetaDataMutationResult dropIndexes(PTable table, Region region, List<ImmutableBytesPtr> invalidateList,
             List<RowLock> locks, long clientTimeStamp, byte[] schemaName,
             byte[] tableName, List<Mutation> additionalTableMetaData, PColumn columnToDelete, 
-            List<byte[]> tableNamesToDelete, List<SharedTableState> sharedTablesToDelete, int clientVersion)
+            List<byte[]> tableNamesToDelete, List<SharedTableState> sharedTablesToDelete, int clientVersion, PTable basePhysicalTable)
             throws IOException, SQLException {
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
@@ -3572,7 +3574,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     ConnectionQueryServices queryServices = connection.getQueryServices();
                     MetaDataMutationResult result =
-                            queryServices.dropTable(tableMetaData, PTableType.INDEX, false);
+                            queryServices.dropTable(tableMetaData, PTableType.INDEX, false, basePhysicalTable);
                     if (result.getTableNamesToDelete()!=null && !result.getTableNamesToDelete().isEmpty())
                         tableNamesToDelete.addAll(result.getTableNamesToDelete());
                     if (result.getSharedTablesToDelete()!=null && !result.getSharedTablesToDelete().isEmpty())

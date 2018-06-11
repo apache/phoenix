@@ -35,50 +35,36 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.SplitSystemCatalogIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
-
 @RunWith(Parameterized.class)
-public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
+public class ViewIndexIT extends SplitSystemCatalogIT {
     private boolean isNamespaceMapped;
 
     @Parameters(name = "ViewIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(true, false);
-    }
-
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        NUM_SLAVES_BASE = 3;
-        Map<String, String> props = Maps.newHashMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     private void createBaseTable(String schemaName, String tableName, boolean multiTenant, Integer saltBuckets, String splits)
@@ -127,7 +113,6 @@ public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
         String indexName = "IND_" + generateUniqueName();
         String viewName = "VIEW_" + generateUniqueName();
         String fullViewName = SchemaUtil.getTableName(viewSchemaName, viewName);
-        splitSystemCatalog(Lists.newArrayList(fullTableName, fullViewName));
 
         createBaseTable(schemaName, tableName, false, null, null);
         Connection conn1 = getConnection();
@@ -154,14 +139,12 @@ public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
     
     @Test
     public void testMultiTenantViewLocalIndex() throws Exception {
-        String schemaName = generateUniqueName();
-        String tableName =  generateUniqueName();
-        String indexName = "IND_" + generateUniqueName();
-        String fullViewName = generateUniqueViewName();
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        splitSystemCatalog(Lists.newArrayList(fullTableName, fullViewName));
+        String tableName = generateUniqueName();
+		String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         
-        createBaseTable(schemaName, tableName, true, null, null);
+        createBaseTable(SCHEMA1, tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
                 "UPSERT INTO " + fullTableName
@@ -227,23 +210,19 @@ public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
         // was used
         sql = "SELECT * FROM " + fullViewName + " WHERE v2 >= 100";
         rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
-        String explainPlan = QueryUtil.getExplainPlan(rs);
         stmt = conn1.prepareStatement(sql);
         stmt.executeQuery();
         QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
-        PTable table = plan.getTableRef().getTable();
         assertEquals(4, plan.getSplits().size());
     }
     
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
-        String baseTable =  generateUniqueTableName();
-        String globalView = generateUniqueViewName();
-        String viewSchemaName = SchemaUtil.getSchemaNameFromFullName(globalView);
-        splitSystemCatalog(Lists.newArrayList(baseTable, globalView));
+        String baseTable =  SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String globalView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String globalViewIdx =  generateUniqueName();
-        String fullIndexName = SchemaUtil.getTableName(viewSchemaName, globalViewIdx);
+        String fullIndexName = SchemaUtil.getTableName(SCHEMA2, globalViewIdx);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE IMMUTABLE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
             conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);
@@ -353,10 +332,6 @@ public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
         String tsViewTableName = "TSV_" + generateUniqueName();
         String tsViewFullName = SchemaUtil.getTableName(tsViewSchemaName, tsViewTableName);
         String tenantId = "tenant1";
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(baseFullName, viewFullName));
-        tenantToTableMap.put(tenantId, Lists.newArrayList(tsViewFullName));
-        splitSystemCatalog(tenantToTableMap);
         try {
             if (isNamespaceMapped) {
                 conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + baseSchemaName);
@@ -460,12 +435,10 @@ public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
         Properties props = new Properties();
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.setAutoCommit(true);
-        String tableName = generateUniqueTableName();
-        String viewName = generateUniqueViewName();
-        String viewSchemaName = SchemaUtil.getSchemaNameFromFullName(viewName);
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String indexName = generateUniqueName();
-        String fullIndexName = SchemaUtil.getTableName(viewSchemaName, indexName);
-        splitSystemCatalog(Lists.newArrayList(tableName, viewName));
+        String fullIndexName = SchemaUtil.getTableName(SCHEMA2, indexName);
         conn1.createStatement().execute(
           "CREATE TABLE "+tableName+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY=1000000");
         conn1.createStatement().execute("upsert into "+tableName+" values ('row1', 'value1', 'key1')");
@@ -481,14 +454,12 @@ public class ViewIndexIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testCreatingIndexOnViewBuiltOnTableWithOnlyNamedColumnFamilies() throws Exception {
         try (Connection c = getConnection(); Statement s = c.createStatement()) {
-            String tableName=generateUniqueTableName();
-            String schemaName=SchemaUtil.getSchemaNameFromFullName(tableName);
-            String viewName=generateUniqueViewName();
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             String indexName=generateUniqueName();
-            splitSystemCatalog(Lists.newArrayList(tableName, viewName));
             c.setAutoCommit(true);
             if (isNamespaceMapped) {
-                c.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+                c.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + SCHEMA1);
             }
             s.execute("CREATE TABLE " + tableName + " (COL1 VARCHAR PRIMARY KEY, CF.COL2 VARCHAR)");
             s.executeUpdate("UPSERT INTO " + tableName + " VALUES ('AAA', 'BBB')");

@@ -118,17 +118,14 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     private void testMultiCFViewIndex(boolean localIndex, boolean isNamespaceEnabled) throws Exception {
-        String tableName = generateUniqueTableName();
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String viewName2 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
         createTableAndValidate(tableName, isNamespaceEnabled);
-        String tenantId1 = "b";
-        String tenantId2 = "a";
-        String tenantViewName1 = createViewAndIndexesWithTenantId(tableName, localIndex, tenantId1, isNamespaceEnabled);
-        String tenantViewName2 = createViewAndIndexesWithTenantId(tableName, localIndex, tenantId2, isNamespaceEnabled);
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(tableName));
-        tenantToTableMap.put(tenantId1, Lists.newArrayList(tenantViewName1));
-        tenantToTableMap.put(tenantId2, Lists.newArrayList(tenantViewName2));
-        splitSystemCatalog(tenantToTableMap);
+        String tenantId1 = TENANT1;
+        String tenantId2 = TENANT2;
+        createViewAndIndexesWithTenantId(tableName, viewName1, localIndex, tenantId1, isNamespaceEnabled);
+        createViewAndIndexesWithTenantId(tableName, viewName2, localIndex, tenantId2, isNamespaceEnabled);
         
         String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId2), isNamespaceEnabled);
         String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId1), isNamespaceEnabled);
@@ -139,11 +136,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute("DROP VIEW  " + tenantViewName2);
+            conn.createStatement().execute("DROP VIEW  " + viewName2);
         }
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId1);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute("DROP VIEW  " + tenantViewName1);
+            conn.createStatement().execute("DROP VIEW  " + viewName1);
         }
         DriverManager.getConnection(getUrl()).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
 
@@ -151,10 +148,9 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         verifySequenceNotExists(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName);
     }
 
-    private String createViewAndIndexesWithTenantId(String tableName, boolean localIndex, String tenantId,
+    private void createViewAndIndexesWithTenantId(String tableName, String viewName, boolean localIndex, String tenantId,
             boolean isNamespaceMapped) throws Exception {
         Properties props = new Properties();
-        String viewName = generateUniqueViewName();
         String indexName = "I_"+ generateUniqueName();
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -248,19 +244,14 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertFalse(rs.next());
 
         conn.close();
-        return viewName;
     }
     
     @Test
     public void testNonPaddedTenantId() throws Exception {
-        String tenantId1 = "org1";
-        String tenantId2 = "org2";
-        String tableName = generateUniqueTableName();
-        String viewName = generateUniqueViewName();
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(tableName));
-        tenantToTableMap.put(tenantId1, Lists.newArrayList(viewName));
-        splitSystemCatalog(tenantToTableMap);
+        String tenantId1 = TENANT1;
+        String tenantId2 = TENANT2;
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         
         String ddl = "CREATE TABLE " + tableName + " (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
         Connection conn = DriverManager.getConnection(getUrl());
@@ -303,15 +294,10 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     
     @Test
     public void testOverlappingDatesFilter() throws Exception {
-        String tenantId = "tenant1";
+        String tenantId = TENANT1;
         String tenantUrl = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + tenantId + ";" + QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB + "=true";
-        String tableName = generateUniqueTableName();
-        String tableSchemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
-        String viewName = generateUniqueViewName();
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        tenantToTableMap.put(null, Lists.newArrayList(tableName));
-        tenantToTableMap.put(tenantId, Lists.newArrayList(viewName));
-        splitSystemCatalog(tenantToTableMap);
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String ddl = "CREATE TABLE " + tableName 
                 + "(ORGANIZATION_ID CHAR(15) NOT NULL, "
                 + "PARENT_TYPE CHAR(3) NOT NULL, "
@@ -335,7 +321,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
                     + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
             
             ResultSet rs = viewConn.createStatement().executeQuery(query);
-            String exptectedIndexName = SchemaUtil.getTableName(tableSchemaName, "IDX");
+            String exptectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
             String expectedPlanFormat = "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + exptectedIndexName
                     + " ['tenant1        ','001','%s 00:00:00.001'] - ['tenant1        ','001','%s 00:00:00.000']" + "\n" +
                         "    SERVER FILTER BY FIRST KEY ONLY" + "\n" +

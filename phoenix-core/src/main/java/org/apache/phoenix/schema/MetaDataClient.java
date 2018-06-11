@@ -2923,7 +2923,7 @@ public class MetaDataClient {
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
             }
-            MetaDataMutationResult result = connection.getQueryServices().dropTable(tableMetaData, tableType, cascade);
+            MetaDataMutationResult result = connection.getQueryServices().dropTable(tableMetaData, tableType, cascade, null);
             MutationCode code = result.getMutationCode();
             PTable table = result.getTable();
             switch (code) {

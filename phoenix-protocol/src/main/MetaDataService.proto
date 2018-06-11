@@ -130,6 +130,7 @@ message DropTableRequest {
   required string tableType = 2;
   optional bool cascade = 3;
   optional int32 clientVersion = 4;
+  optional PTable lockedAncestorTable = 5;
 }
 
 message DropSchemaRequest {

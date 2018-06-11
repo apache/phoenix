@@ -1915,10 +1915,6 @@ public class UpgradeUtil {
                     tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
             }
 
-            // Upgrade all child views
-            if (table.getType() == PTableType.TABLE) mapChildViewsToNamespace(conn.getURL(),
-                conn.getClientInfo(), childViewsResult.getResults());
-
             // Upgrade the data or main table
             mapTableToNamespace(admin, metatable, fullTableName, newPhysicalTablename, readOnlyProps,
                     PhoenixRuntime.getCurrentScn(readOnlyProps), fullTableName, table.getType(),conn.getTenantId());
@@ -2020,6 +2016,10 @@ public class UpgradeUtil {
                     table.getSchemaName().getBytes(), table.getTableName().getBytes(),
                     PhoenixRuntime.getCurrentScn(readOnlyProps));
             }
+            // Upgrade all child views
+            if (table.getType() == PTableType.TABLE) {
+                mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(), childViewsResult.getResults());
+            }
         }
     }
 
@@ -2047,7 +2047,7 @@ public class UpgradeUtil {
     private static void updateLink(PhoenixConnection conn, String srcTableName,
             String destTableName, PName schemaName, PName tableName) throws SQLException {
         String updateLinkSql = String.format(UPDATE_LINK, destTableName);
-        boolean hasTenantId = conn.getTenantId() != null;
+        boolean hasTenantId = conn.getTenantId() != null && conn.getTenantId().getBytes().length!=0;
         if (hasTenantId) {
             updateLinkSql += " AND TENANT_ID  = ? ";
         }

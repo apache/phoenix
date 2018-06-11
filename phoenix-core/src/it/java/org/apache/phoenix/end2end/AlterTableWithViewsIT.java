@@ -73,12 +73,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
+public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     private final boolean isMultiTenant;
     private final boolean columnEncoded;
-    private static final String TENANT1 = "tenant1";
-    private static final String TENANT2 = "tenant2";
     private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT1;
     private final String TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT2;
     
@@ -122,41 +120,12 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             isMultiTenant ? "TENANT_ID, " : "", optionsBuilder.toString());
     }
     
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        NUM_SLAVES_BASE = 3;
-        Map<String, String> props = Maps.newHashMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
-    private void splitSystemCatalog(String baseTableName, String view1, String view1Child, String view2) throws Exception {
-        // ensure metadata is on multiple regions
-        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-        List<String> globalTableList = Lists.newArrayList(baseTableName);
-        if (!isMultiTenant) {
-            globalTableList.add(view1);
-            if (view2!=null)
-                globalTableList.add(view2);
-        }
-        else { 
-            List<String> view1List = Lists.newArrayList(view1);
-            if (view1Child!=null) 
-                view1List.add(view1Child);
-            tenantToTableMap.put(TENANT1, view1List);
-            if (view2!=null)
-                tenantToTableMap.put(TENANT2, Lists.newArrayList(view2));
-        }
-        tenantToTableMap.put(null, globalTableList);
-        splitSystemCatalog(Lists.newArrayList(baseTableName, view1));
-    }
-    
     @Test
     public void testAddNewColumnsToBaseTableWithViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName();
-            splitSystemCatalog(tableName, viewOfTable, null, null);
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -173,8 +142,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             // adding a new pk column and a new regular column
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
-            // nothing changes for this view. The sequence ID is not update because we are no longer updating that row.
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "COL3", "COL4", "VIEW_COL1", "VIEW_COL2");
+            // add/drop column to a base table are no longer propagated to child views
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
         } 
     }
     
@@ -182,10 +151,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testAlterPropertiesOfParentTable() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable1 = generateUniqueViewName(); 
-            String viewOfTable2 = generateUniqueViewName(); 
-            splitSystemCatalog(tableName, viewOfTable1, viewOfTable2, null);
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String viewOfTable2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -261,10 +229,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testDropColumnsFromBaseTableWithView() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(tableName, viewOfTable, null, null);
-            
+			String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+			String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL," + " COL2 bigint NOT NULL,"
                             + " COL3 varchar(10)," + " COL4 varchar(10)," + " COL5 varchar(10),"
@@ -296,9 +263,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(tableName, viewOfTable, null, null);
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -426,9 +392,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {      
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(tableName, viewOfTable, null, null);
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -548,10 +513,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testAddExistingViewPkColumnToBaseTableWithMultipleViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable1 = generateUniqueViewName(); 
-            String viewOfTable2 = generateUniqueViewName(); 
-            splitSystemCatalog(tableName, viewOfTable1, viewOfTable2, null);
+			String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+			String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+			String viewOfTable2 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                             + " %s ID char(10) NOT NULL,"
@@ -614,10 +578,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             viewConn2.setAutoCommit(false);
-            String tableName = generateUniqueTableName(); 
-            String viewOfTable1 = generateUniqueViewName(); 
-            String viewOfTable2 = generateUniqueViewName();
-            splitSystemCatalog(tableName, viewOfTable1, null, viewOfTable2);
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String viewOfTable2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                     + " %s ID char(10) NOT NULL,"
@@ -765,10 +728,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     
     @Test
     public void testAlteringViewThatHasChildViews() throws Exception {
-        String baseTable = generateUniqueTableName(); 
-        String childView = generateUniqueViewName(); 
-        String grandChildView = generateUniqueViewName();
-        splitSystemCatalog(baseTable, childView, grandChildView, null);
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String childView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String grandChildView = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
@@ -828,10 +790,9 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     
     @Test
     public void testDivergedViewsStayDiverged() throws Exception {
-        String baseTable = generateUniqueTableName(); 
-        String view1 = generateUniqueViewName(); 
-        String view2 = generateUniqueViewName();
-        splitSystemCatalog(baseTable, view1, null, view2);
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ;
                 Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2) : conn) {
@@ -905,9 +866,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testMakeBaseTableTransactional() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-            String baseTableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(baseTableName, viewOfTable, null, null);
+            String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -943,9 +903,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testAlterTablePropertyOnView() throws Exception {
     	try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-    	    String baseTableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(baseTableName, viewOfTable, null, null);
+			String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+			String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
 	        String ddl = "CREATE TABLE " + baseTableName + " (\n"
 	                +"%s ID VARCHAR(15) NOT NULL,\n"
@@ -981,9 +940,8 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testAlterAppendOnlySchema() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-            String baseTableName = generateUniqueTableName(); 
-            String viewOfTable = generateUniqueViewName(); 
-            splitSystemCatalog(baseTableName, viewOfTable, null, null);
+			String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+			String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
             String ddl = "CREATE TABLE " + baseTableName + " (\n"
                     +"%s ID VARCHAR(15) NOT NULL,\n"
@@ -1024,14 +982,13 @@ public class AlterTableWithViewsIT extends BaseUniqueNamesOwnClusterIT {
     public void testDroppingIndexedColDropsViewIndex() throws Exception {
         try (Connection conn =DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn  ) {
-            String tableWithView = generateUniqueTableName();
-            String viewOfTable = generateUniqueViewName();
+            String tableWithView = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             String viewSchemaName = SchemaUtil.getSchemaNameFromFullName(viewOfTable);
             String viewIndex1 = generateUniqueName();
             String viewIndex2 = generateUniqueName();
             String fullNameViewIndex1 = SchemaUtil.getTableName(viewSchemaName, viewIndex1);
             String fullNameViewIndex2 = SchemaUtil.getTableName(viewSchemaName, viewIndex2);
-            splitSystemCatalog(tableWithView, viewOfTable, null, null);
             
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
