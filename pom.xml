@@ -231,6 +231,7 @@
         <plugin>
           <groupId>org.apache.rat</groupId>
           <artifactId>apache-rat-plugin</artifactId>
+          <version>0.10</version>
           <!-- Avoid defining exclusions in pluginManagement as they are global.
                We already inherit some from the ASF parent pom. -->
         </plugin>
