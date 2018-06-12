@@ -85,6 +85,7 @@
         </executions>
         <configuration>
           <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
+ 	  <pomFile>${basedir}/pom.xml</pomFile>
         </configuration>
       </plugin>
 

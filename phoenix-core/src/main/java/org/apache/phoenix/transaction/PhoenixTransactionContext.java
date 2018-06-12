@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
@@ -106,6 +107,11 @@ public interface PhoenixTransactionContext {
 
         @Override
         public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) {
+            return null;
+        }
+
+        @Override
+        public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) {
             return null;
         }
     };
@@ -225,4 +231,5 @@ public interface PhoenixTransactionContext {
     public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask);
 
     public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) throws SQLException;
+    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) throws SQLException;
 }

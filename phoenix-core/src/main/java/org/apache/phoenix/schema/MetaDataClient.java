@@ -1168,7 +1168,15 @@ public class MetaDataClient {
                 // If the table is a view, then we will end up calling update stats
                 // here for all the view indexes on it. We take care of local indexes later.
                 if (index.getIndexType() != IndexType.LOCAL) {
-                    rowCount += updateStatisticsInternal(table.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                    if (index.getIndexType() != IndexType.LOCAL) {
+                        if (table.getType() != PTableType.VIEW) {
+                            rowCount += updateStatisticsInternal(index.getPhysicalName(), index,
+                                    updateStatisticsStmt.getProps(), true);
+                        } else {
+                            rowCount += updateStatisticsInternal(table.getPhysicalName(), index,
+                                    updateStatisticsStmt.getProps(), true);
+                        }
+                    }
                 }
             }
             /*
@@ -1517,7 +1525,7 @@ public class MetaDataClient {
                     }
                 }
                 if (!dataTable.isImmutableRows()) {
-                    if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
+                    if (hbaseVersion < MetaDataProtocol.MUTABLE_SI_VERSION_THRESHOLD) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
                     }
                     if (!connection.getQueryServices().hasIndexWALCodec() && !dataTable.isTransactional()) {
@@ -3477,7 +3485,7 @@ public class MetaDataClient {
                     // have existing indexes.
                     if (Boolean.FALSE.equals(metaPropertiesEvaluated.getIsImmutableRows()) && !table.getIndexes().isEmpty()) {
                         int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
-                        if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
+                        if (hbaseVersion < MetaDataProtocol.MUTABLE_SI_VERSION_THRESHOLD) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }

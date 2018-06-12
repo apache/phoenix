@@ -100,8 +100,7 @@
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.10.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
-    <tephra.version>0.13.0-incubating</tephra.version>
-    <!-- <tephra.version>0.12.0-incubating</tephra.version> -->
+    <tephra.version>0.14.0-incubating</tephra.version>
     <omid.version>0.8.2.11-SNAPSHOT</omid.version>
     <spark.version>2.0.2</spark.version>
     <scala.version>2.11.8</scala.version>
@@ -410,6 +409,9 @@
               <!-- TODO turn back on javadocs - disabled now for testing -->
               <!-- <goal>jar</goal> -->
             </goals>
+            <configuration>
+              <additionalparam>${javadoc.opts}</additionalparam>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -1010,6 +1012,16 @@
   </dependencyManagement>
 
   <profiles>
+    <!-- disable doclint with 1.8+ JDKs-->
+    <profile>
+      <id>java8-doclint-disabled</id>
+      <activation>
+        <jdk>[1.8,)</jdk>
+      </activation>
+      <properties>
+        <javadoc.opts>-Xdoclint:none</javadoc.opts>
+      </properties>
+    </profile>
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>

@@ -317,4 +317,8 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         return new OmidTransactionTable(this, htable, isConflictFree);
     }
 
+    @Override
+    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) throws SQLException {
+        return new OmidTransactionTable(this, htable, table.isImmutableRows() || isIndex);
+    }
 }
