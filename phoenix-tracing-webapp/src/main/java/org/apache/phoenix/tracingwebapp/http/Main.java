@@ -62,9 +62,11 @@ public final class Main extends Configured implements Tool {
         final String home = getConf().get(TRACE_SERVER_HTTP_JETTY_HOME_KEY,
                 DEFAULT_HTTP_HOME);
         //setting up the embedded server
-        ProtectionDomain domain = Main.class.getProtectionDomain();
-        URL location = domain.getCodeSource().getLocation();
-        String webappDirLocation = location.toString().split("target")[0] +"src/main/webapp";
+
+        String webappDirLocation = Main.class.getClassLoader().getResource("src/main/webapp").toExternalForm();
+//        ProtectionDomain domain = Main.class.getProtectionDomain();
+//        URL location = domain.getCodeSource().getLocation();
+//        String webappDirLocation = location.toString().split("target")[0] +"src/main/webapp";
         Server server = new Server(port);
         WebAppContext root = new WebAppContext();
 
