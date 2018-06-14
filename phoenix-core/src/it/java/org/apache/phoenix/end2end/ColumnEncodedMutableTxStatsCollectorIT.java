@@ -25,14 +25,14 @@ import org.junit.runners.Parameterized.Parameters;
 
 public class ColumnEncodedMutableTxStatsCollectorIT extends StatsCollectorIT {
 
-    public ColumnEncodedMutableTxStatsCollectorIT(boolean mutable, boolean transactional, String transactionProvider,
+    public ColumnEncodedMutableTxStatsCollectorIT(boolean mutable, String transactionProvider,
             boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, transactionProvider, userTableNamespaceMapped, columnEncoded);
+        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
     }
 
-    @Parameters(name = "mutable={0},transactional={1},transactionProvider={2},isUserTableNamespaceMapped={3},columnEncoded={4}")
+    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
     public static Collection<Object[]> data() {
         return Arrays.asList(
-            new Object[][] { { true, true, "TEPHRA", false, true }, { true, true, "TEPHRA", true, true } });
+            new Object[][] { { true, "TEPHRA", false, true }, { true, "TEPHRA", true, true } });
     }
 }

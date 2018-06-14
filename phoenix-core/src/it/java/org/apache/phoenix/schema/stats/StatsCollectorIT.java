@@ -87,9 +87,9 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private final boolean mutable;
     private static final int defaultGuidePostWidth = 20;
     
-    protected StatsCollectorIT(boolean mutable, boolean transactional, String transactionProvider, boolean userTableNamespaceMapped, boolean columnEncoded) {
+    protected StatsCollectorIT(boolean mutable, String transactionProvider, boolean userTableNamespaceMapped, boolean columnEncoded) {
         StringBuilder sb = new StringBuilder();
-        if (transactional) {
+        if (transactionProvider != null) {
             sb.append("TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         if (!columnEncoded) {

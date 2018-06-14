@@ -31,17 +31,17 @@ import com.google.common.collect.Maps;
 
 public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
 
-    public SysTableNamespaceMappedStatsCollectorIT(boolean mutable, boolean transactional, String transactionProvider,
+    public SysTableNamespaceMappedStatsCollectorIT(boolean mutable, String transactionProvider,
             boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, transactionProvider, userTableNamespaceMapped, columnEncoded);
+        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
     }
 
-    @Parameters(name = "mutable={0},transactional={1},transactionProvider={2},isUserTableNamespaceMapped={3},columnEncoded={4}")
+    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
     public static Collection<Object[]> data() {
         return Arrays.asList(
             new Object[][] { 
-                { true, true, "TEPHRA", false, false }, { true, true, "TEPHRA", false, true }, 
-                { true, true, "OMID", false, false },
+                { true, "TEPHRA", false, false }, { true, "TEPHRA", false, true }, 
+                { true, "OMID", false, false },
             });
     }
 
