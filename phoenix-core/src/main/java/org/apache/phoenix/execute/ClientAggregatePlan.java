@@ -62,6 +62,7 @@ import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.UngroupedAggregatingResultIterator;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
@@ -77,6 +78,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     private final Expression having;
     private final ServerAggregators serverAggregators;
     private final ClientAggregators clientAggregators;
+    private final boolean hashAgg;
     
     public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
@@ -90,6 +92,10 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // another one.
         this.serverAggregators = ServerAggregators.deserialize(context.getScan()
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration(), null);
+
+	// Extract hash aggregate hint, if any.
+	HintNode hints = statement.getHint();
+	this.hashAgg = hints != null && hints.hasHint(HintNode.Hint.HASH_AGGREGATE);
     }
 
     @Override

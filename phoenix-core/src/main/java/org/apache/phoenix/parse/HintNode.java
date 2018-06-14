@@ -108,6 +108,11 @@ public class HintNode {
          * Enforces a forward scan.
          */
         FORWARD_SCAN,
+        /**
+         * Prefer a hash aggregate over a sort plus streaming aggregate.
+	 * Issue https://issues.apache.org/jira/browse/PHOENIX-4751.
+         */
+        HASH_AGGREGATE,
     };
 
     private final Map<Hint,String> hints;
