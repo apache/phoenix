@@ -64,6 +64,11 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
+    public String toString() {
+        return getProvider().toString();
+    }
+    
+    @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
         // Remove last byte (which is used to identify transaction provider)
         return new OmidTransactionContext(Arrays.copyOf(txnBytes,txnBytes.length-1));

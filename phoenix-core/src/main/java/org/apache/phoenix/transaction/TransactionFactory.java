@@ -48,7 +48,7 @@ public class TransactionFactory {
         }
         
         public static Provider getDefault() {
-            return OMID;
+            return TEPHRA;
         }
 
         public PhoenixTransactionProvider getTransactionProvider()  {

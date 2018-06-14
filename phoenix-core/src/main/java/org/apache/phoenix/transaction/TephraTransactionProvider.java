@@ -61,6 +61,11 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     }
     
     @Override
+    public String toString() {
+        return getProvider().toString();
+    }
+    
+    @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
        return new TephraTransactionContext(txnBytes);
     }

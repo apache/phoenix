@@ -142,7 +142,6 @@ import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
-import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
@@ -231,6 +230,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ByteUtil;
@@ -922,11 +922,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             if (isTransactional) {
-                TransactionFactory.Provider provider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(tableProps);
-                if (provider == null) {
-                    String providerValue = this.props.get(QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB, QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER);
-                    provider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(providerValue);
-                }
+                TransactionFactory.Provider provider = getTransactionProvider(tableProps);
                 Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
                 if (!descriptor.hasCoprocessor(coprocessorClass.getName())) {
                     descriptor.addCoprocessor(coprocessorClass.getName(), null, priority - 10, null);
@@ -955,6 +951,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private TransactionFactory.Provider getTransactionProvider(Map<String,Object> tableProps) {
+        TransactionFactory.Provider provider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(tableProps);
+        if (provider == null) {
+            String providerValue = this.props.get(QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB, QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER);
+            provider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(providerValue);
+        }
+        return provider;
+    }
+    
     private static interface RetriableOperation {
         boolean checkForCompletion() throws TimeoutException, IOException;
         String getOperationName();
@@ -1181,11 +1186,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // If mapping an existing table as transactional, set property so that existing
                 // data is correctly read.
                 if (willBeTx) {
+                    TransactionFactory.Provider provider = getTransactionProvider(props);
+                    if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
+                        .setMessage(provider.name())
+                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                    }
                     newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
                 } else {
                     // If we think we're creating a non transactional table when it's already
                     // transactional, don't allow.
-                    if (existingDesc.hasCoprocessor(TephraTransactionalProcessor.class.getName())) {
+                    if (hasTxCoprocessor(existingDesc)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
                         .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
                         .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
@@ -1217,6 +1229,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         return null; // will never make it here
+    }
+    
+    private static boolean hasTxCoprocessor(HTableDescriptor descriptor) {
+        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+            Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
+            if (coprocessorClass != null && descriptor.hasCoprocessor(coprocessorClass.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void modifyTable(byte[] tableName, HTableDescriptor newDesc, boolean shouldPoll) throws IOException,

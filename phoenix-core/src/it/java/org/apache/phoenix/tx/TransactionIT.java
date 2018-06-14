@@ -34,6 +34,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -60,6 +62,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Lists;
+
 @RunWith(Parameterized.class)
 public class TransactionIT  extends ParallelStatsDisabledIT {
     private final String txProvider;
@@ -74,6 +78,46 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] { 
                  {"TEPHRA"},{"OMID"}});
+    }
+    
+    @Test
+    public void testWithMixOfTxProviders() throws Exception {
+        // No sense in running the test with every providers, so just run it with the default one
+        if (!TransactionFactory.Provider.valueOf(txProvider).equals(TransactionFactory.Provider.getDefault())) {
+            return;
+        }
+        List<String> tableNames = Lists.newArrayList();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+                String tableName = generateUniqueName();
+                tableNames.add(tableName);
+                conn.createStatement().execute(
+                        "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+            }
+            Iterator<String> iterator = tableNames.iterator();
+            String tableName1 = iterator.next();
+            conn.createStatement().execute("UPSERT INTO " + tableName1 + " VALUES('a')");
+            String tableName2 = iterator.next();
+            try {
+                conn.createStatement().execute("UPSERT INTO " + tableName2 + " VALUES('a')");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MIX_TXN_PROVIDERS.getErrorCode(), e.getErrorCode());
+            }
+            
+            conn.rollback();
+            conn.setAutoCommit(true);
+            for (String tableName : tableNames) {
+                conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
+            }
+            for (String tableName : tableNames) {
+                ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertFalse(rs.next());
+            }
+        }
     }
     
     @Test
