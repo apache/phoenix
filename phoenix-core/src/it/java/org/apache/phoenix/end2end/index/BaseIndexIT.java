@@ -93,9 +93,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     private final boolean mutable;
     private final String tableDDLOptions;
 
-    protected BaseIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
+    protected BaseIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
         this.mutable = mutable;
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
@@ -111,10 +110,11 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             }
         }
+        transactional = transactionProvider != null;
         if (transactional) {
             if (optionBuilder.length()!=0)
                 optionBuilder.append(",");
-            optionBuilder.append(" TRANSACTIONAL=true ");
+            optionBuilder.append(" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         this.tableDDLOptions = optionBuilder.toString();
     }

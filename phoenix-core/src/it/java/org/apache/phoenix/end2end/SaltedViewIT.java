@@ -22,8 +22,8 @@ import org.junit.Test;
 
 public class SaltedViewIT extends BaseViewIT {
 
-	public SaltedViewIT(boolean transactional) {
-		super(transactional);
+	public SaltedViewIT(String txProvider) {
+		super(txProvider);
 	}
 
 	/**

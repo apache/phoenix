@@ -57,13 +57,13 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     protected String schemaName;
 	protected String fullTableName;
 	protected String tableDDLOptions;
-	protected boolean transactional;
+	protected String txProvider;
 
-    public BaseViewIT( boolean transactional) {
+    public BaseViewIT( String txProvider) {
 		StringBuilder optionBuilder = new StringBuilder();
-		this.transactional = transactional;
-		if (transactional) {
-			optionBuilder.append(" TRANSACTIONAL=true ");
+		this.txProvider = txProvider;
+		if (txProvider != null) {
+			optionBuilder.append(" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
 		}
 		this.schemaName = "S_" + generateUniqueName();
 		this.tableDDLOptions = optionBuilder.toString();
@@ -71,9 +71,9 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         this.fullTableName = SchemaUtil.getTableName(schemaName, tableName);
 	}
     
-    @Parameters(name="transactional = {0}")
-    public static Collection<Boolean> data() {
-        return Arrays.asList(new Boolean[] { false, true });
+    @Parameters(name="transactionProvider={0}")
+    public static Collection<Object> data() {
+        return Arrays.asList(new Object[] { "TEPHRA", "OMID", null });
     }
     
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {

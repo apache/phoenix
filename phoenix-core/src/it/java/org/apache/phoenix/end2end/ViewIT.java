@@ -58,8 +58,8 @@ import org.junit.Test;
 
 public class ViewIT extends BaseViewIT {
 	
-    public ViewIT(boolean transactional) {
-		super(transactional);
+    public ViewIT(String txProvider) {
+		super(txProvider);
 	}
 
     @Test
@@ -82,7 +82,7 @@ public class ViewIT extends BaseViewIT {
         }
         conn.commit();
         
-        analyzeTable(conn, fullParentViewName, transactional);
+        analyzeTable(conn, fullParentViewName, txProvider != null);
         
         List<KeyRange> splits = getAllSplits(conn, fullParentViewName);
         assertEquals(4, splits.size());
