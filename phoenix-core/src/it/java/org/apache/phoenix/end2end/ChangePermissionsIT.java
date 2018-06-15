@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -144,7 +145,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
             verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
         } else {
-            verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(QueryConstants.HBASE_DEFAULT_SCHEMA_NAME), true), superUser1);
         }
 
         // Create new table. Create indexes, views and view indexes on top of it. Verify the contents by querying it
@@ -235,7 +236,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
             verifyAllowed(grantPermissions("C", regularUser1, SCHEMA_NAME, true), superUser1);
         } else {
-            verifyAllowed(grantPermissions("C", regularUser1, "\"" + QueryConstants.HBASE_DEFAULT_SCHEMA_NAME + "\"", true), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(QueryConstants.HBASE_DEFAULT_SCHEMA_NAME), true), superUser1);
         }
 
         // Create MultiTenant Table (View Index Table should be automatically created)
@@ -265,5 +266,26 @@ public class ChangePermissionsIT extends BasePermissionsIT {
         // _IDX_ is the prefix used with base table name to derieve the name of view index table
         verifyAllowed(readMultiTenantTableWithIndex(VIEW1_TABLE_NAME, "o1"), regularUser2);
         verifyAllowed(readMultiTenantTableWithoutIndex(VIEW2_TABLE_NAME, "o2"), regularUser2);
+    }
+
+    /**
+     * Grant RX permissions on the schema to regularUser1,
+     * Creating view on a table with that schema by regularUser1 should be allowed
+     */
+    @Test
+    public void testCreateViewOnTableWithRXPermsOnSchema() throws Exception {
+
+        startNewMiniCluster();
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
+            verifyAllowed(createTable(FULL_TABLE_NAME), superUser1);
+            verifyAllowed(grantPermissions("RX", regularUser1, SCHEMA_NAME, true), superUser1);
+        } else {
+            verifyAllowed(createTable(FULL_TABLE_NAME), superUser1);
+            verifyAllowed(grantPermissions("RX", regularUser1, surroundWithDoubleQuotes(QueryConstants.HBASE_DEFAULT_SCHEMA_NAME), true), superUser1);
+        } 
+        verifyAllowed(createView(VIEW1_TABLE_NAME, FULL_TABLE_NAME), regularUser1);
     }
 }
