@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end.index;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
 public class GlobalMutableTxIndexIT extends BaseIndexIT {
@@ -30,10 +31,11 @@ public class GlobalMutableTxIndexIT extends BaseIndexIT {
 
     @Parameters(name="GlobalMutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-                { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
-                { false, true, "OMID", false },
-           });
+        return TestUtil.filterTxParamData(
+                Arrays.asList(new Object[][] {
+                    { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
+                    { false, true, "OMID", false },
+               }), 2);
     }
 
 }

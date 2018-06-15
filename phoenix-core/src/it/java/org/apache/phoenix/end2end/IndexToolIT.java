@@ -53,6 +53,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -121,7 +122,7 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
                 }
             }
         }
-        return list;
+        return TestUtil.filterTxParamData(list,0);
     }
 
     @Test

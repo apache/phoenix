@@ -122,6 +122,7 @@ import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
@@ -1057,5 +1058,29 @@ public class TestUtil {
             }
         }
         assertTrue(!rs.next());
+    }
+    
+    public static Collection<Object[]> filterTxParamData(Collection<Object[]> data, int index) {
+        boolean runAllTests = true;
+        boolean runNoTests = true;
+        
+        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+            runAllTests &= provider.runTests();
+            runNoTests &= !provider.runTests();
+        }
+        if (runNoTests) {
+            return Collections.emptySet();
+        }
+        if (runAllTests) {
+            return data;
+        }
+        List<Object[]> filteredData = Lists.newArrayListWithExpectedSize(data.size());
+        for (Object[] params : data) {
+            String provider = (String)params[index];
+            if (provider == null || TransactionFactory.Provider.valueOf(provider).runTests()) {
+                filteredData.add(params);
+            }
+        }
+        return filteredData;
     }
 }

@@ -55,10 +55,10 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
 	
 	@Parameters(name="MutableRollbackIT_localIndex={0},transactionProvider={1}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {     
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
             { false, "TEPHRA"}, { true, "TEPHRA"},
             { false, "OMID"}, { true, "OMID"},
-            });
+            }),1);
     }
 	
 	private static Connection getConnection() throws SQLException {

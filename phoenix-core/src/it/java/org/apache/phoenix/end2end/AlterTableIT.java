@@ -61,6 +61,7 @@ import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -1072,6 +1073,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
+	    if (!TransactionFactory.Provider.getDefault().runTests()) {
+	        return;
+	    }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(false));
 		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {

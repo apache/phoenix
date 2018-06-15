@@ -46,6 +46,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -72,8 +73,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 	}
     
     @Parameters(name="transactionProvider={0}")
-    public static Collection<Object> data() {
-        return Arrays.asList(new Object[] { "TEPHRA", "OMID", null });
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { {"TEPHRA"}, {"OMID"}, {null} }), 0);
     }
     
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {

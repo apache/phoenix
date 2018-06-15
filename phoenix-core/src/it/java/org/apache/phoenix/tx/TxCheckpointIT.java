@@ -40,6 +40,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -79,12 +80,12 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
 	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2},transactionProvider={3}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {     
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
                 { false, false, false, "TEPHRA" }, { false, false, true, "TEPHRA" }, { false, true, false, "TEPHRA" }, { false, true, true, "TEPHRA" },
                 { true, false, false, "TEPHRA" }, { true, false, true, "TEPHRA" }, { true, true, false, "TEPHRA" }, { true, true, true, "TEPHRA" },
                 { false, false, false, "OMID" }, { false, true, false, "OMID" }, 
                 { true, false, false, "OMID" }, { true, true, false, "OMID" },
-           });
+           }),3);
     }
     
     @Test

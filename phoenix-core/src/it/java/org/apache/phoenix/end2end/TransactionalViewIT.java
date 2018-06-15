@@ -50,8 +50,8 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
     
     @Parameters(name="TransactionalViewIT_transactionProvider={0}")
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
-                 {"TEPHRA"},{"OMID"}});
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+                 {"TEPHRA"},{"OMID"}}),0);
     }
     
     @Before

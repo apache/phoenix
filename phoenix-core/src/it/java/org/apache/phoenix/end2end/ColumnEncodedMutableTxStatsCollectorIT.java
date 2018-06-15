@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.phoenix.schema.stats.StatsCollectorIT;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
 public class ColumnEncodedMutableTxStatsCollectorIT extends StatsCollectorIT {
@@ -32,7 +33,9 @@ public class ColumnEncodedMutableTxStatsCollectorIT extends StatsCollectorIT {
 
     @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
     public static Collection<Object[]> data() {
-        return Arrays.asList(
-            new Object[][] { { true, "TEPHRA", false, true }, { true, "TEPHRA", true, true } });
+        return TestUtil.filterTxParamData(
+                Arrays.asList(new Object[][] { 
+                    { true, "TEPHRA", false, true }, 
+                    { true, "TEPHRA", true, true } }), 1);
     }
 }

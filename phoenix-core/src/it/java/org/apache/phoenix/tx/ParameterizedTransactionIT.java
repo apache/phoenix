@@ -101,10 +101,10 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     
     @Parameters(name="ParameterizedTransactionIT_mutable={0},columnEncoded={1},transactionProvider={2}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {     
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
                  {false, false, "TEPHRA" }, {false, true, "TEPHRA" }, {true, false, "TEPHRA" }, { true, true, "TEPHRA" },
                  {false, false, "OMID" }, {true, false, "OMID" },
-           });
+           }), 2);
     }
     
     @Test

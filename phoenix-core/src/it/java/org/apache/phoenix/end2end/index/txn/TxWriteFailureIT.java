@@ -48,6 +48,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -94,10 +95,10 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
 	
 	@Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1},transactionProvider={2}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
                  { false, false, "TEPHRA" }, { false, true, "TEPHRA" }, { true, false, "TEPHRA" }, { true, true, "TEPHRA" },
                  { false, false, "OMID" }, { false, true, "OMID" }, { true, false, "OMID" }, { true, true, "OMID" },
-           });
+           }), 2);
     }
     
     @Before

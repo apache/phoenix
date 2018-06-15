@@ -25,15 +25,17 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class TransactionFactory {
     public enum Provider {
-        TEPHRA((byte)1, TephraTransactionProvider.getInstance()),
-        OMID((byte)2, OmidTransactionProvider.getInstance());
+        TEPHRA((byte)1, TephraTransactionProvider.getInstance(), false),
+        OMID((byte)2, OmidTransactionProvider.getInstance(), true);
         
         private final byte code;
         private final PhoenixTransactionProvider provider;
+        private final boolean runTests;
         
-        Provider(byte code, PhoenixTransactionProvider provider) {
+        Provider(byte code, PhoenixTransactionProvider provider, boolean runTests) {
             this.code = code;
             this.provider = provider;
+            this.runTests = runTests;
         }
         
         public byte getCode() {
@@ -53,6 +55,10 @@ public class TransactionFactory {
 
         public PhoenixTransactionProvider getTransactionProvider()  {
             return provider;
+        }
+        
+        public boolean runTests() {
+            return runTests;
         }
     }
 

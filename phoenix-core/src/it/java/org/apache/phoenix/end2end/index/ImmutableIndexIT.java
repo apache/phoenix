@@ -78,7 +78,6 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
-    private final boolean transactional;
     private final PhoenixTransactionProvider transactionProvider;
     private final String tableDDLOptions;
 
@@ -91,7 +90,6 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     public ImmutableIndexIT(boolean localIndex, boolean transactional, String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         this.localIndex = localIndex;
-        this.transactional = transactional;
         if (!columnEncoded) {
             optionBuilder.append(",COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
         }
@@ -117,15 +115,15 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
     @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-		return Arrays.asList(new Object[][] { 
-				{ false, false, null, false }, { false, false, null, true },
-				{ false, true, "OMID", false }, 
-                { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
-				{ true, false, null, false }, { true, false, null, true },
-                { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
-                { true, true, "OMID", false }, 
-            }
-		);
+		return TestUtil.filterTxParamData(
+		        Arrays.asList(new Object[][] { 
+    				{ false, false, null, false }, { false, false, null, true },
+    				{ false, true, "OMID", false }, 
+                    { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
+    				{ true, false, null, false }, { true, false, null, true },
+                    { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
+                    { true, true, "OMID", false }, 
+                }), 2);
     }
 
     @Test

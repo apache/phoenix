@@ -49,6 +49,7 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -755,6 +756,9 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMakeBaseTableTransactional() throws Exception {
+        if (!TransactionFactory.Provider.TEPHRA.runTests()) {
+            return;
+        }
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(), props);

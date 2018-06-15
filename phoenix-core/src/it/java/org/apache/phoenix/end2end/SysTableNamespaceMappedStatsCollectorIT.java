@@ -24,6 +24,7 @@ import java.util.Map;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.stats.StatsCollectorIT;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -38,11 +39,11 @@ public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
 
     @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
     public static Collection<Object[]> data() {
-        return Arrays.asList(
+        return TestUtil.filterTxParamData(Arrays.asList(
             new Object[][] { 
                 { true, "TEPHRA", false, false }, { true, "TEPHRA", false, true }, 
                 { true, "OMID", false, false },
-            });
+            }), 1);
     }
 
     @BeforeClass

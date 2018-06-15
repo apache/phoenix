@@ -29,6 +29,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -157,38 +158,38 @@ public class MutableIndexFailureIT extends BaseTest {
             indexRebuildTaskRegionEnvironment.getConfiguration());
     }
 
-    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
-    public static List<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
-                // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
-                { null, false, false, false, false, false},
-                { null, false, true, true, false, null},
-                { null, false, true, true, false, true},
-                { null, false, false, true, false, null},
-                { null, true, true, true, false, null},
-                { null, true, false, null, false, null},
-                { "TEPHRA", true, false, true, false, null},
-                { "TEPHRA", true, true, null, false, null},
-                { "TEPHRA", false, false, true, false, null},
-                { "TEPHRA", false, true, true, false, null},
-                { "OMID", true, false, true, false, null},
-                { "OMID", true, true, null, false, null},
-                { "OMID", false, false, true, false, null},
-                { "OMID", false, true, true, false, null},
-
-                { null, false, false, false, false, null},
-                { null, true, false, false, false, null},
-                { null, false, false, false, false, null},
-                { null, false, false, true, false, null},
-                { null, false, false, true, false, null},
-                { null, true, false, true, false, null},
-                { null, true, false, true, false, null},
-                { null, false, false, true, true, null},
-                { null, false, true, true, true, null},
-                { null, false, false, false, true, false},
-                { null, false, true, false, true, false},
-                } 
-        );
+    @Parameters(name = "MutableIndexFailureIT_transactionProvider={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(
+                Arrays.asList(new Object[][] { 
+                    // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
+                    { null, false, false, false, false, false},
+                    { null, false, true, true, false, null},
+                    { null, false, true, true, false, true},
+                    { null, false, false, true, false, null},
+                    { null, true, true, true, false, null},
+                    { null, true, false, null, false, null},
+                    { "TEPHRA", true, false, true, false, null},
+                    { "TEPHRA", true, true, null, false, null},
+                    { "TEPHRA", false, false, true, false, null},
+                    { "TEPHRA", false, true, true, false, null},
+                    { "OMID", true, false, true, false, null},
+                    { "OMID", true, true, null, false, null},
+                    { "OMID", false, false, true, false, null},
+                    { "OMID", false, true, true, false, null},
+    
+                    { null, false, false, false, false, null},
+                    { null, true, false, false, false, null},
+                    { null, false, false, false, false, null},
+                    { null, false, false, true, false, null},
+                    { null, false, false, true, false, null},
+                    { null, true, false, true, false, null},
+                    { null, true, false, true, false, null},
+                    { null, false, false, true, true, null},
+                    { null, false, true, true, true, null},
+                    { null, false, false, false, true, false},
+                    { null, false, true, false, true, false},
+                    }), 0);
     }
 
     private void runRebuildTask(Connection conn) throws InterruptedException, SQLException {

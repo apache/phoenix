@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.phoenix.schema.stats.StatsCollectorIT;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
 public class NonColumnEncodedImmutableTxStatsCollectorIT extends StatsCollectorIT {
@@ -32,10 +33,10 @@ public class NonColumnEncodedImmutableTxStatsCollectorIT extends StatsCollectorI
 
     @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
     public static Collection<Object[]> data() {
-        return Arrays.asList(
+        return TestUtil.filterTxParamData(Arrays.asList(
             new Object[][] { 
                 { false, "TEPHRA", false, false }, { false, "TEPHRA", true, false },
                 { false, "OMID", false, false }, { false, "OMID", true, false },
-            });
+            }),1);
     }
 }

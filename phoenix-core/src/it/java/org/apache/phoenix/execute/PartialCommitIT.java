@@ -58,6 +58,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -100,8 +101,8 @@ public class PartialCommitIT extends BaseUniqueNamesOwnClusterIT {
     
     @Parameters(name="PartialCommitIT_transactionProvider={0}")
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
-                 {"TEPHRA"},{"OMID"}});
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+                 {"TEPHRA"},{"OMID"}}),0);
     }
     
     public PartialCommitIT(String transactionProvider) {

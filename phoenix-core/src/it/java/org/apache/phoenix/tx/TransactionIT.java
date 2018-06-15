@@ -76,8 +76,8 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
 
     @Parameters(name="TransactionIT_provider={0}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
-                 {"TEPHRA"},{"OMID"}});
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+                 {"TEPHRA"},{"OMID"}}),0);
     }
     
     @Test
