@@ -542,14 +542,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                                 currentKey.getLength(), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
                                 AGG_TIMESTAMP, value, 0, value.length);
                     results.add(keyValue);
-                    if (logger.isInfoEnabled()) {
-                        logger.info(LogUtil.addCustomAnnotations("Adding new aggregate row: "
-                                + keyValue
-                                + ",for current key "
-                                + Bytes.toStringBinary(currentKey.get(), currentKey.getOffset(),
-                                    currentKey.getLength()) + ", aggregated values: "
-                                + Arrays.asList(rowAggregators), ScanUtil.getCustomAnnotations(scan)));
-                    }
                     // If we're at an aggregation boundary, reset the
                     // aggregators and
                     // aggregate with the current result (which is not a part of
