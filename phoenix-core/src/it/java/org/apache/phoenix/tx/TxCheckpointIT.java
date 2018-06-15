@@ -51,18 +51,15 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	private final boolean localIndex;
 	private final String tableDDLOptions;
 
-	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded) {
+	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded, String transactionProvider) {
 	    StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append("TRANSACTION_PROVIDER='" + transactionProvider + "'");
 	    this.localIndex = localIndex;
 	    if (!columnEncoded) {
-	        if (optionBuilder.length()!=0)
-	            optionBuilder.append(",");
-	        optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+	        optionBuilder.append(",COLUMN_ENCODED_BYTES=0");
 	    }
 	    if (!mutable) {
-	        if (optionBuilder.length()!=0)
-	            optionBuilder.append(",");
-	        optionBuilder.append("IMMUTABLE_ROWS=true");
+	        optionBuilder.append(",IMMUTABLE_ROWS=true");
 	        if (!columnEncoded) {
 	            optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
 	        }
@@ -80,11 +77,13 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         return conn;
     }
 	
-	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
-                { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
+	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2},transactionProvider={3}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {     
+                { false, false, false, "TEPHRA" }, { false, false, true, "TEPHRA" }, { false, true, false, "TEPHRA" }, { false, true, true, "TEPHRA" },
+                { true, false, false, "TEPHRA" }, { true, false, true, "TEPHRA" }, { true, true, false, "TEPHRA" }, { true, true, true, "TEPHRA" },
+                { false, false, false, "OMID" }, { false, true, false, "OMID" }, 
+                { true, false, false, "OMID" }, { true, true, false, "OMID" },
            });
     }
     

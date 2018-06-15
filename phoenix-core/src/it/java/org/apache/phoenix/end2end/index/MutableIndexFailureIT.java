@@ -109,10 +109,10 @@ public class MutableIndexFailureIT extends BaseTest {
     private static final int disableTimestampThresholdMs = 10000;
     private static final int numRpcRetries = 2;
 
-    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
-        this.transactional = transactional;
+    public MutableIndexFailureIT(String transactionProvider, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
+        this.transactional = transactionProvider != null;
         this.localIndex = localIndex;
-        this.tableDDLOptions = " SALT_BUCKETS=2, COLUMN_ENCODED_BYTES=NONE" + (transactional ? ", TRANSACTIONAL=true " : "") 
+        this.tableDDLOptions = " SALT_BUCKETS=2, COLUMN_ENCODED_BYTES=NONE" + (transactional ? (",TRANSACTIONAL=true,TRANSACTION_PROVIDER='"+transactionProvider+"'") : "") 
                 + (disableIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE + "=" + disableIndexOnWriteFailure))
                 + (throwIndexWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.THROW_INDEX_WRITE_FAILURE + "=" + throwIndexWriteFailure));
         this.tableName = FailingRegionObserver.FAIL_TABLE_NAME;
@@ -161,28 +161,32 @@ public class MutableIndexFailureIT extends BaseTest {
     public static List<Object[]> data() {
         return Arrays.asList(new Object[][] { 
                 // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
-                { false, false, false, false, false, false},
-                { false, false, true, true, false, null},
-                { false, false, true, true, false, true},
-                { false, false, false, true, false, null},
-                { true, false, false, true, false, null},
-                { true, false, true, true, false, null},
-                { false, true, true, true, false, null},
-                { false, true, false, null, false, null},
-                { true, true, false, true, false, null},
-                { true, true, true, null, false, null},
+                { null, false, false, false, false, false},
+                { null, false, true, true, false, null},
+                { null, false, true, true, false, true},
+                { null, false, false, true, false, null},
+                { null, true, true, true, false, null},
+                { null, true, false, null, false, null},
+                { "TEPHRA", true, false, true, false, null},
+                { "TEPHRA", true, true, null, false, null},
+                { "TEPHRA", false, false, true, false, null},
+                { "TEPHRA", false, true, true, false, null},
+                { "OMID", true, false, true, false, null},
+                { "OMID", true, true, null, false, null},
+                { "OMID", false, false, true, false, null},
+                { "OMID", false, true, true, false, null},
 
-                { false, false, false, false, false, null},
-                { false, true, false, false, false, null},
-                { false, false, false, false, false, null},
-                { false, false, false, true, false, null},
-                { false, false, false, true, false, null},
-                { false, true, false, true, false, null},
-                { false, true, false, true, false, null},
-                { false, false, false, true, true, null},
-                { false, false, true, true, true, null},
-                { false, false, false, false, true, false},
-                { false, false, true, false, true, false},
+                { null, false, false, false, false, null},
+                { null, true, false, false, false, null},
+                { null, false, false, false, false, null},
+                { null, false, false, true, false, null},
+                { null, false, false, true, false, null},
+                { null, true, false, true, false, null},
+                { null, true, false, true, false, null},
+                { null, false, false, true, true, null},
+                { null, false, true, true, true, null},
+                { null, false, false, false, true, false},
+                { null, false, true, false, true, false},
                 } 
         );
     }

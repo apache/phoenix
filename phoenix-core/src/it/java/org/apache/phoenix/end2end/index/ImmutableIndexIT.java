@@ -93,12 +93,10 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         this.localIndex = localIndex;
         this.transactional = transactional;
         if (!columnEncoded) {
-            if (optionBuilder.length()!=0)
-                optionBuilder.append(",");
-            optionBuilder.append("COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+            optionBuilder.append(",COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
         }
         if (transactional) {
-            optionBuilder.append(", TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
+            optionBuilder.append(",TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
             this.transactionProvider = TransactionFactory.Provider.valueOf(transactionProvider).getTransactionProvider();
         } else {
             this.transactionProvider = null;
