@@ -89,20 +89,17 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     
     protected StatsCollectorIT(boolean mutable, String transactionProvider, boolean userTableNamespaceMapped, boolean columnEncoded) {
         StringBuilder sb = new StringBuilder();
-        if (transactionProvider != null) {
-            sb.append("TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
-        }
-        if (!columnEncoded) {
-            if (sb.length()>0) {
-                sb.append(",");
-            }
+        if (columnEncoded) {
+            sb.append("COLUMN_ENCODED_BYTES=4");        
+        } else {
             sb.append("COLUMN_ENCODED_BYTES=0");
         }
+        
+        if (transactionProvider != null) {
+            sb.append(",TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
+        }
         if (!mutable) {
-            if (sb.length()>0) {
-                sb.append(",");
-            }
-            sb.append("IMMUTABLE_ROWS=true");
+            sb.append(",IMMUTABLE_ROWS=true");
             if (!columnEncoded) {
                 sb.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             }
