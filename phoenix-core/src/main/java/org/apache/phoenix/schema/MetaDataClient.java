@@ -1168,14 +1168,12 @@ public class MetaDataClient {
                 // If the table is a view, then we will end up calling update stats
                 // here for all the view indexes on it. We take care of local indexes later.
                 if (index.getIndexType() != IndexType.LOCAL) {
-                    if (index.getIndexType() != IndexType.LOCAL) {
-                        if (table.getType() != PTableType.VIEW) {
-                            rowCount += updateStatisticsInternal(index.getPhysicalName(), index,
-                                    updateStatisticsStmt.getProps(), true);
-                        } else {
-                            rowCount += updateStatisticsInternal(table.getPhysicalName(), index,
-                                    updateStatisticsStmt.getProps(), true);
-                        }
+                    if (table.getType() != PTableType.VIEW) {
+                        rowCount += updateStatisticsInternal(index.getPhysicalName(), index,
+                                updateStatisticsStmt.getProps(), true);
+                    } else {
+                        rowCount += updateStatisticsInternal(table.getPhysicalName(), index,
+                                updateStatisticsStmt.getProps(), true);
                     }
                 }
             }
