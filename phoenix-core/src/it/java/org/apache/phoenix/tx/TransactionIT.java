@@ -103,7 +103,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k='a'");
             // Forces data to be written to HBase, but not yet committed
             conn.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-            // Upsert another row so commit below will fail the write (and fail subsequent attempt to abort)
+            // Upsert another row so commit below will fail the write (and fail subsequent attempt t o abort)
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('c')");
             TestUtil.addCoprocessor(conn, tableName, WriteFailingRegionObserver.class);
             try {
@@ -464,6 +464,43 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             
         } finally {
             conn.close();
+        }
+    }
+    
+    @Test
+    public void testSetTTL() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        TransactionFactory.Provider txProvider = TransactionFactory.Provider.valueOf(this.txProvider);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateUniqueName();
+            try {
+                conn.createStatement().execute("CREATE TABLE " + tableName + 
+                        "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "',TTL=100");
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    fail();
+                }
+            } catch (SQLException e) {
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    assertEquals(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
+                } else {
+                    throw e;
+                }
+            }
+            tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + 
+                    "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " SET TTL=" + 200);
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    fail();
+                }
+            } catch (SQLException e) {
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    assertEquals(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
+                } else {
+                    throw e;
+                }
+            }
         }
     }
 }

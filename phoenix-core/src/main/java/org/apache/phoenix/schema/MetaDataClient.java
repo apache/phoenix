@@ -2085,6 +2085,16 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
+            if (TableProperty.TTL.getValue(commonFamilyProps) != null 
+                    && transactionProvider != null 
+                    && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
+                throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
+                .setMessage(transactionProvider.name())
+                .setSchemaName(schemaName)
+                .setTableName(tableName)
+                .build()
+                .buildException();
+            }
 
             // Put potentially inferred value into tableProps as it's used by the createTable call below
             // to determine which coprocessors to install on the new table.

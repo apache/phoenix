@@ -205,15 +205,12 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
 
     @Override
     public boolean isUnsupported(Feature feature) {
-        // FIXME: if we initialize a Set with the unsupported features
-        // and check for containment, we run into a test failure
-        // in SetPropertyOnEncodedTableIT.testSpecifyingColumnFamilyForTTLFails()
-        // due to TableProperty.colFamSpecifiedException being null
-        // (though it's set in the constructor). I suspect some
-        // mysterious class loader issue. The below works fine
-        // as a workaround.
         return true;
-        // return (feature == Feature.ALTER_NONTX_TO_TX || feature == Feature.COLUMN_ENCODING || feature == Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER);
+        // return (
+        //   feature == Feature.ALTER_NONTX_TO_TX || 
+        //   feature == Feature.COLUMN_ENCODING || 
+        //   feature == Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER || 
+        //   feature == Feature.SET_TTL);
     }
 
     @Override

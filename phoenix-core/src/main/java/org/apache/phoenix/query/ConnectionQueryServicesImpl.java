@@ -2073,6 +2073,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean willBeTransactional = false;
         boolean isOrWillBeTransactional = isTransactional;
         Integer newTTL = null;
+        TransactionFactory.Provider txProvider = null;
         for (String family : properties.keySet()) {
             List<Pair<String, Object>> propsList = properties.get(family);
             if (propsList != null && propsList.size() > 0) {
@@ -2083,14 +2084,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if ((MetaDataUtil.isHTableProperty(propName) ||  TableProperty.isPhoenixTableProperty(propName)) && addingColumns) {
                         // setting HTable and PhoenixTable properties while adding a column is not allowed.
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN)
-                        .setMessage("Property: " + propName).build()
+                        .setMessage("Property: " + propName)
+                        .setSchemaName(table.getSchemaName().getString())
+                        .setTableName(table.getTableName().getString())
+                        .build()
                         .buildException();
                     }
                     if (MetaDataUtil.isHTableProperty(propName)) {
                         // Can't have a column family name for a property that's an HTableProperty
                         if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
-                            .setMessage("Column Family: " + family + ", Property: " + propName).build()
+                            .setMessage("Column Family: " + family + ", Property: " + propName)
+                            .setSchemaName(table.getSchemaName().getString())
+                            .setTableName(table.getTableName().getString())
+                            .build()
                             .buildException();
                         }
                         tableProps.put(propName, propValue);
@@ -2107,6 +2114,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER) && propValue != null) {
+                                txProvider = (Provider)propValue;
                                 tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, tableProp.getValue(propValue));
                             }
                         } else {
@@ -2121,10 +2129,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // FIXME: This isn't getting triggered as currently a property gets evaluated
                                 // as HTableProp if its neither HColumnProp or PhoenixTableProp.
                                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_PROPERTY)
-                                .setMessage("Column Family: " + family + ", Property: " + propName).build()
+                                .setMessage("Column Family: " + family + ", Property: " + propName)
+                                .setSchemaName(table.getSchemaName().getString())
+                                .setTableName(table.getTableName().getString())
+                                .build()
                                 .buildException();
                             }
                         }
+                    }
+                }
+                if (isOrWillBeTransactional && newTTL != null) {
+                    TransactionFactory.Provider isOrWillBeTransactionProvider = txProvider == null ? table.getTransactionProvider() : txProvider;
+                    if (isOrWillBeTransactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
+                        throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
+                        .setMessage(isOrWillBeTransactionProvider.name())
+                        .setSchemaName(table.getSchemaName().getString())
+                        .setTableName(table.getTableName().getString())
+                        .build()
+                        .buildException();
                     }
                 }
                 if (!colFamilyPropsMap.isEmpty()) {
@@ -2275,6 +2297,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         Map<String, Object> props = entry.getValue();
                         if (props == null) {
                             props = new HashMap<String, Object>();
+                        } else {
+                            props = new HashMap<String, Object>(props);
                         }
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
@@ -2282,6 +2306,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (!willBeTransactional && !Boolean.valueOf(newTableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
                             props.remove(TTL);
                         }
+                        entry.setValue(props);
                     }
                 }
             }
