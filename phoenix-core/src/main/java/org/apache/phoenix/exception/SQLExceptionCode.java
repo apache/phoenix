@@ -300,6 +300,7 @@ public enum SQLExceptionCode {
     CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL(1093, "44A24", "Cannot alter table from non transactional to transactional for"),
     UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER(1094, "44A25", "Column encoding is not supported for"),
     UNSUPPORTED_STORAGE_FORMAT_FOR_TXN_PROVIDER(1095, "44A26", "Only ONE_CELL_PER_COLUMN storage scheme is supported for"),
+    CANNOT_SWITCH_TXN_PROVIDERS(1096, "44A27", "Cannot switch transaction providers."),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

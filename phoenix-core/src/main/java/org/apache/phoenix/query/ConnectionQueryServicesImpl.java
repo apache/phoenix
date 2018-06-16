@@ -1180,13 +1180,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // If mapping an existing table as transactional, set property so that existing
                 // data is correctly read.
                 if (willBeTx) {
-                    if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
-                        .setMessage(provider.name())
-                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                    if (!equalTxCoprocessor(provider, existingDesc, newDesc)) {
+                        // Cannot switch between different providers
+                        if (hasTxCoprocessor(existingDesc)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SWITCH_TXN_PROVIDERS)
+                            .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                            .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                        }
+                        if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
+                            .setMessage(provider.name())
+                            .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                            .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                        }
+                        newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
                     }
-                    newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
                 } else {
                     // If we think we're creating a non transactional table when it's already
                     // transactional, don't allow.
@@ -1233,6 +1241,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return false;
     }
+
+    private static boolean equalTxCoprocessor(TransactionFactory.Provider provider, HTableDescriptor existingDesc, HTableDescriptor newDesc) {
+        Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
+        return (coprocessorClass != null && existingDesc.hasCoprocessor(coprocessorClass.getName()) && newDesc.hasCoprocessor(coprocessorClass.getName()));
+}
 
     private void modifyTable(byte[] tableName, HTableDescriptor newDesc, boolean shouldPoll) throws IOException,
     InterruptedException, TimeoutException, SQLException {
