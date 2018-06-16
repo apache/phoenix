@@ -2090,7 +2090,7 @@ public class MetaDataClient {
 
             // Put potentially inferred value into tableProps as it's used by the createTable call below
             // to determine which coprocessors to install on the new table.
-            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactionProvider != null);
+            tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, transactionProvider);
             if (transactionProvider != null) {
                 // TODO: for Omid
                 // If TTL set, use Tephra TTL property name instead

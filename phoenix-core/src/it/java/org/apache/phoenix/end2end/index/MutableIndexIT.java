@@ -35,8 +35,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import jline.internal.Log;
-
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
@@ -75,6 +73,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.primitives.Doubles;
 
+import jline.internal.Log;
+
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
     
@@ -106,7 +106,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         return getConnection(props);
     }
     
-	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
+	@Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] { 
                 { false, null, false }, { false, null, true },

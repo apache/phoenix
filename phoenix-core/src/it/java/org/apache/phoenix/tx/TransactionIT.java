@@ -40,6 +40,8 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -142,7 +144,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testReCreateTxnTableAfterDroppingExistingNonTxnTable() throws SQLException {
+    public void testReCreateTxnTableAfterDroppingExistingNonTxnTable() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -150,6 +152,10 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         stmt.execute("DROP TABLE " + tableName);
+        // Must drop metadata as Omid does not allow creating a transactional table from a non transactional one
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        admin.disableTable(TableName.valueOf(tableName));
+        admin.deleteTable(TableName.valueOf(tableName));
         stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true," + tableDDLOptions);
         stmt.execute("CREATE INDEX " + tableName + "_IDX ON " + tableName + " (v1) INCLUDE(v2)");
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).isTransactional());

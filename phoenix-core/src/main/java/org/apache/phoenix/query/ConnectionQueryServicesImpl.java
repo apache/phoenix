@@ -856,10 +856,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
-            // For ALTER TABLE
-            boolean nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
-            boolean isTransactional =
-                    Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) || nonTxToTx;
+            TransactionFactory.Provider provider = getTransactionProvider(tableProps);
+            boolean isTransactional = (provider != null);
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
@@ -922,7 +920,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             if (isTransactional) {
-                TransactionFactory.Provider provider = getTransactionProvider(tableProps);
                 Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
                 if (!descriptor.hasCoprocessor(coprocessorClass.getName())) {
                     descriptor.addCoprocessor(coprocessorClass.getName(), null, priority - 10, null);
@@ -935,9 +932,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             } else {
                 // Remove all potential transactional coprocessors
-                for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
-                    Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-                    Class<? extends RegionObserver> coprocessorGCClass = provider.getTransactionProvider().getGCCoprocessor();
+                for (TransactionFactory.Provider aprovider : TransactionFactory.Provider.values()) {
+                    Class<? extends RegionObserver> coprocessorClass = aprovider.getTransactionProvider().getCoprocessor();
+                    Class<? extends RegionObserver> coprocessorGCClass = aprovider.getTransactionProvider().getGCCoprocessor();
                     if (coprocessorClass != null && descriptor.hasCoprocessor(coprocessorClass.getName())) {
                         descriptor.removeCoprocessor(coprocessorClass.getName());
                     }
@@ -953,10 +950,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private TransactionFactory.Provider getTransactionProvider(Map<String,Object> tableProps) {
         TransactionFactory.Provider provider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(tableProps);
-        if (provider == null) {
-            String providerValue = this.props.get(QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB, QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER);
-            provider = (TransactionFactory.Provider)TableProperty.TRANSACTION_PROVIDER.getValue(providerValue);
-        }
         return provider;
     }
     
@@ -1182,11 +1175,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (!modifyExistingMetaData) {
                     return existingDesc; // Caller already knows that no metadata was changed
                 }
-                boolean willBeTx = Boolean.TRUE.equals(props.get(TableProperty.TRANSACTIONAL.name()));
+                TransactionFactory.Provider provider = getTransactionProvider(props);
+                boolean willBeTx = provider != null;
                 // If mapping an existing table as transactional, set property so that existing
                 // data is correctly read.
                 if (willBeTx) {
-                    TransactionFactory.Provider provider = getTransactionProvider(props);
                     if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
                         .setMessage(provider.name())
