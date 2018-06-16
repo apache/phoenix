@@ -169,14 +169,14 @@ public class MutableIndexFailureIT extends BaseTest {
                     { null, false, false, true, false, null},
                     { null, true, true, true, false, null},
                     { null, true, false, null, false, null},
-                    { "TEPHRA", true, false, true, false, null},
-                    { "TEPHRA", true, true, null, false, null},
-                    { "TEPHRA", false, false, true, false, null},
-                    { "TEPHRA", false, true, true, false, null},
-                    { "OMID", true, false, true, false, null},
-                    { "OMID", true, true, null, false, null},
-                    { "OMID", false, false, true, false, null},
-                    { "OMID", false, true, true, false, null},
+                    { "TEPHRA", true, false, false, false, null},
+                    { "TEPHRA", true, true, false, false, null},
+                    { "TEPHRA", false, false, false, false, null},
+                    { "TEPHRA", false, true, false, false, null},
+                    { "OMID", true, false, false, false, null},
+                    { "OMID", true, true, false, false, null},
+                    { "OMID", false, false, false, false, null},
+                    { "OMID", false, true, false, false, null},
     
                     { null, false, false, false, false, null},
                     { null, true, false, false, false, null},
@@ -412,18 +412,18 @@ public class MutableIndexFailureIT extends BaseTest {
 
     }
 
-    private void validateDataWithIndex(Connection conn, String fullTableName, String fullIndexName, boolean localIndex) throws SQLException {
+    private void validateDataWithIndex(Connection conn, String fullTableName, String fullIndexName, boolean localIndex) throws Exception {
         String query = "SELECT /*+ INDEX(" + fullTableName + " " + SchemaUtil.getTableNameFromFullName(fullIndexName) + ")  */ k,v1 FROM " + fullTableName;
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        ResultSet rs = conn.createStatement().executeQuery(query);
         String expectedPlan = " OVER "
                 + (localIndex
                         ? Bytes.toString(
                                 SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
                         : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped).getNameAsString());
-        String explainPlan = QueryUtil.getExplainPlan(rs);
+        String explainPlan = QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
         assertTrue(explainPlan, explainPlan.contains(expectedPlan));
-        rs = conn.createStatement().executeQuery(query);
         if (transactional) { // failed commit does not get retried
+            TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertEquals("x", rs.getString(2));
@@ -454,7 +454,7 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
-    private void updateTable(Connection conn, boolean commitShouldFail) throws SQLException {
+    private void updateTable(Connection conn, boolean commitShouldFail) throws Exception {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
         // Insert new row
         stmt.setString(1, "d");
@@ -470,6 +470,7 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt = conn.prepareStatement("DELETE FROM " + fullTableName + " WHERE k=?");
         stmt.setString(1, "b");
         stmt.execute();
+        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
         // Set to fail after the DELETE, since transactional tables will write
         // uncommitted data when the DELETE is executed.
         FailingRegionObserver.FAIL_WRITE = true;

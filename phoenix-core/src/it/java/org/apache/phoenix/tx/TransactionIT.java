@@ -38,10 +38,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -83,6 +90,44 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
     
     @Test
+    public void testFailureToRollbackAfterDelete() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateUniqueName();
+            conn.createStatement().execute(
+                    "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('b')");
+            conn.commit();
+            // Delete a in new transaction
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k='a'");
+            // Forces data to be written to HBase, but not yet committed
+            conn.createStatement().executeQuery("SELECT * FROM " + tableName).next();
+            // Upsert another row so commit below will fail the write (and fail subsequent attempt to abort)
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('c')");
+            TestUtil.addCoprocessor(conn, tableName, WriteFailingRegionObserver.class);
+            try {
+                conn.commit();
+                fail();
+            } catch (SQLException e) {
+            }
+            // Delete of a shouldn't be visible since commit failed, so all rows should be present
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+    
+    public static class WriteFailingRegionObserver extends SimpleRegionObserver {
+        @Override
+        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+            throw new DoNotRetryIOException();
+        }
+    }
+    @Test
     public void testWithMixOfTxProviders() throws Exception {
         // No sense in running the test with every providers, so just run it with the default one
         if (!TransactionFactory.Provider.valueOf(txProvider).equals(TransactionFactory.Provider.getDefault())) {
@@ -90,7 +135,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         }
         List<String> tableNames = Lists.newArrayList();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
                 String tableName = generateUniqueName();
                 tableNames.add(tableName);
