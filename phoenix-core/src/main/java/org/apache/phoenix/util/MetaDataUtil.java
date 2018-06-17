@@ -26,14 +26,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -46,6 +41,7 @@ import org.apache.hadoop.hbase.protobuf.RequestConverter;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -490,14 +486,18 @@ public class MetaDataUtil {
         return false;
     }
 
-    public static List<byte[]> getNonLocalIndexColumnFamilies(HTableDescriptor desc) {
-    	List<byte[]> families = new ArrayList<byte[]>(desc.getColumnFamilies().length);
-        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+    /**
+     * Return any non-local index column family of a table
+     * @param desc
+     * @return non-local index column family
+     */
+    public static HColumnDescriptor getAnyNonLocalIndexColumnFamily(HTableDescriptor desc) {
+        for (HColumnDescriptor cf: desc.getColumnFamilies()) {
             if (!cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-            	families.add(cf.getName());
+                return cf;
             }
         }
-    	return families;
+        return null;
     }
 
     public static List<byte[]> getLocalIndexColumnFamilies(PhoenixConnection conn, byte[] physicalTableName) throws SQLException {
@@ -582,6 +582,8 @@ public class MetaDataUtil {
 
     public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
 
+    public static final List<String> PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES =
+        ImmutableList.of(HColumnDescriptor.TTL, HColumnDescriptor.KEEP_DELETED_CELLS, HColumnDescriptor.REPLICATION_SCOPE);
 
 
     public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp){
@@ -649,6 +651,10 @@ public class MetaDataUtil {
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
             + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
             + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
+    }
+
+    public static boolean isPropertyAllowedToBeOutOfSyncAmongColFamsAndIndexes(String colFamProp) {
+        return !PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES.contains(colFamProp);
     }
 
     public static boolean isHColumnProperty(String propName) {

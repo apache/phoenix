@@ -3264,7 +3264,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                  * 
                                  * 4) Trying to swtich tenancy of a table that has views
                                  */
-                                if (!childViewsResult.allViewsInSingleRegion() 
+                                if (!childViewsResult.allViewsInSingleRegion()
                                         || table.getBaseColumnCount() == 0 
                                         || !request.hasClientVersion()
                                         || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {

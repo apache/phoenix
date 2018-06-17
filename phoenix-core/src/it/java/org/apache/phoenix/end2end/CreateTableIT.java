@@ -449,7 +449,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try {
             conn.createStatement().execute(ddl);
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),
+            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY.getErrorCode(),
                 sqle.getErrorCode());
         }
     }

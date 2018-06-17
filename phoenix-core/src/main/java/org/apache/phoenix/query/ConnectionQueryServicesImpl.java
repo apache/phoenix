@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.query;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
+import static org.apache.hadoop.hbase.HColumnDescriptor.*;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
@@ -63,23 +63,9 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.sql.PreparedStatement;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.sql.*;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Random;
-import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -98,14 +84,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.NamespaceDescriptor;
-import org.apache.hadoop.hbase.NamespaceNotFoundException;
-import org.apache.hadoop.hbase.TableExistsException;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
@@ -326,6 +305,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
     public static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
     public static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
+    private static final String[] TABLE_TYPES = new String[] { PTableType.TABLE.getValue().getString(),
+            PTableType.INDEX.getValue().getString()};
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -767,13 +748,75 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    /**
+     * Check that the specific set of column family properties mentioned in {@link MetaDataUtil#PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES}
+     * are in sync for the given table (this includes the local index column family).
+     * @param tableName
+     * @param defaultFamilyBytes
+     * @return default column descriptor used for checking if properties are synced or not, and the synced table descriptor
+     * @throws SQLException
+     */
+    private Pair<HColumnDescriptor, HTableDescriptor> ensureTableColumnFamilyPropsInSync(String tableName, byte[] defaultFamilyBytes) throws SQLException {
+        HTableDescriptor tableDescriptor = getTableDescriptor(Bytes.toBytes(tableName));
+        HColumnDescriptor[] colFamilies = tableDescriptor.getColumnFamilies();
+        HColumnDescriptor  defaultColDescriptor = tableDescriptor.getFamily(defaultFamilyBytes);
+        // It's possible that the table has specific column families and none of them are declared to be the DEFAULT_COLUMN_FAMILY
+        defaultColDescriptor = defaultColDescriptor != null ? defaultColDescriptor : colFamilies[0];
+
+        for (String propName: MetaDataUtil.PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES) {
+            if (defaultColDescriptor.getValue(propName) == null) {
+                if (!isUpgradeRequired()) {
+                    // We cannot have a null value for any of the properties that need to be kept in sync amongst all column families
+                    logger.error("Cannot have null value for column family property: " + propName);
+                    setUpgradeRequired();
+                    throw new UpgradeRequiredException();
+                } else {
+                    defaultColDescriptor.setValue(propName, HColumnDescriptor.getDefaultValues().get(propName));
+                }
+            }
+        }
+        // Used in the upgrade path to actually fix the table descriptor by syncing properties
+        HTableDescriptor syncedTableDescriptor = new HTableDescriptor(tableDescriptor);
+        // Check that these properties are in sync amongst all column families of the table
+        for (HColumnDescriptor family: colFamilies) {
+            if (isUpgradeRequired()) {
+                family = syncedTableDescriptor.getFamily(family.getName());
+            }
+            for (String propName: MetaDataUtil.PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES) {
+                if (!family.getValue(propName).toUpperCase(Locale.ROOT).equals(defaultColDescriptor.getValue(propName).toUpperCase(Locale.ROOT))) {
+                    if (!isUpgradeRequired()) {
+                        logger.error("Column family property '" + propName + "' out of sync for table '" + tableName + "'");
+                        setUpgradeRequired();
+                        throw new UpgradeRequiredException();
+                    } else {
+                        family.setValue(propName, defaultColDescriptor.getValue(propName));
+                    }
+                }
+            }
+        }
+        // No metadata needs to be changed to keep column families in sync
+        if (syncedTableDescriptor.equals(tableDescriptor)) {
+            return new Pair<>(defaultColDescriptor, null);
+        }
+        return new Pair<>(defaultColDescriptor, syncedTableDescriptor);
+    }
+
     private HTableDescriptor generateTableDescriptor(byte[] physicalTableName, HTableDescriptor existingDesc,
             PTableType tableType, Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families,
             byte[][] splits, boolean isNamespaceMapped) throws SQLException {
         String defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);
         HTableDescriptor tableDescriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc)
         : new HTableDescriptor(physicalTableName);
+        HColumnDescriptor dataTableColDescForIndexTablePropSyncing = null;
+        if (tableType == PTableType.INDEX) {
+            byte[] defaultFamilyByes = defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
+            // Ensure that all the column families of the data table are in sync for required properties
+            Pair<HColumnDescriptor, HTableDescriptor> colDescTabDescPair =
+                ensureTableColumnFamilyPropsInSync((String)tableProps.get(PhoenixDatabaseMetaData.DATA_TABLE_NAME), defaultFamilyByes);
+            dataTableColDescForIndexTablePropSyncing = colDescTabDescPair.getFirst();
+        }
         // By default, do not automatically rebuild/catch up an index on a write failure
+        // Add table-specific properties to the table descriptor
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
             if (!TableProperty.isPhoenixTableProperty(key)) {
@@ -781,36 +824,41 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tableDescriptor.setValue(key, value == null ? null : value.toString());
             }
         }
-        if (families.isEmpty()) {
-            if (tableType != PTableType.VIEW) {
-                byte[] defaultFamilyByes = defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
-                // Add dummy column family so we have key values for tables that
-                HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(new Pair<byte[],Map<String,Object>>(defaultFamilyByes,Collections.<String,Object>emptyMap()), tableType);
+
+        // Add column family-specific properties to the table descriptor
+        for (Pair<byte[],Map<String,Object>> family : families) {
+            // If family is only in phoenix description, add it. otherwise, modify its property accordingly.
+            byte[] familyByte = family.getFirst();
+            if (tableDescriptor.getFamily(familyByte) == null) {
+                if (tableType == PTableType.VIEW) {
+                    String fullTableName = Bytes.toString(physicalTableName);
+                    throw new ReadOnlyTableException(
+                            "The HBase column families for a read-only table must already exist",
+                            SchemaUtil.getSchemaNameFromFullName(fullTableName),
+                            SchemaUtil.getTableNameFromFullName(fullTableName),
+                            Bytes.toString(familyByte));
+                }
+                HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(family, tableType);
+                // Keep indexes in sync with their data table.
+                // For indexes, the default column family for the global index or the default local index column family
+                // should have TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE in sync with the data table
+                // See PHOENIX-3955: Ensure KEEP_DELETED_CELLS, REPLICATION_SCOPE, and TTL properties stay in sync between the
+                // physical data table and index tables
+                if (tableType == PTableType.INDEX && dataTableColDescForIndexTablePropSyncing != null &&
+                    (Bytes.equals(familyByte, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) ||
+                        Bytes.equals(familyByte, QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES))) {
+                    for (String propToKeepInSync: MetaDataUtil.PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES) {
+                        columnDescriptor.setValue(propToKeepInSync, dataTableColDescForIndexTablePropSyncing.getValue(propToKeepInSync));
+                    }
+                }
                 tableDescriptor.addFamily(columnDescriptor);
-            }
-        } else {
-            for (Pair<byte[],Map<String,Object>> family : families) {
-                // If family is only in phoenix description, add it. otherwise, modify its property accordingly.
-                byte[] familyByte = family.getFirst();
-                if (tableDescriptor.getFamily(familyByte) == null) {
-                    if (tableType == PTableType.VIEW) {
-                        String fullTableName = Bytes.toString(physicalTableName);
-                        throw new ReadOnlyTableException(
-                                "The HBase column families for a read-only table must already exist",
-                                SchemaUtil.getSchemaNameFromFullName(fullTableName),
-                                SchemaUtil.getTableNameFromFullName(fullTableName),
-                                Bytes.toString(familyByte));
+            } else {
+                if (tableType != PTableType.VIEW) {
+                    HColumnDescriptor columnDescriptor = tableDescriptor.getFamily(familyByte);
+                    if (columnDescriptor == null) {
+                        throw new IllegalArgumentException("Unable to find column descriptor with family name " + Bytes.toString(family.getFirst()));
                     }
-                    HColumnDescriptor columnDescriptor = generateColumnFamilyDescriptor(family, tableType);
-                    tableDescriptor.addFamily(columnDescriptor);
-                } else {
-                    if (tableType != PTableType.VIEW) {
-                        HColumnDescriptor columnDescriptor = tableDescriptor.getFamily(familyByte);
-                        if (columnDescriptor == null) {
-                            throw new IllegalArgumentException("Unable to find column descriptor with family name " + Bytes.toString(family.getFirst()));
-                        }
-                        modifyColumnFamilyDescriptor(columnDescriptor, family.getSecond());
-                    }
+                    modifyColumnFamilyDescriptor(columnDescriptor, family.getSecond());
                 }
             }
         }
@@ -1804,23 +1852,28 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(stmtProperties.size());
         Map<String, Object> tableProps = new HashMap<String, Object>();
         Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
-        Set<HTableDescriptor> origTableDescriptors = Collections.emptySet();
         boolean nonTxToTx = false;
-        Pair<HTableDescriptor,HTableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
-        HTableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
-        HTableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
+        Map<HTableDescriptor, HTableDescriptor> oldToNewTableDescriptors =
+            separateAndValidateProperties(table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
+        Set<HTableDescriptor> origTableDescriptors = oldToNewTableDescriptors.keySet();
+        HTableDescriptor origTableDescriptor = getTableDescriptor(table.getTableName().getBytes());;
+        HTableDescriptor tableDescriptor = oldToNewTableDescriptors.remove(origTableDescriptor);
+
         if (tableDescriptor != null) {
             tableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
-            origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
             tableDescriptors.add(tableDescriptor);
-            origTableDescriptors.add(origTableDescriptor);
+            // Add table descriptor mappings for all indexes
+            for (Entry<HTableDescriptor, HTableDescriptor> indexTableDescriptorPair: oldToNewTableDescriptors.entrySet()) {
+                tableDescriptors.add(indexTableDescriptorPair.getValue());
+            }
             nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
             /*
              * If the table was transitioned from non transactional to transactional, we need
              * to also transition the index tables.
              */
             if (nonTxToTx) {
-                updateDescriptorForTx(table, tableProps, tableDescriptor, Boolean.TRUE.toString(), tableDescriptors, origTableDescriptors);
+                updateDescriptorForTx(table, tableProps, tableDescriptor, Boolean.TRUE.toString(), tableDescriptors,
+                    origTableDescriptors, oldToNewTableDescriptors);
             }
         }
 
@@ -1914,8 +1967,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return result;
     }
+
     private void updateDescriptorForTx(PTable table, Map<String, Object> tableProps, HTableDescriptor tableDescriptor,
-            String txValue, Set<HTableDescriptor> descriptorsToUpdate, Set<HTableDescriptor> origDescriptors) throws SQLException {
+            String txValue, Set<HTableDescriptor> descriptorsToUpdate, Set<HTableDescriptor> origDescriptors,
+            Map<HTableDescriptor, HTableDescriptor> oldToNewTableDescriptors) throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
         try (HBaseAdmin admin = getAdmin()) {
             setTransactional(tableDescriptor, table.getType(), txValue, tableProps);
@@ -1928,8 +1983,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             for (PTable index : table.getIndexes()) {
                 HTableDescriptor indexDescriptor = admin.getTableDescriptor(index.getPhysicalName().getBytes());
-                origDescriptors.add(indexDescriptor);
-                indexDescriptor = new HTableDescriptor(indexDescriptor);
+                // If we already wished to make modifications to this index table descriptor previously, we use the updated
+                // table descriptor to carry out further modifications
+                // See {@link ConnectionQueryServicesImpl#separateAndValidateProperties(PTable, Map, Set, Map)}
+                if (origDescriptors.contains(indexDescriptor)) {
+                    indexDescriptor = oldToNewTableDescriptors.get(indexDescriptor);
+                    descriptorsToUpdate.remove(indexDescriptor);
+                } else {
+                    origDescriptors.add(indexDescriptor);
+                    indexDescriptor = new HTableDescriptor(indexDescriptor);
+                }
                 descriptorsToUpdate.add(indexDescriptor);
                 if (index.getColumnFamilies().isEmpty()) {
                     byte[] dataFamilyName = SchemaUtil.getEmptyColumnFamily(table);
@@ -1952,8 +2015,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             try {
                 HTableDescriptor indexDescriptor = admin.getTableDescriptor(MetaDataUtil.getViewIndexPhysicalName(physicalTableName));
-                origDescriptors.add(indexDescriptor);
-                indexDescriptor = new HTableDescriptor(indexDescriptor);
+                if (origDescriptors.contains(indexDescriptor)) {
+                    indexDescriptor = oldToNewTableDescriptors.get(indexDescriptor);
+                    descriptorsToUpdate.remove(indexDescriptor);
+                } else {
+                    origDescriptors.add(indexDescriptor);
+                    indexDescriptor = new HTableDescriptor(indexDescriptor);
+                }
                 descriptorsToUpdate.add(indexDescriptor);
                 setSharedIndexMaxVersion(table, tableDescriptor, indexDescriptor);
                 setTransactional(indexDescriptor, PTableType.INDEX, txValue, indexTableProps);
@@ -1962,8 +2030,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             try {
                 HTableDescriptor indexDescriptor = admin.getTableDescriptor(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName));
-                origDescriptors.add(indexDescriptor);
-                indexDescriptor = new HTableDescriptor(indexDescriptor);
+                if (origDescriptors.contains(indexDescriptor)) {
+                    indexDescriptor = oldToNewTableDescriptors.get(indexDescriptor);
+                    descriptorsToUpdate.remove(indexDescriptor);
+                } else {
+                    origDescriptors.add(indexDescriptor);
+                    indexDescriptor = new HTableDescriptor(indexDescriptor);
+                }
                 descriptorsToUpdate.add(indexDescriptor);
                 setSharedIndexMaxVersion(table, tableDescriptor, indexDescriptor);
                 setTransactional(indexDescriptor, PTableType.INDEX, txValue, indexTableProps);
@@ -2024,7 +2097,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps);
     }
 
-    private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties,
+    private Map<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties,
       Set<String> colFamiliesForPColumnsToBeAdded, Map<String, Object> tableProps) throws SQLException {
         Map<String, Map<String, Object>> stmtFamiliesPropsMap = new HashMap<>(properties.size());
         Map<String,Object> commonFamilyProps = new HashMap<>();
@@ -2035,6 +2108,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean willBeTransactional = false;
         boolean isOrWillBeTransactional = isTransactional;
         Integer newTTL = null;
+        Integer newReplicationScope = null;
+        KeepDeletedCells newKeepDeletedCells = null;
         for (String family : properties.keySet()) {
             List<Pair<String, Object>> propsList = properties.get(family);
             if (propsList != null && propsList.size() > 0) {
@@ -2060,18 +2135,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (TableProperty.isPhoenixTableProperty(propName)) {
                             TableProperty.valueOf(propName).validate(true, !family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY), table.getType());
                             if (propName.equals(TTL)) {
-                                newTTL = ((Number)prop.getSecond()).intValue();
+                                if (table.getType() == PTableType.INDEX) {
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                                        .setMessage("Property: " + propName).build()
+                                        .buildException();
+                                }
+                                newTTL = ((Number)propValue).intValue();
                                 // Even though TTL is really a HColumnProperty we treat it specially.
                                 // We enforce that all column families have the same TTL.
-                                commonFamilyProps.put(propName, prop.getSecond());
+                                commonFamilyProps.put(propName, propValue);
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
                             }
                         } else {
                             if (MetaDataUtil.isHColumnProperty(propName)) {
+                                if (table.getType() == PTableType.INDEX && !MetaDataUtil.isPropertyAllowedToBeOutOfSyncAmongColFamsAndIndexes(propName)) {
+                                    // We disallow index tables from overriding TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE, in order to avoid situations
+                                    // where indexes are not in sync with their data table.
+                                    // See PHOENIX-3955: Ensure KEEP_DELETED_CELLS, REPLICATION_SCOPE, and TTL properties stay in sync between the
+                                    // physical data table and index tables
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                                        .setMessage("Property: " + propName).build()
+                                        .buildException();
+                                }
                                 if (family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+                                    if (propName.equals(HColumnDescriptor.KEEP_DELETED_CELLS)) {
+                                        newKeepDeletedCells = Boolean.parseBoolean((String)propValue)? KeepDeletedCells.TRUE : KeepDeletedCells.FALSE;
+                                    }
+                                    if (propName.equals(HColumnDescriptor.REPLICATION_SCOPE)) {
+                                        newReplicationScope = Integer.parseInt((String)propValue);
+                                    }
                                     commonFamilyProps.put(propName, propValue);
+                                } else if (!MetaDataUtil.isPropertyAllowedToBeOutOfSyncAmongColFamsAndIndexes(propName)) {
+                                    // Don't allow specifying column families for TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE.
+                                    // These properties can only be applied for all column families of a table and can't be column family specific.
+                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY)
+                                        .setMessage("Property: " + propName).build()
+                                        .buildException();
                                 } else {
                                     colFamilyPropsMap.put(propName, propValue);
                                 }
@@ -2170,9 +2271,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             .buildException();
         }
 
-        HTableDescriptor newTableDescriptor = null;
-        HTableDescriptor origTableDescriptor = null;
+        HTableDescriptor newTableDescriptor, origTableDescriptor;
+        // Store all old to new table descriptor mappings for the table as well as its global indexes
+        Map<HTableDescriptor, HTableDescriptor> tableAndIndexDescriptorMappings = Collections.emptyMap();
         if (!allFamiliesProps.isEmpty() || !tableProps.isEmpty()) {
+            tableAndIndexDescriptorMappings = Maps.newHashMapWithExpectedSize(3 + table.getIndexes().size());
             byte[] tableNameBytes = Bytes.toBytes(table.getPhysicalName().getString());
             HTableDescriptor existingTableDescriptor = origTableDescriptor = getTableDescriptor(tableNameBytes);
             newTableDescriptor = new HTableDescriptor(existingTableDescriptor);
@@ -2182,20 +2285,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     newTableDescriptor.setValue(entry.getKey(), entry.getValue() != null ? entry.getValue().toString() : null);
                 }
             }
+            // Ensure that the existing column families (including the local index column family) have the necessary properties
+            // in sync before proceeding ahead
+            ensureTableColumnFamilyPropsInSync(table.getTableName().getString(), SchemaUtil.getEmptyColumnFamily(table));
             if (addingColumns) {
-                // Make sure that all the CFs of the table have the same TTL as the empty CF.
-                setTTLForNewCFs(allFamiliesProps, table, newTableDescriptor, newTTL);
+                // Make sure that TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE for the new column family to be added stays in sync
+                // with the table's existing column families. Note that we use the new values for these properties in case we are
+                // altering their values. We also propagate these altered values to existing column families and indexes on the table below
+                setSyncedPropertiesForNewColumnFamilies(allFamiliesProps, table, newTableDescriptor, newTTL, newKeepDeletedCells, newReplicationScope);
             }
-            // Set TTL on all table column families, even if they're not referenced here
-            if (newTTL != null) {
-                for (PColumnFamily family : table.getColumnFamilies()) {
-                    if (!allFamiliesProps.containsKey(family.getName().getString())) {
-                        Map<String,Object> familyProps = Maps.newHashMapWithExpectedSize(1);
-                        familyProps.put(TTL, newTTL);
-                        allFamiliesProps.put(family.getName().getString(), familyProps);
-                    }
-                }
-            }
+            // Set TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE on all table column families of this table, even if they
+            // are not referenced here. Note that this does not include the local index column family (we handle indexes below)
+            setNewSyncedPropertyForUnreferencedColumnFamilies(table, allFamiliesProps, HColumnDescriptor.TTL, newTTL);
+            setNewSyncedPropertyForUnreferencedColumnFamilies(table, allFamiliesProps, HColumnDescriptor.KEEP_DELETED_CELLS, newKeepDeletedCells);
+            setNewSyncedPropertyForUnreferencedColumnFamilies(table, allFamiliesProps, HColumnDescriptor.REPLICATION_SCOPE, newReplicationScope);
+
             Integer defaultTxMaxVersions = null;
             if (isOrWillBeTransactional) {
                 // Calculate default for max versions
@@ -2223,17 +2327,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-            }
-            // Set Tephra's TTL property based on HBase property if we're
-            // transitioning to become transactional or setting TTL on
-            // an already transactional table.
-            if (isOrWillBeTransactional) {
-                int ttl = getTTL(table, newTableDescriptor, newTTL);
+                // Set Tephra's TTL property based on HBase property if we're
+                // transitioning to become transactional or setting TTL on
+                // an already transactional table.
+                int ttl = ConnectionQueryServicesImpl.getTTL(table, newTableDescriptor, newTTL);
                 if (ttl != HColumnDescriptor.DEFAULT_TTL) {
                     for (Map.Entry<String, Map<String, Object>> entry : allFamiliesProps.entrySet()) {
                         Map<String, Object> props = entry.getValue();
                         if (props == null) {
-                            props = new HashMap<String, Object>();
+                            allFamiliesProps.put(entry.getKey(), new HashMap<String, Object>());
+                            props = allFamiliesProps.get(entry.getKey());
                         }
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
@@ -2264,8 +2367,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     checkTransactionalVersionsValue(colDescriptor);
                 }
             }
+            // Add the table descriptor mapping for the data table and then add all mappings for the indexes
+            tableAndIndexDescriptorMappings.put(origTableDescriptor, newTableDescriptor);
+            // Copy properties that need to be synced from the default column family of the data table to the default
+            // column family of each one of its indexes and store table descriptor mappings for indexes
+            // TODO: Add null check in case we are just alter table adding column, without modifying any metadata of the table, allFamiliesProps won't contain
+            // this key..
+            setSyncedPropertiesForTableIndexes(table, tableAndIndexDescriptorMappings, allFamiliesProps.get(Bytes.toString(SchemaUtil.getEmptyColumnFamily(table))));
         }
-        return new Pair<>(origTableDescriptor, newTableDescriptor);
+        return tableAndIndexDescriptorMappings;
     }
 
     private void checkTransactionalVersionsValue(HColumnDescriptor colDescriptor) throws SQLException {
@@ -2292,6 +2402,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return cfNames;
     }
 
+    private static KeepDeletedCells getKeepDeletedCells(PTable table, HTableDescriptor tableDesc, KeepDeletedCells newKeepDeletedCells) throws SQLException {
+        // If we're setting KEEP_DELETED_CELLS now, then use that value. Otherwise, use the empty column family value
+        KeepDeletedCells keepDeletedCells = newKeepDeletedCells != null ? newKeepDeletedCells
+            : tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getKeepDeletedCells();
+        return keepDeletedCells;
+    }
+
+    private static int getReplicationScope(PTable table, HTableDescriptor tableDesc, Integer newReplicationScope) throws SQLException {
+        // If we're setting replication scope now, then use that value. Otherwise, use the empty column family value
+        int replicationScope = newReplicationScope != null ? newReplicationScope.intValue()
+            : tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getScope();
+        return replicationScope;
+    }
+
+    private static String getNewValueForProp(PTable table, HTableDescriptor tableDesc, String propName, String newPropVal) throws SQLException {
+        // If we're setting this property now, then use that value. Otherwise, use empty column family value
+        String propVal = newPropVal != null ? newPropVal
+            : tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(table)).getValue(propName);
+        return propVal;
+    }
+
     private static int getTTL(PTable table, HTableDescriptor tableDesc, Integer newTTL) throws SQLException {
         // If we're setting TTL now, then use that value. Otherwise, use empty column family value
         int ttl = newTTL != null ? newTTL
@@ -2299,17 +2430,88 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return ttl;
     }
 
-    private static void setTTLForNewCFs(Map<String, Map<String, Object>> familyProps, PTable table,
-            HTableDescriptor tableDesc, Integer newTTL) throws SQLException {
+    /**
+     * Keep the TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE properties of new column families
+     * in sync with the existing column families. Note that we use the new values for these properties in case they are
+     * passed from our alter table command
+     * See {@link MetaDataUtil#PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES}
+     * @param familyProps
+     * @param table
+     * @param tableDesc
+     * @param newTTL
+     * @param newKeepDeletedCells
+     * @param newReplicationScope
+     * @throws SQLException
+     */
+    private void setSyncedPropertiesForNewColumnFamilies(Map<String, Map<String, Object>> familyProps, PTable table,
+        HTableDescriptor tableDesc, Integer newTTL, KeepDeletedCells newKeepDeletedCells, Integer newReplicationScope) throws SQLException {
         if (!familyProps.isEmpty()) {
-            int ttl = getTTL(table, tableDesc, newTTL);
+            int ttl = ConnectionQueryServicesImpl.getTTL(table, tableDesc, newTTL);
+            int replicationScope = ConnectionQueryServicesImpl.getReplicationScope(table, tableDesc, newReplicationScope);
+            KeepDeletedCells keepDeletedCells = ConnectionQueryServicesImpl.getKeepDeletedCells(table, tableDesc, newKeepDeletedCells);
             for (Map.Entry<String, Map<String, Object>> entry : familyProps.entrySet()) {
                 Map<String, Object> props = entry.getValue();
                 if (props == null) {
-                    props = new HashMap<String, Object>();
+                    familyProps.put(entry.getKey(), new HashMap<String, Object>());
+                    props = familyProps.get(entry.getKey());
                 }
                 props.put(TTL, ttl);
+                props.put(KEEP_DELETED_CELLS, keepDeletedCells);
+                props.put(REPLICATION_SCOPE, replicationScope);
             }
+        }
+    }
+
+    /**
+     * Set the new values for properties that are to be kept in sync amongst those column families of the table which are
+     * not referenced in the context of our alter table command
+     * See {@link MetaDataUtil#PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES}
+     * @param table
+     * @param allFamiliesProps
+     * @param propName
+     * @param newPropVal
+     */
+    private void setNewSyncedPropertyForUnreferencedColumnFamilies(PTable table, Map<String, Map<String, Object>> allFamiliesProps,
+        String propName, Object newPropVal) {
+        if (newPropVal != null && !MetaDataUtil.isPropertyAllowedToBeOutOfSyncAmongColFamsAndIndexes(propName)) {
+            for (PColumnFamily family : table.getColumnFamilies()) {
+                if (!allFamiliesProps.containsKey(family.getName().getString())) {
+                    Map<String,Object> familyProps = Maps.newHashMapWithExpectedSize(1);
+                    familyProps.put(propName, newPropVal);
+                    allFamiliesProps.put(family.getName().getString(), familyProps);
+                }
+            }
+        }
+    }
+
+    /**
+     * Set properties to be kept in sync for indexes of a table
+     * See {@link MetaDataUtil#PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES} and
+     * PHOENIX-3955: Ensure KEEP_DELETED_CELLS, REPLICATION_SCOPE, and TTL properties stay in sync between the
+     * physical data table and index tables
+     * @param table
+     * @param tableAndIndexDescriptorMappings
+     * @param applyPropsToAllIndexesDefaultCF
+     * @throws SQLException
+     */
+    private void setSyncedPropertiesForTableIndexes(PTable table, Map<HTableDescriptor, HTableDescriptor> tableAndIndexDescriptorMappings,
+        Map<String, Object> applyPropsToAllIndexesDefaultCF) throws SQLException {
+        if (applyPropsToAllIndexesDefaultCF == null) return;
+
+        for (PTable indexTable: table.getIndexes()) {
+            HTableDescriptor origIndexTableDescriptor, newIndexTableDescriptor;
+            if (indexTable.getIndexType() == PTable.IndexType.LOCAL) {
+                origIndexTableDescriptor = getTableDescriptor(indexTable.getParentTableName().getBytes());
+                // We want to modify the local index column family of the data table's table descriptor
+                newIndexTableDescriptor = tableAndIndexDescriptorMappings.get(origIndexTableDescriptor);
+            } else { // global index table
+                origIndexTableDescriptor = getTableDescriptor(indexTable.getPhysicalName().getBytes());
+                newIndexTableDescriptor = new HTableDescriptor(origIndexTableDescriptor);
+            }
+            byte[] defaultIndexColFam = SchemaUtil.getEmptyColumnFamily(indexTable);
+            HColumnDescriptor indexDefaultColDescriptor = newIndexTableDescriptor.getFamily(defaultIndexColFam);
+            modifyColumnFamilyDescriptor(indexDefaultColDescriptor, applyPropsToAllIndexesDefaultCF);
+            tableAndIndexDescriptorMappings.put(origIndexTableDescriptor, newIndexTableDescriptor);
         }
     }
 
@@ -2708,6 +2910,57 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             logger.error("Failed to created SYSMUTEX table. Upgrade or migration is not possible without it. Please retry.");
             throw exception;
         }
+    }
+
+    /**
+     * Make sure that all data tables have necessary column family properties in sync with each other and also in sync with
+     * all the table's indexes
+     * See PHOENIX-3955: Ensure KEEP_DELETED_CELLS, REPLICATION_SCOPE, and TTL properties stay in sync between the
+     * physical data table and index tables
+     * @param metaConnection
+     * @throws SQLException
+     */
+    // Available for testing
+    protected void syncAllTableColFamPropsAndIndexes(PhoenixConnection metaConnection) throws SQLException {
+        // TODO: fix getTables
+        ResultSet allTablesAndIndexesMetaData = metaConnection.getMetaData().getTables(null, null, null, TABLE_TYPES);
+        Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
+        while(allTablesAndIndexesMetaData.next()) {
+            String schema = allTablesAndIndexesMetaData.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+            String tableName = allTablesAndIndexesMetaData.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+            String fullTableName = SchemaUtil.getTableName(schema, tableName);
+            PTable table = metaConnection.getTable(new PTableKey(metaConnection.getTenantId(), fullTableName));
+            // Note that the below checks all column families in the table including the local index column family
+            Pair<HColumnDescriptor, HTableDescriptor> colDescTabDescPair =
+                ensureTableColumnFamilyPropsInSync(table.getTableName().getString(), SchemaUtil.getEmptyColumnFamily(table));
+            HTableDescriptor tableDescriptor =  colDescTabDescPair.getSecond();
+            if (tableDescriptor != null) {
+                logger.debug("Bringing column families in sync for table: " + fullTableName);
+                tableDescriptors.add(tableDescriptor);
+            }
+            HColumnDescriptor dataTableColDescForIndexTablePropSyncing = colDescTabDescPair.getFirst();
+            // Now make the default column family for every global index in sync with the data table
+            for (PTable indexTable: table.getIndexes()) {
+                if (indexTable.getIndexType() == PTable.IndexType.GLOBAL) {
+                    HTableDescriptor indexTableDescriptor = getTableDescriptor(Bytes.toBytes(table.getTableName().getString()));
+                    HTableDescriptor syncedIndexTableDescriptor = new HTableDescriptor(indexTableDescriptor);
+                    HColumnDescriptor defaultIndexColDesc = syncedIndexTableDescriptor.getFamily(SchemaUtil.getEmptyColumnFamily(indexTable));
+                    for (String propToKeepInSync: MetaDataUtil.PROPERTIES_TO_KEEP_IN_SYNC_AMONG_COL_FAMS_AND_INDEXES) {
+                        if (!dataTableColDescForIndexTablePropSyncing.getValue(propToKeepInSync).toUpperCase(Locale.ROOT).
+                            equals(defaultIndexColDesc.getValue(propToKeepInSync).toUpperCase(Locale.ROOT))) {
+                            defaultIndexColDesc.setValue(propToKeepInSync, dataTableColDescForIndexTablePropSyncing.getValue(propToKeepInSync));
+                        }
+                    }
+                    // Metadata for the global index was changed
+                    if (!syncedIndexTableDescriptor.equals(indexTableDescriptor)) {
+                        logger.debug("Found global index " + indexTable.getTableName().getString() + " properties out of sync "
+                            + "with data table " + table.getTableName().getString() + ". Bringing properties in sync");
+                        tableDescriptors.add(syncedIndexTableDescriptor);
+                    }
+                }
+            }
+        }
+        sendHBaseMetaData(tableDescriptors, true);
     }
 
     /**
@@ -3149,6 +3402,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
             // with SYSTEM Namespace
             createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+
+            // Ensure that all tables have certain properties in sync amongst all their column families and indexes
+            // See PHOENIX-3955: Ensure KEEP_DELETED_CELLS, REPLICATION_SCOPE, and TTL properties stay in sync between the
+            // physical data table and index tables
+            syncAllTableColFamPropsAndIndexes(metaConnection);
 
             ConnectionQueryServicesImpl.this.upgradeRequired.set(false);
             success = true;
@@ -3790,16 +4048,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if(stmtProperties==null) return updateIndexState(tableMetaData,parentTableName);
 
         Map<String, Object> tableProps = new HashMap<String, Object>();
-        Pair<HTableDescriptor,HTableDescriptor> tableDescriptorPair = separateAndValidateProperties(table, stmtProperties, new HashSet<String>(), tableProps);
-        HTableDescriptor tableDescriptor = tableDescriptorPair.getSecond();
-        HTableDescriptor origTableDescriptor = tableDescriptorPair.getFirst();
         Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
-        Set<HTableDescriptor> origTableDescriptors = Collections.emptySet();
+        Map<HTableDescriptor, HTableDescriptor> oldToNewTableDescriptors =
+            separateAndValidateProperties(table, stmtProperties, new HashSet<String>(), tableProps);
+        HTableDescriptor origTableDescriptor;
+        if (table.getType() == PTableType.INDEX && table.getIndexType() == PTable.IndexType.LOCAL) {
+            origTableDescriptor = getTableDescriptor(table.getParentTableName().getBytes());
+        } else {
+            origTableDescriptor = getTableDescriptor(table.getTableName().getBytes());
+        }
+        HTableDescriptor tableDescriptor = oldToNewTableDescriptors.remove(origTableDescriptor);
         if (tableDescriptor != null) {
             tableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
-            origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
             tableDescriptors.add(tableDescriptor);
-            origTableDescriptors.add(origTableDescriptor);
         }
         sendHBaseMetaData(tableDescriptors, true);
         return updateIndexState(tableMetaData,parentTableName);
