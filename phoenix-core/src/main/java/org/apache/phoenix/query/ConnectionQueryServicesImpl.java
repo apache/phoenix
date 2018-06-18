@@ -2262,6 +2262,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         Map<String, Object> props = entry.getValue();
                         if (props == null) {
                             props = new HashMap<String, Object>();
+                        } else {
+                            props = new HashMap<String, Object>(props);
                         }
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, new Integer(ttl));
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
@@ -2269,6 +2271,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (!willBeTransactional && !Boolean.valueOf(newTableDescriptorBuilder.build().getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
                             props.remove(TTL);
                         }
+                        entry.setValue(props);
                     }
                 }
             }
