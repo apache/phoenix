@@ -25,6 +25,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -38,6 +39,9 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotFoundException;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -54,6 +58,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.tephra.TxConstants;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -368,6 +373,32 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             
         } finally {
             conn.close();
+        }
+    }
+    
+    private static void assertTTL(HBaseAdmin admin, String tableName, int ttl) throws TableNotFoundException, IOException {
+        HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
+        for (HColumnDescriptor colDesc : tableDesc.getFamilies()) {
+            assertEquals(ttl,Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            assertEquals(HColumnDescriptor.DEFAULT_TTL,colDesc.getTimeToLive());
+        }
+    }
+    
+    @Test
+    public void testSetTTL() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        TransactionFactory.Provider txProvider = TransactionFactory.Provider.valueOf(this.txProvider);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + 
+                    "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "',TTL=100");
+            assertTTL(admin, tableName, 100);
+            tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + 
+                    "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET TTL=" + 200);
+            assertTTL(admin, tableName, 200);
         }
     }
 }
