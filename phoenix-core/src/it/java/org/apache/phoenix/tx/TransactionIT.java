@@ -66,6 +66,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.tephra.TxConstants;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -137,10 +138,15 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
-                String tableName = generateUniqueName();
-                tableNames.add(tableName);
-                conn.createStatement().execute(
-                        "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+                if (provider.runTests()) {
+                    String tableName = generateUniqueName();
+                    tableNames.add(tableName);
+                    conn.createStatement().execute(
+                            "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+                }
+            }
+            if (tableNames.size() < 2) {
+                return;
             }
             Iterator<String> iterator = tableNames.iterator();
             String tableName1 = iterator.next();
@@ -467,11 +473,21 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         }
     }
     
+    
+    private static void assertTTL(Admin admin, String tableName, int ttl) throws Exception {
+        HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
+        for (HColumnDescriptor colDesc : tableDesc.getFamilies()) {
+            assertEquals(ttl,Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            assertEquals(HColumnDescriptor.DEFAULT_TTL,colDesc.getTimeToLive());
+        }
+    }
+
     @Test
     public void testSetTTL() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         TransactionFactory.Provider txProvider = TransactionFactory.Provider.valueOf(this.txProvider);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props); 
+             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             String tableName = generateUniqueName();
             try {
                 conn.createStatement().execute("CREATE TABLE " + tableName + 
@@ -479,6 +495,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
                 if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
                     fail();
                 }
+                assertTTL(admin, tableName, 100);
             } catch (SQLException e) {
                 if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
                     assertEquals(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
@@ -494,6 +511,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
                 if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
                     fail();
                 }
+                assertTTL(admin, tableName, 200);
             } catch (SQLException e) {
                 if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
                     assertEquals(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
