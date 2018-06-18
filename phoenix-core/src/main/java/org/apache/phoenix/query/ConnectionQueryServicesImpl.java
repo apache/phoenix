@@ -1963,6 +1963,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 indexTableProps = Maps.newHashMapWithExpectedSize(1);
                 indexTableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.valueOf(txValue));
+                indexTableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, tableProps.get(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER));
             }
             for (PTable index : table.getIndexes()) {
                 HTableDescriptor indexDescriptor = admin.getTableDescriptor(index.getPhysicalName().getBytes());
@@ -2114,8 +2115,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER) && propValue != null) {
+                                willBeTransactional = isOrWillBeTransactional = true;
+                                tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE);
                                 txProvider = (Provider)TableProperty.TRANSACTION_PROVIDER.getValue(propValue);
-                                tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, tableProp.getValue(propValue));
+                                tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, txProvider);
                             }
                         } else {
                             if (MetaDataUtil.isHColumnProperty(propName)) {
