@@ -2114,7 +2114,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER) && propValue != null) {
-                                txProvider = (Provider)propValue;
+                                txProvider = (Provider)TableProperty.TRANSACTION_PROVIDER.getValue(propValue);
                                 tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, tableProp.getValue(propValue));
                             }
                         } else {

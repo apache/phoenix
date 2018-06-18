@@ -423,7 +423,6 @@ public class MutableIndexFailureIT extends BaseTest {
         String explainPlan = QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
         assertTrue(explainPlan, explainPlan.contains(expectedPlan));
         if (transactional) { // failed commit does not get retried
-            TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertEquals("x", rs.getString(2));
@@ -470,7 +469,6 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt = conn.prepareStatement("DELETE FROM " + fullTableName + " WHERE k=?");
         stmt.setString(1, "b");
         stmt.execute();
-        TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName)));
         // Set to fail after the DELETE, since transactional tables will write
         // uncommitted data when the DELETE is executed.
         FailingRegionObserver.FAIL_WRITE = true;
