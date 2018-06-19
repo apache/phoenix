@@ -47,7 +47,6 @@ import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
-import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -482,6 +481,7 @@ public class DeleteCompiler {
             projectedColumns.add(column);
             aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
         }
+        boolean noQueryReqd = true;
         // Project all non PK indexed columns so that we can do the proper index maintenance
         for (PTable index : table.getIndexes()) {
             IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
@@ -493,6 +493,8 @@ public class DeleteCompiler {
                     boolean hasNoColumnFamilies = table.getColumnFamilies().isEmpty();
                     PColumn column = hasNoColumnFamilies ? table.getColumnForColumnName(columnName) : table.getColumnFamily(familyName).getPColumnForColumnName(columnName);
                     if(!projectedColumns.contains(column)) {
+                        // We must run a query if any index contains a non pk column
+                        noQueryReqd = false;
                         projectedColumns.add(column);
                         aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
                     }
@@ -512,7 +514,7 @@ public class DeleteCompiler {
             select = StatementNormalizer.normalize(transformedSelect, resolverToBe);
         }
         final boolean hasPreOrPostProcessing = hasPreProcessing || hasPostProcessing;
-        boolean noQueryReqd = !hasPreOrPostProcessing;
+        noQueryReqd &= !hasPreOrPostProcessing;
         // No limit and no sub queries, joins, etc in where clause
         // Can't run on same server for transactional data, as we need the row keys for the data
         // that is being upserted for conflict detection purposes.
@@ -551,24 +553,8 @@ public class DeleteCompiler {
         }
         
         runOnServer &= queryPlans.get(0).getTableRef().getTable().getType() != PTableType.INDEX;
-        
-        // We need to have all indexed columns available in all immutable indexes in order
-        // to generate the delete markers from the query. We also cannot have any filters
-        // except for our SkipScanFilter for point lookups.
-        // A simple check of the non existence of a where clause in the parse node is not sufficient, as the where clause
-        // may have been optimized out. Instead, we check that there's a single SkipScanFilter
-        // If we can generate a plan for every index, that means all the required columns are available in every index,
-        // hence we can drive the delete from any of the plans.
-        noQueryReqd &= queryPlans.size() == 1 + clientSideIndexes.size();
-        int queryPlanIndex = 0;
-        while (noQueryReqd && queryPlanIndex < queryPlans.size()) {
-            QueryPlan plan = queryPlans.get(queryPlanIndex++);
-            StatementContext context = plan.getContext();
-            noQueryReqd &= (!context.getScan().hasFilter()
-                    || context.getScan().getFilter() instanceof SkipScanFilter)
-                && context.getScanRanges().isPointLookup();
-        }
 
+        noQueryReqd &= queryPlans.size() == 1 + clientSideIndexes.size();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
  
