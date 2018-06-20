@@ -1780,10 +1780,11 @@ public abstract class BaseTest {
         admin.split(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoint);
         List<HRegion> regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
         // wait for the split to happen
-        while (regions.size() != startNumRegions+1) {
-          System.out.println("Waiting for region to split....");
-          regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        }
+		while (regions.size() != startNumRegions + 1) {
+			Thread.sleep(5000);
+			logger.info("Waiting for region to split....");
+			regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+		}
     }
     
     /**
