@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.index;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
@@ -37,6 +39,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
@@ -438,6 +441,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     public static void doBatchWithRetries(MutateCommand mutateCommand,
             IndexWriteException iwe, PhoenixConnection connection, ReadOnlyProps config)
             throws IOException {
+        incrementPendingDisableCounter(iwe, connection);
         int maxTries = config.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
             HConstants.DEFAULT_HBASE_CLIENT_RETRIES_NUMBER);
         long pause = config.getLong(HConstants.HBASE_CLIENT_PAUSE,
@@ -472,6 +476,57 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         throw new DoNotRetryIOException(iwe); // send failure back to client
     }
 
+    private static void incrementPendingDisableCounter(IndexWriteException indexWriteException,PhoenixConnection conn) {
+        try {
+            Set<String> indexesToUpdate = new HashSet<>();
+            if (indexWriteException instanceof MultiIndexWriteFailureException) {
+                MultiIndexWriteFailureException indexException =
+                        (MultiIndexWriteFailureException) indexWriteException;
+                List<HTableInterfaceReference> failedIndexes = indexException.getFailedTables();
+                if (indexException.isDisableIndexOnFailure() && failedIndexes != null) {
+                    for (HTableInterfaceReference failedIndex : failedIndexes) {
+                        String failedIndexTable = failedIndex.getTableName();
+                        if (!indexesToUpdate.contains(failedIndexTable)) {
+                            incrementCounterForIndex(conn,failedIndexTable);
+                            indexesToUpdate.add(failedIndexTable);
+                        }
+                    }
+                }
+            } else if (indexWriteException instanceof SingleIndexWriteFailureException) {
+                SingleIndexWriteFailureException indexException =
+                        (SingleIndexWriteFailureException) indexWriteException;
+                String failedIndex = indexException.getTableName();
+                if (indexException.isDisableIndexOnFailure() && failedIndex != null) {
+                    incrementCounterForIndex(conn,failedIndex);
+                }
+            }
+        } catch (Exception handleE) {
+            LOG.warn("Error while trying to handle index write exception", indexWriteException);
+        }
+    }
+
+    private static void incrementCounterForIndex(PhoenixConnection conn, String failedIndexTable) throws IOException {
+        incrementCounterForIndex(conn, failedIndexTable, 1);
+    }
+
+    private static void decrementCounterForIndex(PhoenixConnection conn, String failedIndexTable) throws IOException {
+        incrementCounterForIndex(conn, failedIndexTable, -1);
+    }
+    
+    private static void incrementCounterForIndex(PhoenixConnection conn, String failedIndexTable,long amount) throws IOException {
+        byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(failedIndexTable);
+        Increment incr = new Increment(indexTableKey);
+        incr.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, amount);
+        try {
+            conn.getQueryServices()
+                    .getTable(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                            conn.getQueryServices().getProps()).getName())
+                    .increment(incr);
+        } catch (SQLException e) {
+            throw new IOException(e);
+        }
+    }
+
     private static boolean canRetryMore(int numRetry, int maxRetries, long canRetryUntil) {
         // If there is a single try we must not take into account the time.
         return numRetry < maxRetries
@@ -494,13 +549,25 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     }
 
     private static void updateIndex(String indexFullName, PhoenixConnection conn,
-            PIndexState indexState) throws SQLException {
+            PIndexState indexState) throws SQLException, IOException {
+        //Decrement the counter because we will be here when client give retry after getting failed or succeed
+        decrementCounterForIndex(conn,indexFullName);
+        Long indexDisableTimestamp = null;
         if (PIndexState.DISABLE.equals(indexState)) {
             LOG.info("Disabling index after hitting max number of index write retries: "
                     + indexFullName);
+            IndexUtil.updateIndexState(conn, indexFullName, indexState, indexDisableTimestamp);
         } else if (PIndexState.ACTIVE.equals(indexState)) {
             LOG.debug("Resetting index to active after subsequent success " + indexFullName);
+            //At server disabled timestamp will be reset only if there is no other client is in PENDING_DISABLE state
+            indexDisableTimestamp = 0L;
+            try {
+                IndexUtil.updateIndexState(conn, indexFullName, indexState, indexDisableTimestamp);
+            } catch (SQLException e) {
+                // It's possible that some other client had made the Index DISABLED already , so we can ignore unallowed
+                // transition(DISABLED->ACTIVE)
+                if (e.getErrorCode() != SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION.getErrorCode()) { throw e; }
+            }
         }
-        IndexUtil.updateIndexState(conn, indexFullName, indexState, null);
     }
 }
