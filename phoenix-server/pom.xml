@@ -40,6 +40,7 @@
     <source.skip>true</source.skip>
     <license.bundles.dependencies>true</license.bundles.dependencies>
     <top.dir>${project.basedir}/..</top.dir>
+    <shaded.package>org.apache.phoenix.shaded</shaded.package>
   </properties>
 
   <build>
@@ -124,11 +125,11 @@
                   <include>org.apache.phoenix:phoenix-core</include>
                   <include>org.iq80.snappy:snappy</include>
                   <include>org.antlr:antlr*</include>
+                  <include>joda-time:joda-time</include>
                   <include>org.apache.tephra:tephra*</include>
                   <include>com.google.code.gson:gson</include>
                   <include>org.jruby.joni:joni</include>
                   <include>org.jruby.jcodings:jcodings</include>
-                  <include>joda-time:joda-time</include>
                   <include>org.apache.twill:twill*</include>
                   <include>com.google.inject.extensions:guice-assistedinject</include>
                   <include>it.unimi.dsi:fastutil</include>
@@ -157,6 +158,12 @@
                   </excludes>
                 </filter>
               </filters>
+             <relocations>
+                <relocation>
+                  <pattern>org.joda</pattern>
+                  <shadedPattern>${shaded.package}.org.joda</shadedPattern>
+                </relocation>
+             </relocations>
             </configuration>
           </execution>
         </executions>
