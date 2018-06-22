@@ -197,11 +197,11 @@ public class IndexManagementUtil {
     public static void rethrowIndexingException(Throwable e) throws IOException {
         try {
             throw e;
-        } catch (IOException e1) {
+        } catch (IOException | FatalIndexBuildingFailureException e1) {
             LOG.info("Rethrowing " + e);
             throw e1;
-        } catch (Throwable e1) {
-            if (e1 instanceof FatalIndexBuildingFailureException) { throw (FatalIndexBuildingFailureException)e1; }
+        }
+        catch (Throwable e1) {
             LOG.info("Rethrowing " + e1 + " as a " + IndexBuildingFailureException.class.getSimpleName());
             throw new IndexBuildingFailureException("Failed to build index for unexpected reason!", e1);
         }
