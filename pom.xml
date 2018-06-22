@@ -100,7 +100,7 @@
     <avatica.version>1.11.0</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.14.0-incubating</tephra.version>
-    <spark.version>2.0.2</spark.version>
+    <spark.version>2.3.0</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
