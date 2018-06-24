@@ -883,10 +883,16 @@ public abstract class BaseTest {
             try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
             	DatabaseMetaData dbmd = seeLatestConn.getMetaData();
     	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
-    	        boolean hasTables = rs.next();
-    	        if (hasTables) {
-    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
-    	        }
+				while (rs.next()) {
+					String fullTableName = SchemaUtil.getEscapedTableName(
+							rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+							rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+					try {
+						PhoenixRuntime.getTable(conn, fullTableName);
+						fail("The following tables are not deleted that should be:" + getTableNames(rs));
+					} catch (TableNotFoundException e) {
+					}
+				}
             }
         }
         finally {
