@@ -23,6 +23,7 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.HashMap;
@@ -54,8 +55,9 @@ public class ClientHashAggregatingResultIterator
     private final ResultIterator resultIterator;
     private final Aggregators aggregators;
     private final List<Expression> groupByExpressions;
-    private final HashMap<ImmutableBytesWritable, Aggregator[]> hash;
-    private Iterator<Map.Entry<ImmutableBytesWritable, Aggregator[]>> hashIterator;
+    private HashMap<ImmutableBytesWritable, Aggregator[]> hash;
+    private List<ImmutableBytesWritable> keyList;
+    private Iterator<ImmutableBytesWritable> keyIterator;
 
     public ClientHashAggregatingResultIterator(ResultIterator resultIterator, Aggregators aggregators, List<Expression> groupByExpressions) {
         if (resultIterator == null) throw new NullPointerException();
@@ -64,32 +66,32 @@ public class ClientHashAggregatingResultIterator
         this.resultIterator = resultIterator;
         this.aggregators = aggregators;
         this.groupByExpressions = groupByExpressions;
-        hash = new HashMap<ImmutableBytesWritable, Aggregator[]>(HASH_AGG_INIT_SIZE, 0.75f);
     }
 
     @Override
     public Tuple next() throws SQLException {
-        if (hashIterator == null) {
+        if (keyIterator == null) {
             populateHash();
-            hashIterator = hash.entrySet().iterator();
+            sortKeys();
+            keyIterator = keyList.iterator();
         }
 
-        if (!hashIterator.hasNext()) {
+        if (!keyIterator.hasNext()) {
             return null;
         }
 
-        Map.Entry<ImmutableBytesWritable, Aggregator[]> entry = hashIterator.next();
-        ImmutableBytesWritable key = entry.getKey();
-        Aggregator[] rowAggregators = entry.getValue();
+        ImmutableBytesWritable key = keyIterator.next();
+        Aggregator[] rowAggregators = hash.get(key);
         byte[] value = aggregators.toBytes(rowAggregators);
         Tuple tuple = wrapKeyValueAsResult(KeyValueUtil.newKeyValue(key, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
         return tuple;
     }
-    
+
     @Override
     public void close() throws SQLException {
-        hashIterator = null;
-        hash.clear();
+        keyIterator = null;
+        keyList = null;
+        hash = null;
         resultIterator.close();
     }
     
@@ -113,6 +115,7 @@ public class ClientHashAggregatingResultIterator
             + groupByExpressions + "]";
     }
 
+    // Copied from ClientGroupedAggregatingResultIterator
     protected ImmutableBytesWritable getGroupingKey(Tuple tuple, ImmutableBytesWritable ptr) throws SQLException {
         try {
             ImmutableBytesWritable key = TupleUtil.getConcatenatedValue(tuple, groupByExpressions);
@@ -123,11 +126,14 @@ public class ClientHashAggregatingResultIterator
         }
     }
 
+    // Copied from ClientGroupedAggregatingResultIterator
     protected Tuple wrapKeyValueAsResult(KeyValue keyValue) {
         return new MultiKeyValueTuple(Collections.<Cell> singletonList(keyValue));
     }
 
     private void populateHash() throws SQLException {
+        hash = new HashMap<ImmutableBytesWritable, Aggregator[]>(HASH_AGG_INIT_SIZE, 0.75f);
+
         for (Tuple result = resultIterator.next(); result != null; result = resultIterator.next()) {
             ImmutableBytesWritable key = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
             key = getGroupingKey(result, key);
@@ -139,5 +145,11 @@ public class ClientHashAggregatingResultIterator
 
             aggregators.aggregate(rowAggregators, result);
         }
+    }
+
+    private void sortKeys() {
+        keyList = new ArrayList<ImmutableBytesWritable>(hash.size());
+        keyList.addAll(hash.keySet());
+        Collections.sort(keyList, new ImmutableBytesWritable.Comparator());
     }
 }

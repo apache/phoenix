@@ -142,23 +142,22 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             aggResultIterator = new ClientUngroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators);
             aggResultIterator = new UngroupedAggregatingResultIterator(LookAheadResultIterator.wrap(aggResultIterator), clientAggregators);
         } else {
+            List<Expression> keyExpressions = groupBy.getKeyExpressions();
             if (groupBy.isOrderPreserving()) {
-                aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, groupBy.getKeyExpressions());
+                aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
             } else {
                 int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt
                     (QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-                List<Expression> keyExpressions = groupBy.getKeyExpressions();
                 List<OrderByExpression> keyExpressionOrderBy = Lists.newArrayListWithExpectedSize(keyExpressions.size());
                 for (Expression keyExpression : keyExpressions) {
                     keyExpressionOrderBy.add(new OrderByExpression(keyExpression, false, true));
                 }
 
                 if (useHashAgg) {
-                    aggResultIterator = new ClientHashAggregatingResultIterator(iterator, serverAggregators, groupBy.getKeyExpressions());
-                    aggResultIterator = new OrderedAggregatingResultIterator(aggResultIterator, keyExpressionOrderBy, thresholdBytes, null, null);
+                    aggResultIterator = new ClientHashAggregatingResultIterator(iterator, serverAggregators, keyExpressions);
                 } else {
                     iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
-                    aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, groupBy.getKeyExpressions());
+                    aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
                 }
             }
             aggResultIterator = new GroupedAggregatingResultIterator(LookAheadResultIterator.wrap(aggResultIterator), clientAggregators);
