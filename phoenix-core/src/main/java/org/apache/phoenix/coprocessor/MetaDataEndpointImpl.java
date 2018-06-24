@@ -209,6 +209,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.ParentTableNotFoundException;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -665,6 +666,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         : ByteUtil.EMPTY_BYTE_ARRAY;
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
+		String fullTableName = SchemaUtil.getTableName(table.getSchemaName().getString(),
+				table.getTableName().getString());
         boolean hasIndexId = table.getViewIndexId() != null;
         boolean isSalted = table.getBucketNum() != null;
         if (table.getType() != PTableType.VIEW && !hasIndexId) {
@@ -735,9 +738,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         for (int i = 0; i < ancestorList.size(); i++) {
             TableInfo parentTableInfo = ancestorList.get(i);
             PTable pTable = null;
-            String fullTableName =
-                    SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
-                        parentTableInfo.getTableName());
+            String fullParentTableName = SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
+			    parentTableInfo.getTableName());
             PName tenanId =
                     (parentTableInfo.getTenantId() != null && parentTableInfo.getTenantId().length!=0)
                             ? PNameFactory.newName(parentTableInfo.getTenantId()) : null;
@@ -758,11 +760,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             true, null);
             }
             if (pTable == null) {
-                throw new TableNotFoundException(
-                        "Could not find parent table while combining columns "
-                                + SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
-                                    parentTableInfo.getTableName())
-                                + " with tenant id " + parentTableInfo.getTenantId());
+                throw new ParentTableNotFoundException(fullParentTableName, fullTableName);
             } else {
                 // only combine columns for view indexes (and not local indexes on regular tables
                 // which also have a viewIndexId)
