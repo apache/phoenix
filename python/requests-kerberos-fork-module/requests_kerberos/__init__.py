@@ -22,4 +22,4 @@ logging.getLogger(__name__).addHandler(NullHandler())
 
 __all__ = ('HTTPKerberosAuth', 'MutualAuthenticationError', 'REQUIRED',
            'OPTIONAL', 'DISABLED')
-__version__ = '0.13.0.dev0'
+__version__ = '0.13.0.dev0-phoenixdb'
