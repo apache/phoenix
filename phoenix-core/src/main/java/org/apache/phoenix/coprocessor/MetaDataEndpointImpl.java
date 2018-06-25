@@ -1650,17 +1650,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return function.getFunctionName() == null;
     }
 
-    //TODO see if we can just use goGetTable instead
-    /**
-     * Should only be called if key is in the current region
-     */
-    private PTable getTableOnCurrentRegion(RegionCoprocessorEnvironment env, byte[] key, ImmutableBytesPtr cacheKey,
-            long clientTimeStamp, long asOfTimeStamp, int clientVersion) throws IOException, SQLException {
-        PTable table = loadTable(env, key, cacheKey, clientTimeStamp, asOfTimeStamp, clientVersion);
-        if (table == null || isTableDeleted(table)) { return null; }
-        return table;
-    }
-
     private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key,
         ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp, int clientVersion)
         throws IOException, SQLException {
@@ -1936,8 +1925,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
                 parentTableKey = SchemaUtil.getTableKey(tenantIdBytes, parentSchemaName, parentTableName);
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
-                PTable parentTable = loadTable(env, parentTableKey, new ImmutableBytesPtr(parentTableKey),
-                        clientTimeStamp, clientTimeStamp, clientVersion);
+                PTable parentTable =
+                        doGetTable(tenantIdBytes, parentSchemaName, parentTableName, clientTimeStamp, null,
+                            request.getClientVersion(), false, false, null);
                 if (IndexType.LOCAL == indexType) {
                     cPhysicalName = parentTable.getPhysicalName().getBytes();
                     cParentPhysicalName=parentTable.getPhysicalName().getBytes();
@@ -3636,14 +3626,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         long version = MetaDataUtil.encodeVersion(env.getHBaseVersion(), config);
 
         PTable systemCatalog = null;
-        byte[] tableKey =
-          SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
-            PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES,
-            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
-        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
         try {
-            systemCatalog = loadTable(env, tableKey, cacheKey, MIN_SYSTEM_TABLE_TIMESTAMP,
-              HConstants.LATEST_TIMESTAMP, request.getClientVersion());
+            systemCatalog =
+					doGetTable(ByteUtil.EMPTY_BYTE_ARRAY, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES,
+							PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES, HConstants.LATEST_TIMESTAMP, null,
+							request.getClientVersion(), false, false, null);
         } catch (Throwable t) {
             logger.error("loading system catalog table inside getVersion failed", t);
             ProtobufUtil.setControllerException(controller,
@@ -3725,8 +3712,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
                 //check permission on data table
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
-                PTable loadedTable = getTableOnCurrentRegion(env, key, new ImmutableBytesPtr(key), clientTimeStamp, clientTimeStamp,
-                        request.getClientVersion());
+                PTable loadedTable =
+                        doGetTable(tenantId, schemaName, tableName, clientTimeStamp, null,
+                            request.getClientVersion(), false, false, null);
                 if (loadedTable == null) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                     builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());

@@ -344,15 +344,15 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
    
     @Test
-    public void testViewAndTableAndDropCascade() throws Exception {
+    public void testViewAndTableAndDrop() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
         
-        String ddl = "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
-        conn.createStatement().execute(ddl);
-        ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
+        String tableDdl = "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+        conn.createStatement().execute(tableDdl);
+        String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
         String indexName = generateUniqueName();
 		ddl = "CREATE LOCAL INDEX " + indexName + " on " + fullViewName1 + "(v2)";
@@ -374,6 +374,20 @@ public class ViewIT extends SplitSystemCatalogIT {
         
         validateViewDoesNotExist(conn, fullViewName1);
         validateViewDoesNotExist(conn, fullViewName2);
+
+		// recreate the table that was dropped
+		conn.createStatement().execute(tableDdl);
+		// the two child views should still not exist
+		try {
+			PhoenixRuntime.getTable(conn, fullViewName1);
+			fail();
+		} catch (SQLException e) {
+		}
+		try {
+			PhoenixRuntime.getTable(conn, fullViewName2);
+			fail();
+		} catch (SQLException e) {
+		}
     }
     
     @Test
