@@ -740,10 +740,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PTable pTable = null;
             String fullParentTableName = SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
 			    parentTableInfo.getTableName());
-            PName tenanId =
+            PName parentTenantId =
                     (parentTableInfo.getTenantId() != null && parentTableInfo.getTenantId().length!=0)
                             ? PNameFactory.newName(parentTableInfo.getTenantId()) : null;
-            PTableKey pTableKey = new PTableKey(tenanId, fullTableName);
+            PTableKey pTableKey = new PTableKey(parentTenantId, fullParentTableName);
             // if we already have the PTable of an ancestor that has been locked, no need to look up
             // the table
             if (lockedAncestorTable != null && lockedAncestorTable.getKey().equals(pTableKey)) {
