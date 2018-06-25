@@ -59,9 +59,9 @@ public class QueryWithLimitIT extends BaseUniqueNamesOwnClusterIT {
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(50));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1));
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        props.put(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB, Integer.toString(0)); // Prevents RejectedExecutionException when deleting sequences
+        props.put(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB, Integer.toString(0)); // Prevents RejectedExecutionException when creatomg sequence table
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(4));
+        props.put(QueryServices.LOG_SALT_BUCKETS_ATTRIB, Integer.toString(0)); // Prevents RejectedExecutionException when creating log table
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     

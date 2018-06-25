@@ -81,11 +81,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     protected final boolean localIndex;
     private final String tableDDLOptions;
 	
-    public MutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
+    public MutableIndexIT(Boolean localIndex, String txProvider, Boolean columnEncoded) {
 		this.localIndex = localIndex;
 		StringBuilder optionBuilder = new StringBuilder();
-		if (transactional) {
-			optionBuilder.append("TRANSACTIONAL=true");
+		if (txProvider != null) {
+			optionBuilder.append("TRANSACTIONAL=true," + PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + "='" + txProvider + "'");
 		}
 		if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -107,12 +107,15 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
     
 	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { 
-                { false, false, false }, { false, false, true },
-                { false, true, false }, { false, true, true },
-                { true, false, false }, { true, false, true },
-                { true, true, false }, { true, true, true } });
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] { 
+                { false, null, false }, { false, null, true },
+                { false, "TEPHRA", false }, { false, "TEPHRA", true },
+                //{ false, "OMID", false }, { false, "OMID", true },
+                { true, null, false }, { true, null, true },
+                { true, "TEPHRA", false }, { true, "TEPHRA", true },
+                //{ true, "OMID", false }, { true, "OMID", true },
+                });
     }
     
     @Test
@@ -905,6 +908,47 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           store.triggerMajorCompaction();
           store.compactRecentForTestingAssumingDefaultPolicy(1);
       }
+  }
+
+
+  @Test
+  public void testUpsertingDeletedRowShouldGiveProperDataWithIndexes() throws Exception {
+      testUpsertingDeletedRowShouldGiveProperDataWithIndexes(false);
+  }
+
+  @Test
+  public void testUpsertingDeletedRowShouldGiveProperDataWithMultiCFIndexes() throws Exception {
+      testUpsertingDeletedRowShouldGiveProperDataWithIndexes(true);
+  }
+
+  private void testUpsertingDeletedRowShouldGiveProperDataWithIndexes(boolean multiCf) throws Exception {
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IDX_" + generateUniqueName();
+      String columnFamily1 = "cf1";
+      String columnFamily2 = "cf2";
+      String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+      try (Connection conn = getConnection()) {
+            conn.createStatement().execute(
+                "create table " + fullTableName + " (id integer primary key, "
+                        + (multiCf ? columnFamily1 : "") + "f float, "
+                        + (multiCf ? columnFamily2 : "") + "s varchar)" + tableDDLOptions);
+            conn.createStatement().execute(
+                "create index " + indexName + " on " + fullTableName + " ("
+                        + (multiCf ? columnFamily1 : "") + "f) include ("+(multiCf ? columnFamily2 : "") +"s)");
+            conn.createStatement().execute(
+                "upsert into " + fullTableName + " values (1, 0.5, 'foo')");
+          conn.commit();
+          conn.createStatement().execute("delete from  " + fullTableName + " where id = 1");
+          conn.commit();
+            conn.createStatement().execute(
+                "upsert into  " + fullTableName + " values (1, 0.5, 'foo')");
+          conn.commit();
+          ResultSet rs = conn.createStatement().executeQuery("select * from "+indexName);
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(2));
+          assertEquals(0.5F, rs.getFloat(1), 0.0);
+          assertEquals("foo", rs.getString(3));
+      } 
   }
 
 private void upsertRow(String dml, Connection tenantConn, int i) throws SQLException {

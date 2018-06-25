@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
+
 /**
  * Queue that tracks various writes/mutations related phoenix request metrics.
  */
@@ -86,8 +87,7 @@ public class MutationMetricQueue {
         private final CombinableMetric totalCommitTimeForMutations = new CombinableMetricImpl(MUTATION_COMMIT_TIME);
         private final CombinableMetric numFailedMutations = new CombinableMetricImpl(MUTATION_BATCH_FAILED_SIZE);
 
-        public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations) {
-            this.numMutations.change(numMutations);
+        public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations) {            this.numMutations.change(numMutations);
             this.mutationsSizeBytes.change(mutationsSizeBytes);
             this.totalCommitTimeForMutations.change(commitTimeForMutations);
             this.numFailedMutations.change(numFailedMutations);

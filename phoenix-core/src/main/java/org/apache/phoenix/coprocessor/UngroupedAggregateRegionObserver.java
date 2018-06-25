@@ -94,7 +94,6 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
@@ -145,6 +144,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -226,14 +226,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         upsertSelectConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
             InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
 
-        compactionConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
-        // lower the number of rpc retries, so we don't hang the compaction
-        compactionConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
-            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRIES_NUMBER,
-                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRIES_NUMBER));
-        compactionConfig.setInt(HConstants.HBASE_CLIENT_PAUSE,
-            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRY_PAUSE,
-                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRY_PAUSE));
+        compactionConfig = ServerUtil.getCompactionConfig(e.getConfiguration());
 
         // For retries of index write failures, use the same # of retries as the rebuilder
         indexWriteConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
@@ -516,31 +509,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         }
-        Aggregators aggregators = ServerAggregators.deserialize(
-                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), conf);
-        Aggregator[] rowAggregators = aggregators.getAggregators();
         boolean hasMore;
-        boolean hasAny = false;
-        Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
-        Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
-        }
         int rowCount = 0;
-        final RegionScanner innerScanner = theScanner;
-        boolean useIndexProto = true;
-        byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-        // for backward compatiblity fall back to look by the old attribute
-        if (indexMaintainersPtr == null) {
-            indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
-            useIndexProto = false;
-        }
-
-        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        boolean hasAny = false;
         boolean acquiredLock = false;
         boolean incrScanRefCount = false;
+        Aggregators aggregators = null;
+        Aggregator[] rowAggregators = null;
+        final RegionScanner innerScanner = theScanner;
         final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
         try (MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
+            aggregators = ServerAggregators.deserialize(
+                    scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), conf, em);
+            rowAggregators = aggregators.getAggregators();
+            Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
+            Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
+            if (logger.isDebugEnabled()) {
+                logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
+            }
+            boolean useIndexProto = true;
+            byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+            // for backward compatiblity fall back to look by the old attribute
+            if (indexMaintainersPtr == null) {
+                indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
+                useIndexProto = false;
+            }
+    
+            byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
             if(needToWrite) {
                 synchronized (lock) {
                     if (isRegionClosingOrSplitting) {
@@ -553,7 +548,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             region.startRegionOperation();
             acquiredLock = true;
-            long size = 0;
             synchronized (innerScanner) {
                 do {
                     List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) : new ArrayList<Cell>();
@@ -785,11 +779,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             commitBatch(region, indexMutations, blockingMemStoreSize);
                             indexMutations.clear();
                         }
-                        size += aggregators.aggregate(rowAggregators, result);
-                        while(size > em.getSize()) {
-                            logger.info("Request: {}, resizing {} by 1024*1024", size, em.getSize());
-                            em.resize(em.getSize() + 1024*1024);
-                        }
+                        aggregators.aggregate(rowAggregators, result);
                         hasAny = true;
                     }
                 } while (hasMore);
@@ -988,7 +978,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     InternalScanner internalScanner = scanner;
                     try {
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
-                        DelegateRegionCoprocessorEnvironment compactionConfEnv = new DelegateRegionCoprocessorEnvironment(compactionConfig, c.getEnvironment());
+                        DelegateRegionCoprocessorEnvironment compactionConfEnv =
+                                new DelegateRegionCoprocessorEnvironment(c.getEnvironment(),
+                                        ConnectionType.COMPACTION_CONNECTION);
                         StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
                             compactionConfEnv, table.getNameAsString(), clientTimeStamp,
                             store.getFamily().getName());
@@ -1137,7 +1129,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         long rowCount = 0; // in case of async, we report 0 as number of rows updated
         StatisticsCollectionRunTracker statsRunTracker =
                 StatisticsCollectionRunTracker.getInstance(config);
-        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo());
+        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
         if (runUpdateStats) {
             if (!async) {
                 rowCount = callable.call();
@@ -1256,7 +1248,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     }
                 } finally {
                     try {
-                        StatisticsCollectionRunTracker.getInstance(config).removeUpdateStatsCommandRegion(region.getRegionInfo());
+                        StatisticsCollectionRunTracker.getInstance(config).removeUpdateStatsCommandRegion(region.getRegionInfo(), scan.getFamilyMap().keySet());
                         statsCollector.close();
                     } finally {
                         try {

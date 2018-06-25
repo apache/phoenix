@@ -159,12 +159,22 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
     }
 
+    protected String getSystemSequenceTableDDL(int nSaltBuckets) {
+        String schema = String.format(setSystemDDLProperties(QueryConstants.CREATE_SEQUENCE_METADATA));
+        return Sequence.getCreateTableStatement(schema, nSaltBuckets);
+    }
+
     protected String getFunctionTableDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
     }
 
     protected String getLogTableDDL() {
-        return QueryConstants.CREATE_LOG_METADATA;
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+    
+    private String setSystemLogDDLProperties(String ddl) {
+        return String.format(ddl, props.getInt(LOG_SALT_BUCKETS_ATTRIB, QueryServicesOptions.DEFAULT_LOG_SALT_BUCKETS));
+
     }
     
     protected String getChildLinkDDL() {
@@ -342,7 +352,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 }
                 try {
                     int nSaltBuckets = getSequenceSaltBuckets();
-                    String createTableStatement = Sequence.getCreateTableStatement(nSaltBuckets);
+                    String createTableStatement = getSystemSequenceTableDDL(nSaltBuckets);
                    metaConnection.createStatement().executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.

@@ -48,16 +48,17 @@ import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.PhoenixTxIndexMutationGenerator;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
 import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.apache.phoenix.util.TransactionUtil;
 
 /**
@@ -94,22 +95,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         Configuration conf = e.getConfiguration();
         String serverName = env.getRegionServerServices().getServerName().getServerName();
         codec = new PhoenixIndexCodec(conf, env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey(), env.getRegionInfo().getTable().getName());
-        // Clone the config since it is shared
-        Configuration clonedConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
-        /*
-         * Set the rpc controller factory so that the HTables used by IndexWriter would
-         * set the correct priorities on the remote RPC calls.
-         */
-        clonedConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
-                InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
-        // lower the number of rpc retries.  We inherit config from HConnectionManager#setServerSideHConnectionRetries,
-        // which by default uses a multiplier of 10.  That is too many retries for our synchronous index writes
-        clonedConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
-            env.getConfiguration().getInt(INDEX_WRITER_RPC_RETRIES_NUMBER,
-                DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER));
-        clonedConfig.setInt(HConstants.HBASE_CLIENT_PAUSE, env.getConfiguration()
-            .getInt(INDEX_WRITER_RPC_PAUSE, DEFAULT_INDEX_WRITER_RPC_PAUSE));
-        DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
+        DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
         // setup the actual index writer
         // For transactional tables, we keep the index active upon a write failure
         // since we have the all versus none behavior for transactions. Also, we
@@ -159,7 +145,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
 
         PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaDataBuilder(c.getEnvironment()).getIndexMetaData(miniBatchOp);
-        if (    indexMetaData.getClientVersion() >= PhoenixDatabaseMetaData.MIN_TX_CLIENT_SIDE_MAINTENANCE
+        if (    indexMetaData.getClientVersion() >= MetaDataProtocol.MIN_TX_CLIENT_SIDE_MAINTENANCE
             && !indexMetaData.hasLocalIndexes()) { // Still generate index updates server side for local indexes
             super.preBatchMutate(c, miniBatchOp);
             return;

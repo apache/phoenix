@@ -103,6 +103,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String GROUPBY_SPILL_FILES_ATTRIB = "phoenix.groupby.spillFiles";
     public static final String GROUPBY_MAX_CACHE_SIZE_ATTRIB = "phoenix.groupby.maxCacheSize";
     public static final String GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB = "phoenix.groupby.estimatedDistinctValues";
+    public static final String AGGREGATE_CHUNK_SIZE_INCREASE_ATTRIB = "phoenix.aggregate.chunk_size_increase";
 
     public static final String CALL_QUEUE_PRODUCER_ATTRIB_NAME = "CALL_QUEUE_PRODUCER";
 
@@ -196,6 +197,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";
     // Maximum size in bytes taken up by cached table stats in the client
     public static final String STATS_MAX_CACHE_SIZE = "phoenix.stats.cache.maxSize";
+    public static final String LOG_SALT_BUCKETS_ATTRIB = "phoenix.log.saltBuckets";
 
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
     public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";

@@ -197,10 +197,11 @@ public class RowKeySchema extends ValueSchema {
      * @return true if a value was found and ptr was set, false if the value is null and ptr was not
      * set, and null if the value is null and there are no more values
      */
-    public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
-      Boolean returnValue = next(ptr, position, maxOffset);
-        readExtraFields(ptr, position + 1, maxOffset, extraSpan);
-        return returnValue;
+    public int next(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
+        if (next(ptr, position, maxOffset) == null) {
+            return position-1;
+        }
+        return readExtraFields(ptr, position + 1, maxOffset, extraSpan);
     }
     
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
@@ -337,18 +338,21 @@ public class RowKeySchema extends ValueSchema {
      * @param maxOffset  the maximum offset into the bytes pointer to allow
      * @param extraSpan  the number of extra fields to expand the ptr to contain.
      */
-    private void readExtraFields(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
+    private int readExtraFields(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
         int initialOffset = ptr.getOffset();
 
-        for(int i = 0; i < extraSpan; i++) {
-            Boolean returnValue = next(ptr, position + i, maxOffset);
+        int i = 0;
+        Boolean hasValue = Boolean.FALSE;
+        for(i = 0; i < extraSpan; i++) {
+            hasValue = next(ptr, position + i, maxOffset);
 
-            if(returnValue == null) {
+            if(hasValue == null) {
                 break;
             }
         }
 
         int finalLength = ptr.getOffset() - initialOffset + ptr.getLength();
         ptr.set(ptr.get(), initialOffset, finalLength);
+        return position + i - (Boolean.FALSE.equals(hasValue) ? 1 : 0);
     }
 }

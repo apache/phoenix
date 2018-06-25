@@ -66,7 +66,10 @@ import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.optimize.Cost;
-import org.apache.phoenix.parse.*;
+import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -216,6 +219,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
         boolean hasKeyRangeExpressions = keyRangeExpressions != null && !keyRangeExpressions.isEmpty();
         if (recompileWhereClause || hasKeyRangeExpressions) {
             StatementContext context = delegate.getContext();
+            // Since we are going to compile the WHERE conditions all over again, we will clear
+            // the old filter, otherwise there would be conflicts and would cause PHOENIX-4692.
+            context.getScan().setFilter(null);
             PTable table = context.getCurrentTable().getTable();
             ParseNode viewWhere = table.getViewStatement() == null ? null : new SQLParser(table.getViewStatement()).parseQuery().getWhere();
             context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (delegate.getStatement()), delegate.getContext().getConnection()));
@@ -223,7 +229,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 postFilter = WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, null);
             }
             if (hasKeyRangeExpressions) {
-                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, true, null);
+                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, null);
             }
         }
 
@@ -491,7 +497,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     cache =
                             parent.hashClient.addHashCache(ranges, iterator,
                                 plan.getEstimatedSize(), hashExpressions, singleValueOnly,
-                                parent.delegate.getTableRef(), keyRangeRhsExpression,
+                                parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
                                 keyRangeRhsValues);
                     long endTime = System.currentTimeMillis();
                     boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);

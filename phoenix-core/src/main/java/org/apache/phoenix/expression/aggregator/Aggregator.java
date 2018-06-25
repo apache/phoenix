@@ -18,7 +18,6 @@
 package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -43,4 +42,12 @@ public interface Aggregator extends Expression {
      * Get the size in bytes
      */
     public int getSize();
+    
+    /**
+     * Determines whether or not we should track the heap size as
+     * this aggregator is executing on the server side.
+     * @return true if the size should be tracked and false
+     * otherwise.
+     */
+    public boolean trackSize();
 }

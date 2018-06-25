@@ -764,7 +764,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (int i = 0; i < queries.length; i++) {
                 query = queries[i];
                 Scan scan = compileQuery(query, binds);
-                ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), null);
+                ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), null, null);
                 Aggregator aggregator = aggregators.getAggregators()[0];
                 assertTrue(aggregator instanceof CountAggregator);
             }
@@ -2431,7 +2431,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             Scan scan = projectQuery("select A.i1 from X group by i1 order by avg(B.i2) " +
                     "desc");
             ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute
-                    (BaseScannerRegionObserver.AGGREGATORS), null);
+                    (BaseScannerRegionObserver.AGGREGATORS), null, null);
             assertEquals(2,aggregators.getAggregatorCount());
         } finally {
             conn.close();

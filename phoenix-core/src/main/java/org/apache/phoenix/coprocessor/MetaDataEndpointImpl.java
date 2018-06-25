@@ -1271,12 +1271,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         .getValueArray()[indexStateKv.getValueOffset()]);
         // If client is not yet up to 4.12, then translate PENDING_ACTIVE to ACTIVE (as would have been
         // the value in those versions) since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < PhoenixDatabaseMetaData.MIN_PENDING_ACTIVE_INDEX) {
+        if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < MetaDataProtocol.MIN_PENDING_ACTIVE_INDEX) {
             indexState = PIndexState.ACTIVE;
         }
         // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
         // since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < PhoenixDatabaseMetaData.MIN_PENDING_DISABLE_INDEX) {
+        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < MetaDataProtocol.MIN_PENDING_DISABLE_INDEX) {
             // note: for older clients, we have to rely on the rebuilder to transition PENDING_DISABLE -> DISABLE
             indexState = PIndexState.DISABLE;
         }
@@ -2837,8 +2837,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         + ", table:" + Bytes.toString(table));
                 continue;
             }
-
-            // add the new columns to the child view
+            /*
+             * Disallow adding columns to a base table with APPEND_ONLY_SCHEMA since this
+             * creates a gap in the column positions for every view (PHOENIX-4737).
+             */
+            if (!columnPutsForBaseTable.isEmpty() && view.isAppendOnlySchema()) {
+                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
+            }
+            
+            //add the new columns to the child view
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());
             boolean addingExistingPkCol = false;
             for (Put columnToBeAdded : columnPutsForBaseTable) {
@@ -3614,7 +3621,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         GetVersionResponse.Builder builder = GetVersionResponse.newBuilder();
         Configuration config = env.getConfiguration();
         if (isTablesMappingEnabled
-                && PhoenixDatabaseMetaData.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
+                && MetaDataProtocol.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
             logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(
@@ -3796,7 +3803,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
+                if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE) {
+                    // reset count for first PENDING_DISABLE
+                    newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, timeStamp, Bytes.toBytes(0L)));
+                }
+                if (currentState == PIndexState.PENDING_DISABLE) {
+                    if (newState == PIndexState.ACTIVE) {
+                        //before making index ACTIVE check if all clients succeed otherwise keep it PENDING_DISABLE
+                        byte[] count = region
+                                .get(new Get(key).addColumn(TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES))
+                                .getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        if (count != null && Bytes.toLong(count) != 0) {
+                            newState = PIndexState.PENDING_DISABLE;
+                            newKVs.remove(disableTimeStampKVIndex);
+                            newKVs.set(indexStateKVIndex, KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                                    INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
+                        }
+                    } else if (newState == PIndexState.DISABLE) {
+                        //reset the counter for pending disable when transitioning from PENDING_DISABLE to DISABLE
+                        newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                                PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, timeStamp, Bytes.toBytes(0L)));
+                    }
 
+                }
+                
+                if(newState == PIndexState.ACTIVE||newState == PIndexState.PENDING_ACTIVE||newState == PIndexState.DISABLE){
+                    newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                            PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, timeStamp, Bytes.toBytes(0L)));   
+                }
+                
                 if (currentState == PIndexState.BUILDING && newState != PIndexState.ACTIVE) {
                     timeStamp = currentStateKV.getTimestamp();
                 }

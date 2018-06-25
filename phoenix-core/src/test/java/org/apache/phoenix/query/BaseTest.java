@@ -150,6 +150,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
@@ -491,10 +492,14 @@ public abstract class BaseTest {
                             } catch (Throwable t) {
                                 logger.error("Exception caught when shutting down mini cluster", t);
                             } finally {
-                                logger.info(
-                                    "Time in seconds spent in shutting down mini cluster with "
-                                            + numTables + " tables: "
-                                            + (System.currentTimeMillis() - startTime) / 1000);
+                                try {
+                                    ConnectionFactory.shutdown();
+                                } finally {
+                                    logger.info(
+                                        "Time in seconds spent in shutting down mini cluster with "
+                                                + numTables + " tables: "
+                                                + (System.currentTimeMillis() - startTime) / 1000);
+                                }
                             }
                         }
                     }

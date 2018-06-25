@@ -1486,6 +1486,25 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test // See https://issues.apache.org/jira/browse/PHOENIX-4646
+    public void testLengthLimitedVarchar() throws Exception {
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("create table " + tableName1 + "(name varchar(160) primary key, id varchar(120), address varchar(160))"); 
+            conn.createStatement().execute("create table " + tableName2 + "(name varchar(160) primary key, id varchar(10), address  varchar(10))");
+            conn.createStatement().execute("upsert into " + tableName1 + " values('test','test','test')");
+            conn.createStatement().execute("upsert into " + tableName2 + " select * from " + tableName1);
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName2);
+            assertTrue(rs.next());
+            assertEquals("test", rs.getString(1));
+            assertEquals("test", rs.getString(2));
+            assertEquals("test", rs.getString(2));
+            assertFalse(rs.next());
+        }
+    }
+    
     private static Connection getTenantConnection(String tenantId) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(TENANT_ID_ATTRIB, tenantId);

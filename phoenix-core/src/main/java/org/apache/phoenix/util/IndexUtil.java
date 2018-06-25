@@ -32,6 +32,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -42,7 +43,6 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -119,7 +119,6 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
 import com.google.common.collect.Lists;
 
@@ -283,32 +282,6 @@ public class IndexUtil {
                             .getLength()) == 0);
     }
 
-    public static List<Delete> generateDeleteIndexData(final PTable table, PTable index,
-            List<Delete> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
-            throws SQLException {
-        try {
-            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
-            List<Delete> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
-            for (final Mutation dataMutation : dataMutations) {
-                long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
-                ptr.set(dataMutation.getRow());
-                byte[] regionStartKey = null;
-                byte[] regionEndkey = null;
-                if(maintainer.isLocalIndex()) {
-                    HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
-                    regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                    regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
-                }
-                Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
-                delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY));
-                indexMutations.add(delete);
-            }
-            return indexMutations;
-        } catch (IOException e) {
-            throw new SQLException(e);
-        }
-    }
-    
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
             final MultiRowMutationState multiRowMutationState, List<Mutation> dataMutations, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
             throws SQLException {
@@ -857,6 +830,13 @@ public class IndexUtil {
     				.setMessage("indexState=" + newState).setSchemaName(schemaName)
     				.setTableName(indexName).build().buildException();
     	}
+    }
+
+    public static List<PTable> getClientMaintainedIndexes(PTable table) {
+        Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this client-side mechanism
+        (table.isImmutableRows() || table.isTransactional()) ? IndexMaintainer.maintainedGlobalIndexes(table
+                .getIndexes().iterator()) : Collections.<PTable> emptyIterator();
+        return Lists.newArrayList(indexIterator);
     }
     
 }

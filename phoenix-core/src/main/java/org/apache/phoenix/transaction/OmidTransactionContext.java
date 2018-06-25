@@ -20,6 +20,7 @@ package org.apache.phoenix.transaction;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
@@ -127,6 +128,12 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) {
         // TODO Auto-generated method stub
         return null;
     }

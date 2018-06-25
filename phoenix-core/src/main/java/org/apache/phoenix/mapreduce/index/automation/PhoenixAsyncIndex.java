@@ -59,7 +59,7 @@ public class PhoenixAsyncIndex {
     }
 
     public String getJobName() {
-        return String.format(IndexTool.INDEX_JOB_NAME_TEMPLATE, dataTableName, tableName);
+        return String.format(IndexTool.INDEX_JOB_NAME_TEMPLATE, tableSchem, dataTableName, tableName);
     }
 
     @Override

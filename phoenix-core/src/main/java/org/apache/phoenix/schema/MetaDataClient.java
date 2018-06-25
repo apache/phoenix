@@ -74,6 +74,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
@@ -92,6 +93,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
@@ -261,6 +263,14 @@ public class MetaDataClient {
                     TABLE_SCHEM + "," +
                     TABLE_NAME + "," +
                     ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() +
+                    ") VALUES (?, ?, ?, ?)";
+
+    private static final String SET_INDEX_SYNC_CREATED_DATE =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    SYNC_INDEX_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?)";
     private static final String CREATE_TABLE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
@@ -692,7 +702,7 @@ public class MetaDataClient {
                             // In this case, we update the parent table which may in turn pull
                             // in indexes to add to this table.
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                            if (addIndexesFromParentTable(result, resolvedTimestamp)) {
+                            if (addIndexesFromParentTable(result, resolvedTimestamp, true)) {
                                 connection.addTable(result.getTable(), resolvedTime);
                             } else {
                                 // if we aren't adding the table, we still need to update the
@@ -818,10 +828,12 @@ public class MetaDataClient {
      * TODO: combine this round trip with the one that updates the cache for the child table.
      * @param result the result from updating the cache for the current table.
      * @param resolvedTimestamp timestamp at which child table was resolved
+     * @param alwaysAddIndexes flag that determines whether we should recalculate
+     *        all indexes that can be used in the view
      * @return true if the PTable contained by result was modified and false otherwise
      * @throws SQLException if the physical table cannot be found
      */
-    private boolean addIndexesFromParentTable(MetaDataMutationResult result, Long resolvedTimestamp) throws SQLException {
+    private boolean addIndexesFromParentTable(MetaDataMutationResult result, Long resolvedTimestamp, boolean alwaysAddIndexes) throws SQLException {
         PTable view = result.getTable();
         // If not a view or if a view directly over an HBase table, there's nothing to do
         if (view.getType() != PTableType.VIEW || view.getViewType() == ViewType.MAPPED) {
@@ -836,7 +848,8 @@ public class MetaDataClient {
         if (parentTable == null) {
             throw new TableNotFoundException(schemaName, tableName);
         }
-        if (!result.wasUpdated() && !parentResult.wasUpdated()) {
+        // if alwaysAddIndexes is false we only add indexes if the parent table or view was updated from the server
+        if (!alwaysAddIndexes && !result.wasUpdated() && !parentResult.wasUpdated()) {
             return false;
         }
         List<PTable> parentTableIndexes = parentTable.getIndexes();
@@ -1166,7 +1179,15 @@ public class MetaDataClient {
                 // If the table is a view, then we will end up calling update stats
                 // here for all the view indexes on it. We take care of local indexes later.
                 if (index.getIndexType() != IndexType.LOCAL) {
-                    rowCount += updateStatisticsInternal(table.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                    if (index.getIndexType() != IndexType.LOCAL) {
+                        if (table.getType() != PTableType.VIEW) {
+                            rowCount += updateStatisticsInternal(index.getPhysicalName(), index,
+                                    updateStatisticsStmt.getProps(), true);
+                        } else {
+                            rowCount += updateStatisticsInternal(table.getPhysicalName(), index,
+                                    updateStatisticsStmt.getProps(), true);
+                        }
+                    }
                 }
             }
             /*
@@ -1515,7 +1536,7 @@ public class MetaDataClient {
                     }
                 }
                 if (!dataTable.isImmutableRows()) {
-                    if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
+                    if (hbaseVersion < MetaDataProtocol.MUTABLE_SI_VERSION_THRESHOLD) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES).setTableName(indexTableName.getTableName()).build().buildException();
                     }
                     if (!connection.getQueryServices().hasIndexWALCodec() && !dataTable.isTransactional()) {
@@ -2296,7 +2317,7 @@ public class MetaDataClient {
                 }
             }
             // System tables have hard-coded column qualifiers. So we can't use column encoding for them.
-            else if (!SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))) {
+            else if (!SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))|| SchemaUtil.isLogTable(schemaName, tableName)) {
                 /*
                  * Indexes inherit the storage scheme of the parent data tables. Otherwise, we always attempt to 
                  * create tables with encoded column names. 
@@ -2386,7 +2407,9 @@ public class MetaDataClient {
                         cqCounterFamily = defaultFamilyName != null ? defaultFamilyName : DEFAULT_COLUMN_FAMILY;
                     }
                 }
-                Integer encodedCQ =  isPkColumn ? null : cqCounter.getNextQualifier(cqCounterFamily);
+                // Use position as column qualifier if APPEND_ONLY_SCHEMA to prevent gaps in
+                // the column encoding (PHOENIX-4737).
+                Integer encodedCQ =  isPkColumn ? null : isAppendOnlySchema ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounter.getNextQualifier(cqCounterFamily);
                 byte[] columnQualifierBytes = null;
                 try {
                     columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(columnDefName.getColumnName(), encodedCQ, encodingScheme, isPkColumn);
@@ -2397,7 +2420,7 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (cqCounter.increment(cqCounterFamily)) {
+                if (!isAppendOnlySchema && cqCounter.increment(cqCounterFamily)) {
                     changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }
                 if (SchemaUtil.isPKColumn(column)) {
@@ -2697,6 +2720,14 @@ public class MetaDataClient {
                 setAsync.setString(3, tableName);
                 setAsync.setDate(4, asyncCreatedDate);
                 setAsync.execute();
+            } else {
+                Date syncCreatedDate = new Date(EnvironmentEdgeManager.currentTimeMillis());
+                PreparedStatement setSync = connection.prepareStatement(SET_INDEX_SYNC_CREATED_DATE);
+                setSync.setString(1, tenantIdStr);
+                setSync.setString(2, schemaName);
+                setSync.setString(3, tableName);
+                setSync.setDate(4, syncCreatedDate);
+                setSync.execute();
             }
             tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
             connection.rollback();
@@ -3352,8 +3383,8 @@ public class MetaDataClient {
                                 } else {
                                     familyName = defaultColumnFamily;
                                 }
-                                encodedCQ = cqCounterToUse.getNextQualifier(familyName);
-                                if (cqCounterToUse.increment(familyName)) {
+                                encodedCQ = table.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounterToUse.getNextQualifier(familyName);
+                                if (!table.isAppendOnlySchema() && cqCounterToUse.increment(familyName)) {
                                     changedCqCounters.put(familyName,
                                         cqCounterToUse.getNextQualifier(familyName));
                                 }
@@ -3403,13 +3434,14 @@ public class MetaDataClient {
                                     if (colDef.isPK()) {
                                         PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
                                         ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
-                                        Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, ++pkSlotPosition));
+                                        Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, pkSlotPosition));
                                         ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
                                         PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true, null, willBeImmutableRows);
                                         addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
                                     }
                                 }
                             }
+                            ++pkSlotPosition;
                         }
                         columnMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                         connection.rollback();
@@ -3420,7 +3452,7 @@ public class MetaDataClient {
                     // have existing indexes.
                     if (Boolean.FALSE.equals(metaPropertiesEvaluated.getIsImmutableRows()) && !table.getIndexes().isEmpty()) {
                         int hbaseVersion = connection.getQueryServices().getLowestClusterHBaseVersion();
-                        if (hbaseVersion < PhoenixDatabaseMetaData.MUTABLE_SI_VERSION_THRESHOLD) {
+                        if (hbaseVersion < MetaDataProtocol.MUTABLE_SI_VERSION_THRESHOLD) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_MUTABLE_INDEXES)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
                         }
@@ -4006,7 +4038,7 @@ public class MetaDataClient {
     }
 
     private PTable addTableToCache(MetaDataMutationResult result) throws SQLException {
-        addIndexesFromParentTable(result, null);
+        addIndexesFromParentTable(result, null, false);
         PTable table = result.getTable();
         connection.addTable(table, TransactionUtil.getResolvedTime(connection, result));
         return table;

@@ -63,4 +63,8 @@ public abstract class BaseAggregator extends BaseTerminalExpression implements A
         return null;
     }
 
+    @Override
+    public boolean trackSize() {
+        return false;
+    }
 }

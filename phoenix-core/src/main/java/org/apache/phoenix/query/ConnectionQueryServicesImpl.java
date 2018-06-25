@@ -339,14 +339,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 @Override
                 public boolean isSupported(ConnectionQueryServices services) {
                     int hbaseVersion = services.getLowestClusterHBaseVersion();
-                    return hbaseVersion < PhoenixDatabaseMetaData.MIN_LOCAL_SI_VERSION_DISALLOW || hbaseVersion > PhoenixDatabaseMetaData.MAX_LOCAL_SI_VERSION_DISALLOW;
+                    return hbaseVersion < MetaDataProtocol.MIN_LOCAL_SI_VERSION_DISALLOW || hbaseVersion > MetaDataProtocol.MAX_LOCAL_SI_VERSION_DISALLOW;
                 }
             },
             Feature.RENEW_LEASE, new FeatureSupported() {
                 @Override
                 public boolean isSupported(ConnectionQueryServices services) {
                     int hbaseVersion = services.getLowestClusterHBaseVersion();
-                    return hbaseVersion >= PhoenixDatabaseMetaData.MIN_RENEW_LEASE_VERSION;
+                    return hbaseVersion >= MetaDataProtocol.MIN_RENEW_LEASE_VERSION;
                 }
             });
     private QueryLoggerDisruptor queryDisruptor;
@@ -2245,6 +2245,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         Map<String, Object> props = entry.getValue();
                         if (props == null) {
                             props = new HashMap<String, Object>();
+                        } else {
+                            props = new HashMap<String, Object>(props);
                         }
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
@@ -2252,6 +2254,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (!willBeTransactional && !Boolean.valueOf(newTableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
                             props.remove(TTL);
                         }
+                        entry.setValue(props);
                     }
                 }
             }
@@ -2476,6 +2479,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
     }
 
+    protected String getSystemSequenceTableDDL(int nSaltBuckets) {
+        String schema = String.format(setSystemDDLProperties(QueryConstants.CREATE_SEQUENCE_METADATA));
+        return Sequence.getCreateTableStatement(schema, nSaltBuckets);
+    }
+
     // Available for testing
     protected String getFunctionTableDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
@@ -2483,7 +2491,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     // Available for testing
     protected String getLogTableDDL() {
-        return QueryConstants.CREATE_LOG_METADATA;
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+
+    private String setSystemLogDDLProperties(String ddl) {
+        return String.format(ddl, props.getInt(LOG_SALT_BUCKETS_ATTRIB, QueryServicesOptions.DEFAULT_LOG_SALT_BUCKETS));
+
     }
     
     // Available for testing
@@ -2691,7 +2704,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void createOtherSystemTables(PhoenixConnection metaConnection, HBaseAdmin hbaseAdmin) throws SQLException, IOException {
         try {
-            metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
+
+            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
+                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
+            metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
         } catch (TableAlreadyExistsException e) {
             nSequenceSaltBuckets = getSaltBuckets(e);
         }
@@ -3073,7 +3090,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             try {
-                String createSequenceTable = Sequence.getCreateTableStatement(nSaltBuckets);
+                String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
                 metaConnection.createStatement().executeUpdate(createSequenceTable);
                 nSequenceSaltBuckets = nSaltBuckets;
             } catch (NewerTableAlreadyExistsException e) {

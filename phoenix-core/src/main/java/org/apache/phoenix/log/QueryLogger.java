@@ -17,13 +17,17 @@
  */
 package org.apache.phoenix.log;
 
+import java.util.Map;
 import java.util.UUID;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap.Builder;
 
 import io.netty.util.internal.ThreadLocalRandom;
 
@@ -34,15 +38,17 @@ public class QueryLogger {
     private final ThreadLocal<RingBufferEventTranslator> threadLocalTranslator = new ThreadLocal<>();
     private QueryLoggerDisruptor queryDisruptor;
     private String queryId;
-    private Long startTime;
     private LogLevel logLevel;
+    private Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
+    private boolean isSynced;
     private static final Log LOG = LogFactory.getLog(QueryLoggerDisruptor.class);
     
     private QueryLogger(PhoenixConnection connection) {
         this.queryId = UUID.randomUUID().toString();
         this.queryDisruptor = connection.getQueryServices().getQueryDisruptor();
-        this.startTime = System.currentTimeMillis();
         logLevel = connection.getLogLevel();
+        log(QueryLogInfo.QUERY_ID_I, queryId);
+        log(QueryLogInfo.START_TIME_I, EnvironmentEdgeManager.currentTimeMillis());
     }
     
     private QueryLogger() {
@@ -58,20 +64,31 @@ public class QueryLogger {
         return result;
     }
     
-    private static final QueryLogger NO_OP_INSTANCE = new QueryLogger() {
+    public static final QueryLogger NO_OP_INSTANCE = new QueryLogger() {
         @Override
-        public void log(QueryLogState logState, ImmutableMap<QueryLogInfo, Object> map) {
+        public void log(QueryLogInfo queryLogInfo, Object info) {
+
+        }
+
+        @Override
+        public boolean isDebugEnabled() {
+            return false;
+        }
+
+        @Override
+        public boolean isInfoEnabled() {
+            return false;
+        }
+
+        @Override
+        public void sync(
+                Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics) {
 
         }
         
         @Override
-        public boolean isDebugEnabled(){
-            return false;
-        }
-        
-        @Override
-        public boolean isInfoEnabled(){
-            return false;
+        public boolean isSynced(){
+            return true;
         }
     };
 
@@ -82,14 +99,14 @@ public class QueryLogger {
     }
 
     /**
-     * Add query log in the table, columns will be logged depending upon the connection logLevel
-     * @param logState State of the query
-     * @param map Value of the map should be in format of the corresponding data type 
+     * Add query log in the table, columns will be logged depending upon the connection logLevel 
      */
-    public void log(QueryLogState logState, ImmutableMap<QueryLogInfo, Object> map) {
-        final RingBufferEventTranslator translator = getCachedTranslator();
-        translator.setQueryInfo(logState, map, logLevel);
-        publishLogs(translator);
+    public void log(QueryLogInfo queryLogInfo, Object info) {
+        try {
+            queryLogBuilder.put(queryLogInfo, info);
+        } catch (Exception e) {
+            LOG.warn("Unable to add log info because of " + e.getMessage());
+        }
     }
     
     private boolean publishLogs(RingBufferEventTranslator translator) {
@@ -102,13 +119,6 @@ public class QueryLogger {
     }
 
     /**
-     * Start time when the logger was started, if {@link LogLevel#OFF} then it's the current time
-     */
-    public Long getStartTime() {
-        return startTime != null ? startTime : System.currentTimeMillis();
-    }
-    
-    /**
      *  Is debug logging currently enabled?
      *  Call this method to prevent having to perform expensive operations (for example, String concatenation) when the log level is more than debug.
      */
@@ -117,7 +127,8 @@ public class QueryLogger {
     }
     
     private boolean isLevelEnabled(LogLevel logLevel){
-        return this.logLevel != null ? logLevel.ordinal() <= this.logLevel.ordinal() : false;
+        return this.logLevel != null && logLevel != LogLevel.OFF ? logLevel.ordinal() <= this.logLevel.ordinal()
+                : false;
     }
     
     /**
@@ -140,6 +151,23 @@ public class QueryLogger {
      */
     public String getQueryId() {
         return this.queryId;
+    }
+    
+
+    public void sync(Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics) {
+        if (!isSynced) {
+            isSynced = true;
+            final RingBufferEventTranslator translator = getCachedTranslator();
+            translator.setQueryInfo(logLevel, queryLogBuilder.build(), readMetrics, overAllMetrics);
+            publishLogs(translator);
+        }
+    }
+    
+    /**
+     * Is Synced already
+     */
+    public boolean isSynced(){
+        return this.isSynced;
     }
     
 }

@@ -54,7 +54,6 @@ import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
-import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
@@ -228,6 +227,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+    public static final byte[] PENDING_DISABLE_COUNT_BYTES = Bytes.toBytes("PENDING_DISABLE_COUNT");
 
     public static final String TYPE_SEQUENCE = "SEQUENCE";
     public static final String SYSTEM_FUNCTION_TABLE = "FUNCTION";
@@ -304,6 +304,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String ASYNC_REBUILD_TIMESTAMP = "ASYNC_REBUILD_TIMESTAMP";
     public static final byte[] ASYNC_REBUILD_TIMESTAMP_BYTES = Bytes.toBytes(ASYNC_REBUILD_TIMESTAMP);
 
+    public static final String COLUMN_ENCODED_BYTES = "COLUMN_ENCODED_BYTES";
+
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
 
@@ -328,6 +330,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String ASYNC_CREATED_DATE = "ASYNC_CREATED_DATE";
     public static final String SEQUENCE_TABLE_TYPE = SYSTEM_SEQUENCE_TABLE;
 
+    public static final String SYNC_INDEX_CREATED_DATE = "SYNC_INDEX_CREATED_DATE";
     public static final String SYSTEM_MUTEX_TABLE_NAME = "MUTEX";
     public static final String SYSTEM_MUTEX_NAME = SchemaUtil.getTableName(QueryConstants.SYSTEM_SCHEMA_NAME, SYSTEM_MUTEX_TABLE_NAME);
     public static final TableName SYSTEM_MUTEX_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_MUTEX_NAME);
@@ -336,22 +339,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
-    public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
-    public static final int MIN_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "6");
-    public static final int MIN_RENEW_LEASE_VERSION = VersionUtil.encodeVersion("1", "1", "3");
-    public static final int MIN_NAMESPACE_MAPPED_PHOENIX_VERSION = VersionUtil.encodeVersion("4", "8", "0");
-    public static final int MIN_PENDING_ACTIVE_INDEX = VersionUtil.encodeVersion("4", "12", "0");
-    public static final int MIN_PENDING_DISABLE_INDEX = VersionUtil.encodeVersion("4", "14", "0");
-    public static final int MIN_CLIENT_RETRY_INDEX_WRITES = VersionUtil.encodeVersion("4", "14", "0");
-    public static final int MIN_TX_CLIENT_SIDE_MAINTENANCE = VersionUtil.encodeVersion("4", "14", "0");
-    
-    // Version below which we should turn off essential column family.
-    public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");
-    // Version below which we should disallow usage of mutable secondary indexing.
-    public static final int MUTABLE_SI_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "10");
-    /** Version below which we fall back on the generic KeyValueBuilder */
-    public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
-    
+
     public static final String IMMUTABLE_STORAGE_SCHEME = "IMMUTABLE_STORAGE_SCHEME";
     public static final byte[] STORAGE_SCHEME_BYTES = Bytes.toBytes(IMMUTABLE_STORAGE_SCHEME);
     public static final String ENCODING_SCHEME = "ENCODING_SCHEME";

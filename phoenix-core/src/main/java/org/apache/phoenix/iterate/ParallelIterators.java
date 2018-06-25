@@ -107,11 +107,10 @@ public class ParallelIterators extends BaseResultIterators {
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
         final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
-        boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
         for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
             final ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, physicalTableName,
-                scan, isRequestMetricsEnabled);
+                scan, context.getConnection().getLogLevel());
             final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
             final TableResultIterator tableResultItr =
                     context.getConnection().getTableResultIteratorFactory().newIterator(

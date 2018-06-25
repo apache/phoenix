@@ -117,6 +117,7 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.tephra.TxConstants;
 
 
 
@@ -161,6 +162,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
     public static final int DEFAULT_MAX_INTRA_REGION_PARALLELIZATION = DEFAULT_MAX_QUERY_CONCURRENCY;
     public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
+    public static final int DEFAULT_AGGREGATE_CHUNK_SIZE_INCREASE = 1024 * 1024 * 1; // 1 Mb
     public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 3;
     public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
     // Only the first chunked batches are fetched in parallel, so this default
@@ -355,6 +357,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_COST_BASED_OPTIMIZER_ENABLED = false;
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
+    public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
 
     private final Configuration config;
 
@@ -438,7 +441,9 @@ public class QueryServicesOptions {
             .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
             .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED)
             .setIfUnset(LOG_LEVEL,  DEFAULT_LOGGING_LEVEL)
-            .setIfUnset(LOG_SAMPLE_RATE,  DEFAULT_LOG_SAMPLE_RATE);
+            .setIfUnset(LOG_SAMPLE_RATE,  DEFAULT_LOG_SAMPLE_RATE)
+            .setIfUnset(TxConstants.TX_PRE_014_CHANGESET_KEY, Boolean.FALSE.toString())
+            ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.

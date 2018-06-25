@@ -85,6 +85,7 @@ public class StatementContext {
     private final ReadMetricQueue readMetricsQueue;
     private final OverAllQueryMetrics overAllQueryMetrics;
     private QueryLogger queryLogger;
+    private boolean isClientSideUpsertSelect;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -98,7 +99,7 @@ public class StatementContext {
     }
 
     public StatementContext(PhoenixStatement statement, Scan scan) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, scan, new SequenceManager(statement));
     }
 
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver) {
@@ -134,8 +135,8 @@ public class StatementContext {
         this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer> emptyMap() : Maps
                 .<PColumn, Integer> newLinkedHashMap();
         this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
-        this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled);
-        this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled);
+        this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
+        this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
     }
 
     /**
@@ -315,6 +316,14 @@ public class StatementContext {
 
     public QueryLogger getQueryLogger() {
         return queryLogger;
+    }
+
+    public boolean isClientSideUpsertSelect() {
+        return isClientSideUpsertSelect;
+    }
+
+    public void setClientSideUpsertSelect(boolean isClientSideUpsertSelect) {
+        this.isClientSideUpsertSelect = isClientSideUpsertSelect;
     }
     
 }

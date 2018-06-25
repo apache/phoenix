@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.0-HBase-1.4-SNAPSHOT</version>
+    <version>4.14.0-HBase-1.4</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Server</name>
@@ -85,6 +85,7 @@
         </executions>
         <configuration>
           <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
+ 	  <pomFile>${basedir}/pom.xml</pomFile>
         </configuration>
       </plugin>
 

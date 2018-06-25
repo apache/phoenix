@@ -22,9 +22,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
@@ -236,16 +238,23 @@ public interface QueryConstants {
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 
     public static final String CREATE_SEQUENCE_METADATA =
-            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" + TENANT_ID
-                    + " VARCHAR NULL," + SEQUENCE_SCHEMA + " VARCHAR NULL, \n" + SEQUENCE_NAME
-                    + " VARCHAR NOT NULL, \n" + START_WITH + " BIGINT, \n" + CURRENT_VALUE
-                    + " BIGINT, \n" + INCREMENT_BY + " BIGINT, \n" + CACHE_SIZE + " BIGINT, \n" +
-                    // the following three columns were added in 3.1/4.1
-                    MIN_VALUE + " BIGINT, \n" + MAX_VALUE + " BIGINT, \n" + CYCLE_FLAG
-                    + " BOOLEAN, \n" + LIMIT_REACHED_FLAG + " BOOLEAN \n" + " CONSTRAINT "
-                    + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA
-                    + "," + SEQUENCE_NAME + "))\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "="
-                    + Boolean.FALSE;
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +
+            TENANT_ID + " VARCHAR NULL," +
+            SEQUENCE_SCHEMA + " VARCHAR NULL, \n" +
+            SEQUENCE_NAME +  " VARCHAR NOT NULL, \n" +
+            START_WITH + " BIGINT, \n" +
+            CURRENT_VALUE + " BIGINT, \n" +
+            INCREMENT_BY  + " BIGINT, \n" +
+            CACHE_SIZE  + " BIGINT, \n" +
+            //  the following three columns were added in 3.1/4.1
+            MIN_VALUE + " BIGINT, \n" +
+            MAX_VALUE + " BIGINT, \n" +
+            CYCLE_FLAG + " BOOLEAN, \n" +
+            LIMIT_REACHED_FLAG + " BOOLEAN \n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n"+
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
     public static final String CREATE_SYSTEM_SCHEMA = "CREATE SCHEMA " + SYSTEM_CATALOG_SCHEMA;
     public static final String UPGRADE_TABLE_SNAPSHOT_PREFIX = "_UPGRADING_TABLE_";
 
@@ -275,28 +284,31 @@ public interface QueryConstants {
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
     
     public static final String CREATE_LOG_METADATA =
-            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"(\n" +
+            "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"(\n" +
              // Pk columns
+             START_TIME + " DECIMAL, \n" +
+             TABLE_NAME + " VARCHAR, \n" +
+             QUERY_ID + " VARCHAR NOT NULL,\n" +
             TENANT_ID + " VARCHAR ," +
-            QUERY_ID + " VARCHAR NOT NULL,\n" +
             USER + " VARCHAR , \n" +
             CLIENT_IP + " VARCHAR, \n" +
             // Function metadata (will be null for argument row)
             QUERY +  " VARCHAR, \n" +
             EXPLAIN_PLAN + " VARCHAR, \n" +
             // Argument metadata (will be null for function row)
-            START_TIME + " TIMESTAMP, \n" +
-            TOTAL_EXECUTION_TIME + " BIGINT, \n" +
             NO_OF_RESULTS_ITERATED + " BIGINT, \n" +
             QUERY_STATUS + " VARCHAR, \n" +
             EXCEPTION_TRACE + " VARCHAR, \n" +
             GLOBAL_SCAN_DETAILS + " VARCHAR, \n" +
             BIND_PARAMETERS + " VARCHAR, \n" +
             SCAN_METRICS_JSON + " VARCHAR, \n" +
-            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (QUERY_ID))\n" +
+            MetricType.getMetricColumnsDetails()+"\n"+
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (START_TIME, TABLE_NAME, QUERY_ID))\n" +
+            PhoenixDatabaseMetaData.SALT_BUCKETS + "=%s,\n"+
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE+ ",\n" +
             HColumnDescriptor.TTL + "=" + MetaDataProtocol.DEFAULT_LOG_TTL+",\n"+
-            TableProperty.COLUMN_ENCODED_BYTES.toString()+" = 0";
+            TableProperty.IMMUTABLE_STORAGE_SCHEME.toString() + " = " + ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.name() + ",\n" +
+            TableProperty.COLUMN_ENCODED_BYTES.toString()+" = 1";
     
     public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();

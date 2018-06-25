@@ -855,6 +855,51 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
+    @Test
+    public void testQueryWithSeparateConnectionForViewOnTableThatHasIndex() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection conn2 = DriverManager.getConnection(getUrl());
+                Statement s = conn.createStatement();
+                Statement s2 = conn2.createStatement()) {
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String indexName = generateUniqueName();
+            helpTestQueryForViewOnTableThatHasIndex(s, s2, tableName, viewName, indexName);
+        }
+    }
+
+    @Test
+    public void testQueryForViewOnTableThatHasIndex() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement s = conn.createStatement()) {
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String indexName = generateUniqueName();
+            helpTestQueryForViewOnTableThatHasIndex(s, s, tableName, viewName, indexName);
+        }
+    }
+
+    private void helpTestQueryForViewOnTableThatHasIndex(Statement s1, Statement s2, String tableName, String viewName, String indexName)
+            throws SQLException {
+        // Create a table
+        s1.execute("create table " + tableName + " (col1 varchar primary key, col2 varchar)");
+
+        // Create a view on the table
+        s1.execute("create view " + viewName + " (col3 varchar) as select * from " + tableName);
+        s1.executeQuery("select * from " + viewName);
+        // Create a index on the table
+        s1.execute("create index " + indexName + " ON " + tableName + " (col2)");
+
+        try (ResultSet rs =
+                s2.executeQuery("explain select /*+ INDEX(" + viewName + " " + indexName
+                        + ") */ * from " + viewName + " where col2 = 'aaa'")) {
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+
+            // check if the query uses the index
+            assertTrue(explainPlan.contains(indexName));
+        }
+    }
+
     private void validate(String viewName, Connection tenantConn, String[] whereClauseArray,
             long[] expectedArray) throws SQLException {
         for (int i = 0; i < whereClauseArray.length; ++i) {

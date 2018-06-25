@@ -171,7 +171,6 @@ public class SerialIterators extends BaseResultIterators {
                 return EMPTY_ITERATOR;
             }
             ReadMetricQueue readMetrics = context.getReadMetricsQueue();
-            boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
             while (index < scans.size()) {
                 Scan currentScan = scans.get(index++);
                 if (remainingOffset != null) {
@@ -179,7 +178,7 @@ public class SerialIterators extends BaseResultIterators {
                 }
                 ScanMetricsHolder scanMetricsHolder =
                         ScanMetricsHolder.getInstance(readMetrics, tableName, currentScan,
-                            isRequestMetricsEnabled);
+                            context.getConnection().getLogLevel());
                 TableResultIterator itr =
                         new TableResultIterator(mutationState, currentScan, scanMetricsHolder,
                                 renewLeaseThreshold, plan, scanGrouper, caches);
