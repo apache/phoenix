@@ -22,9 +22,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.replication.WALEntryFilter;
 import org.apache.hadoop.hbase.wal.WAL;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.util.List;
@@ -34,9 +32,13 @@ import java.util.List;
  * may change between the source and target clusters at different times, in particular
  * during cluster upgrades. However, tenant-owned data such as tenant-owned views need to
  * be copied. This WALEntryFilter will only allow tenant-owned rows in SYSTEM.CATALOG to
+<<<<<<< HEAD
  * be replicated. Data from all other tables is automatically passed. It will also copy
  * child links in SYSTEM.CHILD_LINK that are globally-owned but point to tenant-owned views.
  *
+=======
+ * be replicated. Data from all other tables is automatically passed.
+>>>>>>> parent of ff8055553... PHOENIX-4229 - Parent-Child linking rows in System.Catalog break tenant view replication
  */
 public class SystemCatalogWALEntryFilter implements WALEntryFilter {
 
@@ -69,35 +71,6 @@ public class SystemCatalogWALEntryFilter implements WALEntryFilter {
     ImmutableBytesWritable key =
         new ImmutableBytesWritable(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
     //rows in system.catalog that aren't tenant-owned will have a leading separator byte
-    boolean isTenantRowCell = key.get()[key.getOffset()] != QueryConstants.SEPARATOR_BYTE;
-
-    /* In addition to the tenant view rows, there are parent-child links (see PHOENIX-2051) that
-     * provide an efficient way for a parent table or view to look up its children.
-     * These rows override SYSTEM_CATALOG.COLUMN_NAME with the child tenant_id,
-     * if any, and contain only a single Cell, LINK_TYPE, which is of PTable.LinkType.Child
-     */
-    boolean isChildLinkToTenantView = false;
-    if (!isTenantRowCell) {
-      ImmutableBytesWritable columnQualifier = new ImmutableBytesWritable(cell.getQualifierArray(),
-          cell.getQualifierOffset(), cell.getQualifierLength());
-      boolean isChildLink = columnQualifier.compareTo(PhoenixDatabaseMetaData.LINK_TYPE_BYTES) == 0;
-      if (isChildLink) {
-        ImmutableBytesWritable columnValue = new ImmutableBytesWritable(cell.getValueArray(),
-            cell.getValueOffset(), cell.getValueLength());
-        if (columnValue.compareTo(PTable.LinkType.CHILD_TABLE.getSerializedValueAsByteArray()) == 0) {
-          byte[][] rowViewKeyMetadata = new byte[5][];
-          SchemaUtil.getVarChars(key.get(), key.getOffset(),
-              key.getLength(), 0, rowViewKeyMetadata);
-          //if the child link is to a tenant-owned view,
-          // the COLUMN_NAME field will be the byte[] of the tenant
-          //otherwise, it will be an empty byte array
-          // (NOT QueryConstants.SEPARATOR_BYTE, but a byte[0])
-          isChildLinkToTenantView =
-              rowViewKeyMetadata[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length != 0;
-        }
-      }
-
-    }
-    return isTenantRowCell || isChildLinkToTenantView;
+    return key.get()[key.getOffset()] != QueryConstants.SEPARATOR_BYTE;
   }
 }
