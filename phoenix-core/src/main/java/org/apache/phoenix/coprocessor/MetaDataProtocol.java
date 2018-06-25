@@ -109,7 +109,6 @@ public abstract class MetaDataProtocol extends MetaDataService {
     /** Version below which we fall back on the generic KeyValueBuilder */
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
 
->>>>>>> master
     // ALWAYS update this map whenever rolling out a new release (major, minor or patch release). 
     // Key is the SYSTEM.CATALOG timestamp for the version and value is the version string.
     private static final NavigableMap<Long, String> TIMESTAMP_VERSION_MAP = new TreeMap<>();
