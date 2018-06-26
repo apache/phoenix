@@ -4,13 +4,14 @@ set -e
 set -u
 set +x
 
-PY_ENV_PATH=$1
-LOCAL_PY=$2
-PQS_URL=$3
-TABLE_NAME=$4
-PRINC=$5
-KEYTAB_LOC=$6
+LOCAL_PY=$1
+PQS_URL=$2
+TABLE_NAME=$3
+PRINC=$4
+KEYTAB_LOC=$5
 
+
+PY_ENV_PATH=$( mktemp -d )
 conda create -p $PY_ENV_PATH
 cd ${PY_ENV_PATH}/bin
 . activate

@@ -292,7 +292,7 @@ public class SecureQueryServerPhoenixDBIT {
         ArrayList<String> cmdList = new ArrayList<>();
         cmdList.add("/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.sh");
         cmdList.add("/Users/lbronshtein/DEV/phoenix/python");
-        cmdList.add()
+        cmdList.add("http://localhost:8765")
         cmdList.add(tableName);
         cmdList.add(user1.getKey());
         cmdList.add(user1.getValue().getAbsolutePath());
