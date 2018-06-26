@@ -1,63 +1,43 @@
 #/usr/bin/env bash
 
-set -e
 set -u
-set +x
+set -x
+set -e
+
+function cleanup {
+    set +e
+    kdestroy
+    rm $KRB5_CONF_FILE
+    rm -rf $PY_ENV_PATH
+}
+
+trap cleanup EXIT
+
+echo "LAUNCHING SCRIPT"
 
 LOCAL_PY=$1
-PQS_URL=$2
-TABLE_NAME=$3
-PRINC=$4
-KEYTAB_LOC=$5
+TABLE_NAME=$2
+PRINC=$3
+KEYTAB_LOC=$4
 
+export http_proxy=http://proxy.bloomberg.com:81
+export https_proxy=http://proxy.bloomberg.com:81
+export no_proxy=localhost,127.*,[::1],repo.dev.bloomberg.com,artifactory.bdns.bloomberg.com,artprod.dev.bloomberg.com
 
 PY_ENV_PATH=$( mktemp -d )
-conda create -p $PY_ENV_PATH
+conda create -y -p $PY_ENV_PATH
 cd ${PY_ENV_PATH}/bin
-. activate
+. activate ""
+
+echo "INSTALLING COMPONENTS"
 pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install -e file:///${LOCAL_PY}/phoenixdb-module
 
-$KRB5_CONF_FILE=$( mktemp )
+export KRB5_CONFIG=/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/resources/krb5.conf
 
-cat << KRB5C > ${KRB5_CONF_FILE}
-[libdefaults]
- default_realm = EXAMPLE.COM
- ticket_lifetime = 86400
- forwardable = true
- renew_lifetime = 604800
-
-[domain_realm]
- .example.com = EXAMPLE.COM
-
-[relams]
- EXAMPLE.COM = {
-  kdc = localhost
- }
-
-KRB5C
-
-export KRB5_CONFIG=$KRB5_CONF_FILE
-
-
+echo "RUNNING KINIT"
 kinit -kt $KEYTAB_LOC $PRINC
 
+echo "RUN PYTHON TEST"
+python /Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.py
 
-python <<TEST_SCRIPT
-
-import phoenixdb
-import phoenixdb.cursor
-
-database_url = 'http://${PQS_URL}/'
-conn = phoenixdb.connect(database_url, autocommit=True, auth="SPNEGO")
-cursor = conn.cursor()
-cursor.execute("CREATE TABLE " + ${TABLE_NAME} + "(pk integer not null primary key)")
-cursor.execute("UPSERT INTO " + ${TABLE_NAME} + " values(" + i + ")")
-cursor.execute("SELECT * FROM " + ${TABLE_NAME})
-print(cursor.fetchall())
-
-TEST_SCRIPT
-
-kdestroy
-rm $KRB5_CONF_FILE
-rm -rf $PY_ENV_PATH
