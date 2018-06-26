@@ -1,3 +1,9 @@
+#/usr/bin/env bash
+
+set -e
+set -u
+set +x
+
 PY_ENV_PATH=$1
 LOCAL_PY=$2
 PQS_URL=$3
@@ -13,7 +19,7 @@ pip install -e file:///${LOCAL_PY}/phoenixdb-module
 
 $KRB5_CONF_FILE=$( mktemp )
 
-cat << EOF > ${KRB5_CONF_FILE}
+cat << KRB5C > ${KRB5_CONF_FILE}
 [libdefaults]
  default_realm = EXAMPLE.COM
  ticket_lifetime = 86400
@@ -28,7 +34,7 @@ cat << EOF > ${KRB5_CONF_FILE}
   kdc = localhost
  }
 
-EOF
+KRB5C
 
 export KRB5_CONFIG=$KRB5_CONF_FILE
 
@@ -36,7 +42,7 @@ export KRB5_CONFIG=$KRB5_CONF_FILE
 kinit -kt $KEYTAB_LOC $PRINC
 
 
-python <<EOF
+python <<TEST_SCRIPT
 
 import phoenixdb
 import phoenixdb.cursor
@@ -49,7 +55,7 @@ cursor.execute("UPSERT INTO " + ${TABLE_NAME} + " values(" + i + ")")
 cursor.execute("SELECT * FROM " + ${TABLE_NAME})
 print(cursor.fetchall())
 
-EOF
+TEST_SCRIPT
 
 kdestroy
 rm $KRB5_CONF_FILE
