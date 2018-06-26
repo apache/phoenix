@@ -46,8 +46,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
@@ -292,12 +291,34 @@ public class SecureQueryServerPhoenixDBIT {
         ArrayList<String> cmdList = new ArrayList<>();
         cmdList.add("/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.sh");
         cmdList.add("/Users/lbronshtein/DEV/phoenix/python");
-        cmdList.add("http://localhost:8765")
         cmdList.add(tableName);
         cmdList.add(user1.getKey());
         cmdList.add(user1.getValue().getAbsolutePath());
 
-        Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
+        Process runPython = Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
+        BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPython.getInputStream()));
+        BufferedReader processError = new BufferedReader(new InputStreamReader(runPython.getErrorStream()));
+        while (processError.ready() || processOutput.ready()) {
+            /*System.out.println(processError.readLine());
+            System.out.println(processOutput.readLine());*/
+            LOG.error(processError.readLine());
+            LOG.info(processOutput.readLine());
+
+        }
+
+
+        int exitCode = runPython.waitFor();
+        if (exitCode != 0) {
+            while (processError.ready() || processOutput.ready()) {
+                LOG.error(processError.readLine());
+                LOG.info(processOutput.readLine());
+            }
+
+        }
+
+        assertEquals("Subprocess exited with errors", 0, exitCode);
+
+
 
         /*UserGroupInformation user1Ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(user1.getKey(), user1.getValue().getAbsolutePath());
         user1Ugi.doAs(new PrivilegedExceptionAction<Void>() {
