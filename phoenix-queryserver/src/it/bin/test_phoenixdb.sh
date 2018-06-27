@@ -8,7 +8,6 @@ function cleanup {
     set +e
     set +u
     kdestroy
-    rm $KRB5_TMP
     rm -rf $PY_ENV_PATH
 }
 
