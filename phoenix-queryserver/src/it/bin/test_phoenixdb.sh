@@ -7,7 +7,6 @@ set -e
 function cleanup {
     set +e
     kdestroy
-    rm $KRB5_CONFIG
     rm -rf $PY_ENV_PATH
 }
 
@@ -19,6 +18,7 @@ LOCAL_PY=$1
 TABLE_NAME=$2
 PRINC=$3
 KEYTAB_LOC=$4
+KRB5_CFG_FILE=$5
 
 #export http_proxy=http://proxy.bloomberg.com:81
 #export https_proxy=http://proxy.bloomberg.com:81
@@ -37,7 +37,9 @@ echo "INSTALLING COMPONENTS"
 pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install -e file:///${LOCAL_PY}/phoenixdb-module
 
-export KRB5_CONFIG=/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/resources/krb5.conf
+export KRB5_CONFIG=$KRB5_CFG_FILE
+echo "USING KRB5.CONF FROM MINKIKDC"
+cat $KRB5_CONFIG
 
 echo "RUNNING KINIT"
 kinit -kt $KEYTAB_LOC $PRINC

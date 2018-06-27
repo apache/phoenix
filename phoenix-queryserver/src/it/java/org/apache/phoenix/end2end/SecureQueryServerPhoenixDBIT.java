@@ -292,9 +292,10 @@ public class SecureQueryServerPhoenixDBIT {
         cmdList.add("/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.sh");
         cmdList.add("/Users/lbronshtein/DEV/phoenix/python");
         cmdList.add(tableName);
-        cmdList.add(user1.getKey());
+        cmdList.add(user1.getKey() + "@" + KDC.getRealm());
         cmdList.add(user1.getValue().getAbsolutePath());
-        cmdList.add(Integer.toString(KDC.getPort()));
+        //cmdList.add(Integer.toString(KDC.getPort()));
+        cmdList.add(KDC.getKrb5conf().getAbsolutePath());
 
         Process runPython = Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
         BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPython.getInputStream()));
