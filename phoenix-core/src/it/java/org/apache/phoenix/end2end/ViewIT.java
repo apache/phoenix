@@ -38,6 +38,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -55,7 +56,9 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -67,6 +70,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Collections2;
 
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
@@ -344,7 +350,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
    
     @Test
-    public void testViewAndTableAndDrop() throws Exception {
+    public void testViewAndTableAndDropCascade() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
@@ -375,6 +381,31 @@ public class ViewIT extends SplitSystemCatalogIT {
         validateViewDoesNotExist(conn, fullViewName1);
         validateViewDoesNotExist(conn, fullViewName2);
 
+    }
+    
+    @Test
+    public void testRecreateDroppedTableWithChildViews() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        
+        String tableDdl = "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+        conn.createStatement().execute(tableDdl);
+        String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        String indexName = generateUniqueName();
+		ddl = "CREATE INDEX " + indexName + " on " + fullViewName1 + "(v2)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE VIEW " + fullViewName2 + "(v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 10";
+        conn.createStatement().execute(ddl);
+        
+        // drop table cascade should succeed
+        conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
+        
+        validateViewDoesNotExist(conn, fullViewName1);
+        validateViewDoesNotExist(conn, fullViewName2);
+
 		// recreate the table that was dropped
 		conn.createStatement().execute(tableDdl);
 		// the two child views should still not exist
@@ -389,6 +420,85 @@ public class ViewIT extends SplitSystemCatalogIT {
 		} catch (SQLException e) {
 		}
     }
+    
+    @Test
+    public void testRecreateIndexWhoseAncestorWasDropped() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String fullTableName1 = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullTableName2 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        
+        String tableDdl = "CREATE TABLE " + fullTableName1 + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+        conn.createStatement().execute(tableDdl);
+        tableDdl = "CREATE TABLE " + fullTableName2 + "  (k INTEGER NOT NULL PRIMARY KEY, v3 DATE)" + tableDDLOptions;
+        conn.createStatement().execute(tableDdl);
+        String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName1 + " WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        String indexName = generateUniqueName();
+		ddl = "CREATE INDEX " + indexName + " on " + fullViewName1 + "(v2)";
+        conn.createStatement().execute(ddl);
+        try {
+        		// this should fail because an index with this name is present
+	        ddl = "CREATE INDEX " + indexName + " on " + fullTableName2 + "(v1)";
+	        conn.createStatement().execute(ddl);
+	        fail();
+        }
+        catch(SQLException e) {
+        }
+        
+        // drop table cascade should succeed
+        conn.createStatement().execute("DROP TABLE " + fullTableName1 + " CASCADE");
+        
+		// should be able to reuse the index name 
+        ddl = "CREATE INDEX " + indexName + " on " + fullTableName2 + "(v3)";
+		conn.createStatement().execute(ddl);
+		
+		String fullIndexName = SchemaUtil.getTableName(SCHEMA2, indexName);
+		PTable index = PhoenixRuntime.getTableNoCache(conn, fullIndexName);
+		// the index should have v3 but not v2
+        validateCols(index);
+    }
+    
+    @Test
+    public void testRecreateViewWhoseParentWasDropped() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String fullTableName1 = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullTableName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        
+        String tableDdl = "CREATE TABLE " + fullTableName1 + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+        conn.createStatement().execute(tableDdl);
+        tableDdl = "CREATE TABLE " + fullTableName2 + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+        conn.createStatement().execute(tableDdl);
+        String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName1 + " WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        
+        // drop table cascade should succeed
+        conn.createStatement().execute("DROP TABLE " + fullTableName1 + " CASCADE");
+        
+		// should be able to reuse the view name 
+        ddl = "CREATE VIEW " + fullViewName1 + " (v3 VARCHAR) AS SELECT * FROM " + fullTableName2 + " WHERE k > 5";
+        conn.createStatement().execute(ddl);
+        
+        PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName1);
+        // the view should have v3 but not v2
+        validateCols(view);
+    }
+
+	private void validateCols(PTable table) {
+		final String prefix = table.getType() == PTableType.INDEX ? "0:" : "";
+		Predicate<PColumn> predicate = new Predicate<PColumn>() {
+            @Override
+            public boolean apply(PColumn col) {
+				return col.getName().getString().equals(prefix + "V3")
+						|| col.getName().getString().equals(prefix + "V2");
+            }
+        };
+        List<PColumn> colList = table.getColumns();
+		Collection<PColumn> filteredCols = Collections2.filter(colList, predicate);
+        assertEquals(1, filteredCols.size());
+		assertEquals(prefix + "V3", filteredCols.iterator().next().getName().getString());
+	}
     
     @Test
     public void testViewAndTableAndDropCascadeWithIndexes() throws Exception {

@@ -762,7 +762,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             true, null);
             }
             if (pTable == null) {
-                throw new ParentTableNotFoundException(fullParentTableName, fullTableName);
+                throw new ParentTableNotFoundException(parentTableInfo, fullTableName);
             } else {
                 // only combine columns for view indexes (and not local indexes on regular tables
                 // which also have a viewIndexId)
@@ -1799,7 +1799,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[][] rowKeyMetaData = new byte[3][];
         byte[] schemaName = null;
         byte[] tableName = null;
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullTableName = null;
         try {
             int clientVersion = request.getClientVersion();
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
@@ -1807,6 +1807,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             // TODO before creating a table we need to see if the table was previously created and then dropped
             // and clean up any parent->child links or child views
             boolean isNamespaceMapped = MetaDataUtil.isNameSpaceMapped(tableMetadata, GenericKeyValueBuilder.INSTANCE,
@@ -1819,27 +1820,43 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
             ViewType viewType = MetaDataUtil.getViewType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
 
-            // check if the table was dropped, but had child views that were have not yet been cleaned up by compaction
+            // Load table to see if it already exists
+            byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
+            ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
+            long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
+            PTable table = null;
+			try {
+				// Get as of latest timestamp so we can detect if we have a newer table that already
+	            // exists without making an additional query
+				table = loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP,
+						clientVersion);
+			} catch (ParentTableNotFoundException e) {
+				dropChildMetadata(e.getParentSchemaName(), e.getParentTableName(), e.getParentTenantId());
+			}
+            if (table != null) {
+                if (table.getTimeStamp() < clientTimeStamp) {
+                    // If the table is older than the client time stamp and it's deleted,
+                    // continue
+                    if (!isTableDeleted(table)) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        builder.setTable(PTableImpl.toProto(table));
+                        done.run(builder.build());
+                        return;
+                    }
+                } else {
+                    builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_TABLE_FOUND);
+                    builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                    builder.setTable(PTableImpl.toProto(table));
+                    done.run(builder.build());
+                    return;
+                }
+            }
+            
+			// check if the table was dropped, but had child views that were have not yet
+			// been cleaned up by compaction
 			if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-				TableViewFinderResult childViewsResult = new TableViewFinderResult();
-				findAllChildViews(tenantIdBytes, schemaName, tableName, childViewsResult);
-				if (childViewsResult.hasViews()) {
-					for (TableInfo viewInfo : childViewsResult.getResults()) {
-						byte[] viewTenantId = viewInfo.getTenantId();
-						byte[] viewSchemaName = viewInfo.getSchemaName();
-						byte[] viewName = viewInfo.getTableName();
-						Properties props = new Properties();
-						if (viewTenantId != null && viewTenantId.length != 0)
-							props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-						try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration())
-								.unwrap(PhoenixConnection.class)) {
-							MetaDataClient client = new MetaDataClient(connection);
-							org.apache.phoenix.parse.TableName viewTableName = org.apache.phoenix.parse.TableName
-									.create(Bytes.toString(viewSchemaName), Bytes.toString(viewName));
-							client.dropTable(new DropTableStatement(viewTableName, PTableType.VIEW, false, true, true));
-						}
-					}
-				}
+				dropChildMetadata(schemaName, tableName, tenantIdBytes);
 			}
             
             // Here we are passed the parent's columns to add to a view, PHOENIX-3534 allows for a splittable
@@ -1887,14 +1904,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (tableType == PTableType.VIEW) {
                 byte[][] parentSchemaTableNames = new byte[3][];
                 byte[][] parentPhysicalSchemaTableNames = new byte[3][];
-                /*
-                 * For a view, we lock the base physical table row. For a mapped view, there is 
-                 * no link present to the physical table. So the viewPhysicalTableRow is null
-                 * in that case.
-                 */
+				/*
+				 * For a mapped view, there is no link present to the physical table. So the
+				 * viewPhysicalTableRow is null in that case.
+				 */
                 
                 viewPhysicalTableRow = getPhysicalTableRowForView(tableMetadata, parentSchemaTableNames,parentPhysicalSchemaTableNames);
-                long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 if (parentPhysicalSchemaTableNames[2] != null) {
                     
                     parentTableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
@@ -1952,7 +1967,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 parentTenantId = tenantIdBytes;
                 parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
                 parentTableKey = SchemaUtil.getTableKey(tenantIdBytes, parentSchemaName, parentTableName);
-                long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 PTable parentTable =
                         doGetTable(tenantIdBytes, parentSchemaName, parentTableName, clientTimeStamp, null,
                             request.getClientVersion(), false, false, null);
@@ -1978,7 +1992,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             Region region = env.getRegion();
             List<RowLock> locks = Lists.newArrayList();
             // Place a lock using key for the table to be created
-            byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             try {
                 acquireLock(region, tableKey, locks);
 
@@ -1989,7 +2002,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     return;
                 }
 
-                long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 ImmutableBytesPtr parentCacheKey = null;
                 PTable parentTable = null;
                 if (parentTableName != null) {
@@ -2036,31 +2048,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         builder.setReturnCode(MetaDataProtos.MutationCode.CONCURRENT_TABLE_MUTATION);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                         builder.setTable(PTableImpl.toProto(parentTable));
-                        done.run(builder.build());
-                        return;
-                    }
-                }
-                // Load child table next
-                ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
-                // Get as of latest timestamp so we can detect if we have a newer table that already
-                // exists without making an additional query
-                PTable table =
-                        loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP, clientVersion);
-                if (table != null) {
-                    if (table.getTimeStamp() < clientTimeStamp) {
-                        // If the table is older than the client time stamp and it's deleted,
-                        // continue
-                        if (!isTableDeleted(table)) {
-                            builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            builder.setTable(PTableImpl.toProto(table));
-                            done.run(builder.build());
-                            return;
-                        }
-                    } else {
-                        builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_TABLE_FOUND);
-                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        builder.setTable(PTableImpl.toProto(table));
                         done.run(builder.build());
                         return;
                     }
@@ -2264,6 +2251,30 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     ServerUtil.createIOException(fullTableName, t));
         }
     }
+
+	private void dropChildMetadata(byte[] schemaName, byte[] tableName, byte[] tenantIdBytes)
+			throws IOException, SQLException, ClassNotFoundException {
+		TableViewFinderResult childViewsResult = new TableViewFinderResult();
+		findAllChildViews(tenantIdBytes, schemaName, tableName, childViewsResult);
+		if (childViewsResult.hasViews()) {
+			for (TableInfo viewInfo : childViewsResult.getResults()) {
+				byte[] viewTenantId = viewInfo.getTenantId();
+				byte[] viewSchemaName = viewInfo.getSchemaName();
+				byte[] viewName = viewInfo.getTableName();
+				Properties props = new Properties();
+				if (viewTenantId != null && viewTenantId.length != 0)
+					props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
+				try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration())
+						.unwrap(PhoenixConnection.class)) {
+					MetaDataClient client = new MetaDataClient(connection);
+					org.apache.phoenix.parse.TableName viewTableName = org.apache.phoenix.parse.TableName
+							.create(Bytes.toString(viewSchemaName), Bytes.toString(viewName));
+					client.dropTable(
+							new DropTableStatement(viewTableName, PTableType.VIEW, false, true, true));
+				}
+			}
+		}
+	}
 
     private boolean execeededIndexQuota(PTableType tableType, PTable parentTable) {
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
