@@ -59,6 +59,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.nio.file.Paths;
 
 import static org.junit.Assert.*;
 
@@ -287,13 +288,20 @@ public class SecureQueryServerPhoenixDBIT {
         File file = new File(".");
         currentDirectory = file.getAbsolutePath();
         LOG.debug("Current working directory : "+currentDirectory);
+        LOG.debug("PQS_PORT:" + PQS_PORT);
+        LOG.debug("PQS_URL: " + PQS_URL);
         ArrayList<String> cmdList = new ArrayList<>();
-        cmdList.add("/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.sh");
-        cmdList.add("/Users/lbronshtein/DEV/phoenix/python");
+        // This assumes the test is being run from phoenix/phoenix-queryserver
+        cmdList.add(Paths.get(currentDirectory, "src", "it", "bin", "test_phoenixdb.sh").toString());
+        cmdList.add(Paths.get(currentDirectory, "..", "python").toString());
         cmdList.add(user1.getKey() + "@" + KDC.getRealm());
         cmdList.add(user1.getValue().getAbsolutePath());
-        cmdList.add(KDC.getKrb5conf().getAbsolutePath());
-
+        //cmdList.add(KDC.getKrb5conf().getAbsolutePath());
+        cmdList.add(System.getProperty("java.security.krb5.conf"));
+        LOG.info("KRB5 CONFIG IN  " + KDC.getKrb5conf().getAbsolutePath());
+        cmdList.add(Integer.toString(KDC.getPort()));
+        LOG.info("MINIKDC PORT " + KDC.getPort());
+        cmdList.add(Integer.toString(PQS_PORT));
         Process runPython = Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
         BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPython.getInputStream()));
         BufferedReader processError = new BufferedReader(new InputStreamReader(runPython.getErrorStream()));
