@@ -294,28 +294,19 @@ public class SecureQueryServerPhoenixDBIT {
         cmdList.add(tableName);
         cmdList.add(user1.getKey() + "@" + KDC.getRealm());
         cmdList.add(user1.getValue().getAbsolutePath());
-        //cmdList.add(Integer.toString(KDC.getPort()));
         cmdList.add(KDC.getKrb5conf().getAbsolutePath());
 
         Process runPython = Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
         BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPython.getInputStream()));
         BufferedReader processError = new BufferedReader(new InputStreamReader(runPython.getErrorStream()));
-        while (processError.ready() || processOutput.ready()) {
-            /*System.out.println(processError.readLine());
-            System.out.println(processOutput.readLine());*/
-            LOG.error(processError.readLine());
-            LOG.info(processOutput.readLine());
-
-        }
-
-
         int exitCode = runPython.waitFor();
-        if (exitCode != 0) {
-            while (processError.ready() || processOutput.ready()) {
-                LOG.error(processError.readLine());
-                LOG.info(processOutput.readLine());
-            }
 
+        // dump stdout and stderr
+        while (processOutput.ready()) {
+            LOG.info(processOutput.readLine());
+        }
+        while (processError.ready()) {
+            LOG.error(processError.readLine());
         }
 
         assertEquals("Subprocess exited with errors", 0, exitCode);
