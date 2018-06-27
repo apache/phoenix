@@ -177,6 +177,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
@@ -192,6 +193,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -918,7 +920,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try (RegionScanner scanner = region.getScanner(scan)) {
             PTable oldTable = (PTable)metaDataCache.getIfPresent(cacheKey);
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP-1 : oldTable.getTimeStamp();
-            newTable = getTable(scanner, clientTimeStamp, tableTimeStamp, clientVersion, skipAddingIndexes);
+            newTable = getTable(scanner, clientTimeStamp, tableTimeStamp, clientVersion, skipAddingIndexes, skipAddingParentColumns);
             if (newTable != null
                     && (oldTable == null || tableTimeStamp < newTable.getTimeStamp()
                             || (blockWriteRebuildIndex && newTable.getIndexDisableTimestamp() > 0))
@@ -1007,10 +1009,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
 
-    private void addIndexToTable(PName tenantId, PName schemaName, PName indexName, PName tableName, long clientTimeStamp, List<PTable> indexes, int clientVersion) throws IOException, SQLException {
+	private void addIndexToTable(PName tenantId, PName schemaName, PName indexName, PName tableName,
+			long clientTimeStamp, List<PTable> indexes, int clientVersion, boolean skipAddingParentColumns)
+			throws IOException, SQLException {
         byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes();
-        byte[] key = SchemaUtil.getTableKey(tenantIdBytes, schemaName.getBytes(), indexName.getBytes());
-        PTable indexTable = doGetTable(tenantIdBytes, schemaName.getBytes(), indexName.getBytes(), clientTimeStamp, clientVersion);
+		PTable indexTable = doGetTable(tenantIdBytes, schemaName.getBytes(), indexName.getBytes(), clientTimeStamp,
+				null, clientVersion, false, skipAddingParentColumns, null);
         if (indexTable == null) {
             ServerUtil.throwIOException("Index not found", new TableNotFoundException(schemaName.getString(), indexName.getString()));
             return;
@@ -1164,11 +1168,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     /**
-     * @param skipAddingIndexes if true the returned PTable for a table or view won't have include indexes
+     * @param skipAddingIndexes if true the returned PTable for a table or view won't include indexes
+     * @param skipAddingParentColumns if true the returned PTable won't include inherited columns
      * @return PTable 
      */
     private PTable getTable(RegionScanner scanner, long clientTimeStamp, long tableTimeStamp,
-            int clientVersion, boolean skipAddingIndexes)
+            int clientVersion, boolean skipAddingIndexes, boolean skipAddingParentColumns)
         throws IOException, SQLException {
         List<Cell> results = Lists.newArrayList();
         scanner.next(results);
@@ -1382,7 +1387,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
           } else if (Bytes.compareTo(LINK_TYPE_BYTES, 0, LINK_TYPE_BYTES.length, colKv.getQualifierArray(), colKv.getQualifierOffset(), colKv.getQualifierLength())==0) {
               LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
               if (linkType == LinkType.INDEX_TABLE && !skipAddingIndexes) {
-                  addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes, clientVersion);
+                  addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes, clientVersion, skipAddingParentColumns);
               } else if (linkType == LinkType.PHYSICAL_TABLE) {
                   physicalTables.add(famName);
               } else if (linkType == LinkType.PARENT_TABLE) {
@@ -1814,6 +1819,29 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
             ViewType viewType = MetaDataUtil.getViewType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
 
+            // check if the table was dropped, but had child views that were have not yet been cleaned up by compaction
+			if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+				TableViewFinderResult childViewsResult = new TableViewFinderResult();
+				findAllChildViews(tenantIdBytes, schemaName, tableName, childViewsResult);
+				if (childViewsResult.hasViews()) {
+					for (TableInfo viewInfo : childViewsResult.getResults()) {
+						byte[] viewTenantId = viewInfo.getTenantId();
+						byte[] viewSchemaName = viewInfo.getSchemaName();
+						byte[] viewName = viewInfo.getTableName();
+						Properties props = new Properties();
+						if (viewTenantId != null && viewTenantId.length != 0)
+							props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
+						try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration())
+								.unwrap(PhoenixConnection.class)) {
+							MetaDataClient client = new MetaDataClient(connection);
+							org.apache.phoenix.parse.TableName viewTableName = org.apache.phoenix.parse.TableName
+									.create(Bytes.toString(viewSchemaName), Bytes.toString(viewName));
+							client.dropTable(new DropTableStatement(viewTableName, PTableType.VIEW, false, true, true));
+						}
+					}
+				}
+			}
+            
             // Here we are passed the parent's columns to add to a view, PHOENIX-3534 allows for a splittable
             // System.Catalog thus we only store the columns that are new to the view, not the parents columns,
             // thus here we remove everything that is ORDINAL.POSITION <= baseColumnCount and update the
@@ -2037,6 +2065,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
+                
                 // Add cell for ROW_KEY_ORDER_OPTIMIZABLE = true, as we know that new tables
                 // conform the correct row key. The exception is for a VIEW, which the client
                 // sends over depending on its base physical table.
@@ -2308,7 +2337,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         String tableType = request.getTableType();
         byte[] schemaName = null;
         byte[] tableName = null;
-        PTable lockedAncestorTable = PTableImpl.createFromProto(request.getLockedAncestorTable());
 
         try {
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
@@ -2350,12 +2378,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
-//            byte[] cKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
-//            PTable loadedTable = getTableOnCurrentRegion(env, cKey, new ImmutableBytesPtr(cKey), clientTimeStamp, clientTimeStamp,
-//                    request.getClientVersion());
+			boolean skipAddingParentColumns = request.hasSkipAddingParentColumns()
+					? request.getSkipAddingParentColumns()
+					: false;
             PTable loadedTable =
                     doGetTable(tenantIdBytes, schemaName, tableName, clientTimeStamp, null,
-                        request.getClientVersion(), false, false, lockedAncestorTable);
+                        request.getClientVersion(), false, skipAddingParentColumns, null);
             if (loadedTable == null) {
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                 builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
@@ -3569,7 +3597,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     ConnectionQueryServices queryServices = connection.getQueryServices();
                     MetaDataMutationResult result =
-                            queryServices.dropTable(tableMetaData, PTableType.INDEX, false, basePhysicalTable);
+                            queryServices.dropTable(tableMetaData, PTableType.INDEX, false, false);
                     if (result.getTableNamesToDelete()!=null && !result.getTableNamesToDelete().isEmpty())
                         tableNamesToDelete.addAll(result.getTableNamesToDelete());
                     if (result.getSharedTablesToDelete()!=null && !result.getSharedTablesToDelete().isEmpty())

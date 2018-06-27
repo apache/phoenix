@@ -379,12 +379,12 @@ public class ViewIT extends SplitSystemCatalogIT {
 		conn.createStatement().execute(tableDdl);
 		// the two child views should still not exist
 		try {
-			PhoenixRuntime.getTable(conn, fullViewName1);
+			PhoenixRuntime.getTableNoCache(conn, fullViewName1);
 			fail();
 		} catch (SQLException e) {
 		}
 		try {
-			PhoenixRuntime.getTable(conn, fullViewName2);
+			PhoenixRuntime.getTableNoCache(conn, fullViewName2);
 			fail();
 		} catch (SQLException e) {
 		}

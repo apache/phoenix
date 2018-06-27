@@ -927,6 +927,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       String columnFamily1 = "cf1";
       String columnFamily2 = "cf2";
       String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+      String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
       try (Connection conn = getConnection()) {
             conn.createStatement().execute(
                 "create table " + fullTableName + " (id integer primary key, "
@@ -943,7 +944,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                 "upsert into  " + fullTableName + " values (1, 0.5, 'foo')");
           conn.commit();
-          ResultSet rs = conn.createStatement().executeQuery("select * from "+indexName);
+          ResultSet rs = conn.createStatement().executeQuery("select * from "+fullIndexName);
           assertTrue(rs.next());
           assertEquals(1, rs.getInt(2));
           assertEquals(0.5F, rs.getFloat(1), 0.0);

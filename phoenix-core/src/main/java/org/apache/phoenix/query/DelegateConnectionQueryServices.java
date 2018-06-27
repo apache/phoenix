@@ -120,8 +120,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade, PTable lockedAncestorTable) throws SQLException {
-        return getDelegate().dropTable(tabeMetaData, tableType, cascade, lockedAncestorTable);
+    public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
+        return getDelegate().dropTable(tabeMetaData, tableType, cascade, skipAddingParentColumns);
     }
 
     @Override
