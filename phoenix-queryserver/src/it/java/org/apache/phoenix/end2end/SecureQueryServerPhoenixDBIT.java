@@ -330,6 +330,7 @@ public class SecureQueryServerPhoenixDBIT {
             LOG.info("Using miniKDC provided krb5.conf  " + KDC.getKrb5conf().getAbsolutePath());
         }
         cmdList.add(Integer.toString(PQS_PORT));
+        cmdList.add(Paths.get(currentDirectory, "src", "it", "bin", "test_phoenixdb.py").toString());
         Process runPython = Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
         BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPython.getInputStream()));
         BufferedReader processError = new BufferedReader(new InputStreamReader(runPython.getErrorStream()));
@@ -348,34 +349,6 @@ public class SecureQueryServerPhoenixDBIT {
             krb5ConfFile.delete();
 
         assertEquals("Subprocess exited with errors", 0, exitCode);
-
-
-
-        /*UserGroupInformation user1Ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(user1.getKey(), user1.getValue().getAbsolutePath());
-        user1Ugi.doAs(new PrivilegedExceptionAction<Void>() {
-            @Override public Void run() throws Exception {
-                // Phoenix
-                final String tableName = "phx_table1";
-                try (java.sql.Connection conn = DriverManager.getConnection(PQS_URL);
-                        Statement stmt = conn.createStatement()) {
-                    conn.setAutoCommit(true);
-                    assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk integer not null primary key)"));
-                    final int numRows = 5;
-                    for (int i = 0; i < numRows; i++) {
-                      assertEquals(1, stmt.executeUpdate("UPSERT INTO " + tableName + " values(" + i + ")"));
-                    }
-
-                    try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
-                        for (int i = 0; i < numRows; i++) {
-                            assertTrue(rs.next());
-                            assertEquals(i, rs.getInt(1));
-                        }
-                        assertFalse(rs.next());
-                    }
-                }
-                return null;
-            }
-        });*/
     }
 
     byte[] copyBytes(byte[] src, int offset, int length) {

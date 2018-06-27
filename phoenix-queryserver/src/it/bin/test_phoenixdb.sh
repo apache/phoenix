@@ -21,14 +21,17 @@ PRINC=$2
 KEYTAB_LOC=$3
 KRB5_CFG_FILE=$4
 PQS_PORT=$5
+PYTHON_SCRIPT=$6
 
 PY_ENV_PATH=$( mktemp -d )
 conda create -y -p $PY_ENV_PATH
-cd ${PY_ENV_PATH}/bin
+pushd ${PY_ENV_PATH}/bin
 
 # conda activate does stuff with unbound variables :(
 set +u
 . activate ""
+
+popd
 
 set -u
 echo "INSTALLING COMPONENTS"
@@ -46,6 +49,7 @@ klist
 unset http_proxy
 unset https_proxy
 
-echo "RUN PYTHON TEST"
-python /Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.py $PQS_PORT
+echo "Working Directory is ${PWD}"
 
+echo "RUN PYTHON TEST"
+python $PYTHON_SCRIPT $PQS_PORT
