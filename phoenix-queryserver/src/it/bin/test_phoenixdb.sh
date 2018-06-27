@@ -7,7 +7,7 @@ set -e
 function cleanup {
     set +e
     kdestroy
-    rm $KRB5_CONF_FILE
+    rm $KRB5_CONFIG
     rm -rf $PY_ENV_PATH
 }
 
@@ -20,15 +20,19 @@ TABLE_NAME=$2
 PRINC=$3
 KEYTAB_LOC=$4
 
-export http_proxy=http://proxy.bloomberg.com:81
-export https_proxy=http://proxy.bloomberg.com:81
-export no_proxy=localhost,127.*,[::1],repo.dev.bloomberg.com,artifactory.bdns.bloomberg.com,artprod.dev.bloomberg.com
+#export http_proxy=http://proxy.bloomberg.com:81
+#export https_proxy=http://proxy.bloomberg.com:81
+#export no_proxy=localhost,127.*,[::1],repo.dev.bloomberg.com,artifactory.bdns.bloomberg.com,artprod.dev.bloomberg.com
 
 PY_ENV_PATH=$( mktemp -d )
 conda create -y -p $PY_ENV_PATH
 cd ${PY_ENV_PATH}/bin
+
+# conda activate does stuff with unbound variables :(
+set +u
 . activate ""
 
+set -u
 echo "INSTALLING COMPONENTS"
 pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install -e file:///${LOCAL_PY}/phoenixdb-module
