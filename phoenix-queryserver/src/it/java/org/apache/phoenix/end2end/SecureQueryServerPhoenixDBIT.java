@@ -287,11 +287,9 @@ public class SecureQueryServerPhoenixDBIT {
         File file = new File(".");
         currentDirectory = file.getAbsolutePath();
         LOG.debug("Current working directory : "+currentDirectory);
-        final String tableName = "phx_table1";
         ArrayList<String> cmdList = new ArrayList<>();
         cmdList.add("/Users/lbronshtein/DEV/phoenix/phoenix-queryserver/src/it/bin/test_phoenixdb.sh");
         cmdList.add("/Users/lbronshtein/DEV/phoenix/python");
-        cmdList.add(tableName);
         cmdList.add(user1.getKey() + "@" + KDC.getRealm());
         cmdList.add(user1.getValue().getAbsolutePath());
         cmdList.add(KDC.getKrb5conf().getAbsolutePath());

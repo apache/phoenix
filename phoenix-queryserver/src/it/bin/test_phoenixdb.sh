@@ -15,10 +15,9 @@ trap cleanup EXIT
 echo "LAUNCHING SCRIPT"
 
 LOCAL_PY=$1
-TABLE_NAME=$2
-PRINC=$3
-KEYTAB_LOC=$4
-KRB5_CFG_FILE=$5
+PRINC=$2
+KEYTAB_LOC=$3
+KRB5_CFG_FILE=$4
 
 #export http_proxy=http://proxy.bloomberg.com:81
 #export https_proxy=http://proxy.bloomberg.com:81
