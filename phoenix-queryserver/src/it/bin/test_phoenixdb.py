@@ -7,8 +7,7 @@ print "CREATING PQS CONNECTION"
 conn = phoenixdb.connect(database_url, autocommit=True, auth="SPNEGO")
 cursor = conn.cursor()
 
-print "CREATING TABLE"
-cursor.execute("CREATE TABLE " + ${TABLE_NAME} + "(pk integer not null primary key)")
-cursor.execute("UPSERT INTO " + ${TABLE_NAME} + " values(" + i + ")")
-cursor.execute("SELECT * FROM " + ${TABLE_NAME})
-print(cursor.fetchall())
+cursor.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR)")
+cursor.execute("UPSERT INTO users VALUES (?, ?)", (1, 'admin'))
+cursor.execute("SELECT * FROM users")
+print cursor.fetchall()
