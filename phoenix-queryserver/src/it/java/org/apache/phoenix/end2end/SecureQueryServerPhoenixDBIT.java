@@ -296,11 +296,39 @@ public class SecureQueryServerPhoenixDBIT {
         cmdList.add(Paths.get(currentDirectory, "..", "python").toString());
         cmdList.add(user1.getKey() + "@" + KDC.getRealm());
         cmdList.add(user1.getValue().getAbsolutePath());
-        //cmdList.add(KDC.getKrb5conf().getAbsolutePath());
-        cmdList.add(System.getProperty("java.security.krb5.conf"));
-        LOG.info("KRB5 CONFIG IN  " + KDC.getKrb5conf().getAbsolutePath());
-        cmdList.add(Integer.toString(KDC.getPort()));
-        LOG.info("MINIKDC PORT " + KDC.getPort());
+        String osName = System.getProperty("os.name").toLowerCase();
+        LOG.info("OS is " + osName);
+        File krb5ConfFile = null;
+        if (osName.indexOf("mac") >= 0 ) {
+            int kdcPort = KDC.getPort();
+            LOG.info("MINIKDC PORT " + kdcPort);
+            // Render a Heimdal compatible krb5.conf
+            // Currently kinit will only try tcp if the KDC is defined as
+            // kdc = tcp/hostname:port
+            StringBuilder krb5conf = new StringBuilder();
+            krb5conf.append("[libdefaults]\n");
+            krb5conf.append("     default_realm = EXAMPLE.COM\n");
+            krb5conf.append("     udp_preference_limit = 1\n");
+            krb5conf.append("\n");
+            krb5conf.append("[realms]\n");
+            krb5conf.append("    EXAMPLE.COM = {\n");
+            krb5conf.append("       kdc = tcp/localhost:");
+            krb5conf.append(kdcPort);
+            krb5conf.append("\n");
+            krb5conf.append("    }\n");
+
+            LOG.info("Writing Heimdal style krb5.conf");
+            LOG.info(krb5conf.toString());
+            krb5ConfFile = File.createTempFile("krb5.conf", null);
+            FileOutputStream fos = new FileOutputStream(krb5ConfFile);
+            fos.write(krb5conf.toString().getBytes());
+            fos.close();
+            LOG.info("krb5.conf written to " + krb5ConfFile.getAbsolutePath());
+            cmdList.add(krb5ConfFile.getAbsolutePath());
+        } else {
+            cmdList.add(System.getProperty("java.security.krb5.conf"));
+            LOG.info("Using miniKDC provided krb5.conf  " + KDC.getKrb5conf().getAbsolutePath());
+        }
         cmdList.add(Integer.toString(PQS_PORT));
         Process runPython = Runtime.getRuntime().exec(cmdList.toArray(new String[cmdList.size()]));
         BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPython.getInputStream()));
@@ -314,6 +342,10 @@ public class SecureQueryServerPhoenixDBIT {
         while (processError.ready()) {
             LOG.error(processError.readLine());
         }
+
+        // Not managed by miniKDC so we have to clean up
+        if (krb5ConfFile != null)
+            krb5ConfFile.delete();
 
         assertEquals("Subprocess exited with errors", 0, exitCode);
 

@@ -20,13 +20,7 @@ LOCAL_PY=$1
 PRINC=$2
 KEYTAB_LOC=$3
 KRB5_CFG_FILE=$4
-
-KDC_PORT=$5
-PQS_PORT=$6
-
-#export http_proxy=http://proxy.bloomberg.com:81
-#export https_proxy=http://proxy.bloomberg.com:81
-#export no_proxy=localhost,127.*,[::1],repo.dev.bloomberg.com,artifactory.bdns.bloomberg.com,artprod.dev.bloomberg.com
+PQS_PORT=$5
 
 PY_ENV_PATH=$( mktemp -d )
 conda create -y -p $PY_ENV_PATH
@@ -41,25 +35,8 @@ echo "INSTALLING COMPONENTS"
 pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install -e file:///${LOCAL_PY}/phoenixdb-module
 
-#export KRB5_CONFIG=$KRB5_CFG_FILE
-#echo "USING KRB5.CONF FROM MINKIKDC"
-
-echo "Cooking up a conf file for heimdal"
-KRB5_TMP=$( mktemp )
-cat <<KRB5_HEIMDAL > $KRB5_TMP
-[libdefaults]
-     default_realm = EXAMPLE.COM
-     udp_preference_limit = 1
-
-[realms]
-    EXAMPLE.COM = {
-        kdc = tcp/localhost:${KDC_PORT}
-    }
-KRB5_HEIMDAL
-
-export KRB5_CONFIG=$KRB5_TMP
+export KRB5_CONFIG=$KRB5_CFG_FILE
 cat $KRB5_CONFIG
-
 export KRB5_TRACE=/dev/stdout
 
 echo "RUNNING KINIT"
