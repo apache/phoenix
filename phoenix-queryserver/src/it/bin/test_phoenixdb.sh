@@ -37,12 +37,12 @@ echo "INSTALLING COMPONENTS"
 pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install -e file:///${LOCAL_PY}/phoenixdb-module
 
-export KRB5_CONFIG=$KRB5_CFG_FILE
-cat $KRB5_CONFIG
-export KRB5_TRACE=/dev/stdout
+#export KRB5_CONFIG=$KRB5_CFG_FILE
+#cat $KRB5_CONFIG
+#export KRB5_TRACE=/dev/stdout
 
-echo "RUNNING KINIT"
-kinit -kt $KEYTAB_LOC $PRINC
+#echo "RUNNING KINIT"
+#kinit -kt $KEYTAB_LOC $PRINC
 klist
 
 unset http_proxy
