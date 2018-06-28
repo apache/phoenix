@@ -86,12 +86,10 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     final UserGroupInformation user4 =
             UserGroupInformation.createUserForTesting("user4", new String[0]);
 
-
-    @Before
-    public final void doSetup() throws Exception {
+    public final void doSetup(boolean systemMappingEnabled) throws Exception {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
-        enableNamespacesOnServer(conf);
+        enableNamespacesOnServer(conf, systemMappingEnabled);
         configureRandomHMasterPort(conf);
         testUtil.startMiniCluster(1);
     }
@@ -110,9 +108,9 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     // Tests that client can create and read tables on a fresh HBase cluster with
     // system namespace mapping enabled from the start
-    @Test
-    public void freshClientsCreateNamespaceMappedSystemTables() throws IOException, InterruptedException {
-
+	@Test
+	public void freshClientsCreateNamespaceMappedSystemTables() throws Exception {
+		doSetup(true);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
@@ -137,9 +135,9 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     }
 
     // Tests that NEWER clients can read tables on HBase cluster after system tables are migrated
-    @Test
-    public void migrateSystemTablesInExistingCluster() throws IOException, InterruptedException {
-
+	@Test
+	public void migrateSystemTablesInExistingCluster() throws Exception {
+		doSetup(false);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
@@ -167,9 +165,9 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     // Tests that OLDER clients fail after system tables are migrated
     // Clients should be restarted with new properties which are consistent on both client and server
-    @Test
-    public void oldClientsAfterSystemTableMigrationShouldFail() throws IOException, InterruptedException {
-
+	@Test
+	public void oldClientsAfterSystemTableMigrationShouldFail() throws Exception {
+		doSetup(true);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
@@ -202,9 +200,9 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     // Tests that only one client can migrate the system table to system namespace
     // Migrate process acquires lock in SYSMUTEX table
-    @Test
-    public void onlyOneClientCanMigrate() throws IOException, InterruptedException, SQLException {
-
+	@Test
+	public void onlyOneClientCanMigrate() throws Exception {
+		doSetup(false);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
@@ -291,8 +289,10 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         }
     }
 
-    private void enableNamespacesOnServer(Configuration conf) {
+    private void enableNamespacesOnServer(Configuration conf, boolean systemMappingEnabled) {
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+		conf.set(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
+				systemMappingEnabled ? Boolean.TRUE.toString() : Boolean.FALSE.toString());
     }
 
     // For PHOENIX-4389 (Flapping tests SystemTablePermissionsIT and MigrateSystemTablesToSystemNamespaceIT)
