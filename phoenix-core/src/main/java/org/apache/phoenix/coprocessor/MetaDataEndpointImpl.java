@@ -3608,7 +3608,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     ConnectionQueryServices queryServices = connection.getQueryServices();
                     MetaDataMutationResult result =
-                            queryServices.dropTable(tableMetaData, PTableType.INDEX, false, false);
+                            queryServices.dropTable(tableMetaData, PTableType.INDEX, false, true);
                     if (result.getTableNamesToDelete()!=null && !result.getTableNamesToDelete().isEmpty())
                         tableNamesToDelete.addAll(result.getTableNamesToDelete());
                     if (result.getSharedTablesToDelete()!=null && !result.getSharedTablesToDelete().isEmpty())
