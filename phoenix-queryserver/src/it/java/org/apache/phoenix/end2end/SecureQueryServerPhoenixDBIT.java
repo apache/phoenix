@@ -336,16 +336,16 @@ public class SecureQueryServerPhoenixDBIT {
         cmdList.add(Paths.get(currentDirectory, "src", "it", "bin", "test_phoenixdb.py").toString());
 
         // kinit in some random credcache
-        String KRB5CCNAME;
+        /*String KRB5CCNAME;
         if (osName.indexOf("mac") >= 0 )
             KRB5CCNAME = kinit(user1.getKey(), user1.getValue(), krb5ConfFile);
         else
-            KRB5CCNAME = kinit(user1.getKey(), user1.getValue(), KDC.getKrb5conf());
+            KRB5CCNAME = kinit(user1.getKey(), user1.getValue(), KDC.getKrb5conf());*/
 
 
         ProcessBuilder runPython = new ProcessBuilder(cmdList);
         Map<String, String> runPythonEnv = runPython.environment();
-        runPythonEnv.put("KRB5CCNAME", KRB5CCNAME);
+        //runPythonEnv.put("KRB5CCNAME", KRB5CCNAME);
         Process runPythonProcess = runPython.start();
         BufferedReader processOutput = new BufferedReader(new InputStreamReader(runPythonProcess.getInputStream()));
         BufferedReader processError = new BufferedReader(new InputStreamReader(runPythonProcess.getErrorStream()));
@@ -382,6 +382,7 @@ public class SecureQueryServerPhoenixDBIT {
         try {
             File KRB5CCNAME = File.createTempFile("krb5ccname", null);
             kinitEnv.put("KRB5CCNAME", KRB5CCNAME.getAbsolutePath());
+            LOG.info("KRB5CCNAME " + KRB5CCNAME.getAbsolutePath());
         } catch (IOException ioe) {
             throw ioe;
         }
@@ -396,7 +397,6 @@ public class SecureQueryServerPhoenixDBIT {
         while (processOutput.ready()) {
             LOG.error(processOutput.readLine());
         }
-
 
         int exitCode;
         LOG.info("Waiting for kinit to complete");
