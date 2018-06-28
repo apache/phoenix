@@ -8,6 +8,9 @@ function cleanup {
     set +e
     set +u
     kdestroy
+    pushd ${PY_ENV_PATH}/bin
+    . deactivate ""
+    popd
     rm -rf $PY_ENV_PATH
 }
 
