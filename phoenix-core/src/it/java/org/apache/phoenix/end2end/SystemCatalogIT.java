@@ -23,6 +23,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -30,30 +32,34 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.After;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemCatalogIT extends BaseTest {
     private HBaseTestingUtility testUtil = null;
-
-    @After
-    public void cleanup() throws Exception {
-        if (null != testUtil) {
-          testUtil.shutdownMiniCluster();
-          testUtil = null;
-        }
-    }
+    
+	@BeforeClass
+	public static void doSetup() throws Exception {
+		Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
+		serverProps.put(QueryServices.SYSTEM_CATALOG_SPLITTABLE, "false");
+		Map<String, String> clientProps = Collections.emptyMap();
+		setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+				new ReadOnlyProps(clientProps.entrySet().iterator()));
+	}
 
     /**
-     * Make sure that SYSTEM.CATALOG cannot be split, even with schemas and multi-tenant views
+     * Make sure that SYSTEM.CATALOG cannot be split if QueryServices.SYSTEM_CATALOG_SPLITTABLE is false
      */
     @Test
     public void testSystemTableSplit() throws Exception {
-        testUtil = new HBaseTestingUtility();
-        testUtil.startMiniCluster(1);
+        testUtil = getUtility();
         for (int i=0; i<10; i++) {
             createTable("schema"+i+".table_"+i);
         }
@@ -63,7 +69,6 @@ public class SystemCatalogIT extends BaseTest {
         try {
             // now attempt to split SYSTEM.CATALOG
             testUtil.getHBaseAdmin().split(systemCatalog);
-
             // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
             testUtil.getHBaseAdmin().disableTable(systemCatalog);
             testUtil.getHBaseAdmin().enableTable(systemCatalog);

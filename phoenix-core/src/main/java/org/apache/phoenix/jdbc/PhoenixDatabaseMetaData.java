@@ -665,7 +665,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     	ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
     	while (rs.next()) {
     		String schemaName = rs.getString(TABLE_SCHEM);
-    		boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
     		// Allow a "." in columnNamePattern for column family match
             String colPattern = null;
             String cfPattern = null;
