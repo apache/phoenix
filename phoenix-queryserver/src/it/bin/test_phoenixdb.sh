@@ -27,14 +27,7 @@ PYTHON_SCRIPT=$6
 
 PY_ENV_PATH=$( mktemp -d )
 
-case $( python -V ) in
-    *Anaconda*||*anaconda*)
-        conda create -y -p $PY_ENV_PATH
-        ;;
-    *)
-        virtualenv $PY_ENV_PATH
-        ;;
-esac
+conda create -y -p $PY_ENV_PATH || virtualenv $PY_ENV_PATH
 
 pushd ${PY_ENV_PATH}/bin
 
