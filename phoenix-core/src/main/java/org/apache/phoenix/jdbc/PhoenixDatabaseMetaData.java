@@ -488,184 +488,184 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     }
     
     private static final PColumnImpl TENANT_ID_COLUMN = new PColumnImpl(PNameFactory.newName(TENANT_ID),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
     private static final PColumnImpl TABLE_SCHEM_COLUMN = new PColumnImpl(PNameFactory.newName(TABLE_SCHEM),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
     private static final PColumnImpl TABLE_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(TABLE_NAME),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
     private static final PColumnImpl COLUMN_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_NAME),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(DATA_TYPE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl TYPE_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(TYPE_NAME),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(TYPE_NAME), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl COLUMN_SIZE_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, COLUMN_SIZE_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl BUFFER_LENGTH_COLUMN = new PColumnImpl(PNameFactory.newName(BUFFER_LENGTH),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(BUFFER_LENGTH), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl DECIMAL_DIGITS_COLUMN = new PColumnImpl(PNameFactory.newName(DECIMAL_DIGITS),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, DECIMAL_DIGITS_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl NUM_PREC_RADIX_COLUMN = new PColumnImpl(PNameFactory.newName(NUM_PREC_RADIX),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(NUM_PREC_RADIX), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl NULLABLE_COLUMN = new PColumnImpl(PNameFactory.newName(NULLABLE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, NULLABLE_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl REMARKS_COLUMN = new PColumnImpl(PNameFactory.newName(REMARKS),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(REMARKS), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl COLUMN_DEF_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_DEF),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(COLUMN_DEF), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl SQL_DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(SQL_DATA_TYPE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SQL_DATA_TYPE), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl SQL_DATETIME_SUB_COLUMN = new PColumnImpl(PNameFactory.newName(SQL_DATETIME_SUB),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SQL_DATETIME_SUB), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl CHAR_OCTET_LENGTH_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(CHAR_OCTET_LENGTH), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl ORDINAL_POSITION_COLUMN = new PColumnImpl(PNameFactory.newName(ORDINAL_POSITION),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, ORDINAL_POSITION_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl IS_NULLABLE_COLUMN = new PColumnImpl(PNameFactory.newName(IS_NULLABLE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(IS_NULLABLE), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl SCOPE_CATALOG_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_CATALOG),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SCOPE_CATALOG), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl SCOPE_SCHEMA_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_SCHEMA),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SCOPE_SCHEMA), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl SCOPE_TABLE_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_TABLE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SCOPE_TABLE), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl SOURCE_DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(SOURCE_DATA_TYPE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SOURCE_DATA_TYPE), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl IS_AUTOINCREMENT_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(SCOPE_CATALOG), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl ARRAY_SIZE_COLUMN = new PColumnImpl(PNameFactory.newName(ARRAY_SIZE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, ARRAY_SIZE_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl COLUMN_FAMILY_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_FAMILY),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, COLUMN_FAMILY_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl TYPE_ID_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, Bytes.toBytes(TYPE_ID), HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl VIEW_CONSTANT_COLUMN = new PColumnImpl(PNameFactory.newName(VIEW_CONSTANT),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarbinary.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, VIEW_CONSTANT_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl MULTI_TENANT_COLUMN = new PColumnImpl(PNameFactory.newName(MULTI_TENANT),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PBoolean.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, MULTI_TENANT_BYTES, HConstants.LATEST_TIMESTAMP);
-	private static final PColumnImpl KEY_SEQ_COLUMN = new PColumnImpl(PNameFactory.newName(KEY_SEQ),
-			PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
-			0, null, false, null, false, false, KEY_SEQ_BYTES, HConstants.LATEST_TIMESTAMP);
-	
-	private static final List<PColumnImpl> PK_DATUM_LIST = Lists.newArrayList(TENANT_ID_COLUMN, TABLE_SCHEM_COLUMN, TABLE_NAME_COLUMN, COLUMN_NAME_COLUMN);
-	
-	private static final RowProjector GET_COLUMNS_ROW_PROJECTOR = new RowProjector(
-			Arrays.<ColumnProjector> asList(
-					new ExpressionProjector(TABLE_CAT, SYSTEM_CATALOG,
-							new RowKeyColumnExpression(TENANT_ID_COLUMN,
-									new RowKeyValueAccessor(PK_DATUM_LIST, 0)), false),
-					new ExpressionProjector(TABLE_SCHEM, SYSTEM_CATALOG,
-							new RowKeyColumnExpression(TABLE_SCHEM_COLUMN,
-									new RowKeyValueAccessor(PK_DATUM_LIST, 1)), false),
-					new ExpressionProjector(TABLE_NAME, SYSTEM_CATALOG,
-							new RowKeyColumnExpression(TABLE_NAME_COLUMN,
-									new RowKeyValueAccessor(PK_DATUM_LIST, 2)), false),
-					new ExpressionProjector(COLUMN_NAME, SYSTEM_CATALOG,
-							new RowKeyColumnExpression(COLUMN_NAME_COLUMN,
-									new RowKeyValueAccessor(PK_DATUM_LIST, 3)), false),
-					new ExpressionProjector(DATA_TYPE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(DATA_TYPE_COLUMN), false),
-					new ExpressionProjector(TYPE_NAME, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(TYPE_NAME_COLUMN), false),
-					new ExpressionProjector(COLUMN_SIZE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(COLUMN_SIZE_COLUMN), false),
-					new ExpressionProjector(BUFFER_LENGTH, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(BUFFER_LENGTH_COLUMN), false),
-					new ExpressionProjector(DECIMAL_DIGITS, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(DECIMAL_DIGITS_COLUMN), false),
-					new ExpressionProjector(NUM_PREC_RADIX, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(NUM_PREC_RADIX_COLUMN), false),
-					new ExpressionProjector(NULLABLE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(NULLABLE_COLUMN), false),
-					new ExpressionProjector(REMARKS, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(REMARKS_COLUMN), false),
-					new ExpressionProjector(COLUMN_DEF, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(COLUMN_DEF_COLUMN), false),
-					new ExpressionProjector(SQL_DATA_TYPE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(SQL_DATA_TYPE_COLUMN), false),
-					new ExpressionProjector(SQL_DATETIME_SUB, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(SQL_DATETIME_SUB_COLUMN), false),
-					new ExpressionProjector(CHAR_OCTET_LENGTH, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(CHAR_OCTET_LENGTH_COLUMN), false),
-					new ExpressionProjector(ORDINAL_POSITION, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(ORDINAL_POSITION_COLUMN), false),
-					new ExpressionProjector(IS_NULLABLE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(IS_NULLABLE_COLUMN), false),
-					new ExpressionProjector(SCOPE_CATALOG, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(SCOPE_CATALOG_COLUMN), false),
-					new ExpressionProjector(SCOPE_SCHEMA, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(SCOPE_SCHEMA_COLUMN), false),
-					new ExpressionProjector(SCOPE_TABLE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(SCOPE_TABLE_COLUMN), false),
-					new ExpressionProjector(SOURCE_DATA_TYPE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(SOURCE_DATA_TYPE_COLUMN), false),
-					new ExpressionProjector(IS_AUTOINCREMENT, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(IS_AUTOINCREMENT_COLUMN), false),
-					new ExpressionProjector(ARRAY_SIZE, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(ARRAY_SIZE_COLUMN), false),
-					new ExpressionProjector(COLUMN_FAMILY, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(COLUMN_FAMILY_COLUMN), false),
-					new ExpressionProjector(TYPE_ID, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(TYPE_ID_COLUMN), false),
-					new ExpressionProjector(VIEW_CONSTANT, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(VIEW_CONSTANT_COLUMN), false),
-					new ExpressionProjector(MULTI_TENANT, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(MULTI_TENANT_COLUMN), false),
-					new ExpressionProjector(KEY_SEQ, SYSTEM_CATALOG,
-							new KeyValueColumnExpression(KEY_SEQ_COLUMN), false)
-					), 0, true);
-	
-	private boolean match(String str, String pattern) throws SQLException {
-		LiteralExpression strExpr = LiteralExpression.newConstant(str, PVarchar.INSTANCE, SortOrder.ASC);
-		LiteralExpression patternExpr = LiteralExpression.newConstant(pattern, PVarchar.INSTANCE, SortOrder.ASC);
-		List<Expression> children = Arrays.<Expression>asList(strExpr, patternExpr);
-		LikeExpression likeExpr = StringBasedLikeExpression.create(children, LikeType.CASE_SENSITIVE);
-		ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-		boolean evaluated = likeExpr.evaluate(null, ptr);
-		Boolean result = (Boolean)likeExpr.getDataType().toObject(ptr);
-		if (evaluated) {
-			return result;
-		}
-		return false;
-	}
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(DATA_TYPE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl TYPE_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(TYPE_NAME),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(TYPE_NAME), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl COLUMN_SIZE_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, COLUMN_SIZE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl BUFFER_LENGTH_COLUMN = new PColumnImpl(PNameFactory.newName(BUFFER_LENGTH),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(BUFFER_LENGTH), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl DECIMAL_DIGITS_COLUMN = new PColumnImpl(PNameFactory.newName(DECIMAL_DIGITS),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, DECIMAL_DIGITS_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl NUM_PREC_RADIX_COLUMN = new PColumnImpl(PNameFactory.newName(NUM_PREC_RADIX),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(NUM_PREC_RADIX), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl NULLABLE_COLUMN = new PColumnImpl(PNameFactory.newName(NULLABLE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, NULLABLE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl REMARKS_COLUMN = new PColumnImpl(PNameFactory.newName(REMARKS),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(REMARKS), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl COLUMN_DEF_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_DEF),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(COLUMN_DEF), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl SQL_DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(SQL_DATA_TYPE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SQL_DATA_TYPE), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl SQL_DATETIME_SUB_COLUMN = new PColumnImpl(PNameFactory.newName(SQL_DATETIME_SUB),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SQL_DATETIME_SUB), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl CHAR_OCTET_LENGTH_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(CHAR_OCTET_LENGTH), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl ORDINAL_POSITION_COLUMN = new PColumnImpl(PNameFactory.newName(ORDINAL_POSITION),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, ORDINAL_POSITION_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl IS_NULLABLE_COLUMN = new PColumnImpl(PNameFactory.newName(IS_NULLABLE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(IS_NULLABLE), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl SCOPE_CATALOG_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_CATALOG),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SCOPE_CATALOG), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl SCOPE_SCHEMA_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_SCHEMA),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SCOPE_SCHEMA), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl SCOPE_TABLE_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_TABLE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SCOPE_TABLE), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl SOURCE_DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(SOURCE_DATA_TYPE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SOURCE_DATA_TYPE), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl IS_AUTOINCREMENT_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(SCOPE_CATALOG), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl ARRAY_SIZE_COLUMN = new PColumnImpl(PNameFactory.newName(ARRAY_SIZE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, ARRAY_SIZE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl COLUMN_FAMILY_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_FAMILY),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, COLUMN_FAMILY_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl TYPE_ID_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, Bytes.toBytes(TYPE_ID), HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl VIEW_CONSTANT_COLUMN = new PColumnImpl(PNameFactory.newName(VIEW_CONSTANT),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PVarbinary.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, VIEW_CONSTANT_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl MULTI_TENANT_COLUMN = new PColumnImpl(PNameFactory.newName(MULTI_TENANT),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PBoolean.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, MULTI_TENANT_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl KEY_SEQ_COLUMN = new PColumnImpl(PNameFactory.newName(KEY_SEQ),
+            PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+            0, null, false, null, false, false, KEY_SEQ_BYTES, HConstants.LATEST_TIMESTAMP);
     
-	@Override
+    private static final List<PColumnImpl> PK_DATUM_LIST = Lists.newArrayList(TENANT_ID_COLUMN, TABLE_SCHEM_COLUMN, TABLE_NAME_COLUMN, COLUMN_NAME_COLUMN);
+    
+    private static final RowProjector GET_COLUMNS_ROW_PROJECTOR = new RowProjector(
+            Arrays.<ColumnProjector> asList(
+                    new ExpressionProjector(TABLE_CAT, SYSTEM_CATALOG,
+                            new RowKeyColumnExpression(TENANT_ID_COLUMN,
+                                    new RowKeyValueAccessor(PK_DATUM_LIST, 0)), false),
+                    new ExpressionProjector(TABLE_SCHEM, SYSTEM_CATALOG,
+                            new RowKeyColumnExpression(TABLE_SCHEM_COLUMN,
+                                    new RowKeyValueAccessor(PK_DATUM_LIST, 1)), false),
+                    new ExpressionProjector(TABLE_NAME, SYSTEM_CATALOG,
+                            new RowKeyColumnExpression(TABLE_NAME_COLUMN,
+                                    new RowKeyValueAccessor(PK_DATUM_LIST, 2)), false),
+                    new ExpressionProjector(COLUMN_NAME, SYSTEM_CATALOG,
+                            new RowKeyColumnExpression(COLUMN_NAME_COLUMN,
+                                    new RowKeyValueAccessor(PK_DATUM_LIST, 3)), false),
+                    new ExpressionProjector(DATA_TYPE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(DATA_TYPE_COLUMN), false),
+                    new ExpressionProjector(TYPE_NAME, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(TYPE_NAME_COLUMN), false),
+                    new ExpressionProjector(COLUMN_SIZE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(COLUMN_SIZE_COLUMN), false),
+                    new ExpressionProjector(BUFFER_LENGTH, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(BUFFER_LENGTH_COLUMN), false),
+                    new ExpressionProjector(DECIMAL_DIGITS, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(DECIMAL_DIGITS_COLUMN), false),
+                    new ExpressionProjector(NUM_PREC_RADIX, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(NUM_PREC_RADIX_COLUMN), false),
+                    new ExpressionProjector(NULLABLE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(NULLABLE_COLUMN), false),
+                    new ExpressionProjector(REMARKS, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(REMARKS_COLUMN), false),
+                    new ExpressionProjector(COLUMN_DEF, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(COLUMN_DEF_COLUMN), false),
+                    new ExpressionProjector(SQL_DATA_TYPE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(SQL_DATA_TYPE_COLUMN), false),
+                    new ExpressionProjector(SQL_DATETIME_SUB, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(SQL_DATETIME_SUB_COLUMN), false),
+                    new ExpressionProjector(CHAR_OCTET_LENGTH, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(CHAR_OCTET_LENGTH_COLUMN), false),
+                    new ExpressionProjector(ORDINAL_POSITION, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(ORDINAL_POSITION_COLUMN), false),
+                    new ExpressionProjector(IS_NULLABLE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(IS_NULLABLE_COLUMN), false),
+                    new ExpressionProjector(SCOPE_CATALOG, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(SCOPE_CATALOG_COLUMN), false),
+                    new ExpressionProjector(SCOPE_SCHEMA, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(SCOPE_SCHEMA_COLUMN), false),
+                    new ExpressionProjector(SCOPE_TABLE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(SCOPE_TABLE_COLUMN), false),
+                    new ExpressionProjector(SOURCE_DATA_TYPE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(SOURCE_DATA_TYPE_COLUMN), false),
+                    new ExpressionProjector(IS_AUTOINCREMENT, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(IS_AUTOINCREMENT_COLUMN), false),
+                    new ExpressionProjector(ARRAY_SIZE, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(ARRAY_SIZE_COLUMN), false),
+                    new ExpressionProjector(COLUMN_FAMILY, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(COLUMN_FAMILY_COLUMN), false),
+                    new ExpressionProjector(TYPE_ID, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(TYPE_ID_COLUMN), false),
+                    new ExpressionProjector(VIEW_CONSTANT, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(VIEW_CONSTANT_COLUMN), false),
+                    new ExpressionProjector(MULTI_TENANT, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(MULTI_TENANT_COLUMN), false),
+                    new ExpressionProjector(KEY_SEQ, SYSTEM_CATALOG,
+                            new KeyValueColumnExpression(KEY_SEQ_COLUMN), false)
+                    ), 0, true);
+    
+    private boolean match(String str, String pattern) throws SQLException {
+        LiteralExpression strExpr = LiteralExpression.newConstant(str, PVarchar.INSTANCE, SortOrder.ASC);
+        LiteralExpression patternExpr = LiteralExpression.newConstant(pattern, PVarchar.INSTANCE, SortOrder.ASC);
+        List<Expression> children = Arrays.<Expression>asList(strExpr, patternExpr);
+        LikeExpression likeExpr = StringBasedLikeExpression.create(children, LikeType.CASE_SENSITIVE);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        boolean evaluated = likeExpr.evaluate(null, ptr);
+        Boolean result = (Boolean)likeExpr.getDataType().toObject(ptr);
+        if (evaluated) {
+            return result;
+        }
+        return false;
+    }
+    
+    @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
-		boolean isTenantSpecificConnection = connection.getTenantId() != null;
-    	List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
-    	ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
-    	while (rs.next()) {
-    		String schemaName = rs.getString(TABLE_SCHEM);
-    		// Allow a "." in columnNamePattern for column family match
+        boolean isTenantSpecificConnection = connection.getTenantId() != null;
+        List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
+        ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
+        while (rs.next()) {
+            String schemaName = rs.getString(TABLE_SCHEM);
+            // Allow a "." in columnNamePattern for column family match
             String colPattern = null;
             String cfPattern = null;
             if (columnNamePattern != null && columnNamePattern.length() > 0) {
@@ -679,29 +679,29 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     }
                 }
             }
-			String tableName = rs.getString(TABLE_NAME);
-    		String tenantId = rs.getString(TABLE_CAT);
-    		String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-			PTable table = PhoenixRuntime.getTable(connection, fullTableName);
-    		boolean isSalted = table.getBucketNum()!=null;
-    		boolean tenantColSkipped = false;
-    		for (PColumn column : table.getColumns()) {
-    			if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(0))) {
-    				// skip the tenant column
-    				tenantColSkipped = true;
-    				continue;
-    			}
-    			String columnFamily = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
-    			String columnName = column.getName().getString();
-    			if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
-    				if (columnFamily==null || !match(columnFamily, cfPattern)) {
-    					continue;
-    				}
+            String tableName = rs.getString(TABLE_NAME);
+            String tenantId = rs.getString(TABLE_CAT);
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            PTable table = PhoenixRuntime.getTable(connection, fullTableName);
+            boolean isSalted = table.getBucketNum()!=null;
+            boolean tenantColSkipped = false;
+            for (PColumn column : table.getColumns()) {
+                if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(0))) {
+                    // skip the tenant column
+                    tenantColSkipped = true;
+                    continue;
+                }
+                String columnFamily = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
+                String columnName = column.getName().getString();
+                if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
+                    if (columnFamily==null || !match(columnFamily, cfPattern)) {
+                        continue;
+                    }
                 }
                 if (colPattern != null && colPattern.length() > 0) {
-                	if (!match(columnName, colPattern)) {
-                		continue;
-                	}
+                    if (!match(columnName, colPattern)) {
+                        continue;
+                    }
                 }
                 // generate row key
                 // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
@@ -819,19 +819,19 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
                 // KEY_SEQ_COLUMN
                 byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-				int pkPos = table.getPKColumns().indexOf(column);
-				if (pkPos!=-1) {
-					short keySeq = (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
-			        keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
-				}
-				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
-        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
-				Collections.sort(cells, new CellComparator());
-    	    	Tuple tuple = new MultiKeyValueTuple(cells);
-    	    	tuples.add(tuple);
-    		}
-    	}
-    	return new PhoenixResultSet(new MaterializedResultIterator(tuples), GET_COLUMNS_ROW_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
+                int pkPos = table.getPKColumns().indexOf(column);
+                if (pkPos!=-1) {
+                    short keySeq = (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
+                    keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
+                }
+                cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
+                Collections.sort(cells, new CellComparator());
+                Tuple tuple = new MultiKeyValueTuple(cells);
+                tuples.add(tuple);
+            }
+        }
+        return new PhoenixResultSet(new MaterializedResultIterator(tuples), GET_COLUMNS_ROW_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
     }
 
     @Override

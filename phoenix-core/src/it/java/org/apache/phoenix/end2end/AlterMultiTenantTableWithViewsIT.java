@@ -84,13 +84,13 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddDropColumnToBaseTablePropagatesToEntireViewHierarchy() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-		String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
-		String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String tenant1 = TENANT1;
-		String tenant2 = TENANT2;
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+        String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenant1 = TENANT1;
+        String tenant2 = TENANT2;
         /*                                     baseTable
                                  /                  |               \ 
                          view1(tenant1)    view3(tenant2)          view4(global)
@@ -172,13 +172,13 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testChangingPKOfBaseTableChangesPKForAllViews() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-		String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
-		String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String tenant1 = TENANT1;
-		String tenant2 = TENANT2;
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+        String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenant1 = TENANT1;
+        String tenant2 = TENANT2;
         /*                                     baseTable
                                  /                  |               \ 
                          view1(tenant1)    view3(tenant2)          view4(global)
@@ -271,16 +271,16 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddPKColumnToBaseTableWhoseViewsHaveIndices() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-		String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
-		String view2Schema = SCHEMA3;
-		String view3Schema = SCHEMA4;
-		String tenant1 = TENANT1;
-		String tenant2 = TENANT2;
-		String view2Index = generateUniqueName() + "_IDX";
-		String view3Index = generateUniqueName() + "_IDX";
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+        String view2Schema = SCHEMA3;
+        String view3Schema = SCHEMA4;
+        String tenant1 = TENANT1;
+        String tenant2 = TENANT2;
+        String view2Index = generateUniqueName() + "_IDX";
+        String view3Index = generateUniqueName() + "_IDX";
         /*                          baseTable(mutli-tenant)
                                  /                           \                
                          view1(tenant1)                  view3(tenant2, index) 
@@ -413,13 +413,13 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddingPkAndKeyValueColumnsToBaseTableWithDivergedView() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String divergedView = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
-		String divergedViewSchemaName = SchemaUtil.getSchemaNameFromFullName(divergedView);
-		String divergedViewIndex = generateUniqueName() + "_IDX";
-		String tenant1 = TENANT1;
-		String tenant2 = TENANT2;
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String divergedView = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+        String divergedViewSchemaName = SchemaUtil.getSchemaNameFromFullName(divergedView);
+        String divergedViewIndex = generateUniqueName() + "_IDX";
+        String tenant1 = TENANT1;
+        String tenant2 = TENANT2;
         
         /*                                     baseTable
                                  /                  |                
@@ -560,9 +560,9 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAlteringViewConditionallyModifiesHTableMetadata() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String tenant = TENANT1;
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
@@ -597,9 +597,9 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testCacheInvalidatedAfterAddingColumnToBaseTableWithViews() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String tenantId = TENANT1;
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenantId = TENANT1;
         try (Connection globalConn = DriverManager.getConnection(getUrl())) {
             String tableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true" ;
             globalConn.createStatement().execute(tableDDL);
@@ -622,9 +622,9 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testCacheInvalidatedAfterDroppingColumnFromBaseTableWithViews() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-		String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-		String tenantId = TENANT1;
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenantId = TENANT1;
         try (Connection globalConn = DriverManager.getConnection(getUrl())) {
             String tableDDL =
                     "CREATE TABLE "

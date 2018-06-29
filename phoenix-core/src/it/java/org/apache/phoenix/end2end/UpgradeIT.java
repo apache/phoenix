@@ -403,8 +403,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     return true;
                 }
             };
-			try (PhoenixConnection phxConn = new PhoenixConnection(conn.unwrap(PhoenixConnection.class),
-					servicesWithUpgrade, conn.getClientInfo())) {
+            try (PhoenixConnection phxConn = new PhoenixConnection(conn.unwrap(PhoenixConnection.class),
+                    servicesWithUpgrade, conn.getClientInfo())) {
                 // Because upgrade is required, this SQL should fail.
                 try {
                     phxConn.createStatement().executeQuery("SELECT * FROM " + tableName);

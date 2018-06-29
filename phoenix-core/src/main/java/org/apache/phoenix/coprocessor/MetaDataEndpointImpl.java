@@ -2386,8 +2386,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             
             byte[] parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
             byte[] parentLockKey = null;
-            // No need to lock parent table for views or view indexes
-            if (parentTableName != null && pTableType != PTableType.VIEW) {
+            // Only lock parent table for indexes
+            if (parentTableName != null && pTableType == PTableType.INDEX) {
                 parentLockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, parentTableName);
                 result = checkTableKeyInRegion(lockKey, region);
                 if (result != null) {

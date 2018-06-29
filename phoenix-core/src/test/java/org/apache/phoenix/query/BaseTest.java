@@ -232,26 +232,26 @@ public abstract class BaseTest {
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n" +
                 ") ");
         builder.put(TABLE_WITH_ARRAY, "create table "
-				+ TABLE_WITH_ARRAY
-				+ "   (organization_id char(15) not null, \n"
-				+ "    entity_id char(15) not null,\n"
-				+ "    a_string_array varchar(100) array[],\n"
-				+ "    b_string varchar(100),\n"
-				+ "    a_integer integer,\n"
-				+ "    a_date date,\n"
-				+ "    a_time time,\n"
-				+ "    a_timestamp timestamp,\n"
-				+ "    x_decimal decimal(31,10),\n"
-				+ "    x_long_array bigint array[],\n"
-				+ "    x_integer integer,\n"
-				+ "    a_byte_array tinyint array[],\n"
-				+ "    a_short smallint,\n"
-				+ "    a_float float,\n"
-				+ "    a_double_array double array[],\n"
-				+ "    a_unsigned_float unsigned_float,\n"
-				+ "    a_unsigned_double unsigned_double \n"
-				+ "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
-				+ ")");
+                + TABLE_WITH_ARRAY
+                + "   (organization_id char(15) not null, \n"
+                + "    entity_id char(15) not null,\n"
+                + "    a_string_array varchar(100) array[],\n"
+                + "    b_string varchar(100),\n"
+                + "    a_integer integer,\n"
+                + "    a_date date,\n"
+                + "    a_time time,\n"
+                + "    a_timestamp timestamp,\n"
+                + "    x_decimal decimal(31,10),\n"
+                + "    x_long_array bigint array[],\n"
+                + "    x_integer integer,\n"
+                + "    a_byte_array tinyint array[],\n"
+                + "    a_short smallint,\n"
+                + "    a_float float,\n"
+                + "    a_double_array double array[],\n"
+                + "    a_unsigned_float unsigned_float,\n"
+                + "    a_unsigned_double unsigned_double \n"
+                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
+                + ")");
         builder.put(BTABLE_NAME,"create table " + BTABLE_NAME +
                 "   (a_string varchar not null, \n" +
                 "    a_id char(3) not null,\n" +
@@ -402,7 +402,7 @@ public abstract class BaseTest {
     protected static String url;
     protected static PhoenixTestDriver driver;
     protected static boolean clusterInitialized = false;
-	protected static HBaseTestingUtility utility;
+    protected static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create();
 
     private static class TearDownMiniClusterThreadFactory implements ThreadFactory {
@@ -886,18 +886,18 @@ public abstract class BaseTest {
             // Make sure all tables and views have been dropped
             props.remove(CURRENT_SCN_ATTRIB);
             try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
-            	DatabaseMetaData dbmd = seeLatestConn.getMetaData();
-    	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
-				while (rs.next()) {
-					String fullTableName = SchemaUtil.getEscapedTableName(
-							rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
-							rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-					try {
-						PhoenixRuntime.getTable(conn, fullTableName);
-						fail("The following tables are not deleted that should be:" + getTableNames(rs));
-					} catch (TableNotFoundException e) {
-					}
-				}
+                DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+                ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
+                while (rs.next()) {
+                    String fullTableName = SchemaUtil.getEscapedTableName(
+                            rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                            rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                    try {
+                        PhoenixRuntime.getTable(conn, fullTableName);
+                        fail("The following tables are not deleted that should be:" + getTableNames(rs));
+                    } catch (TableNotFoundException e) {
+                    }
+                }
             }
         }
         finally {
@@ -946,12 +946,12 @@ public abstract class BaseTest {
     }
     
     private static String getTableNames(ResultSet rs) throws SQLException {
-    	StringBuilder buf = new StringBuilder();
-    	do {
-    		buf.append(" ");
-    		buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
-    	} while (rs.next());
-    	return buf.toString();
+        StringBuilder buf = new StringBuilder();
+        do {
+            buf.append(" ");
+            buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
+        } while (rs.next());
+        return buf.toString();
     }
 
     private static String getSchemaNames(ResultSet rs) throws SQLException {
@@ -1301,10 +1301,10 @@ public abstract class BaseTest {
     }
     
     private static String initEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
-    	if (tableName == null) {
-    		tableName = generateUniqueName();
-    	}
-    	
+        if (tableName == null) {
+            tableName = generateUniqueName();
+        }
+        
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, null);
         } else {
@@ -1411,10 +1411,10 @@ public abstract class BaseTest {
     }
     
     protected static String initSaltedEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
-    	if (tableName == null) {
-    		tableName = generateUniqueName();
-    	}
-    	
+        if (tableName == null) {
+            tableName = generateUniqueName();
+        }
+        
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
         } else {
@@ -1633,42 +1633,42 @@ public abstract class BaseTest {
     }
     
     public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
-    	for (int i=1; i<=numRows; ++i) {
-	        upsertRow(conn, fullTableName, i, false);
-    	}
+        for (int i=1; i<=numRows; ++i) {
+            upsertRow(conn, fullTableName, i, false);
+        }
     }
 
     public static void upsertRow(Connection conn, String fullTableName, int index, boolean firstRowInBatch) throws SQLException {
-    	String upsert = "UPSERT INTO " + fullTableName
+        String upsert = "UPSERT INTO " + fullTableName
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-		PreparedStatement stmt = conn.prepareStatement(upsert);
-		stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
-		stmt.setString(2, "char"+index);
-		stmt.setInt(3, index);
-		stmt.setLong(4, index);
-		stmt.setBigDecimal(5, new BigDecimal(index));
-		Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-		stmt.setDate(6, date);
-		stmt.setString(7, "varchar_a");
-		stmt.setString(8, "chara");
-		stmt.setInt(9, index+1);
-		stmt.setLong(10, index+1);
-		stmt.setBigDecimal(11, new BigDecimal(index+1));
-		stmt.setDate(12, date);
-		stmt.setString(13, "varchar_b");
-		stmt.setString(14, "charb");
-		stmt.setInt(15, index+2);
-		stmt.setLong(16, index+2);
-		stmt.setBigDecimal(17, new BigDecimal(index+2));
-		stmt.setDate(18, date);
-		stmt.executeUpdate();
-	}
+        PreparedStatement stmt = conn.prepareStatement(upsert);
+        stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
+        stmt.setString(2, "char"+index);
+        stmt.setInt(3, index);
+        stmt.setLong(4, index);
+        stmt.setBigDecimal(5, new BigDecimal(index));
+        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+        stmt.setDate(6, date);
+        stmt.setString(7, "varchar_a");
+        stmt.setString(8, "chara");
+        stmt.setInt(9, index+1);
+        stmt.setLong(10, index+1);
+        stmt.setBigDecimal(11, new BigDecimal(index+1));
+        stmt.setDate(12, date);
+        stmt.setString(13, "varchar_b");
+        stmt.setString(14, "charb");
+        stmt.setInt(15, index+2);
+        stmt.setLong(16, index+2);
+        stmt.setBigDecimal(17, new BigDecimal(index+2));
+        stmt.setDate(18, date);
+        stmt.executeUpdate();
+    }
 
     // Populate the test table with data.
     public static void populateTestTable(String fullTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-        	upsertRows(conn, fullTableName, 3);
+            upsertRows(conn, fullTableName, 3);
             conn.commit();
         }
     }
@@ -1814,15 +1814,15 @@ public abstract class BaseTest {
         List<byte[]> splitPoints = Lists.newArrayListWithExpectedSize(5);
         // add the rows keys of the table or view metadata rows
         Set<String> schemaNameSet=Sets.newHashSetWithExpectedSize(15);
-		for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
-			String tenantId = entrySet.getKey();
+        for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
+            String tenantId = entrySet.getKey();
             for (String fullName : entrySet.getValue()) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(fullName);
                 // we don't allow SYSTEM.CATALOG to split within a schema, so to ensure each table
                 // or view is on a separate region they need to have a unique tenant and schema name
                 assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(tenantId+"."+schemaName));
                 String tableName = SchemaUtil.getTableNameFromFullName(fullName);
-				splitPoints.add(
+                splitPoints.add(
                     SchemaUtil.getTableKey(tenantId, "".equals(schemaName) ? null : schemaName, tableName));
             }
         }

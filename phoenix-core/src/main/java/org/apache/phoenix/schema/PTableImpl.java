@@ -558,10 +558,10 @@ public class PTableImpl implements PTable {
                                 || column.getDataType() == PDouble.INSTANCE 
                                 || column.getDataType() == PBinary.INSTANCE) )
                         || (column.getSortOrder() == SortOrder.ASC && column.getDataType() == PBinary.INSTANCE && column.getMaxLength() != null && column.getMaxLength() > 1);
-            	pkColumns.add(column);
-            	if (column.isRowTimestamp()) {
-            	    rowTimestampCol = column;
-            	}
+                pkColumns.add(column);
+                if (column.isRowTimestamp()) {
+                    rowTimestampCol = column;
+                }
             }
             if (familyName == null) {
                 estimatedSize += column.getEstimatedSize(); // PK columns
@@ -744,7 +744,7 @@ public class PTableImpl implements PTable {
                 if (byteValue.length == 0 && !column.isNullable()) {
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
-                Integer	maxLength = column.getMaxLength();
+                Integer    maxLength = column.getMaxLength();
                 Integer scale = column.getScale();
                 key.set(byteValue);
                 if (!type.isSizeCompatible(key, null, type, sortOrder, null, null, maxLength, scale)) {
@@ -925,10 +925,10 @@ public class PTableImpl implements PTable {
                         }
                         Expression[] colValues = EncodedColumnsUtil.createColumnExpressionArray(maxEncodedColumnQualifier);
                         for (PColumn column : columns) {
-                        	if (columnToValueMap.containsKey(column)) {
-                        	    int colIndex = qualifierEncodingScheme.decode(column.getColumnQualifierBytes())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                        	    colValues[colIndex] = new LiteralExpression(columnToValueMap.get(column));
-                        	}
+                            if (columnToValueMap.containsKey(column)) {
+                                int colIndex = qualifierEncodingScheme.decode(column.getColumnQualifierBytes())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
+                                colValues[colIndex] = new LiteralExpression(columnToValueMap.get(column));
+                            }
                         }
                         
                         List<Expression> children = Arrays.asList(colValues);
@@ -1002,7 +1002,7 @@ public class PTableImpl implements PTable {
                             .getFamilyName().getBytesPtr(), qualifierPtr, ts));
             } else {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue);
-                Integer	maxLength = column.getMaxLength();
+                Integer    maxLength = column.getMaxLength();
                 Integer scale = column.getScale();
                 SortOrder sortOrder = column.getSortOrder();
                 if (!type.isSizeCompatible(ptr, null, type, sortOrder, null, null, maxLength, scale)) {
@@ -1333,15 +1333,15 @@ public class PTableImpl implements PTable {
         }
         EncodedCQCounter encodedColumnQualifierCounter = null;
         if ((!EncodedColumnsUtil.usesEncodedColumnNames(qualifierEncodingScheme) || tableType == PTableType.VIEW)) {
-        	encodedColumnQualifierCounter = PTable.EncodedCQCounter.NULL_COUNTER;
+            encodedColumnQualifierCounter = PTable.EncodedCQCounter.NULL_COUNTER;
         }
         else {
-        	encodedColumnQualifierCounter = new EncodedCQCounter();
-        	if (table.getEncodedCQCountersList() != null) {
-        		for (org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounter cqCounterFromProto : table.getEncodedCQCountersList()) {
-        			encodedColumnQualifierCounter.setValue(cqCounterFromProto.getColFamily(), cqCounterFromProto.getCounter());
-        		}
-        	}
+            encodedColumnQualifierCounter = new EncodedCQCounter();
+            if (table.getEncodedCQCountersList() != null) {
+                for (org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounter cqCounterFromProto : table.getEncodedCQCountersList()) {
+                    encodedColumnQualifierCounter.setValue(cqCounterFromProto.getColFamily(), cqCounterFromProto.getCounter());
+                }
+            }
         }
         Boolean useStatsForParallelization = null;
         if (table.hasUseStatsForParallelization()) {
@@ -1370,15 +1370,15 @@ public class PTableImpl implements PTable {
       builder.setTableNameBytes(ByteStringer.wrap(table.getTableName().getBytes()));
       builder.setTableType(ProtobufUtil.toPTableTypeProto(table.getType()));
       if (table.getType() == PTableType.INDEX) {
-    	if(table.getIndexState() != null) {
-    	  builder.setIndexState(table.getIndexState().getSerializedValue());
-    	}
-    	if(table.getViewIndexId() != null) {
-    	  builder.setViewIndexId(table.getViewIndexId());
-    	}
-    	if(table.getIndexType() != null) {
-    	    builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
-    	}
+        if(table.getIndexState() != null) {
+          builder.setIndexState(table.getIndexState().getSerializedValue());
+        }
+        if(table.getViewIndexId() != null) {
+          builder.setViewIndexId(table.getViewIndexId());
+        }
+        if(table.getIndexType() != null) {
+            builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
+        }
       }
       builder.setSequenceNumber(table.getSequenceNumber());
       builder.setTimeStamp(table.getTimeStamp());

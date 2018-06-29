@@ -225,8 +225,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     public void testDropColumnsFromBaseTableWithView() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-			String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-			String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL," + " COL2 bigint NOT NULL,"
@@ -509,9 +509,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     public void testAddExistingViewPkColumnToBaseTableWithMultipleViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-			String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-			String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-			String viewOfTable2 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String viewOfTable2 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                             + " %s ID char(10) NOT NULL,"
@@ -825,36 +825,36 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             // However, column V3 should have propagated to the non-diverged view.
             sql = "SELECT V3 FROM " + view2;
             viewConn2.createStatement().execute(sql);
-
-			// PK2 should be in both views
-			sql = "SELECT PK2 FROM " + view1;
-			viewConn.createStatement().execute(sql);
-			sql = "SELECT PK2 FROM " + view2;
-			viewConn2.createStatement().execute(sql);
-
-			// Drop a column from the base table
-			alterBaseTable = "ALTER TABLE " + baseTable + " DROP COLUMN V1";
-			conn.createStatement().execute(alterBaseTable);
-
-			// V1 should be dropped from both diverged and non-diverged views
-			sql = "SELECT V1 FROM " + view1;
-			try {
-				viewConn.createStatement().execute(sql);
-			} catch (SQLException e) {
-				assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-			}
-			sql = "SELECT V1 FROM " + view2;
-			try {
-				viewConn2.createStatement().execute(sql);
-			} catch (SQLException e) {
-				assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-			}
-
-			// V2 should be still exist in both diverged and non-diverged views
-			sql = "SELECT V0 FROM " + view1;
-			viewConn.createStatement().execute(sql);
-			sql = "SELECT V0 FROM " + view2;
-			viewConn2.createStatement().execute(sql);
+            
+            // PK2 should be in both views
+            sql = "SELECT PK2 FROM " + view1;
+            viewConn.createStatement().execute(sql);
+            sql = "SELECT PK2 FROM " + view2;
+            viewConn2.createStatement().execute(sql);
+            
+            // Drop a column from the base table
+            alterBaseTable = "ALTER TABLE " + baseTable + " DROP COLUMN V1";
+            conn.createStatement().execute(alterBaseTable);
+            
+            // V1 should be dropped from both diverged and non-diverged views
+            sql = "SELECT V1 FROM " + view1;
+            try {
+                viewConn.createStatement().execute(sql);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+            sql = "SELECT V1 FROM " + view2;
+            try {
+                viewConn2.createStatement().execute(sql);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+            
+            // V2 should be still exist in both diverged and non-diverged views
+            sql = "SELECT V0 FROM " + view1;
+            viewConn.createStatement().execute(sql);
+            sql = "SELECT V0 FROM " + view2;
+            viewConn2.createStatement().execute(sql);
         } 
     }
     
@@ -897,47 +897,47 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     @Test
     public void testAlterTablePropertyOnView() throws Exception {
-    	try (Connection conn = DriverManager.getConnection(getUrl());
+        try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-			String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-			String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
-	        String ddl = "CREATE TABLE " + baseTableName + " (\n"
-	                +"%s ID VARCHAR(15) NOT NULL,\n"
-	                + " COL1 integer NOT NULL,"
-	                +"CREATED_DATE DATE,\n"
-	                +"CONSTRAINT PK PRIMARY KEY (%s ID, COL1)) %s";
-	        conn.createStatement().execute(generateDDL(ddl));
-	        ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
-	        viewConn.createStatement().execute(ddl);
-	        
-	        try {
-	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET IMMUTABLE_ROWS = true");
-	            fail();
-	        } catch (SQLException e) {
-	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
-	        }
-	        
-        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET UPDATE_CACHE_FREQUENCY = 100");
-        	viewConn.createStatement().execute("SELECT * FROM "+ viewOfTable);
-        	PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-        	assertEquals(100, viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).getUpdateCacheFrequency());
-	        
-	        try {
-	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET APPEND_ONLY_SCHEMA = true");
-	            fail();
-	        } catch (SQLException e) {
-	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
-	        }
-    	}
+            String ddl = "CREATE TABLE " + baseTableName + " (\n"
+                    +"%s ID VARCHAR(15) NOT NULL,\n"
+                    + " COL1 integer NOT NULL,"
+                    +"CREATED_DATE DATE,\n"
+                    +"CONSTRAINT PK PRIMARY KEY (%s ID, COL1)) %s";
+            conn.createStatement().execute(generateDDL(ddl));
+            ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
+            viewConn.createStatement().execute(ddl);
+            
+            try {
+                viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET IMMUTABLE_ROWS = true");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+            }
+            
+            viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET UPDATE_CACHE_FREQUENCY = 100");
+            viewConn.createStatement().execute("SELECT * FROM "+ viewOfTable);
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
+            assertEquals(100, viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).getUpdateCacheFrequency());
+            
+            try {
+                viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET APPEND_ONLY_SCHEMA = true");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+            }
+        }
     }
     
     @Test
     public void testAlterAppendOnlySchema() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-			String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-			String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String baseTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
             
             String ddl = "CREATE TABLE " + baseTableName + " (\n"
                     +"%s ID VARCHAR(15) NOT NULL,\n"

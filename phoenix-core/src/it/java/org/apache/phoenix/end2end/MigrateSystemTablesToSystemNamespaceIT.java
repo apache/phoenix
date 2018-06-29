@@ -110,7 +110,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     // system namespace mapping enabled from the start
 	@Test
 	public void freshClientsCreateNamespaceMappedSystemTables() throws Exception {
-		doSetup(true);
+        doSetup(true);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
@@ -167,7 +167,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     // Clients should be restarted with new properties which are consistent on both client and server
 	@Test
 	public void oldClientsAfterSystemTableMigrationShouldFail() throws Exception {
-		doSetup(true);
+        doSetup(true);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
@@ -202,7 +202,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     // Migrate process acquires lock in SYSMUTEX table
 	@Test
 	public void onlyOneClientCanMigrate() throws Exception {
-		doSetup(false);
+        doSetup(false);
         user1.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
