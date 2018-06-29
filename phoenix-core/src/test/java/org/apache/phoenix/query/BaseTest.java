@@ -1786,16 +1786,10 @@ public abstract class BaseTest {
     protected static void splitRegion(byte[] splitPoint) throws SQLException, IOException, InterruptedException {
         HBaseAdmin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        MiniHBaseCluster cluster = getUtility().getHBaseCluster();
-        int startNumRegions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME).size();
         admin.split(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoint);
-        List<HRegion> regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        // wait for the split to happen
-		while (regions.size() != startNumRegions + 1) {
-			Thread.sleep(5000);
-			logger.info("Waiting for region to split....");
-			regions = cluster.getRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-		}
+        // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
+        admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+        admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
     }
     
     /**
@@ -1811,16 +1805,6 @@ public abstract class BaseTest {
         return false;
     }
     
-    /**
-     * @param fullTableOrViewNames  list of global tables or views 
-     */
-    protected void splitSystemCatalog(List<String> fullTableOrViewNames) throws Exception {
-        Map<String, List<String>> tenantToTableAndViewMap = Maps.newHashMapWithExpectedSize(1);
-        tenantToTableAndViewMap.put(null, fullTableOrViewNames);
-        // move metadata to multiple regions
-        splitSystemCatalog(tenantToTableAndViewMap);
-    }
-
     /**
      * Splits SYSTEM.CATALOG into multiple regions based on the table or view names passed in.
      * Metadata for each table or view is moved to a separate region,
