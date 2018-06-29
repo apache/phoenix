@@ -2174,7 +2174,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                 }
                 
-                // From 4.15 the child links are stored in a separate table SYSTEM.CHILD_LINK
+                // The mutations to create a table are written in the following order:
+                // 1. Write the child link as if the next two steps fail we
+                // ignore missing children while processing a parent
+                // 2. Update the encoded column qualifier for the parent table if its on a
+                // different region server (for tables that use column qualifier encoding)
+                // if the next step fails we end up wasting a few col qualifiers
+                // 3. Finally write the mutations to create the table
+
+                // From 4.15 the parent->child links are stored in a separate table SYSTEM.CHILD_LINK
                 List<Mutation> childLinkMutations = MetaDataUtil.removeChildLinks(tableMetadata);
                 MetaDataResponse response =
                         processRemoteRegionMutations(
@@ -2733,6 +2741,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                         GlobalCache.getInstance(this.env).getMetaDataCache();
+
+                // The mutations to create a table are written in the following order:
+                // 1. Update the encoded column qualifier for the parent table if its on a
+                // different region server (for tables that use column qualifier encoding)
+                // if the next step fails we end up wasting a few col qualifiers
+                // 2. Write the mutations to add the column
 
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
