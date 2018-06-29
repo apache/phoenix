@@ -427,8 +427,8 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
                             
         */
         try (Connection conn = DriverManager.getConnection(getUrl());
-        		Connection tenant1Conn = getTenantConnection(tenant1);
-        		Connection tenant2Conn = getTenantConnection(tenant2)) {
+                Connection tenant1Conn = getTenantConnection(tenant1);
+                Connection tenant2Conn = getTenantConnection(tenant2)) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
             
@@ -493,11 +493,11 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testAddColumnsToSaltedBaseTableWithViews() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl());
-        		Connection tenant1Conn = getTenantConnection(tenant)) {
+                Connection tenant1Conn = getTenantConnection(tenant)) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
 
@@ -521,11 +521,11 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
     
     @Test
     public void testDropColumnsFromSaltedBaseTableWithViews() throws Exception {
-		String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl());
-        		Connection tenant1Conn = getTenantConnection(tenant)) {
+                Connection tenant1Conn = getTenantConnection(tenant)) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
 
