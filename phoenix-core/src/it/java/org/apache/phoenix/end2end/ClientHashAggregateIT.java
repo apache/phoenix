@@ -43,7 +43,9 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
    
         try {
             String table = createSalted(conn);
+            verifyExplain(conn, table);
             verifyResults(conn, table);
+            dropTable(conn, table);
         } finally {
             conn.close();
         }
@@ -58,6 +60,7 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         try {
             String table = createUnsalted(conn);
             verifyResults(conn, table);
+            dropTable(conn, table);
         } finally {
             conn.close();
         }
@@ -91,6 +94,29 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         return table;
     }
 
+    private String getQuery(String table, boolean hash) {
+
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN"
+            + (hash ? " HASH_AGGREGATE" : "") + " */"
+            + " t1.val v1, t2.val v2, COUNT(*) c"
+            + " FROM " + table + " t1 JOIN " + table + " t2"
+            + " ON (t1.keyB = t2.keyB)"
+            + " WHERE t1.keyA = 10 AND t2.keyA = 20"
+            + " GROUP BY t1.val, t2.val";
+
+        return query;
+    }
+
+    private void verifyExplain(Connection conn, String table) throws Exception {
+
+        String query = "EXPLAIN " + getQuery(table, true);
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery(query);
+        String plan = QueryUtil.getExplainPlan(rs);
+        rs.close();
+        assertTrue(plan != null && plan.contains("CLIENT HASH AGGREGATE"));
+    }
+
     private void verifyResults(Connection conn, String table) throws Exception {
 
         String upsert = "UPSERT INTO " + table + "(keyA, keyB, val) VALUES(?, ?, ?)";
@@ -119,42 +145,42 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         }
         conn.commit();
 
-        String hashQuery = "SELECT /*+ USE_SORT_MERGE_JOIN HASH_AGGREGATE */"
-            + " t1.val v1, t2.val v2, COUNT(*) c"
-            + " FROM " + table + " t1 JOIN " + table + " t2"
-            + " ON (t1.keyB = t2.keyB)"
-            + " WHERE t1.keyA = 10 AND t2.keyA = 20"
-            + " GROUP BY t1.val, t2.val";
-
-        String sortQuery = "SELECT /*+ USE_SORT_MERGE_JOIN */"
-            + " t1.val v1, t2.val v2, COUNT(*) c"
-            + " FROM " + table + " t1 JOIN " + table + " t2"
-            + " ON (t1.keyB = t2.keyB)"
-            + " WHERE t1.keyA = 10 AND t2.keyA = 20"
-            + " GROUP BY t1.val, t2.val";
-
+        String hashQuery = getQuery(table, true);
+        String sortQuery = getQuery(table, false);
         Statement stmt = conn.createStatement();
         ResultSet hrs = stmt.executeQuery(hashQuery);
         ResultSet srs = stmt.executeQuery(sortQuery);
-        assertTrue(hrs.next());
-        assertTrue(srs.next());
-        assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-        assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-        assertEquals(hrs.getInt("c"), srs.getInt("c"));
-        assertEquals(hrs.getInt("v1"), 1);
-        assertEquals(hrs.getInt("v2"), 2);
-        assertEquals(hrs.getInt("c"), 13);
-        assertTrue(hrs.next());
-        assertTrue(srs.next());
-        assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-        assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-        assertEquals(hrs.getInt("c"), srs.getInt("c"));
-        assertEquals(hrs.getInt("v1"), 2);
-        assertEquals(hrs.getInt("v2"), 1);
-        assertEquals(hrs.getInt("c"), 17);
-        assertFalse(hrs.next());
-        assertFalse(srs.next());
-        hrs.close();
-        srs.close();
+
+        try {
+            assertTrue(hrs.next());
+            assertTrue(srs.next());
+            assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
+            assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
+            assertEquals(hrs.getInt("c"), srs.getInt("c"));
+            assertEquals(hrs.getInt("v1"), 1);
+            assertEquals(hrs.getInt("v2"), 2);
+            assertEquals(hrs.getInt("c"), 13);
+            assertTrue(hrs.next());
+            assertTrue(srs.next());
+            assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
+            assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
+            assertEquals(hrs.getInt("c"), srs.getInt("c"));
+            assertEquals(hrs.getInt("v1"), 2);
+            assertEquals(hrs.getInt("v2"), 1);
+            assertEquals(hrs.getInt("c"), 17);
+            assertFalse(hrs.next());
+            assertFalse(srs.next());
+        } finally {
+            hrs.close();
+            srs.close();
+        }
+    }
+
+    private void dropTable(Connection conn, String table) throws Exception {
+
+        String drop = "DROP TABLE " + table;
+        Statement stmt = conn.createStatement();
+        stmt.execute(drop);
+        stmt.close();
     }
 }
