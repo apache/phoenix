@@ -43,9 +43,7 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
    
         try {
             String table = createSalted(conn);
-            verifyExplain(conn, table);
-            verifyResults(conn, table);
-            dropTable(conn, table);
+            testTable(conn, table);
         } finally {
             conn.close();
         }
@@ -59,11 +57,16 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
    
         try {
             String table = createUnsalted(conn);
-            verifyResults(conn, table);
-            dropTable(conn, table);
+            testTable(conn, table);
         } finally {
             conn.close();
         }
+    }
+
+    private void testTable(Connection conn, String table) throws Exception {
+        verifyExplain(conn, table);
+        verifyResults(conn, table);
+        dropTable(conn, table);
     }
 
     private String createSalted(Connection conn) throws Exception {
@@ -83,14 +86,14 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
     private String createUnsalted(Connection conn) throws Exception {
     
         String table = "UNSALTED_" + generateUniqueName();
-        String createString = "CREATE TABLE " + table + " ("
+        String create = "CREATE TABLE " + table + " ("
             + " keyA BIGINT NOT NULL,"
             + " keyB BIGINT NOT NULL,"
             + " val SMALLINT,"
             + " CONSTRAINT pk PRIMARY KEY (keyA, keyB)"
             + ")";
 
-        conn.createStatement().execute(createString);
+        conn.createStatement().execute(create);
         return table;
     }
 
