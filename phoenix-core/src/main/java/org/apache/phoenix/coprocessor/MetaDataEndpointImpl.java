@@ -2437,8 +2437,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 List<Mutation> remoteMutations = Lists.newArrayList();
                 separateLocalAndRemoteMutations(region, tableMetadata, localMutations, remoteMutations);
                 if (!remoteMutations.isEmpty()) {
-                    // there should only be remote mutations if we are creating a view that uses encoded column qualifiers
-                    // (the remote mutations are to update the encoded column qualifier counter on the parent table)
+                    // while dropping a table all the mutations should be local
                     String msg = "Found unexpected mutations while dropping table "+SchemaUtil.getTableName(schemaName, tableName);
                     logger.error(msg);
                     for (Mutation m : remoteMutations) {
@@ -2460,7 +2459,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     metaDataCache.invalidate(parentCacheKey);
                 }
 
-                // drop all child links which are stored in a separate table SYSTEM.CHILD_LINK
+                // drop parent->child link when dropping a child view
                 MetaDataResponse response =
                         processRemoteRegionMutations(
                             PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,

@@ -850,11 +850,18 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
             
-            // V2 should be still exist in both diverged and non-diverged views
+            // V0 should be still exist in both diverged and non-diverged views
             sql = "SELECT V0 FROM " + view1;
             viewConn.createStatement().execute(sql);
             sql = "SELECT V0 FROM " + view2;
             viewConn2.createStatement().execute(sql);
+
+			// add the column that was dropped back to the view
+			String addColumn = "ALTER VIEW " + view1 + " ADD V2 VARCHAR";
+			viewConn.createStatement().execute(addColumn);
+			// V2 should not exist in the view
+			sql = "SELECT V0 FROM " + view1;
+			viewConn.createStatement().execute(sql);
         } 
     }
     
