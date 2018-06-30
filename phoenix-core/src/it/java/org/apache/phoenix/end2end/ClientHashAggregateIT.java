@@ -97,23 +97,23 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         for (int i = 0; i < 13; i++) {
             upsertStmt.setInt(1, 10);
-            upsertStmt.setInt(2, 100);
+            upsertStmt.setInt(2, 100+i);
             upsertStmt.setInt(3, 1);
             upsertStmt.execute();
 
             upsertStmt.setInt(1, 20);
-            upsertStmt.setInt(2, 100);
+            upsertStmt.setInt(2, 100+i);
             upsertStmt.setInt(3, 2);
             upsertStmt.execute();
         }
         for (int i = 0; i < 17; i++) {
             upsertStmt.setInt(1, 10);
-            upsertStmt.setInt(2, 100);
+            upsertStmt.setInt(2, 200+i);
             upsertStmt.setInt(3, 2);
             upsertStmt.execute();
 
             upsertStmt.setInt(1, 20);
-            upsertStmt.setInt(2, 100);
+            upsertStmt.setInt(2, 200+i);
             upsertStmt.setInt(3, 1);
             upsertStmt.execute();
         }
@@ -138,20 +138,20 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         ResultSet srs = stmt.executeQuery(sortQuery);
         assertTrue(hrs.next());
         assertTrue(srs.next());
-        assertEquals(hrs.getInt("v1"), 1);
         assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-        assertEquals(hrs.getInt("v2"), 2);
         assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-        assertEquals(hrs.getInt("c"), 13);
         assertEquals(hrs.getInt("c"), srs.getInt("c"));
+        assertEquals(hrs.getInt("v1"), 1);
+        assertEquals(hrs.getInt("v2"), 2);
+        assertEquals(hrs.getInt("c"), 13);
         assertTrue(hrs.next());
         assertTrue(srs.next());
-        assertEquals(hrs.getInt("v1"), 2);
         assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-        assertEquals(hrs.getInt("v2"), 1);
         assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-        assertEquals(hrs.getInt("c"), 17);
         assertEquals(hrs.getInt("c"), srs.getInt("c"));
+        assertEquals(hrs.getInt("v1"), 2);
+        assertEquals(hrs.getInt("v2"), 1);
+        assertEquals(hrs.getInt("c"), 17);
         assertFalse(hrs.next());
         assertFalse(srs.next());
         hrs.close();
