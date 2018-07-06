@@ -25,15 +25,19 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
@@ -146,6 +150,50 @@ public class RowKeySchemaTest  extends BaseConnectionlessQueryTest  {
     @Test
     public void testVarFixedFixed() throws Exception {
         assertExpectedRowKeyValue("c1 VARCHAR, c2 CHAR(1) NOT NULL, c3 INTEGER NOT NULL", "c1, c2, c3", new Object[] {"abc", "z", 5});
+    }
+    
+    private static byte[] getKeyPart(PTable t, String... keys) throws SQLException {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        byte[][] keyByteArray = new byte[keys.length][];
+        int i = 0;
+        for (String key : keys) {
+            keyByteArray[i++] = key == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(key);
+        }
+        t.newKey(ptr, keyByteArray);
+        return ptr.copyBytes();
+    }
+    
+    @Test
+    public void testClipLeft() throws Exception {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE T1(K1 CHAR(1) NOT NULL, K2 VARCHAR, K3 VARCHAR, CONSTRAINT pk PRIMARY KEY (K1,K2,K3))  ");
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table;
+        RowKeySchema schema;
+        table = pconn.getTable(new PTableKey(pconn.getTenantId(), "T1"));
+        schema = table.getRowKeySchema();
+        KeyRange r, rLeft, expectedResult;
+        r = KeyRange.getKeyRange(getKeyPart(table, "A", "B", "C"), true, getKeyPart(table, "B", "C"), true);
+        rLeft = schema.clipLeft(0, r, 1, ptr);
+        expectedResult = KeyRange.getKeyRange(getKeyPart(table, "A"), true, getKeyPart(table, "B"), true);
+        r = KeyRange.getKeyRange(getKeyPart(table, "A", "B", "C"), true, getKeyPart(table, "B"), true);
+        rLeft = schema.clipLeft(0, r, 1, ptr);
+        expectedResult = KeyRange.getKeyRange(getKeyPart(table, "A"), true, getKeyPart(table, "B"), true);
+        assertEquals(expectedResult, rLeft);
+        rLeft = schema.clipLeft(0, r, 2, ptr);
+        expectedResult = KeyRange.getKeyRange(getKeyPart(table, "A", "B"), true, getKeyPart(table, "B"), true);
+        assertEquals(expectedResult, rLeft);
+        
+        r = KeyRange.getKeyRange(getKeyPart(table, "A", "B", "C"), true, KeyRange.UNBOUND, true);
+        rLeft = schema.clipLeft(0, r, 2, ptr);
+        expectedResult = KeyRange.getKeyRange(getKeyPart(table, "A", "B"), true, KeyRange.UNBOUND, false);
+        assertEquals(expectedResult, rLeft);
+        
+        r = KeyRange.getKeyRange(KeyRange.UNBOUND, false, getKeyPart(table, "A", "B", "C"), true);
+        rLeft = schema.clipLeft(0, r, 2, ptr);
+        expectedResult = KeyRange.getKeyRange(KeyRange.UNBOUND, false, getKeyPart(table, "A", "B"), true);
+        assertEquals(expectedResult, rLeft);
     }
     
 }

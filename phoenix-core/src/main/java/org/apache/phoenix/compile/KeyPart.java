@@ -33,8 +33,6 @@ import org.apache.phoenix.schema.PTable;
  * between a built-in function and the setting of the scan key
  * during query compilation.
  * 
- * 
- * @since 0.12
  */
 public interface KeyPart {
     /**
