@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 
 public class TableSnapshotResultIterator implements ResultIterator {
 
@@ -65,7 +66,8 @@ public class TableSnapshotResultIterator implements ResultIterator {
     this.scan = scan;
     this.scanMetricsHolder = scanMetricsHolder;
     this.scanIterator = UNINITIALIZED_SCANNER;
-    this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+    this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY),
+        UUID.randomUUID().toString());
     this.snapshotName = configuration.get(
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = FSUtils.getRootDir(configuration);
