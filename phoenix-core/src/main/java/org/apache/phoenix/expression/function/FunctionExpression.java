@@ -30,7 +30,15 @@ import org.apache.phoenix.expression.Expression;
  * @since 0.1
  */
 public abstract class FunctionExpression extends BaseCompoundExpression {
-    public enum OrderPreserving {NO, YES_IF_LAST, YES};
+    public enum OrderPreserving {NO, YES_IF_LAST, YES;
+
+    public OrderPreserving combine(OrderPreserving that) {
+        if (that == null) {
+            return this;
+        }
+        return OrderPreserving.values()[Math.min(this.ordinal(), that.ordinal())];
+    }};
+    
     public FunctionExpression() {
     }
     
