@@ -96,7 +96,24 @@ public class InvertFunction extends ScalarFunction {
             @Override
             public KeyRange getKeyRange(CompareOp op, Expression rhs) {
                 KeyRange range = childPart.getKeyRange(op, rhs);
-                return range.invert();
+                byte[] lower = range.getLowerRange();
+                if (!range.lowerUnbound()) {
+                    lower = SortOrder.invert(lower, 0, lower.length);
+                }
+                byte[] upper;
+                if (range.isSingleKey()) {
+                    upper = lower;
+                } else {
+                    upper = range.getUpperRange();
+                    if (!range.upperUnbound()) {
+                        upper = SortOrder.invert(upper, 0, upper.length);
+                    }
+                }
+                range = KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper, range.isUpperInclusive());
+                if (getColumn().getSortOrder() == SortOrder.DESC) {
+                    range = range.invert();
+                }
+                return range;
             }
 
             @Override
