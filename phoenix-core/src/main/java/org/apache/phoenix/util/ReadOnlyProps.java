@@ -33,7 +33,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Maps;
 
 /**
@@ -319,5 +318,19 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
             }
         }
         return this;
+    }
+
+    /**
+     * Converts these read-only properties into a java.util.Properties object.
+     * @return Java properties
+     */
+    public Properties toProperties() {
+        Properties props = new Properties();
+        Iterator<Entry<String, String>> i = iterator();
+        while (i.hasNext()) {
+            Entry<String, String> e = i.next();
+            props.put(e.getKey(), e.getValue());
+        }
+        return props;
     }
 }
