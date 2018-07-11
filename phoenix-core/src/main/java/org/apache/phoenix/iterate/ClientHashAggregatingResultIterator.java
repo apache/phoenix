@@ -25,10 +25,11 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Map;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -60,9 +61,9 @@ public class ClientHashAggregatingResultIterator
     private Iterator<ImmutableBytesWritable> keyIterator;
 
     public ClientHashAggregatingResultIterator(ResultIterator resultIterator, Aggregators aggregators, List<Expression> groupByExpressions) {
-        if (resultIterator == null) throw new NullPointerException();
-        if (aggregators == null) throw new NullPointerException();
-        if (groupByExpressions == null) throw new NullPointerException();
+        Objects.requireNonNull(resultIterator);
+        Objects.requireNonNull(aggregators);
+        Objects.requireNonNull(groupByExpressions);
         this.resultIterator = resultIterator;
         this.aggregators = aggregators;
         this.groupByExpressions = groupByExpressions;
@@ -71,8 +72,8 @@ public class ClientHashAggregatingResultIterator
     @Override
     public Tuple next() throws SQLException {
         if (keyIterator == null) {
-            populateHash();
-            sortKeys();
+            hash = populateHash();
+            keyList = sortKeys();
             keyIterator = keyList.iterator();
         }
 
@@ -131,7 +132,7 @@ public class ClientHashAggregatingResultIterator
         return new MultiKeyValueTuple(Collections.<Cell> singletonList(keyValue));
     }
 
-    private void populateHash() throws SQLException {
+    private HashMap<ImmutableBytesWritable, Aggregator[]> populateHash() throws SQLException {
         hash = new HashMap<ImmutableBytesWritable, Aggregator[]>(HASH_AGG_INIT_SIZE, 0.75f);
 
         for (Tuple result = resultIterator.next(); result != null; result = resultIterator.next()) {
@@ -145,11 +146,14 @@ public class ClientHashAggregatingResultIterator
 
             aggregators.aggregate(rowAggregators, result);
         }
+
+        return hash;
     }
 
-    private void sortKeys() {
+    private List<ImmutableBytesWritable> sortKeys() {
         keyList = new ArrayList<ImmutableBytesWritable>(hash.size());
         keyList.addAll(hash.keySet());
         Collections.sort(keyList, new ImmutableBytesWritable.Comparator());
+        return keyList;
     }
 }
