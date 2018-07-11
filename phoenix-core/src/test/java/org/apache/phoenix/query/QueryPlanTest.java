@@ -36,6 +36,9 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
     public void testExplainPlan() throws Exception {
         String[] queryPlans = new String[] {
 
+                "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) <= ('000000000000001','000000000000005') ",
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']",
+
                 "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'",
@@ -64,11 +67,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n" + 
                 "    SERVER FILTER BY (X_INTEGER = 2 AND A_INTEGER < 5)",
 
-                "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) <= ('000000000000001','000000000000005') ",
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000003'] - ['000000000000001','000000000000006']",
-
                 "SELECT a_string,b_string FROM atable WHERE organization_id > '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000003','000000000000005') ",
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000003','000000000000005'] - [*]\n" + 
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000003000000000000005'] - [*]\n" + 
                 "    SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id >= '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000000','000000000000005') ",
