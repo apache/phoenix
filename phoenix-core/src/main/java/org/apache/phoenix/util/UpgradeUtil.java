@@ -2018,7 +2018,7 @@ public class UpgradeUtil {
             }
             // Upgrade all child views
             if (table.getType() == PTableType.TABLE) {
-                mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(), childViewsResult.getResults());
+                mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(), childViewsResult.getLinks());
             }
         }
     }

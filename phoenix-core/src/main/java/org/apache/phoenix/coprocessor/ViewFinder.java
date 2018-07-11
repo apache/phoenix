@@ -64,11 +64,14 @@ public class ViewFinder {
         TableViewFinderResult currentResult =
             findRelatedViews(systemCatalog, tenantId, schema, table, linkType, timestamp);
         result.addResult(currentResult);
-        for (TableInfo viewInfo : currentResult.getResults()) {
+        for (TableInfo viewInfo : currentResult.getLinks()) {
             findAllRelatives(systemCatalog, viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName(), linkType, timestamp, result);
         }
     }
 
+    /**
+     * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the related tables/views
+     */
     static TableViewFinderResult findRelatedViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, long timestamp) throws IOException {
         if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {

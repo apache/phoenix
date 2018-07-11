@@ -82,7 +82,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         TableViewFinderResult childViews = new TableViewFinderResult();
         ViewFinder.findAllRelatives(getTable(linkTable), HConstants.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
             table.getTableName().getBytes(), PTable.LinkType.CHILD_TABLE, childViews);
-        assertEquals(3, childViews.getResults().size());
+        assertEquals(3, childViews.getLinks().size());
 
         PTable childMostView = PhoenixRuntime.getTable(conn , leftGrandChild.toUpperCase());
         TableViewFinderResult parentViews = new TableViewFinderResult();
@@ -90,7 +90,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
             .findAllRelatives(getTable(catalogTable), HConstants.EMPTY_BYTE_ARRAY, childMostView.getSchemaName().getBytes(),
                 childMostView.getTableName().getBytes(), PTable.LinkType.PARENT_TABLE, parentViews);
         // returns back everything but the parent table - should only return back the left_child and not the right child
-        assertEquals(1, parentViews.getResults().size());
+        assertEquals(1, parentViews.getLinks().size());
         // now lets check and make sure the columns are correct
         assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childMostView.getName().getString()), "PK2", "V1", "V2", "CARRIER", "DROPPED_CALLS");
 

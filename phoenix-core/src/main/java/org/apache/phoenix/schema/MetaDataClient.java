@@ -2217,6 +2217,7 @@ public class MetaDataClient {
                     }
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
+                    // TODO PHOENIX-4766 Add an options to stop sending parent metadata when creating views
                     List<PColumn> allColumns = parent.getColumns();
                     if (saltBucketNum != null) { // Don't include salt column in columns, as it should not have it when created
                         allColumns = allColumns.subList(1, allColumns.size());
@@ -2237,6 +2238,7 @@ public class MetaDataClient {
                     linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
                     linkStatement.execute();
                     // Add row linking parent to view
+                    // TODO From 4.16 write the child links to SYSTEM.CHILD_LINK directly 
                     linkStatement = connection.prepareStatement(CREATE_CHILD_LINK);
                     linkStatement.setString(1, parent.getTenantId() == null ? null : parent.getTenantId().getString());
                     linkStatement.setString(2, parent.getSchemaName() == null ? null : parent.getSchemaName().getString());

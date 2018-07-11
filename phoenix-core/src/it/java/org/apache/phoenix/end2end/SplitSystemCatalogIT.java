@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -56,20 +57,24 @@ public class SplitSystemCatalogIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
-            try (Connection conn = DriverManager.getConnection(getUrl())) {
-            }
-            String tableName = "TABLE";
-            String fullTableName1 = SchemaUtil.getTableName(SCHEMA1, tableName);
-            String fullTableName2 = SchemaUtil.getTableName(SCHEMA2, tableName);
-            String fullTableName3 = SchemaUtil.getTableName(SCHEMA3, tableName);
-            String fullTableName4 = SchemaUtil.getTableName(SCHEMA4, tableName);
-            ArrayList<String> tableList = Lists.newArrayList(fullTableName1, fullTableName2, fullTableName3);
-            Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
-            tenantToTableMap.put(null, tableList);
-            tenantToTableMap.put(TENANT1, Lists.newArrayList(fullTableName2, fullTableName3));
-            tenantToTableMap.put(TENANT2, Lists.newArrayList(fullTableName4));
-            splitSystemCatalog(tenantToTableMap);
+            splitSystemCatalog();
         }
+    }
+    
+    protected static void splitSystemCatalog() throws SQLException, Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        }
+        String tableName = "TABLE";
+        String fullTableName1 = SchemaUtil.getTableName(SCHEMA1, tableName);
+        String fullTableName2 = SchemaUtil.getTableName(SCHEMA2, tableName);
+        String fullTableName3 = SchemaUtil.getTableName(SCHEMA3, tableName);
+        String fullTableName4 = SchemaUtil.getTableName(SCHEMA4, tableName);
+        ArrayList<String> tableList = Lists.newArrayList(fullTableName1, fullTableName2, fullTableName3);
+        Map<String, List<String>> tenantToTableMap = Maps.newHashMap();
+        tenantToTableMap.put(null, tableList);
+        tenantToTableMap.put(TENANT1, Lists.newArrayList(fullTableName2, fullTableName3));
+        tenantToTableMap.put(TENANT2, Lists.newArrayList(fullTableName4));
+        splitSystemCatalog(tenantToTableMap);
     }
 
 }
