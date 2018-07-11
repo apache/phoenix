@@ -335,14 +335,6 @@ public class SecureQueryServerPhoenixDBIT {
         cmdList.add(Integer.toString(PQS_PORT));
         cmdList.add(Paths.get(currentDirectory, "src", "it", "bin", "test_phoenixdb.py").toString());
 
-        // kinit in some random credcache
-        /*String KRB5CCNAME;
-        if (osName.indexOf("mac") >= 0 )
-            KRB5CCNAME = kinit(user1.getKey(), user1.getValue(), krb5ConfFile);
-        else
-            KRB5CCNAME = kinit(user1.getKey(), user1.getValue(), KDC.getKrb5conf());*/
-
-
         ProcessBuilder runPython = new ProcessBuilder(cmdList);
         Map<String, String> runPythonEnv = runPython.environment();
         //runPythonEnv.put("KRB5CCNAME", KRB5CCNAME);
@@ -370,54 +362,5 @@ public class SecureQueryServerPhoenixDBIT {
         byte[] dest = new byte[length];
         System.arraycopy(src, offset, dest, 0, length);
         return dest;
-    }
-
-    String kinit(String principal, File keytab, File krb5ConfFile) throws IOException{
-        ArrayList<String> kinitCmd =  new ArrayList<>();
-        kinitCmd.add("kinit");
-        kinitCmd.add(keytab.getAbsolutePath());
-        kinitCmd.add(principal);
-        ProcessBuilder kinit = new ProcessBuilder(kinitCmd);
-        Map<String, String> kinitEnv = kinit.environment();
-        try {
-            File KRB5CCNAME = File.createTempFile("krb5ccname", null);
-            kinitEnv.put("KRB5CCNAME", KRB5CCNAME.getAbsolutePath());
-            LOG.info("KRB5CCNAME " + KRB5CCNAME.getAbsolutePath());
-        } catch (IOException ioe) {
-            throw ioe;
-        }
-        kinitEnv.put("KRB5_CONFIG", krb5ConfFile.getAbsolutePath());
-        LOG.info("Launching kinit");
-        Process kinitProc = kinit.start();
-
-        BufferedReader processOutput = new BufferedReader(new InputStreamReader(kinitProc.getInputStream()));
-        BufferedReader processError = new BufferedReader(new InputStreamReader(kinitProc.getErrorStream()));
-
-
-        while (processOutput.ready()) {
-            LOG.error(processOutput.readLine());
-        }
-
-        int exitCode;
-        LOG.info("Waiting for kinit to complete");
-        try {
-            exitCode = kinitProc.waitFor();
-        } catch (InterruptedException ie) {
-            LOG.error("Interrupted while waiting for kinit to complete");
-            throw new RuntimeException("Interrupted while waiting for kinit", ie);
-        }
-
-        LOG.info("kinit to completed");
-
-        if (exitCode > 0) {
-            LOG.error("kinit exited with non zero value");
-            while (processError.ready()) {
-                LOG.error(processError.readLine());
-            }
-
-            throw new RuntimeException("kinit did not run successfully");
-        }
-        // If we succeeded, return the location of credentials
-        return kinitEnv.get("KRB5CCNAME");
     }
 }
