@@ -542,9 +542,6 @@ public class DeleteCompiler {
         Iterator<QueryPlan> iterator = queryPlans.iterator();
         while (iterator.hasNext()) {
             QueryPlan plan = iterator.next();
-            // Must be a point lookup in order to not run a query since
-            // we have to have the full key be enumerated.
-            noQueryReqd &= plan.getContext().getScanRanges().isPointLookup();
             if (plan.getTableRef().getTable().getIndexType() == IndexType.LOCAL) {
                 if (!plan.getContext().getDataColumns().isEmpty()) {
                     iterator.remove();
