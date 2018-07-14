@@ -90,7 +90,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -112,11 +117,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
+import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.master.AssignmentManager;
+import org.apache.hadoop.hbase.master.HMaster;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -137,6 +149,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
@@ -145,6 +158,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -218,26 +232,26 @@ public abstract class BaseTest {
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n" +
                 ") ");
         builder.put(TABLE_WITH_ARRAY, "create table "
-				+ TABLE_WITH_ARRAY
-				+ "   (organization_id char(15) not null, \n"
-				+ "    entity_id char(15) not null,\n"
-				+ "    a_string_array varchar(100) array[],\n"
-				+ "    b_string varchar(100),\n"
-				+ "    a_integer integer,\n"
-				+ "    a_date date,\n"
-				+ "    a_time time,\n"
-				+ "    a_timestamp timestamp,\n"
-				+ "    x_decimal decimal(31,10),\n"
-				+ "    x_long_array bigint array[],\n"
-				+ "    x_integer integer,\n"
-				+ "    a_byte_array tinyint array[],\n"
-				+ "    a_short smallint,\n"
-				+ "    a_float float,\n"
-				+ "    a_double_array double array[],\n"
-				+ "    a_unsigned_float unsigned_float,\n"
-				+ "    a_unsigned_double unsigned_double \n"
-				+ "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
-				+ ")");
+                + TABLE_WITH_ARRAY
+                + "   (organization_id char(15) not null, \n"
+                + "    entity_id char(15) not null,\n"
+                + "    a_string_array varchar(100) array[],\n"
+                + "    b_string varchar(100),\n"
+                + "    a_integer integer,\n"
+                + "    a_date date,\n"
+                + "    a_time time,\n"
+                + "    a_timestamp timestamp,\n"
+                + "    x_decimal decimal(31,10),\n"
+                + "    x_long_array bigint array[],\n"
+                + "    x_integer integer,\n"
+                + "    a_byte_array tinyint array[],\n"
+                + "    a_short smallint,\n"
+                + "    a_float float,\n"
+                + "    a_double_array double array[],\n"
+                + "    a_unsigned_float unsigned_float,\n"
+                + "    a_unsigned_double unsigned_double \n"
+                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
+                + ")");
         builder.put(BTABLE_NAME,"create table " + BTABLE_NAME +
                 "   (a_string varchar not null, \n" +
                 "    a_id char(3) not null,\n" +
@@ -388,7 +402,7 @@ public abstract class BaseTest {
     protected static String url;
     protected static PhoenixTestDriver driver;
     protected static boolean clusterInitialized = false;
-    private static HBaseTestingUtility utility;
+    protected static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create();
 
     private static class TearDownMiniClusterThreadFactory implements ThreadFactory {
@@ -720,9 +734,9 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
-        return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
-
+    
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
     private static final int MAX_SEQ_SUFFIX_VALUE = 1000000;
 
@@ -872,12 +886,18 @@ public abstract class BaseTest {
             // Make sure all tables and views have been dropped
             props.remove(CURRENT_SCN_ATTRIB);
             try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
-            	DatabaseMetaData dbmd = seeLatestConn.getMetaData();
-    	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
-    	        boolean hasTables = rs.next();
-    	        if (hasTables) {
-    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
-    	        }
+                DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+                ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
+                while (rs.next()) {
+                    String fullTableName = SchemaUtil.getEscapedTableName(
+                            rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                            rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                    try {
+                        PhoenixRuntime.getTable(conn, fullTableName);
+                        fail("The following tables are not deleted that should be:" + getTableNames(rs));
+                    } catch (TableNotFoundException e) {
+                    }
+                }
             }
         }
         finally {
@@ -926,12 +946,12 @@ public abstract class BaseTest {
     }
     
     private static String getTableNames(ResultSet rs) throws SQLException {
-    	StringBuilder buf = new StringBuilder();
-    	do {
-    		buf.append(" ");
-    		buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
-    	} while (rs.next());
-    	return buf.toString();
+        StringBuilder buf = new StringBuilder();
+        do {
+            buf.append(" ");
+            buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
+        } while (rs.next());
+        return buf.toString();
     }
 
     private static String getSchemaNames(ResultSet rs) throws SQLException {
@@ -1281,10 +1301,10 @@ public abstract class BaseTest {
     }
     
     private static String initEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
-    	if (tableName == null) {
-    		tableName = generateUniqueName();
-    	}
-    	
+        if (tableName == null) {
+            tableName = generateUniqueName();
+        }
+        
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, null);
         } else {
@@ -1391,10 +1411,10 @@ public abstract class BaseTest {
     }
     
     protected static String initSaltedEntityHistoryTableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
-    	if (tableName == null) {
-    		tableName = generateUniqueName();
-    	}
-    	
+        if (tableName == null) {
+            tableName = generateUniqueName();
+        }
+        
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
         } else {
@@ -1613,42 +1633,42 @@ public abstract class BaseTest {
     }
     
     public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
-    	for (int i=1; i<=numRows; ++i) {
-	        upsertRow(conn, fullTableName, i, false);
-    	}
+        for (int i=1; i<=numRows; ++i) {
+            upsertRow(conn, fullTableName, i, false);
+        }
     }
 
     public static void upsertRow(Connection conn, String fullTableName, int index, boolean firstRowInBatch) throws SQLException {
-    	String upsert = "UPSERT INTO " + fullTableName
+        String upsert = "UPSERT INTO " + fullTableName
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-		PreparedStatement stmt = conn.prepareStatement(upsert);
-		stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
-		stmt.setString(2, "char"+index);
-		stmt.setInt(3, index);
-		stmt.setLong(4, index);
-		stmt.setBigDecimal(5, new BigDecimal(index));
-		Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-		stmt.setDate(6, date);
-		stmt.setString(7, "varchar_a");
-		stmt.setString(8, "chara");
-		stmt.setInt(9, index+1);
-		stmt.setLong(10, index+1);
-		stmt.setBigDecimal(11, new BigDecimal(index+1));
-		stmt.setDate(12, date);
-		stmt.setString(13, "varchar_b");
-		stmt.setString(14, "charb");
-		stmt.setInt(15, index+2);
-		stmt.setLong(16, index+2);
-		stmt.setBigDecimal(17, new BigDecimal(index+2));
-		stmt.setDate(18, date);
-		stmt.executeUpdate();
-	}
+        PreparedStatement stmt = conn.prepareStatement(upsert);
+        stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
+        stmt.setString(2, "char"+index);
+        stmt.setInt(3, index);
+        stmt.setLong(4, index);
+        stmt.setBigDecimal(5, new BigDecimal(index));
+        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+        stmt.setDate(6, date);
+        stmt.setString(7, "varchar_a");
+        stmt.setString(8, "chara");
+        stmt.setInt(9, index+1);
+        stmt.setLong(10, index+1);
+        stmt.setBigDecimal(11, new BigDecimal(index+1));
+        stmt.setDate(12, date);
+        stmt.setString(13, "varchar_b");
+        stmt.setString(14, "charb");
+        stmt.setInt(15, index+2);
+        stmt.setLong(16, index+2);
+        stmt.setBigDecimal(17, new BigDecimal(index+2));
+        stmt.setDate(18, date);
+        stmt.executeUpdate();
+    }
 
     // Populate the test table with data.
     public static void populateTestTable(String fullTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-        	upsertRows(conn, fullTableName, 3);
+            upsertRows(conn, fullTableName, 3);
             conn.commit();
         }
     }
@@ -1757,5 +1777,146 @@ public abstract class BaseTest {
             assertFalse(rs.next());
         }
         phxConn.close();
+    }
+    
+
+    /**
+     *  Split SYSTEM.CATALOG at the given split point 
+     */
+    protected static void splitRegion(byte[] splitPoint) throws SQLException, IOException, InterruptedException {
+        HBaseAdmin admin =
+                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        admin.split(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoint);
+        // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
+        admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+        admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+    }
+    
+    /**
+     * Returns true if the region contains atleast one of the metadata rows we are interested in
+     */
+    protected static boolean regionContainsMetadataRows(HRegionInfo regionInfo,
+            List<byte[]> metadataRowKeys) {
+        for (byte[] rowKey : metadataRowKeys) {
+            if (regionInfo.containsRow(rowKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Splits SYSTEM.CATALOG into multiple regions based on the table or view names passed in.
+     * Metadata for each table or view is moved to a separate region,
+     * @param tenantToTableAndViewMap map from tenant to tables and views owned by the tenant
+     */
+    protected static void splitSystemCatalog(Map<String, List<String>> tenantToTableAndViewMap) throws Exception  {
+        List<byte[]> splitPoints = Lists.newArrayListWithExpectedSize(5);
+        // add the rows keys of the table or view metadata rows
+        Set<String> schemaNameSet=Sets.newHashSetWithExpectedSize(15);
+        for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
+            String tenantId = entrySet.getKey();
+            for (String fullName : entrySet.getValue()) {
+                String schemaName = SchemaUtil.getSchemaNameFromFullName(fullName);
+                // we don't allow SYSTEM.CATALOG to split within a schema, so to ensure each table
+                // or view is on a separate region they need to have a unique tenant and schema name
+                assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(tenantId+"."+schemaName));
+                String tableName = SchemaUtil.getTableNameFromFullName(fullName);
+                splitPoints.add(
+                    SchemaUtil.getTableKey(tenantId, "".equals(schemaName) ? null : schemaName, tableName));
+            }
+        }
+        Collections.sort(splitPoints, Bytes.BYTES_COMPARATOR);
+        
+        HBaseAdmin admin =
+                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        assertTrue("Needs at least two split points ", splitPoints.size() > 1);
+        assertTrue(
+            "Number of split points should be less than or equal to the number of region servers ",
+            splitPoints.size() <= NUM_SLAVES_BASE);
+        HBaseTestingUtility util = getUtility();
+        MiniHBaseCluster cluster = util.getHBaseCluster();
+        HMaster master = cluster.getMaster();
+        AssignmentManager am = master.getAssignmentManager();
+        // No need to split on the first splitPoint since the end key of region boundaries are exclusive
+        for (int i=1; i<splitPoints.size(); ++i) {
+            splitRegion(splitPoints.get(i));
+        }
+        HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
+        Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
+        for (int i=0; i<NUM_SLAVES_BASE; ++i) {
+            availableRegionServers.push(util.getHBaseCluster().getRegionServer(i).getServerName());
+        }
+        List<HRegionInfo> tableRegions =
+                admin.getTableRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+        for (HRegionInfo hRegionInfo : tableRegions) {
+            // filter on regions we are interested in
+            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
+                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
+                if (!serverToRegionsList.containsKey(serverName)) {
+                    serverToRegionsList.put(serverName, new ArrayList<HRegionInfo>());
+                }
+                serverToRegionsList.get(serverName).add(hRegionInfo);
+                availableRegionServers.remove(serverName);
+                // Scan scan = new Scan();
+                // scan.setStartRow(hRegionInfo.getStartKey());
+                // scan.setStopRow(hRegionInfo.getEndKey());
+                // HTable primaryTable = new HTable(getUtility().getConfiguration(),
+                // PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+                // ResultScanner resultScanner = primaryTable.getScanner(scan);
+                // for (Result result : resultScanner) {
+                // System.out.println(result);
+                // }
+            }
+        }
+        assertTrue("No region servers available to move regions on to ", !availableRegionServers.isEmpty());
+        for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
+            List<HRegionInfo> regions = entry.getValue();
+            if (regions.size()>1) {
+                for (int i=1; i< regions.size(); ++i) {
+                    moveRegion(regions.get(i), entry.getKey(), availableRegionServers.pop());
+                }
+            }
+        }
+        
+        // verify each region of SYSTEM.CATALOG is on its own region server
+        tableRegions =
+                admin.getTableRegions(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+        Set<ServerName> serverNames = Sets.newHashSet();
+        for (HRegionInfo hRegionInfo : tableRegions) {
+            // filter on regions we are interested in
+            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
+                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
+                if (!serverNames.contains(serverName)) {
+                    serverNames.add(serverName);
+                }
+                else {
+                    fail("Multiple regions on "+serverName.getServerName());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Ensures each region of SYSTEM.CATALOG is on a different region server
+     */
+    private static void moveRegion(HRegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        HBaseTestingUtility util = getUtility();
+        MiniHBaseCluster cluster = util.getHBaseCluster();
+        HMaster master = cluster.getMaster();
+        AssignmentManager am = master.getAssignmentManager();
+   
+        HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
+        HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
+        byte[] encodedRegionNameInBytes = regionInfo.getEncodedNameAsBytes();
+        admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
+        while (dstServer.getOnlineRegion(regionInfo.getRegionName()) == null
+                || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
+                || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
+                || master.getAssignmentManager().getRegionStates().isRegionsInTransition()) {
+            // wait for the move to be finished
+            Thread.sleep(100);
+        }
     }
 }

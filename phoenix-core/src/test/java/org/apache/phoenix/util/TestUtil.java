@@ -132,7 +132,7 @@ public class TestUtil {
     private static final Log LOG = LogFactory.getLog(TestUtil.class);
     
     private static final Long ZERO = new Long(0);
-    public static final String DEFAULT_SCHEMA_NAME = "";
+    public static final String DEFAULT_SCHEMA_NAME = "S";
     public static final String DEFAULT_DATA_TABLE_NAME = "T";
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
@@ -722,6 +722,22 @@ public class TestUtil {
                 public String getExpressionStr() {
                     return null;
                 }
+
+                @Override
+                public long getTimestamp() {
+                    return HConstants.LATEST_TIMESTAMP;
+                }
+
+                @Override
+                public boolean isDerived() {
+                    return false;
+                }
+
+                @Override
+                public boolean isExcluded() {
+                    return false;
+                }
+
                 @Override
                 public boolean isRowTimestamp() {
                     return false;
