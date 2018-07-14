@@ -58,7 +58,9 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
+import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
 import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
+import static org.apache.phoenix.util.UpgradeUtil.moveChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -206,6 +208,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PSynchronizedMetaData;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
@@ -1553,8 +1556,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public MetaDataMutationResult getTable(final PName tenantId, final byte[] schemaBytes, final byte[] tableBytes,
-            final long tableTimestamp, final long clientTimestamp) throws SQLException {
+    public MetaDataMutationResult getTable(final PName tenantId, final byte[] schemaBytes,
+            final byte[] tableBytes, final long tableTimestamp, final long clientTimestamp,
+            final boolean skipAddingIndexes, final boolean skipAddingParentColumns,
+            final PTable lockedAncestorTable) throws SQLException {
         final byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes();
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
         return metaDataCoprocessorExec(tableKey,
@@ -1571,6 +1576,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 builder.setTableTimestamp(tableTimestamp);
                 builder.setClientTimestamp(clientTimestamp);
                 builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                builder.setSkipAddingParentColumns(skipAddingParentColumns);
+                builder.setSkipAddingIndexes(skipAddingIndexes);
+                if (lockedAncestorTable!=null)
+                    builder.setLockedAncestorTable(PTableImpl.toProto(lockedAncestorTable));
                 instance.getTable(controller, builder.build(), rpcCallback);
                 if(controller.getFailedOn() != null) {
                     throw controller.getFailedOn();
@@ -1582,7 +1591,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public MetaDataMutationResult dropTable(final List<Mutation> tableMetaData, final PTableType tableType,
-            final boolean cascade) throws SQLException {
+            final boolean cascade, final boolean skipAddingParentColumns) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         SchemaUtil.getVarChars(tableMetaData.get(0).getRow(), rowKeyMetadata);
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -1604,6 +1613,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 builder.setTableType(tableType.getSerializedValue());
                 builder.setCascade(cascade);
                 builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                builder.setSkipAddingParentColumns(skipAddingParentColumns);
                 instance.dropTable(controller, builder.build(), rpcCallback);
                 if(controller.getFailedOn() != null) {
                     throw controller.getFailedOn();
@@ -1761,7 +1771,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(fullTableName));
             byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(fullTableName));
             MetaDataMutationResult result = this.getTable(tenantId, schemaName, tableName, HConstants.LATEST_TIMESTAMP,
-                    timestamp);
+                    timestamp, false, false, null);
             table = result.getTable();
             if (table == null) { throw e; }
         }
@@ -2447,6 +2457,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
     }
     
+    
     // Available for testing
     protected void setUpgradeRequired() {
         this.upgradeRequired.set(true);
@@ -2485,6 +2496,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private String setSystemLogDDLProperties(String ddl) {
         return String.format(ddl, props.getInt(LOG_SALT_BUCKETS_ATTRIB, QueryServicesOptions.DEFAULT_LOG_SALT_BUCKETS));
 
+    }
+    
+    // Available for testing
+    protected String getChildLinkDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CHILD_LINK_METADATA);
     }
 
     private String setSystemDDLProperties(String ddl) {
@@ -2704,6 +2720,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().execute(getLogTableDDL());
         } catch (TableAlreadyExistsException ignore) {}
+        try {
+            metaConnection.createStatement().executeUpdate(getChildLinkDDL());
+        } catch (TableAlreadyExistsException e) {}
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
             createSysMutexTableIfNotExists(hbaseAdmin);
@@ -2984,6 +3003,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     HTableDescriptor.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() +"'"
                     );
         }
+        if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
+            addViewIndexToParentLinks(metaConnection);
+            moveChildLinks(metaConnection);
+        }
         return metaConnection;
     }
 
@@ -3147,6 +3170,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 metaConnection.createStatement().executeUpdate(getLogTableDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
+            try {
+                metaConnection.createStatement().executeUpdate(getChildLinkDDL());
+            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
@@ -3223,8 +3249,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         metaConnection.rollback();
         PColumn column = new PColumnImpl(PNameFactory.newName("COLUMN_QUALIFIER"),
                 PNameFactory.newName(DEFAULT_COLUMN_FAMILY_NAME), PVarbinary.INSTANCE, null, null, true, numColumns,
-                SortOrder.ASC, null, null, false, null, false, false,
-                Bytes.toBytes("COLUMN_QUALIFIER"));
+                SortOrder.ASC, null, null, false, null, false, false, 
+                Bytes.toBytes("COLUMN_QUALIFIER"), timestamp);
         String upsertColumnMetadata = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
                 TABLE_SCHEM + "," +
@@ -3765,7 +3791,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public MetaDataMutationResult updateIndexState(final List<Mutation> tableMetaData, String parentTableName) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         SchemaUtil.getVarChars(tableMetaData.get(0).getRow(), rowKeyMetadata);
-        byte[] tableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX], rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);
+        byte[] tableKey =
+                SchemaUtil.getTableKey(rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX],
+                    rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX],
+                    rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);
         return metaDataCoprocessorExec(tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override

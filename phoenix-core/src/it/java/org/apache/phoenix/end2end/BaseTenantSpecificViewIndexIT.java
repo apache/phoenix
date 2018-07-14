@@ -32,13 +32,12 @@ import java.util.Set;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 
-public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
+public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
     
-    public static final String TENANT1_ID = "tenant1";
-    public static final String TENANT2_ID = "tenant2";
     public static final String NON_STRING_TENANT_ID = "1234";
     
     protected Set<Pair<String, String>> tenantViewsToDelete = newHashSet();
@@ -48,12 +47,13 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
     
     protected void testUpdatableView(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         createBaseTable(tableName, saltBuckets, true);
-        Connection conn = createTenantConnection(TENANT1_ID);
+        Connection conn = createTenantConnection(TENANT1);
         try {
-            String viewName = createAndPopulateTenantView(conn, TENANT1_ID, tableName, "");
-            createAndVerifyIndex(conn, viewName, tableName, saltBuckets, TENANT1_ID, "", localIndex);
+            createAndPopulateTenantView(conn, TENANT1, tableName, "", viewName);
+            createAndVerifyIndex(conn, viewName, tableName, saltBuckets, TENANT1, "", localIndex);
             verifyViewData(conn, viewName, "");
         } finally {
             try { conn.close();} catch (Exception ignored) {}
@@ -61,11 +61,12 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     protected void testUpdatableViewNonString(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         createBaseTable(tableName, saltBuckets, false);
         Connection conn = createTenantConnection(NON_STRING_TENANT_ID);
         try {
-            String viewName = createAndPopulateTenantView(conn, NON_STRING_TENANT_ID, tableName, "");
+            createAndPopulateTenantView(conn, NON_STRING_TENANT_ID, tableName, "", viewName);
             createAndVerifyIndexNonStringTenantId(conn, viewName, tableName, NON_STRING_TENANT_ID, "");
             verifyViewData(conn, viewName, "");
         } finally {
@@ -78,20 +79,22 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     protected void testUpdatableViewsWithSameNameDifferentTenants(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String viewName2 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
         createBaseTable(tableName, saltBuckets, true);
-        Connection conn1 = createTenantConnection(TENANT1_ID);
-        Connection conn2 = createTenantConnection(TENANT2_ID);
+        Connection conn1 = createTenantConnection(TENANT1);
+        Connection conn2 = createTenantConnection(TENANT2);
         try {
             String prefixForTenant1Data = "TI";
             String prefixForTenant2Data = "TII";
             
             // tenant views with same name for two different tables
-            String viewName1 = createAndPopulateTenantView(conn1, TENANT1_ID, tableName, prefixForTenant1Data);
-            String viewName2 = createAndPopulateTenantView(conn2, TENANT2_ID, tableName, prefixForTenant2Data);
+            createAndPopulateTenantView(conn1, TENANT1, tableName, prefixForTenant1Data, viewName1);
+            createAndPopulateTenantView(conn2, TENANT2, tableName, prefixForTenant2Data, viewName2);
             
-            createAndVerifyIndex(conn1, viewName1, tableName, saltBuckets, TENANT1_ID, prefixForTenant1Data, localIndex);
-            createAndVerifyIndex(conn2, viewName2, tableName, saltBuckets, TENANT2_ID, prefixForTenant2Data, localIndex);
+            createAndVerifyIndex(conn1, viewName1, tableName, saltBuckets, TENANT1, prefixForTenant1Data, localIndex);
+            createAndVerifyIndex(conn2, viewName2, tableName, saltBuckets, TENANT2, prefixForTenant2Data, localIndex);
             
             verifyViewData(conn1, viewName1, prefixForTenant1Data);
             verifyViewData(conn2, viewName2, prefixForTenant2Data);
@@ -114,8 +117,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
         conn.close();
     }
     
-    private String createAndPopulateTenantView(Connection conn, String tenantId, String baseTable, String valuePrefix) throws SQLException {
-        String viewName = generateUniqueName();
+    private String createAndPopulateTenantView(Connection conn, String tenantId, String baseTable, String valuePrefix, String viewName) throws SQLException {
         String ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE k1 = 1";
         conn.createStatement().execute(ddl);
         tenantViewsToDelete.add(new Pair<String, String>(tenantId, viewName ));
