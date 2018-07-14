@@ -4194,7 +4194,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 connectionCount++;
             }
         }
-        connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
+        // If lease renewal isn't enabled, these are never cleaned up. Tracking when renewals
+        // aren't enabled also (presently) has no purpose.
+        if (isRenewingLeasesEnabled()) {
+          connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
+        }
     }
 
     @Override
@@ -4692,5 +4696,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             client = txClients[provider.ordinal()] = provider.getTransactionProvider().getTransactionClient(config, connectionInfo);
         }
         return client;
+    }
+
+    @VisibleForTesting
+    public List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> getCachedConnections() {
+      return connectionQueues;
     }
 }
