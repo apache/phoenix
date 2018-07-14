@@ -174,30 +174,24 @@ public class PhoenixDriverIT extends BaseUniqueNamesOwnClusterIT {
         String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
         String phoenixFullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        String viewName1 = "VC_" + generateUniqueName();
-        String viewName2 = "VB_" + generateUniqueName();
+        String viewName1 = "VB_" + generateUniqueName();
+        String viewName2 = "VC_" + generateUniqueName();
 
         try (Connection conn = createConnection(null, false)) {
             conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
                     + "(k VARCHAR not null, v INTEGER not null, f INTEGER, g INTEGER NULL, h INTEGER NULL CONSTRAINT pk PRIMARY KEY(k,v)) MULTI_TENANT=true");
         }
-        try (Connection conn = createConnection("tenant1", false)) {
-            // create view
-            conn.createStatement().execute("CREATE VIEW " + schemaName + "." + viewName1
-                    + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // create child view
-            conn.createStatement().execute("CREATE VIEW " + schemaName + "." + viewName2
-                    + " (col2 VARCHAR) AS SELECT * FROM " + schemaName + "." + viewName1);
-        }
 
-        String tenant2 = "tenant2";
-        try (Connection conn = createConnection(tenant2, false)) {
-            // creating another view in a second tenant but same view name
-            conn.createStatement().execute("CREATE VIEW " + schemaName + "." + viewName1
-                    + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // creating child view with a second tenant
-            conn.createStatement().execute("CREATE VIEW " + schemaName + "." + viewName2
-                    + " (col2 VARCHAR) AS SELECT * FROM " + schemaName + "." + viewName1);
+        String[] tenantIds = new String[] { "tenant1", "tenant2" };
+        for (String tenantId : tenantIds) {
+            try (Connection conn = createConnection(tenantId, false)) {
+                // create view
+                conn.createStatement().execute("CREATE VIEW " + schemaName + "." + viewName1
+                        + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+                // create child view
+                conn.createStatement().execute("CREATE VIEW " + schemaName + "." + viewName2
+                        + " (col2 VARCHAR) AS SELECT * FROM " + schemaName + "." + viewName1);
+            }
         }
 
         try (Connection conn = createConnection(null, true)) {
@@ -209,14 +203,15 @@ public class PhoenixDriverIT extends BaseUniqueNamesOwnClusterIT {
             try (PhoenixConnection phxConn =
                     DriverManager.getConnection(url, props).unwrap(PhoenixConnection.class)) {
                 UpgradeUtil.upgradeTable(phxConn, phoenixFullTableName);
-                UpgradeUtil.mapChildViewsToNamespace(phxConn, phoenixFullTableName, props);
             }
 
             // verify physical table link
             String physicalTableName =
                     SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, true).getString();
-            assertEquals(physicalTableName, getPhysicalTable(conn, tenant2, schemaName, viewName1));
-            assertEquals(physicalTableName, getPhysicalTable(conn, tenant2, schemaName, viewName2));
+            for (String tenantId : tenantIds) {
+                assertEquals(physicalTableName, getPhysicalTable(conn, tenantId, schemaName, viewName1));
+                assertEquals(physicalTableName, getPhysicalTable(conn, tenantId, schemaName, viewName2));
+            }
         }
     }
 

@@ -105,6 +105,14 @@ public final class MetaDataProtos {
      * <code>TOO_MANY_INDEXES = 22;</code>
      */
     TOO_MANY_INDEXES(22, 22),
+    /**
+     * <code>UNABLE_TO_CREATE_CHILD_LINK = 23;</code>
+     */
+    UNABLE_TO_CREATE_CHILD_LINK(23, 23),
+    /**
+     * <code>UNABLE_TO_UPDATE_PARENT_TABLE = 24;</code>
+     */
+    UNABLE_TO_UPDATE_PARENT_TABLE(24, 24),
     ;
 
     /**
@@ -199,6 +207,14 @@ public final class MetaDataProtos {
      * <code>TOO_MANY_INDEXES = 22;</code>
      */
     public static final int TOO_MANY_INDEXES_VALUE = 22;
+    /**
+     * <code>UNABLE_TO_CREATE_CHILD_LINK = 23;</code>
+     */
+    public static final int UNABLE_TO_CREATE_CHILD_LINK_VALUE = 23;
+    /**
+     * <code>UNABLE_TO_UPDATE_PARENT_TABLE = 24;</code>
+     */
+    public static final int UNABLE_TO_UPDATE_PARENT_TABLE_VALUE = 24;
 
 
     public final int getNumber() { return value; }
@@ -228,6 +244,8 @@ public final class MetaDataProtos {
         case 20: return AUTO_PARTITION_SEQUENCE_NOT_FOUND;
         case 21: return CANNOT_COERCE_AUTO_PARTITION_ID;
         case 22: return TOO_MANY_INDEXES;
+        case 23: return UNABLE_TO_CREATE_CHILD_LINK;
+        case 24: return UNABLE_TO_UPDATE_PARENT_TABLE;
         default: return null;
       }
     }
@@ -3948,6 +3966,40 @@ public final class MetaDataProtos {
      * <code>optional int32 clientVersion = 6;</code>
      */
     int getClientVersion();
+
+    // optional bool skipAddingParentColumns = 7;
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    boolean hasSkipAddingParentColumns();
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    boolean getSkipAddingParentColumns();
+
+    // optional bool skipAddingIndexes = 8;
+    /**
+     * <code>optional bool skipAddingIndexes = 8;</code>
+     */
+    boolean hasSkipAddingIndexes();
+    /**
+     * <code>optional bool skipAddingIndexes = 8;</code>
+     */
+    boolean getSkipAddingIndexes();
+
+    // optional .PTable lockedAncestorTable = 9;
+    /**
+     * <code>optional .PTable lockedAncestorTable = 9;</code>
+     */
+    boolean hasLockedAncestorTable();
+    /**
+     * <code>optional .PTable lockedAncestorTable = 9;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.PTable getLockedAncestorTable();
+    /**
+     * <code>optional .PTable lockedAncestorTable = 9;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder getLockedAncestorTableOrBuilder();
   }
   /**
    * Protobuf type {@code GetTableRequest}
@@ -4028,6 +4080,29 @@ public final class MetaDataProtos {
             case 48: {
               bitField0_ |= 0x00000020;
               clientVersion_ = input.readInt32();
+              break;
+            }
+            case 56: {
+              bitField0_ |= 0x00000040;
+              skipAddingParentColumns_ = input.readBool();
+              break;
+            }
+            case 64: {
+              bitField0_ |= 0x00000080;
+              skipAddingIndexes_ = input.readBool();
+              break;
+            }
+            case 74: {
+              org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.Builder subBuilder = null;
+              if (((bitField0_ & 0x00000100) == 0x00000100)) {
+                subBuilder = lockedAncestorTable_.toBuilder();
+              }
+              lockedAncestorTable_ = input.readMessage(org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.PARSER, extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(lockedAncestorTable_);
+                lockedAncestorTable_ = subBuilder.buildPartial();
+              }
+              bitField0_ |= 0x00000100;
               break;
             }
           }
@@ -4166,6 +4241,60 @@ public final class MetaDataProtos {
       return clientVersion_;
     }
 
+    // optional bool skipAddingParentColumns = 7;
+    public static final int SKIPADDINGPARENTCOLUMNS_FIELD_NUMBER = 7;
+    private boolean skipAddingParentColumns_;
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    public boolean hasSkipAddingParentColumns() {
+      return ((bitField0_ & 0x00000040) == 0x00000040);
+    }
+    /**
+     * <code>optional bool skipAddingParentColumns = 7;</code>
+     */
+    public boolean getSkipAddingParentColumns() {
+      return skipAddingParentColumns_;
+    }
+
+    // optional bool skipAddingIndexes = 8;
+    public static final int SKIPADDINGINDEXES_FIELD_NUMBER = 8;
+    private boolean skipAddingIndexes_;
+    /**
+     * <code>optional bool skipAddingIndexes = 8;</code>
+     */
+    public boolean hasSkipAddingIndexes() {
+      return ((bitField0_ & 0x00000080) == 0x00000080);
+    }
+    /**
+     * <code>optional bool skipAddingIndexes = 8;</code>
+     */
+    public boolean getSkipAddingIndexes() {
+      return skipAddingIndexes_;
+    }
+
+    // optional .PTable lockedAncestorTable = 9;
+    public static final int LOCKEDANCESTORTABLE_FIELD_NUMBER = 9;
+    private org.apache.phoenix.coprocessor.generated.PTableProtos.PTable lockedAncestorTable_;
+    /**
+     * <code>optional .PTable lockedAncestorTable = 9;</code>
+     */
+    public boolean hasLockedAncestorTable() {
+      return ((bitField0_ & 0x00000100) == 0x00000100);
+    }
+    /**
+     * <code>optional .PTable lockedAncestorTable = 9;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTable getLockedAncestorTable() {
+      return lockedAncestorTable_;
+    }
+    /**
+     * <code>optional .PTable lockedAncestorTable = 9;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder getLockedAncestorTableOrBuilder() {
+      return lockedAncestorTable_;
+    }
+
     private void initFields() {
       tenantId_ = com.google.protobuf.ByteString.EMPTY;
       schemaName_ = com.google.protobuf.ByteString.EMPTY;
@@ -4173,6 +4302,9 @@ public final class MetaDataProtos {
       tableTimestamp_ = 0L;
       clientTimestamp_ = 0L;
       clientVersion_ = 0;
+      skipAddingParentColumns_ = false;
+      skipAddingIndexes_ = false;
+      lockedAncestorTable_ = org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance();
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4199,6 +4331,12 @@ public final class MetaDataProtos {
         memoizedIsInitialized = 0;
         return false;
       }
+      if (hasLockedAncestorTable()) {
+        if (!getLockedAncestorTable().isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
       memoizedIsInitialized = 1;
       return true;
     }
@@ -4223,6 +4361,15 @@ public final class MetaDataProtos {
       }
       if (((bitField0_ & 0x00000020) == 0x00000020)) {
         output.writeInt32(6, clientVersion_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        output.writeBool(7, skipAddingParentColumns_);
+      }
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
+        output.writeBool(8, skipAddingIndexes_);
+      }
+      if (((bitField0_ & 0x00000100) == 0x00000100)) {
+        output.writeMessage(9, lockedAncestorTable_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -4256,6 +4403,18 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000020) == 0x00000020)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(6, clientVersion_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(7, skipAddingParentColumns_);
+      }
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(8, skipAddingIndexes_);
+      }
+      if (((bitField0_ & 0x00000100) == 0x00000100)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(9, lockedAncestorTable_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4310,6 +4469,21 @@ public final class MetaDataProtos {
         result = result && (getClientVersion()
             == other.getClientVersion());
       }
+      result = result && (hasSkipAddingParentColumns() == other.hasSkipAddingParentColumns());
+      if (hasSkipAddingParentColumns()) {
+        result = result && (getSkipAddingParentColumns()
+            == other.getSkipAddingParentColumns());
+      }
+      result = result && (hasSkipAddingIndexes() == other.hasSkipAddingIndexes());
+      if (hasSkipAddingIndexes()) {
+        result = result && (getSkipAddingIndexes()
+            == other.getSkipAddingIndexes());
+      }
+      result = result && (hasLockedAncestorTable() == other.hasLockedAncestorTable());
+      if (hasLockedAncestorTable()) {
+        result = result && getLockedAncestorTable()
+            .equals(other.getLockedAncestorTable());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4346,6 +4520,18 @@ public final class MetaDataProtos {
       if (hasClientVersion()) {
         hash = (37 * hash) + CLIENTVERSION_FIELD_NUMBER;
         hash = (53 * hash) + getClientVersion();
+      }
+      if (hasSkipAddingParentColumns()) {
+        hash = (37 * hash) + SKIPADDINGPARENTCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getSkipAddingParentColumns());
+      }
+      if (hasSkipAddingIndexes()) {
+        hash = (37 * hash) + SKIPADDINGINDEXES_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getSkipAddingIndexes());
+      }
+      if (hasLockedAncestorTable()) {
+        hash = (37 * hash) + LOCKEDANCESTORTABLE_FIELD_NUMBER;
+        hash = (53 * hash) + getLockedAncestorTable().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4448,6 +4634,7 @@ public final class MetaDataProtos {
       }
       private void maybeForceBuilderInitialization() {
         if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+          getLockedAncestorTableFieldBuilder();
         }
       }
       private static Builder create() {
@@ -4468,6 +4655,16 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000010);
         clientVersion_ = 0;
         bitField0_ = (bitField0_ & ~0x00000020);
+        skipAddingParentColumns_ = false;
+        bitField0_ = (bitField0_ & ~0x00000040);
+        skipAddingIndexes_ = false;
+        bitField0_ = (bitField0_ & ~0x00000080);
+        if (lockedAncestorTableBuilder_ == null) {
+          lockedAncestorTable_ = org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance();
+        } else {
+          lockedAncestorTableBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000100);
         return this;
       }
 
@@ -4520,6 +4717,22 @@ public final class MetaDataProtos {
           to_bitField0_ |= 0x00000020;
         }
         result.clientVersion_ = clientVersion_;
+        if (((from_bitField0_ & 0x00000040) == 0x00000040)) {
+          to_bitField0_ |= 0x00000040;
+        }
+        result.skipAddingParentColumns_ = skipAddingParentColumns_;
+        if (((from_bitField0_ & 0x00000080) == 0x00000080)) {
+          to_bitField0_ |= 0x00000080;
+        }
+        result.skipAddingIndexes_ = skipAddingIndexes_;
+        if (((from_bitField0_ & 0x00000100) == 0x00000100)) {
+          to_bitField0_ |= 0x00000100;
+        }
+        if (lockedAncestorTableBuilder_ == null) {
+          result.lockedAncestorTable_ = lockedAncestorTable_;
+        } else {
+          result.lockedAncestorTable_ = lockedAncestorTableBuilder_.build();
+        }
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4554,6 +4767,15 @@ public final class MetaDataProtos {
         if (other.hasClientVersion()) {
           setClientVersion(other.getClientVersion());
         }
+        if (other.hasSkipAddingParentColumns()) {
+          setSkipAddingParentColumns(other.getSkipAddingParentColumns());
+        }
+        if (other.hasSkipAddingIndexes()) {
+          setSkipAddingIndexes(other.getSkipAddingIndexes());
+        }
+        if (other.hasLockedAncestorTable()) {
+          mergeLockedAncestorTable(other.getLockedAncestorTable());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -4578,6 +4800,12 @@ public final class MetaDataProtos {
         if (!hasClientTimestamp()) {
           
           return false;
+        }
+        if (hasLockedAncestorTable()) {
+          if (!getLockedAncestorTable().isInitialized()) {
+            
+            return false;
+          }
         }
         return true;
       }
@@ -4806,6 +5034,189 @@ public final class MetaDataProtos {
         clientVersion_ = 0;
         onChanged();
         return this;
+      }
+
+      // optional bool skipAddingParentColumns = 7;
+      private boolean skipAddingParentColumns_ ;
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public boolean hasSkipAddingParentColumns() {
+        return ((bitField0_ & 0x00000040) == 0x00000040);
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public boolean getSkipAddingParentColumns() {
+        return skipAddingParentColumns_;
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public Builder setSkipAddingParentColumns(boolean value) {
+        bitField0_ |= 0x00000040;
+        skipAddingParentColumns_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 7;</code>
+       */
+      public Builder clearSkipAddingParentColumns() {
+        bitField0_ = (bitField0_ & ~0x00000040);
+        skipAddingParentColumns_ = false;
+        onChanged();
+        return this;
+      }
+
+      // optional bool skipAddingIndexes = 8;
+      private boolean skipAddingIndexes_ ;
+      /**
+       * <code>optional bool skipAddingIndexes = 8;</code>
+       */
+      public boolean hasSkipAddingIndexes() {
+        return ((bitField0_ & 0x00000080) == 0x00000080);
+      }
+      /**
+       * <code>optional bool skipAddingIndexes = 8;</code>
+       */
+      public boolean getSkipAddingIndexes() {
+        return skipAddingIndexes_;
+      }
+      /**
+       * <code>optional bool skipAddingIndexes = 8;</code>
+       */
+      public Builder setSkipAddingIndexes(boolean value) {
+        bitField0_ |= 0x00000080;
+        skipAddingIndexes_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool skipAddingIndexes = 8;</code>
+       */
+      public Builder clearSkipAddingIndexes() {
+        bitField0_ = (bitField0_ & ~0x00000080);
+        skipAddingIndexes_ = false;
+        onChanged();
+        return this;
+      }
+
+      // optional .PTable lockedAncestorTable = 9;
+      private org.apache.phoenix.coprocessor.generated.PTableProtos.PTable lockedAncestorTable_ = org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance();
+      private com.google.protobuf.SingleFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTable, org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder> lockedAncestorTableBuilder_;
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public boolean hasLockedAncestorTable() {
+        return ((bitField0_ & 0x00000100) == 0x00000100);
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTable getLockedAncestorTable() {
+        if (lockedAncestorTableBuilder_ == null) {
+          return lockedAncestorTable_;
+        } else {
+          return lockedAncestorTableBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public Builder setLockedAncestorTable(org.apache.phoenix.coprocessor.generated.PTableProtos.PTable value) {
+        if (lockedAncestorTableBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          lockedAncestorTable_ = value;
+          onChanged();
+        } else {
+          lockedAncestorTableBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000100;
+        return this;
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public Builder setLockedAncestorTable(
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.Builder builderForValue) {
+        if (lockedAncestorTableBuilder_ == null) {
+          lockedAncestorTable_ = builderForValue.build();
+          onChanged();
+        } else {
+          lockedAncestorTableBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000100;
+        return this;
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public Builder mergeLockedAncestorTable(org.apache.phoenix.coprocessor.generated.PTableProtos.PTable value) {
+        if (lockedAncestorTableBuilder_ == null) {
+          if (((bitField0_ & 0x00000100) == 0x00000100) &&
+              lockedAncestorTable_ != org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance()) {
+            lockedAncestorTable_ =
+              org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.newBuilder(lockedAncestorTable_).mergeFrom(value).buildPartial();
+          } else {
+            lockedAncestorTable_ = value;
+          }
+          onChanged();
+        } else {
+          lockedAncestorTableBuilder_.mergeFrom(value);
+        }
+        bitField0_ |= 0x00000100;
+        return this;
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public Builder clearLockedAncestorTable() {
+        if (lockedAncestorTableBuilder_ == null) {
+          lockedAncestorTable_ = org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance();
+          onChanged();
+        } else {
+          lockedAncestorTableBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000100);
+        return this;
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.Builder getLockedAncestorTableBuilder() {
+        bitField0_ |= 0x00000100;
+        onChanged();
+        return getLockedAncestorTableFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder getLockedAncestorTableOrBuilder() {
+        if (lockedAncestorTableBuilder_ != null) {
+          return lockedAncestorTableBuilder_.getMessageOrBuilder();
+        } else {
+          return lockedAncestorTable_;
+        }
+      }
+      /**
+       * <code>optional .PTable lockedAncestorTable = 9;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.PTable, org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder> 
+          getLockedAncestorTableFieldBuilder() {
+        if (lockedAncestorTableBuilder_ == null) {
+          lockedAncestorTableBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.PTableProtos.PTable, org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder>(
+                  lockedAncestorTable_,
+                  getParentForChildren(),
+                  isClean());
+          lockedAncestorTable_ = null;
+        }
+        return lockedAncestorTableBuilder_;
       }
 
       // @@protoc_insertion_point(builder_scope:GetTableRequest)
@@ -8780,6 +9191,16 @@ public final class MetaDataProtos {
      * <code>optional int32 clientVersion = 4;</code>
      */
     int getClientVersion();
+
+    // optional bool skipAddingParentColumns = 5;
+    /**
+     * <code>optional bool skipAddingParentColumns = 5;</code>
+     */
+    boolean hasSkipAddingParentColumns();
+    /**
+     * <code>optional bool skipAddingParentColumns = 5;</code>
+     */
+    boolean getSkipAddingParentColumns();
   }
   /**
    * Protobuf type {@code DropTableRequest}
@@ -8853,6 +9274,11 @@ public final class MetaDataProtos {
             case 32: {
               bitField0_ |= 0x00000004;
               clientVersion_ = input.readInt32();
+              break;
+            }
+            case 40: {
+              bitField0_ |= 0x00000008;
+              skipAddingParentColumns_ = input.readBool();
               break;
             }
           }
@@ -8996,11 +9422,28 @@ public final class MetaDataProtos {
       return clientVersion_;
     }
 
+    // optional bool skipAddingParentColumns = 5;
+    public static final int SKIPADDINGPARENTCOLUMNS_FIELD_NUMBER = 5;
+    private boolean skipAddingParentColumns_;
+    /**
+     * <code>optional bool skipAddingParentColumns = 5;</code>
+     */
+    public boolean hasSkipAddingParentColumns() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>optional bool skipAddingParentColumns = 5;</code>
+     */
+    public boolean getSkipAddingParentColumns() {
+      return skipAddingParentColumns_;
+    }
+
     private void initFields() {
       tableMetadataMutations_ = java.util.Collections.emptyList();
       tableType_ = "";
       cascade_ = false;
       clientVersion_ = 0;
+      skipAddingParentColumns_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -9029,6 +9472,9 @@ public final class MetaDataProtos {
       }
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         output.writeInt32(4, clientVersion_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeBool(5, skipAddingParentColumns_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -9059,6 +9505,10 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(4, clientVersion_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(5, skipAddingParentColumns_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -9100,6 +9550,11 @@ public final class MetaDataProtos {
         result = result && (getClientVersion()
             == other.getClientVersion());
       }
+      result = result && (hasSkipAddingParentColumns() == other.hasSkipAddingParentColumns());
+      if (hasSkipAddingParentColumns()) {
+        result = result && (getSkipAddingParentColumns()
+            == other.getSkipAddingParentColumns());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -9128,6 +9583,10 @@ public final class MetaDataProtos {
       if (hasClientVersion()) {
         hash = (37 * hash) + CLIENTVERSION_FIELD_NUMBER;
         hash = (53 * hash) + getClientVersion();
+      }
+      if (hasSkipAddingParentColumns()) {
+        hash = (37 * hash) + SKIPADDINGPARENTCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getSkipAddingParentColumns());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -9246,6 +9705,8 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000004);
         clientVersion_ = 0;
         bitField0_ = (bitField0_ & ~0x00000008);
+        skipAddingParentColumns_ = false;
+        bitField0_ = (bitField0_ & ~0x00000010);
         return this;
       }
 
@@ -9291,6 +9752,10 @@ public final class MetaDataProtos {
           to_bitField0_ |= 0x00000004;
         }
         result.clientVersion_ = clientVersion_;
+        if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.skipAddingParentColumns_ = skipAddingParentColumns_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -9327,6 +9792,9 @@ public final class MetaDataProtos {
         }
         if (other.hasClientVersion()) {
           setClientVersion(other.getClientVersion());
+        }
+        if (other.hasSkipAddingParentColumns()) {
+          setSkipAddingParentColumns(other.getSkipAddingParentColumns());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -9567,6 +10035,39 @@ public final class MetaDataProtos {
       public Builder clearClientVersion() {
         bitField0_ = (bitField0_ & ~0x00000008);
         clientVersion_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional bool skipAddingParentColumns = 5;
+      private boolean skipAddingParentColumns_ ;
+      /**
+       * <code>optional bool skipAddingParentColumns = 5;</code>
+       */
+      public boolean hasSkipAddingParentColumns() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 5;</code>
+       */
+      public boolean getSkipAddingParentColumns() {
+        return skipAddingParentColumns_;
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 5;</code>
+       */
+      public Builder setSkipAddingParentColumns(boolean value) {
+        bitField0_ |= 0x00000010;
+        skipAddingParentColumns_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool skipAddingParentColumns = 5;</code>
+       */
+      public Builder clearSkipAddingParentColumns() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        skipAddingParentColumns_ = false;
         onChanged();
         return this;
       }
@@ -17158,83 +17659,88 @@ public final class MetaDataProtos {
       "\030\007 \001(\014\022\034\n\010function\030\010 \003(\0132\n.PFunction\022/\n\024" +
       "sharedTablesToDelete\030\t \003(\0132\021.SharedTable" +
       "State\022\030\n\006schema\030\n \001(\0132\010.PSchema\022\030\n\020autoP" +
-      "artitionNum\030\013 \001(\003\022\023\n\013viewIndexId\030\014 \001(\005\"\222" +
+      "artitionNum\030\013 \001(\003\022\023\n\013viewIndexId\030\014 \001(\005\"\364" +
       "\001\n\017GetTableRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\n" +
       "schemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\026\n\016t" +
       "ableTimestamp\030\004 \002(\003\022\027\n\017clientTimestamp\030\005" +
-      " \002(\003\022\025\n\rclientVersion\030\006 \001(\005\"\212\001\n\023GetFunct" +
-      "ionsRequest\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctio" +
-      "nNames\030\002 \003(\014\022\032\n\022functionTimestamps\030\003 \003(\003",
-      "\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rclientVersi" +
-      "on\030\005 \001(\005\"V\n\020GetSchemaRequest\022\022\n\nschemaNa" +
-      "me\030\001 \002(\t\022\027\n\017clientTimestamp\030\002 \002(\003\022\025\n\rcli" +
-      "entVersion\030\003 \002(\005\"d\n\022CreateTableRequest\022\036" +
-      "\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rclient" +
-      "Version\030\002 \001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r" +
-      "\n\025CreateFunctionRequest\022\036\n\026tableMetadata" +
-      "Mutations\030\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007re" +
-      "place\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023Cr" +
-      "eateSchemaRequest\022\036\n\026tableMetadataMutati",
-      "ons\030\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientV" +
-      "ersion\030\003 \002(\005\"m\n\020DropTableRequest\022\036\n\026tabl" +
-      "eMetadataMutations\030\001 \003(\014\022\021\n\ttableType\030\002 " +
-      "\002(\t\022\017\n\007cascade\030\003 \001(\010\022\025\n\rclientVersion\030\004 " +
-      "\001(\005\"_\n\021DropSchemaRequest\022\037\n\027schemaMetada" +
-      "taMutations\030\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n" +
-      "\rclientVersion\030\003 \002(\005\"I\n\020AddColumnRequest" +
-      "\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rclie" +
-      "ntVersion\030\002 \001(\005\"J\n\021DropColumnRequest\022\036\n\026" +
-      "tableMetadataMutations\030\001 \003(\014\022\025\n\rclientVe",
-      "rsion\030\002 \001(\005\"^\n\023DropFunctionRequest\022\036\n\026ta" +
-      "bleMetadataMutations\030\001 \003(\014\022\020\n\010ifExists\030\002" +
-      " \001(\010\022\025\n\rclientVersion\030\003 \001(\005\"P\n\027UpdateInd" +
-      "exStateRequest\022\036\n\026tableMetadataMutations" +
-      "\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"*\n\021ClearCa" +
-      "cheRequest\022\025\n\rclientVersion\030\001 \001(\005\"*\n\022Cle" +
-      "arCacheResponse\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n" +
-      "\021GetVersionRequest\022\025\n\rclientVersion\030\001 \001(" +
-      "\005\"E\n\022GetVersionResponse\022\017\n\007version\030\001 \002(\003" +
-      "\022\036\n\026systemCatalogTimestamp\030\002 \001(\003\"\205\001\n\032Cle",
-      "arTableFromCacheRequest\022\020\n\010tenantId\030\001 \002(" +
-      "\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014" +
-      "\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rclientVersi" +
-      "on\030\005 \001(\005\"\035\n\033ClearTableFromCacheResponse*" +
-      "\365\004\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXISTS" +
-      "\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FO" +
-      "UND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONC" +
-      "URRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_" +
-      "REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALL" +
-      "OWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010",
-      "\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t\022\033\n\027FUNCTION" +
-      "_ALREADY_EXISTS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020" +
-      "\013\022\030\n\024NEWER_FUNCTION_FOUND\020\014\022\032\n\026FUNCTION_" +
-      "NOT_IN_REGION\020\r\022\031\n\025SCHEMA_ALREADY_EXISTS" +
-      "\020\016\022\026\n\022NEWER_SCHEMA_FOUND\020\017\022\024\n\020SCHEMA_NOT" +
-      "_FOUND\020\020\022\030\n\024SCHEMA_NOT_IN_REGION\020\021\022\032\n\026TA" +
-      "BLES_EXIST_ON_SCHEMA\020\022\022\035\n\031UNALLOWED_SCHE" +
-      "MA_MUTATION\020\023\022%\n!AUTO_PARTITION_SEQUENCE" +
-      "_NOT_FOUND\020\024\022#\n\037CANNOT_COERCE_AUTO_PARTI" +
-      "TION_ID\020\025\022\024\n\020TOO_MANY_INDEXES\020\0262\345\006\n\017Meta",
+      " \002(\003\022\025\n\rclientVersion\030\006 \001(\005\022\037\n\027skipAddin" +
+      "gParentColumns\030\007 \001(\010\022\031\n\021skipAddingIndexe" +
+      "s\030\010 \001(\010\022$\n\023lockedAncestorTable\030\t \001(\0132\007.P",
+      "Table\"\212\001\n\023GetFunctionsRequest\022\020\n\010tenantI" +
+      "d\030\001 \002(\014\022\025\n\rfunctionNames\030\002 \003(\014\022\032\n\022functi" +
+      "onTimestamps\030\003 \003(\003\022\027\n\017clientTimestamp\030\004 " +
+      "\002(\003\022\025\n\rclientVersion\030\005 \001(\005\"V\n\020GetSchemaR" +
+      "equest\022\022\n\nschemaName\030\001 \002(\t\022\027\n\017clientTime" +
+      "stamp\030\002 \002(\003\022\025\n\rclientVersion\030\003 \002(\005\"d\n\022Cr" +
+      "eateTableRequest\022\036\n\026tableMetadataMutatio" +
+      "ns\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\022\027\n\017alloc" +
+      "ateIndexId\030\003 \001(\010\"r\n\025CreateFunctionReques" +
+      "t\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\021\n\ttem",
+      "porary\030\002 \002(\010\022\017\n\007replace\030\003 \001(\010\022\025\n\rclientV" +
+      "ersion\030\004 \001(\005\"`\n\023CreateSchemaRequest\022\036\n\026t" +
+      "ableMetadataMutations\030\001 \003(\014\022\022\n\nschemaNam" +
+      "e\030\002 \002(\t\022\025\n\rclientVersion\030\003 \002(\005\"\216\001\n\020DropT" +
+      "ableRequest\022\036\n\026tableMetadataMutations\030\001 " +
+      "\003(\014\022\021\n\ttableType\030\002 \002(\t\022\017\n\007cascade\030\003 \001(\010\022" +
+      "\025\n\rclientVersion\030\004 \001(\005\022\037\n\027skipAddingPare" +
+      "ntColumns\030\005 \001(\010\"_\n\021DropSchemaRequest\022\037\n\027" +
+      "schemaMetadataMutations\030\001 \003(\014\022\022\n\nschemaN" +
+      "ame\030\002 \002(\t\022\025\n\rclientVersion\030\003 \002(\005\"I\n\020AddC",
+      "olumnRequest\022\036\n\026tableMetadataMutations\030\001" +
+      " \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"J\n\021DropColum" +
+      "nRequest\022\036\n\026tableMetadataMutations\030\001 \003(\014" +
+      "\022\025\n\rclientVersion\030\002 \001(\005\"^\n\023DropFunctionR" +
+      "equest\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\020" +
+      "\n\010ifExists\030\002 \001(\010\022\025\n\rclientVersion\030\003 \001(\005\"" +
+      "P\n\027UpdateIndexStateRequest\022\036\n\026tableMetad" +
+      "ataMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(" +
+      "\005\"*\n\021ClearCacheRequest\022\025\n\rclientVersion\030" +
+      "\001 \001(\005\"*\n\022ClearCacheResponse\022\024\n\014unfreedBy",
+      "tes\030\001 \001(\003\"*\n\021GetVersionRequest\022\025\n\rclient" +
+      "Version\030\001 \001(\005\"E\n\022GetVersionResponse\022\017\n\007v" +
+      "ersion\030\001 \002(\003\022\036\n\026systemCatalogTimestamp\030\002" +
+      " \001(\003\"\205\001\n\032ClearTableFromCacheRequest\022\020\n\010t" +
+      "enantId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttab" +
+      "leName\030\003 \002(\014\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n" +
+      "\rclientVersion\030\005 \001(\005\"\035\n\033ClearTableFromCa" +
+      "cheResponse*\271\005\n\014MutationCode\022\030\n\024TABLE_AL" +
+      "READY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020C" +
+      "OLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREADY_EXIS",
+      "TS\020\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020\004\022\027\n\023T" +
+      "ABLE_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABLE_FOUN" +
+      "D\020\006\022\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022\021\n\rNO_" +
+      "PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t" +
+      "\022\033\n\027FUNCTION_ALREADY_EXISTS\020\n\022\026\n\022FUNCTIO" +
+      "N_NOT_FOUND\020\013\022\030\n\024NEWER_FUNCTION_FOUND\020\014\022" +
+      "\032\n\026FUNCTION_NOT_IN_REGION\020\r\022\031\n\025SCHEMA_AL" +
+      "READY_EXISTS\020\016\022\026\n\022NEWER_SCHEMA_FOUND\020\017\022\024" +
+      "\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024SCHEMA_NOT_IN_RE" +
+      "GION\020\021\022\032\n\026TABLES_EXIST_ON_SCHEMA\020\022\022\035\n\031UN",
+      "ALLOWED_SCHEMA_MUTATION\020\023\022%\n!AUTO_PARTIT" +
+      "ION_SEQUENCE_NOT_FOUND\020\024\022#\n\037CANNOT_COERC" +
+      "E_AUTO_PARTITION_ID\020\025\022\024\n\020TOO_MANY_INDEXE" +
+      "S\020\026\022\037\n\033UNABLE_TO_CREATE_CHILD_LINK\020\027\022!\n\035" +
+      "UNABLE_TO_UPDATE_PARENT_TABLE\020\0302\345\006\n\017Meta" +
       "DataService\022/\n\010getTable\022\020.GetTableReques" +
       "t\032\021.MetaDataResponse\0227\n\014getFunctions\022\024.G" +
       "etFunctionsRequest\032\021.MetaDataResponse\0221\n" +
       "\tgetSchema\022\021.GetSchemaRequest\032\021.MetaData" +
-      "Response\0225\n\013createTable\022\023.CreateTableReq" +
+      "Response\0225\n\013createTable\022\023.CreateTableReq",
       "uest\032\021.MetaDataResponse\022;\n\016createFunctio" +
       "n\022\026.CreateFunctionRequest\032\021.MetaDataResp" +
       "onse\0227\n\014createSchema\022\024.CreateSchemaReque" +
       "st\032\021.MetaDataResponse\0221\n\tdropTable\022\021.Dro" +
-      "pTableRequest\032\021.MetaDataResponse\0223\n\ndrop",
+      "pTableRequest\032\021.MetaDataResponse\0223\n\ndrop" +
       "Schema\022\022.DropSchemaRequest\032\021.MetaDataRes" +
       "ponse\0227\n\014dropFunction\022\024.DropFunctionRequ" +
       "est\032\021.MetaDataResponse\0221\n\taddColumn\022\021.Ad" +
       "dColumnRequest\032\021.MetaDataResponse\0223\n\ndro" +
-      "pColumn\022\022.DropColumnRequest\032\021.MetaDataRe" +
+      "pColumn\022\022.DropColumnRequest\032\021.MetaDataRe",
       "sponse\022?\n\020updateIndexState\022\030.UpdateIndex" +
       "StateRequest\032\021.MetaDataResponse\0225\n\nclear" +
       "Cache\022\022.ClearCacheRequest\032\023.ClearCacheRe" +
       "sponse\0225\n\ngetVersion\022\022.GetVersionRequest" +
-      "\032\023.GetVersionResponse\022P\n\023clearTableFromC",
+      "\032\023.GetVersionResponse\022P\n\023clearTableFromC" +
       "ache\022\033.ClearTableFromCacheRequest\032\034.Clea" +
       "rTableFromCacheResponseBB\n(org.apache.ph" +
       "oenix.coprocessor.generatedB\016MetaDataPro" +
@@ -17262,7 +17768,7 @@ public final class MetaDataProtos {
           internal_static_GetTableRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_GetTableRequest_descriptor,
-              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "TableTimestamp", "ClientTimestamp", "ClientVersion", });
+              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "TableTimestamp", "ClientTimestamp", "ClientVersion", "SkipAddingParentColumns", "SkipAddingIndexes", "LockedAncestorTable", });
           internal_static_GetFunctionsRequest_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_GetFunctionsRequest_fieldAccessorTable = new
@@ -17298,7 +17804,7 @@ public final class MetaDataProtos {
           internal_static_DropTableRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_DropTableRequest_descriptor,
-              new java.lang.String[] { "TableMetadataMutations", "TableType", "Cascade", "ClientVersion", });
+              new java.lang.String[] { "TableMetadataMutations", "TableType", "Cascade", "ClientVersion", "SkipAddingParentColumns", });
           internal_static_DropSchemaRequest_descriptor =
             getDescriptor().getMessageTypes().get(9);
           internal_static_DropSchemaRequest_fieldAccessorTable = new

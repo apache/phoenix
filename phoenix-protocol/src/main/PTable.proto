@@ -35,12 +35,12 @@ enum PTableType {
 message PColumn {
   required bytes columnNameBytes = 1;
   optional bytes familyNameBytes = 2;
-  required string dataType = 3;
+  optional string dataType = 3;
   optional int32 maxLength = 4;
   optional int32 scale = 5;
   required bool nullable = 6;
   required int32 position = 7;
-  required int32 sortOrder = 8;
+  optional int32 sortOrder = 8;
   optional int32 arraySize = 9;
   optional bytes viewConstant = 10;
   optional bool viewReferenced = 11;
@@ -48,6 +48,8 @@ message PColumn {
   optional bool isRowTimestamp = 13;
   optional bool isDynamic = 14;
   optional bytes columnQualifierBytes = 15;
+  optional int64 timestamp = 16;
+  optional bool derived = 17 [default = false];
 }
 
 message PTableStats {

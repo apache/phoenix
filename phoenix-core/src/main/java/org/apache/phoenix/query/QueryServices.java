@@ -313,6 +313,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String LOG_BUFFER_WAIT_STRATEGY = "phoenix.log.wait.strategy";
     public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
 
+	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
+
     /**
      * Get executor service used for parallel scans
      */

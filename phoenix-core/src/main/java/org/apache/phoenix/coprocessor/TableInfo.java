@@ -15,45 +15,53 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.coprocessor;
 
-import org.apache.phoenix.query.QueryConstants;
+import java.util.Arrays;
 
-import com.google.common.base.Preconditions;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.SchemaUtil;
 
-public class PTableKey {
-    private final PName tenantId;
-    private final String name;
-    
-    public PTableKey(PName tenantId, String name) {
-        Preconditions.checkNotNull(name);
+public class TableInfo {
+
+    private final byte[] tenantId;
+    private final byte[] schema;
+    private final byte[] name;
+
+    public TableInfo(byte[] tenantId, byte[] schema, byte[] name) {
         this.tenantId = tenantId;
-        if (name.indexOf(QueryConstants.NAMESPACE_SEPARATOR) != -1) {
-            this.name = name.replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
-        } else {
-            this.name = name;
-        }
+        this.schema = schema;
+        this.name = name;
+    }
+    
+    public byte[] getRowKeyPrefix() {
+        return SchemaUtil.getTableKey(tenantId, schema, name);
     }
 
-    public PName getTenantId() {
+    @Override
+    public String toString() {
+        return Bytes.toStringBinary(getRowKeyPrefix());
+    }
+    
+    public byte[] getTenantId() {
         return tenantId;
     }
 
-    public String getName() {
-        return name;
+    public byte[] getSchemaName() {
+        return schema;
     }
-    
-    @Override
-    public String toString() {
-        return name + ((tenantId == null || tenantId.getBytes().length==0) ? "" : " for " + tenantId.getString());
+
+    public byte[] getTableName() {
+        return name;
     }
     
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((tenantId == null || tenantId.getBytes().length==0) ? 0 : tenantId.hashCode());
-        result = prime * result + name.hashCode();
+        result = prime * result + Arrays.hashCode(name);
+        result = prime * result + Arrays.hashCode(schema);
+        result = prime * result + Arrays.hashCode(tenantId);
         return result;
     }
 
@@ -62,12 +70,10 @@ public class PTableKey {
         if (this == obj) return true;
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
-        PTableKey other = (PTableKey)obj;
-        if (!name.equals(other.name)) return false;
-        if (tenantId == null) {
-            if (other.tenantId != null) return false;
-        } else if (!tenantId.equals(other.tenantId)) return false;
+        TableInfo other = (TableInfo) obj;
+        if (!Arrays.equals(name, other.name)) return false;
+        if (!Arrays.equals(schema, other.schema)) return false;
+        if (!Arrays.equals(tenantId, other.tenantId)) return false;
         return true;
     }
-
 }

@@ -39,7 +39,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.SplitSystemCatalogIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -59,7 +59,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class ViewIndexIT extends ParallelStatsDisabledIT {
+public class ViewIndexIT extends SplitSystemCatalogIT {
     private boolean isNamespaceMapped;
 
     @Parameters(name = "ViewIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
@@ -108,10 +108,11 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     public void testDeleteViewIndexSequences() throws Exception {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
+        String viewSchemaName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String indexName = "IND_" + generateUniqueName();
         String viewName = "VIEW_" + generateUniqueName();
-        String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        String fullViewName = SchemaUtil.getTableName(viewSchemaName, viewName);
 
         createBaseTable(schemaName, tableName, false, null, null);
         Connection conn1 = getConnection();
@@ -138,13 +139,12 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultiTenantViewLocalIndex() throws Exception {
-        String schemaName = generateUniqueName();
-        String tableName =  generateUniqueName();
-        String indexName = "IND_" + generateUniqueName();
-        String viewName = "VIEW_" + generateUniqueName();
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String tableName = generateUniqueName();
+		String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         
-        createBaseTable(schemaName, tableName, true, null, null);
+        createBaseTable(SCHEMA1, tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
                 "UPSERT INTO " + fullTableName
@@ -178,14 +178,14 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         Properties props  = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty("TenantId", "10");
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        conn1.createStatement().execute("CREATE VIEW " + viewName
+        conn1.createStatement().execute("CREATE VIEW " + fullViewName
                 + " AS select * from " + fullTableName);
         conn1.createStatement().execute("CREATE LOCAL INDEX "
                 + indexName + " ON "
-                + viewName + "(v2)");
+                + fullViewName + "(v2)");
         conn1.commit();
         
-        String sql = "SELECT * FROM " + viewName + " WHERE v2 = 100";
+        String sql = "SELECT * FROM " + fullViewName + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + " [1,'10',100]\n" +
@@ -208,7 +208,8 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
 
         // Confirm that when view index used, the GUIDE_POSTS_WIDTH from the data physical table
         // was used
-        sql = "SELECT * FROM " + viewName + " WHERE v2 >= 100";
+        sql = "SELECT * FROM " + fullViewName + " WHERE v2 >= 100";
+        rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         stmt = conn1.prepareStatement(sql);
         stmt.executeQuery();
         QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
@@ -218,9 +219,10 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
-        String baseTable =  generateUniqueName();
-        String globalView = generateUniqueName();
+        String baseTable =  SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String globalView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String globalViewIdx =  generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(SCHEMA2, globalViewIdx);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE IMMUTABLE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
             conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);
@@ -264,7 +266,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             stmt.setString(2, "KV3");
             ResultSet rs = stmt.executeQuery();
             QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
-            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
+            assertEquals(fullIndexName, plan.getTableRef().getTable().getName().getString());
             assertTrue(rs.next());
             assertEquals("KV1", rs.getString(1));
             assertFalse(rs.next());
@@ -287,7 +289,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             stmt.setString(2, "KV3");
             rs = stmt.executeQuery();
             plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
-            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
+            assertEquals(fullIndexName, plan.getTableRef().getTable().getName().getString());
             assertEquals(6, plan.getSplits().size());
         }
     }
@@ -319,14 +321,17 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpdateOnTenantViewWithGlobalView() throws Exception {
         Connection conn = getConnection();
-        String baseSchemaName = "PLATFORM_ENTITY";
+        String baseSchemaName = generateUniqueName();
+        String viewSchemaName = generateUniqueName();
+        String tsViewSchemaName = generateUniqueName();
         String baseTableName = generateUniqueName();
         String baseFullName = SchemaUtil.getTableName(baseSchemaName, baseTableName);
         String viewTableName = "V_" + generateUniqueName();
-        String viewFullName = SchemaUtil.getTableName(baseSchemaName, viewTableName);
+        String viewFullName = SchemaUtil.getTableName(viewSchemaName, viewTableName);
         String indexName = "I_" + generateUniqueName();
         String tsViewTableName = "TSV_" + generateUniqueName();
-        String tsViewFullName = SchemaUtil.getTableName(baseSchemaName, tsViewTableName);
+        String tsViewFullName = SchemaUtil.getTableName(tsViewSchemaName, tsViewTableName);
+        String tenantId = "tenant1";
         try {
             if (isNamespaceMapped) {
                 conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + baseSchemaName);
@@ -348,7 +353,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
                     "CREATE INDEX " + indexName + " \n" + "ON " + viewFullName + " (TEXT1 DESC, INT1)\n"
                             + "INCLUDE (CREATED_BY, DOUBLE1, IS_BOOLEAN, CREATED_DATE)");
             Properties tsProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            tsProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "123451234512345");
+            tsProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             Connection tsConn = DriverManager.getConnection(getUrl(), tsProps);
             tsConn.createStatement().execute("CREATE VIEW " + tsViewFullName + " AS SELECT * FROM " + viewFullName);
             tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (1,1.0, true, 'a')");
@@ -430,9 +435,10 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.setAutoCommit(true);
-        String tableName=generateUniqueName();
-        String viewName=generateUniqueName();
-        String indexName=generateUniqueName();
+        String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String indexName = generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(SCHEMA2, indexName);
         conn1.createStatement().execute(
           "CREATE TABLE "+tableName+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY=1000000");
         conn1.createStatement().execute("upsert into "+tableName+" values ('row1', 'value1', 'key1')");
@@ -440,19 +446,21 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
           "CREATE VIEW "+viewName+" (v3 VARCHAR, v4 VARCHAR) AS SELECT * FROM "+tableName+" WHERE v1 = 'value1'");
         conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + "(v3)" + (includeColumns ? " INCLUDE(v4)" : ""));
         PhoenixStatement stmt = conn1.createStatement().unwrap(PhoenixStatement.class);
-        ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + viewName + " " + indexName + ") */ v1 FROM " + viewName + " WHERE v3 = 'foo' ORDER BY v4");
+        ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + viewName + " " + fullIndexName + ") */ v1 FROM " + viewName + " WHERE v3 = 'foo' ORDER BY v4");
         assertFalse(rs.next());
-        assertEquals(indexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+        assertEquals(fullIndexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
     }
 
     @Test
     public void testCreatingIndexOnViewBuiltOnTableWithOnlyNamedColumnFamilies() throws Exception {
         try (Connection c = getConnection(); Statement s = c.createStatement()) {
-            String tableName = generateUniqueName();
-            String viewName = generateUniqueName();
-            String indexName = generateUniqueName();
-
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String indexName=generateUniqueName();
             c.setAutoCommit(true);
+            if (isNamespaceMapped) {
+                c.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + SCHEMA1);
+            }
             s.execute("CREATE TABLE " + tableName + " (COL1 VARCHAR PRIMARY KEY, CF.COL2 VARCHAR)");
             s.executeUpdate("UPSERT INTO " + tableName + " VALUES ('AAA', 'BBB')");
             s.execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
