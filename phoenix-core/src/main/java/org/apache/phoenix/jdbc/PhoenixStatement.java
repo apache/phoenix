@@ -528,7 +528,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_BYTES_ESTIMATE),
                     PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 1,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
-                    EXPLAIN_PLAN_BYTES_ESTIMATE);
+                    EXPLAIN_PLAN_BYTES_ESTIMATE, 0, false);
 
     private static final String EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME = "RowsEstimate";
     private static final byte[] EXPLAIN_PLAN_ROWS_ESTIMATE =
@@ -538,7 +538,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ROWS_ESTIMATE),
                     PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 2,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
-                    EXPLAIN_PLAN_ROWS_ESTIMATE);
+                    EXPLAIN_PLAN_ROWS_ESTIMATE, 0, false);
 
     private static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_NAME = "EstimateInfoTS";
     private static final byte[] EXPLAIN_PLAN_ESTIMATE_INFO_TS =
@@ -548,7 +548,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ESTIMATE_INFO_TS),
                 PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 3,
                 SortOrder.getDefault(), 0, null, false, null, false, false,
-                EXPLAIN_PLAN_ESTIMATE_INFO_TS);
+                EXPLAIN_PLAN_ESTIMATE_INFO_TS, 0, false);
 
     private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR_WITH_BYTE_ROW_ESTIMATES =
             new RowProjector(Arrays
@@ -1109,7 +1109,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private static class ExecutableDropTableStatement extends DropTableStatement implements CompilableStatement {
 
         ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
-            super(tableName, tableType, ifExists, cascade);
+            super(tableName, tableType, ifExists, cascade, false);
         }
 
         @SuppressWarnings("unchecked")

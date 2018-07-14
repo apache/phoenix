@@ -694,7 +694,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             assertTrue(info.getEstimateInfoTs() > 0);
 
             conn.createStatement()
-                    .execute("ALTER TABLE " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
+                    .execute("ALTER VIEW " + viewName + " SET USE_STATS_FOR_PARALLELIZATION=true");
             sql = "SELECT COUNT(*) FROM " + viewName;
             // query the view
             rs = conn.createStatement().executeQuery(sql);
@@ -1212,33 +1212,44 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         assertEquals("B", rs.getString(1));
     }
 
-	@Test
-	public void testUseStatsForParallelizationProperyOnViewIndex() throws SQLException {
-		String tableName = generateUniqueName();
-		String viewName = generateUniqueName();
-		String tenantViewName = generateUniqueName();
-		String viewIndexName = generateUniqueName();
-		boolean useStats = !DEFAULT_USE_STATS_FOR_PARALLELIZATION;
-		try (Connection conn = DriverManager.getConnection(getUrl())) {
-			conn.createStatement()
-					.execute("create table " + tableName
-							+ "(tenantId CHAR(15) NOT NULL, pk1 integer NOT NULL, v varchar CONSTRAINT PK PRIMARY KEY "
-							+ "(tenantId, pk1)) MULTI_TENANT=true");
-			try (Connection tenantConn = getTenantConnection("tenant1")) {
-				conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
-				conn.createStatement().execute("CREATE INDEX " + viewIndexName + " on " + viewName + " (v) ");
-				tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + viewName);
-				conn.createStatement()
-						.execute("ALTER TABLE " + tableName + " set USE_STATS_FOR_PARALLELIZATION=" + useStats);
-				// fetch the latest view ptable 
-				PhoenixRuntime.getTableNoCache(tenantConn, viewName);
-				PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-				PTable viewIndex = phxConn.getTable(new PTableKey(phxConn.getTenantId(), viewIndexName));
-				assertEquals("USE_STATS_FOR_PARALLELIZATION property set incorrectly", useStats,
-						PhoenixConfigurationUtil
-								.getStatsForParallelizationProp(tenantConn.unwrap(PhoenixConnection.class), viewIndex));
-			}
-		}
-	}
+    @Test
+    public void testUseStatsForParallelizationProperyOnViewIndex() throws SQLException {
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String tenantViewName = generateUniqueName();
+        String viewIndexName = generateUniqueName();
+        boolean useStats = !DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement()
+                    .execute("create table " + tableName
+                            + "(tenantId CHAR(15) NOT NULL, pk1 integer NOT NULL, v varchar CONSTRAINT PK PRIMARY KEY "
+                            + "(tenantId, pk1)) MULTI_TENANT=true");
+            try (Connection tenantConn = getTenantConnection("tenant1")) {
+                conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+                conn.createStatement().execute("CREATE INDEX " + viewIndexName + " on " + viewName + " (v) ");
+                tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + viewName);
+                conn.createStatement()
+                        .execute("ALTER TABLE " + tableName + " set USE_STATS_FOR_PARALLELIZATION=" + useStats);
+                // changing a property on a base table does not change the property on a view
+                validatePropertyOnViewIndex(viewName, viewIndexName, !useStats, conn, tenantConn);
+
+                // need to explicitly change the property on the view
+                conn.createStatement()
+                        .execute("ALTER VIEW " + viewName + " set USE_STATS_FOR_PARALLELIZATION=" + useStats);
+                validatePropertyOnViewIndex(viewName, viewIndexName, useStats, conn, tenantConn);
+            }
+        }
+    }
+
+    private void validatePropertyOnViewIndex(String viewName, String viewIndexName, boolean useStats, Connection conn,
+            Connection tenantConn) throws SQLException, TableNotFoundException {
+        // fetch the latest view ptable
+        PhoenixRuntime.getTableNoCache(tenantConn, viewName);
+        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+        PTable viewIndex = phxConn.getTable(new PTableKey(phxConn.getTenantId(), viewIndexName));
+        assertEquals("USE_STATS_FOR_PARALLELIZATION property set incorrectly", useStats,
+                PhoenixConfigurationUtil
+                        .getStatsForParallelizationProp(tenantConn.unwrap(PhoenixConnection.class), viewIndex));
+    }
 
 }

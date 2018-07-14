@@ -149,7 +149,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
         String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR PRIMARY KEY, KV1 VARCHAR)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_IDX ON " + tableName + "(KV1)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + generateUniqueName() + " ON " + tableName + "(KV1)");
             PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
             try (Admin admin = phxConn.getQueryServices().getAdmin()) {
                 List<RegionInfo> tableRegions = admin.getRegions(tn);

@@ -358,6 +358,8 @@ public class QueryServicesOptions {
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
     public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
 
+	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {

@@ -24,6 +24,9 @@ public abstract class SplitOnLeadingVarCharColumnsPolicy extends ConstantSizeReg
     abstract protected int getColumnToSplitAt();
     
     protected final byte[] getSplitPoint(byte[] splitPoint) {
+        if (splitPoint==null) {
+            return splitPoint;
+        }
         int offset = SchemaUtil.getVarCharLength(splitPoint, 0, splitPoint.length, getColumnToSplitAt());
         // Only split between leading columns indicated.
         if (offset == splitPoint.length) {

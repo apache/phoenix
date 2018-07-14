@@ -22,13 +22,17 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
+import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -274,7 +278,7 @@ public class SchemaUtil {
      * @param tableName
      */
     public static byte[] getTableKey(byte[] tenantId, byte[] schemaName, byte[] tableName) {
-        return ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName, QueryConstants.SEPARATOR_BYTE_ARRAY, tableName);
+        return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, SEPARATOR_BYTE_ARRAY, schemaName, SEPARATOR_BYTE_ARRAY, tableName);
     }
 
     /**
@@ -283,32 +287,32 @@ public class SchemaUtil {
      * @param functionName
      */
     public static byte[] getFunctionKey(byte[] tenantId, byte[] functionName) {
-        return ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, functionName);
+        return ByteUtil.concat(tenantId, SEPARATOR_BYTE_ARRAY, functionName);
     }
 
     public static byte[] getKeyForSchema(String tenantId, String schemaName) {
         return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
-                QueryConstants.SEPARATOR_BYTE_ARRAY,
+                SEPARATOR_BYTE_ARRAY,
                 schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName));
     }
 
     public static byte[] getTableKey(String tenantId, String schemaName, String tableName) {
-        return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName));
+        return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName));
     }
 
     public static byte[] getColumnKey(String tenantId, String schemaName, String tableName, String columnName, String familyName) {
         Preconditions.checkNotNull(columnName,"Column name cannot be null");
         if (familyName == null) {
             return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
-                    QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), 
-                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
-                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName));
+                    SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+                    SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
+                    SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName));
         }
         return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
-                QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), 
-                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
-                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName),
-                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
+                SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+                SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
+                SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName),
+                SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
     }
 
     public static String getTableName(String schemaName, String tableName) {
@@ -536,6 +540,11 @@ public class SchemaUtil {
                 || Bytes.compareTo(tableName, SchemaUtil
                         .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true).getName()) == 0;
     }
+    
+    public static boolean isChildLinkTable(byte[] tableName) {
+        return Bytes.compareTo(tableName, SYSTEM_CHILD_LINK_NAME_BYTES) == 0 || Bytes.compareTo(tableName,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES, true).getName()) == 0;
+    }
 
     public static boolean isSequenceTable(PTable table) {
         return PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME.equals(table.getName().getString());
@@ -603,7 +612,7 @@ public class SchemaUtil {
                 if (pos == pkColumns.size() - 1) {
                     break;
                 }
-                while (offset < maxOffset && split[offset] != QueryConstants.SEPARATOR_BYTE) {
+                while (offset < maxOffset && split[offset] != SEPARATOR_BYTE) {
                     offset++;
                 }
                 if (offset == maxOffset) {
@@ -645,7 +654,7 @@ public class SchemaUtil {
         PhoenixConnection metaConnection = null;
         Statement stmt = null;
         try {
-            metaConnection = new PhoenixConnection(conn.getQueryServices(), conn, scn);
+            metaConnection = new PhoenixConnection(conn, scn);
             try {
                 stmt = metaConnection.createStatement();
                 stmt.executeUpdate("ALTER TABLE SYSTEM.\"TABLE\" ADD IF NOT EXISTS " + columnDef);
@@ -893,7 +902,7 @@ public class SchemaUtil {
      * @return the byte to use as the separator
      */
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, SortOrder sortOrder) {
-        return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? QueryConstants.SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
+        return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
     }
     
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Field f) {
@@ -1157,7 +1166,11 @@ public class SchemaUtil {
         }
     }
 
-    public static boolean hasGlobalIndex(PTable table) {
+	public static int getIsNullableInt(boolean isNullable) {
+		return isNullable ? ResultSetMetaData.columnNullable : ResultSetMetaData.columnNoNulls;
+	}
+
+	public static boolean hasGlobalIndex(PTable table) {
         for (PTable index : table.getIndexes()) {
             if (index.getIndexType() == IndexType.GLOBAL) {
                 return true;

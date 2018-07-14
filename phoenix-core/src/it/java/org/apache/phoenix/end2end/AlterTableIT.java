@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -811,7 +812,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute("CREATE INDEX " + indexTableName + " ON " + dataTableFullName + "(COL1) INCLUDE (COL2,COL3,COL4)");
         
         ddl = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL2, COL3";
-        conn1.createStatement().execute(ddl);
+         conn1.createStatement().execute(ddl);
         ResultSet rs = conn1.getMetaData().getColumns("", "", dataTableFullName, null);
         assertTrue(rs.next());
         assertEquals("ID",rs.getString(4));
@@ -1286,10 +1287,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             
             // assert that the server side metadata for the base table and the view is also updated correctly.
             assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 10));
-            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, viewName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 8));
-            assertEncodedCQValue("A", "COL11", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 9);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, baseTableName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 8));
+            assertEncodedCQValue("A", "COL11", schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 9);
             assertSequenceNumber(schemaName, baseTableName, columnEncoded ? initBaseTableSeqNumber + 4 : initBaseTableSeqNumber + 2 );
-            assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 2);
+            // view sequence number does not change as base table column changes are not propagated to views
+            assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 1);
         }
     }
 	
@@ -1347,5 +1349,40 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
     
+	@Test
+	public void testAlterTableWithIndexesExtendPk() throws Exception {
+		Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		conn.setAutoCommit(false);
+		String tableName = generateUniqueName();
+		String indexName1 = "I_" + generateUniqueName();
+		String indexName2 = "I_" + generateUniqueName();
+
+		try {
+			String ddl = "CREATE TABLE " + tableName + " (ORG_ID CHAR(15) NOT NULL,"
+					+ " PARTITION_KEY CHAR(3) NOT NULL, " + " ACTIVITY_DATE DATE NOT NULL, "
+					+ " FK1_ID CHAR(15) NOT NULL, " + " FK2_ID CHAR(15) NOT NULL, " + " TYPE VARCHAR NOT NULL, "
+					+ " IS_OPEN BOOLEAN " + " CONSTRAINT PKVIEW PRIMARY KEY " + "("
+					+ "ORG_ID, PARTITION_KEY, ACTIVITY_DATE, FK1_ID, FK2_ID, TYPE" + "))";
+			createTestTable(getUrl(), ddl);
+
+			String idx1ddl = "CREATE INDEX " + indexName1 + " ON " + tableName
+					+ " (FK1_ID, ACTIVITY_DATE DESC) INCLUDE (IS_OPEN)";
+			PreparedStatement stmt1 = conn.prepareStatement(idx1ddl);
+			stmt1.execute();
+
+			String idx2ddl = "CREATE INDEX " + indexName2 + " ON " + tableName
+					+ " (FK2_ID, ACTIVITY_DATE DESC) INCLUDE (IS_OPEN)";
+			PreparedStatement stmt2 = conn.prepareStatement(idx2ddl);
+			stmt2.execute();
+
+			ddl = "ALTER TABLE " + tableName + " ADD SOURCE VARCHAR(25) NULL PRIMARY KEY";
+			PreparedStatement stmt3 = conn.prepareStatement(ddl);
+			stmt3.execute();
+		} finally {
+			conn.close();
+		}
+	}
+
 }
  

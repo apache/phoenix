@@ -28,6 +28,7 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -61,6 +62,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -287,7 +289,7 @@ public class PartialCommitIT extends BaseOwnClusterIT {
         PhoenixConnection phxCon = new PhoenixConnection(con.unwrap(PhoenixConnection.class));
         final Map<TableRef, MultiRowMutationState> mutations = Maps.newTreeMap(new TableRefComparator());
         // passing a null mutation state forces the connection.newMutationState() to be used to create the MutationState
-        return new PhoenixConnection(phxCon, null) {
+        return new PhoenixConnection(phxCon, (MutationState)null) {
             @Override
             protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
                 return new MutationState(maxSize, maxSizeBytes, this, mutations, false, null);
