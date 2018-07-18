@@ -24,11 +24,11 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.apache.phoenix.metrics.MetricInfo;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -52,7 +52,7 @@ public class TraceServlet extends HttpServlet {
 
   @Override
   public void init() {
-    org.apache.hadoop.conf.Configuration conf = HBaseConfiguration.create();
+    Configuration conf = HBaseConfiguration.create();
     TRACING_TABLE =
             conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
                     QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
@@ -129,7 +129,7 @@ public class TraceServlet extends HttpServlet {
     } catch (NumberFormatException e) {
       throw new RuntimeException("The passed parentId/traceId is not a number.", e);
     }
-    if (logic != null && (!logic.equals(LOGIC_AND) && !logic.equals(LOGIC_OR))) {
+    if (logic != null && !logic.equals(LOGIC_AND) && !logic.equals(LOGIC_OR)) {
       throw new RuntimeException("Wrong logical operator passed to the query. Only " + LOGIC_AND + "," + LOGIC_OR + " are allowed.");
     }
     if (parentId != null && traceId != null) {
