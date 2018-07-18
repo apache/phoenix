@@ -45,7 +45,7 @@ public class TraceServlet extends HttpServlet {
   private static Connection con;
   protected String DEFAULT_LIMIT = "25";
   protected String DEFAULT_COUNTBY = "hostname";
-  protected String DEFAULT_DESCRIPTION = "description";
+  protected String DESCRIPTION_COUNTBY = "description";
   protected String LOGIC_AND = "AND";
   protected String LOGIC_OR = "OR";
   protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
@@ -70,7 +70,7 @@ public class TraceServlet extends HttpServlet {
     if ("getall".equals(action)) {
       jsonObject = getAll(limit);
     } else if ("getCount".equals(action)) {
-      jsonObject = getCount(DEFAULT_DESCRIPTION);
+      jsonObject = getCount(DESCRIPTION_COUNTBY);
     } else if ("getDistribution".equals(action)) {
       jsonObject = getCount(DEFAULT_COUNTBY);
     } else if ("searchTrace".equals(action)) {
