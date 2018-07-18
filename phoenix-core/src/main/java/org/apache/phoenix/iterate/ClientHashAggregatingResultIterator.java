@@ -56,21 +56,23 @@ public class ClientHashAggregatingResultIterator
     private final ResultIterator resultIterator;
     private final Aggregators aggregators;
     private final List<Expression> groupByExpressions;
+    private final int thresholdBytes;
     private HashMap<ImmutableBytesWritable, Aggregator[]> hash;
     private List<ImmutableBytesWritable> keyList;
     private Iterator<ImmutableBytesWritable> keyIterator;
 
-    public ClientHashAggregatingResultIterator(ResultIterator resultIterator, Aggregators aggregators, List<Expression> groupByExpressions) {
+    public ClientHashAggregatingResultIterator(ResultIterator resultIterator, Aggregators aggregators, List<Expression> groupByExpressions, int thresholdBytes) {
         Objects.requireNonNull(resultIterator);
         Objects.requireNonNull(aggregators);
         Objects.requireNonNull(groupByExpressions);
         this.resultIterator = resultIterator;
         this.aggregators = aggregators;
         this.groupByExpressions = groupByExpressions;
+        this.thresholdBytes = thresholdBytes;
     }
 
     @Override
-    public Tuple next() throws SQLException {
+        public Tuple next() throws SQLException {
         if (keyIterator == null) {
             hash = populateHash();
             keyList = sortKeys();
@@ -89,15 +91,15 @@ public class ClientHashAggregatingResultIterator
     }
 
     @Override
-    public void close() throws SQLException {
+        public void close() throws SQLException {
         keyIterator = null;
         keyList = null;
         hash = null;
         resultIterator.close();
     }
-    
+
     @Override
-    public Aggregator[] aggregate(Tuple result) {
+        public Aggregator[] aggregate(Tuple result) {
         Aggregator[] rowAggregators = aggregators.getAggregators();
         aggregators.reset(rowAggregators);
         aggregators.aggregate(rowAggregators, result);
@@ -105,13 +107,13 @@ public class ClientHashAggregatingResultIterator
     }
 
     @Override
-    public void explain(List<String> planSteps) {
+        public void explain(List<String> planSteps) {
         resultIterator.explain(planSteps);
     }
 
     @Override
-    public String toString() {
-        return "ClientHashAggregatingResultIterator [resultIterator=" 
+        public String toString() {
+        return "ClientHashAggregatingResultIterator [resultIterator="
             + resultIterator + ", aggregators=" + aggregators + ", groupByExpressions="
             + groupByExpressions + "]";
     }
@@ -135,11 +137,23 @@ public class ClientHashAggregatingResultIterator
     private HashMap<ImmutableBytesWritable, Aggregator[]> populateHash() throws SQLException {
         hash = new HashMap<ImmutableBytesWritable, Aggregator[]>(HASH_AGG_INIT_SIZE, 0.75f);
 
+        final int aggSize = aggregators.getEstimatedByteSize();
+        int hashSize = 0;
+
         for (Tuple result = resultIterator.next(); result != null; result = resultIterator.next()) {
             ImmutableBytesWritable key = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
             key = getGroupingKey(result, key);
             Aggregator[] rowAggregators = hash.get(key);
             if (rowAggregators == null) {
+                // Abort if we exceed memory threshold/2
+                // We use threshold/2 to leave room for the subsequent sort
+                if (thresholdBytes > 0) {
+                    hashSize += key.getSize() + aggSize;
+                    if (hashSize > thresholdBytes/2) {
+                        throw new ClientHashSizeException("Client hash size " + hashSize + " exceeds threshold value " + thresholdBytes + "/2");
+                    }
+                }
+
                 rowAggregators = aggregators.newAggregators();
                 hash.put(key, rowAggregators);
             }
