@@ -129,7 +129,7 @@ public class TraceServlet extends HttpServlet {
     } catch (NumberFormatException e) {
       throw new RuntimeException("The passed parentId/traceId is not a number.", e);
     }
-    if ((!logic.equals(LOGIC_AND) || !logic.equals(LOGIC_OR)) && logic == null) {
+    if (logic != null && (!logic.equals(LOGIC_AND) && !logic.equals(LOGIC_OR))) {
       throw new RuntimeException("Wrong logical operator passed to the query. Only " + LOGIC_AND + "," + LOGIC_OR + " are allowed.");
     }
     if (parentId != null && traceId != null) {
