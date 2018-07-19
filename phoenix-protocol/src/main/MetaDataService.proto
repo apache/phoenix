@@ -58,7 +58,8 @@ message SharedTableState {
   required bytes tableName = 3;
   repeated PColumn columns = 4;  
   repeated bytes physicalNames = 5;
-  required int32 viewIndexId = 6;
+  required int64 viewIndexId = 6;
+  optional bool useLongViewIndexId = 7;
 }
 
 message MetaDataResponse {
@@ -73,7 +74,8 @@ message MetaDataResponse {
   repeated SharedTableState sharedTablesToDelete = 9;
   optional PSchema schema = 10;
   optional int64 autoPartitionNum = 11;
-  optional int32 viewIndexId = 12;
+  optional int64 viewIndexId = 12;
+  optional bool useLongViewIndexId = 13;
 }
 
 message GetTableRequest {

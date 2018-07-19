@@ -314,6 +314,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     private byte[] viewIndexId;
+    private PDataType viewIndexType;
     private boolean isMultiTenant;
     // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column
     private List<Expression> indexedExpressions;
@@ -371,7 +372,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
-        this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
+        this.viewIndexId = index.getViewIndexId() == null ? null : index.getViewIndexType().toBytes(index.getViewIndexId());
+        this.viewIndexType = index.getViewIndexType();
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
         this.encodingScheme = index.getEncodingScheme();
         
@@ -823,7 +825,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
                 @Override
                 public PDataType getDataType() {
-                    return MetaDataUtil.getViewIndexIdDataType();
+                    return viewIndexType;
                 }
 
                 @Override
@@ -1220,7 +1222,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         boolean hasViewIndexId = encodedIndexedColumnsAndViewId < 0;
         if (hasViewIndexId) {
             // Fixed length
-            viewIndexId = new byte[MetaDataUtil.getViewIndexIdDataType().getByteSize()];
+            //Use leacy viewIndexIdType for clients older than 4.10 release
+            viewIndexId = new byte[MetaDataUtil.getLegacyViewIndexIdDataType().getByteSize()];
+            viewIndexType = MetaDataUtil.getLegacyViewIndexIdDataType();
             input.readFully(viewIndexId);
         }
         int nIndexedColumns = Math.abs(encodedIndexedColumnsAndViewId) - 1;
@@ -1337,6 +1341,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         maintainer.nIndexSaltBuckets = proto.getSaltBuckets();
         maintainer.isMultiTenant = proto.getIsMultiTenant();
         maintainer.viewIndexId = proto.hasViewIndexId() ? proto.getViewIndexId().toByteArray() : null;
+        maintainer.viewIndexType = proto.hasUseLongViewIndex()
+                ? MetaDataUtil.getViewIndexIdDataType()
+                : MetaDataUtil.getLegacyViewIndexIdDataType();
         List<ServerCachingProtos.ColumnReference> indexedColumnsList = proto.getIndexedColumnsList();
         maintainer.indexedColumns = new HashSet<ColumnReference>(indexedColumnsList.size());
         for (ServerCachingProtos.ColumnReference colRefFromProto : indexedColumnsList) {
@@ -1456,6 +1463,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setIsMultiTenant(maintainer.isMultiTenant);
         if (maintainer.viewIndexId != null) {
             builder.setViewIndexId(ByteStringer.wrap(maintainer.viewIndexId));
+            builder.setUseLongViewIndex(MetaDataUtil.getViewIndexIdDataType().equals(maintainer.viewIndexType));
         }
         for (ColumnReference colRef : maintainer.indexedColumns) {
             ServerCachingProtos.ColumnReference.Builder cRefBuilder =  ServerCachingProtos.ColumnReference.newBuilder();

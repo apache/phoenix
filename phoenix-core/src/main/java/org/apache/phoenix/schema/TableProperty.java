@@ -222,8 +222,24 @@ public enum TableProperty {
         public Object getPTableValue(PTable table) {
             return table.useStatsForParallelization();
         }
-    }
-    ;
+    },
+    USE_LONG_VIEW_INDEX(PhoenixDatabaseMetaData.USE_LONG_VIEW_INDEX, true, true, true) {
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return false;
+            } else if (value instanceof Boolean) {
+                return value;
+            } else {
+                throw new IllegalArgumentException("Use long view index can only be either true or false");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getImmutableStorageScheme();
+        }
+    };
 
     private final String propertyName;
     private final SQLExceptionCode colFamSpecifiedException;

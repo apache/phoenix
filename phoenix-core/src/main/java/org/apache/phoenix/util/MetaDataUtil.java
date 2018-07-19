@@ -445,6 +445,10 @@ public class MetaDataUtil {
     }
 
     public static PDataType getViewIndexIdDataType() {
+       return PLong.INSTANCE;
+    }
+
+    public static PDataType getLegacyViewIndexIdDataType() {
         return PSmallint.INSTANCE;
     }
 

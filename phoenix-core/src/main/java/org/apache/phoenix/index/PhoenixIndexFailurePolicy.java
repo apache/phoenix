@@ -312,7 +312,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                     new HashMap<ImmutableBytesWritable, String>();
             for (PTable index : indexes) {
                 if (localIndex == null) localIndex = index;
-                localIndexNames.put(new ImmutableBytesWritable(MetaDataUtil.getViewIndexIdDataType().toBytes(
+                localIndexNames.put(new ImmutableBytesWritable(index.getViewIndexType().toBytes(
                         index.getViewIndexId())), index.getName().getString());
             }
             if (localIndex == null) {
