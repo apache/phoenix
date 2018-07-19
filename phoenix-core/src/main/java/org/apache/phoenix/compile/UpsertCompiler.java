@@ -720,7 +720,7 @@ public class UpsertCompiler {
         final byte[][] values = new byte[nValuesToSet][];
         int nodeIndex = 0;
         if (isSharedViewIndex) {
-            values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+            values[nodeIndex++] = table.getViewIndexType().toBytes(table.getViewIndexId());
         }
         if (isTenantSpecific) {
             PName tenantId = connection.getTenantId();
