@@ -34,12 +34,15 @@ import java.util.Objects;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
+import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 /**
@@ -52,16 +55,20 @@ public class ClientHashAggregatingResultIterator
     implements AggregatingResultIterator {
 
     private static final int HASH_AGG_INIT_SIZE = 64*1024;
+    private static final int CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE = 64*1024;
     private static final byte[] UNITIALIZED_KEY_BUFFER = new byte[0];
     private final ResultIterator resultIterator;
     private final Aggregators aggregators;
     private final List<Expression> groupByExpressions;
     private final int thresholdBytes;
+    private final MemoryChunk memoryChunk;
     private HashMap<ImmutableBytesWritable, Aggregator[]> hash;
     private List<ImmutableBytesWritable> keyList;
     private Iterator<ImmutableBytesWritable> keyIterator;
 
-    public ClientHashAggregatingResultIterator(ResultIterator resultIterator, Aggregators aggregators, List<Expression> groupByExpressions, int thresholdBytes) {
+    public ClientHashAggregatingResultIterator(StatementContext context, ResultIterator resultIterator, Aggregators aggregators,
+                                               List<Expression> groupByExpressions, int thresholdBytes) {
+
         Objects.requireNonNull(resultIterator);
         Objects.requireNonNull(aggregators);
         Objects.requireNonNull(groupByExpressions);
@@ -69,6 +76,7 @@ public class ClientHashAggregatingResultIterator
         this.aggregators = aggregators;
         this.groupByExpressions = groupByExpressions;
         this.thresholdBytes = thresholdBytes;
+        memoryChunk = context.getConnection().getQueryServices().getMemoryManager().allocate(CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE);
     }
 
     @Override
@@ -95,6 +103,7 @@ public class ClientHashAggregatingResultIterator
         keyIterator = null;
         keyList = null;
         hash = null;
+        memoryChunk.resize(0);
         resultIterator.close();
     }
 
@@ -135,20 +144,24 @@ public class ClientHashAggregatingResultIterator
     }
 
     private HashMap<ImmutableBytesWritable, Aggregator[]> populateHash() throws SQLException {
-        hash = new HashMap<ImmutableBytesWritable, Aggregator[]>(HASH_AGG_INIT_SIZE, 0.75f);
 
+        hash = new HashMap<ImmutableBytesWritable, Aggregator[]>(HASH_AGG_INIT_SIZE, 0.75f);
         final int aggSize = aggregators.getEstimatedByteSize();
-        int hashSize = 0;
 
         for (Tuple result = resultIterator.next(); result != null; result = resultIterator.next()) {
             ImmutableBytesWritable key = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
             key = getGroupingKey(result, key);
             Aggregator[] rowAggregators = hash.get(key);
             if (rowAggregators == null) {
+                long hashSize = SizedUtil.sizeOfMap(hash.size() + 1, key.getSize(), aggSize);
+                if (hashSize > memoryChunk.getSize() + CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE) {
+                    // This will throw InsufficientMemoryException if necessary
+                    memoryChunk.resize(hashSize + CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE);
+                }
+
                 // Abort if we exceed memory threshold/2
                 // We use threshold/2 to leave room for the subsequent sort
                 if (thresholdBytes > 0) {
-                    hashSize += key.getSize() + aggSize;
                     if (hashSize > thresholdBytes/2) {
                         throw new ClientHashSizeException("Client hash size " + hashSize + " exceeds threshold value " + thresholdBytes + "/2");
                     }
@@ -165,6 +178,9 @@ public class ClientHashAggregatingResultIterator
     }
 
     private List<ImmutableBytesWritable> sortKeys() {
+        // This will throw InsufficientMemoryException if necessary
+        memoryChunk.resize(memoryChunk.getSize() + SizedUtil.sizeOfArrayList(hash.size()));
+
         keyList = new ArrayList<ImmutableBytesWritable>(hash.size());
         keyList.addAll(hash.keySet());
         Collections.sort(keyList, new ImmutableBytesWritable.Comparator());
