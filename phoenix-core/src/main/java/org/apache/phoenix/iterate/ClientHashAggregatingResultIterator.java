@@ -184,6 +184,7 @@ public class ClientHashAggregatingResultIterator
 
         keyList = new ArrayList<ImmutableBytesWritable>(hash.size());
         keyList.addAll(hash.keySet());
+        Collections.sort(keyList, new ImmutableBytesWritable.Comparator());
         return keyList;
     }
 }
