@@ -60,13 +60,14 @@ public class ClientHashAggregatingResultIterator
     private final ResultIterator resultIterator;
     private final Aggregators aggregators;
     private final List<Expression> groupByExpressions;
+    private final boolean sort;
     private final MemoryChunk memoryChunk;
     private HashMap<ImmutableBytesWritable, Aggregator[]> hash;
     private List<ImmutableBytesWritable> keyList;
     private Iterator<ImmutableBytesWritable> keyIterator;
 
     public ClientHashAggregatingResultIterator(StatementContext context, ResultIterator resultIterator,
-                                               Aggregators aggregators, List<Expression> groupByExpressions) {
+                                               Aggregators aggregators, List<Expression> groupByExpressions, boolean sort) {
 
         Objects.requireNonNull(resultIterator);
         Objects.requireNonNull(aggregators);
@@ -74,6 +75,7 @@ public class ClientHashAggregatingResultIterator
         this.resultIterator = resultIterator;
         this.aggregators = aggregators;
         this.groupByExpressions = groupByExpressions;
+        this.sort = sort;
         memoryChunk = context.getConnection().getQueryServices().getMemoryManager().allocate(CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE);
     }
 
@@ -81,8 +83,12 @@ public class ClientHashAggregatingResultIterator
     public Tuple next() throws SQLException {
         if (keyIterator == null) {
             hash = populateHash();
-            keyList = sortKeys();
-            keyIterator = keyList.iterator();
+            if (sort) {
+                keyList = sortKeys();
+                keyIterator = keyList.iterator();
+            } else {
+                keyIterator = hash.keySet().iterator();
+            }
         }
 
         if (!keyIterator.hasNext()) {
@@ -178,7 +184,6 @@ public class ClientHashAggregatingResultIterator
 
         keyList = new ArrayList<ImmutableBytesWritable>(hash.size());
         keyList.addAll(hash.keySet());
-        Collections.sort(keyList, new ImmutableBytesWritable.Comparator());
         return keyList;
     }
 }

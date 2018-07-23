@@ -154,7 +154,8 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 }
 
                 if (useHashAgg) {
-                    aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions);
+                    boolean sort = orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY;
+                    aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions, sort);
                 } else {
                     iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
                     aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);

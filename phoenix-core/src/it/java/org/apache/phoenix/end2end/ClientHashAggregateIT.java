@@ -105,7 +105,9 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
             + " FROM " + table + " t1 JOIN " + table + " t2"
             + " ON (t1.keyB = t2.keyB)"
             + " WHERE t1.keyA = 10 AND t2.keyA = 20"
-            + " GROUP BY t1.val, t2.val";
+            + " GROUP BY t1.val, t2.val"
+            + " ORDER BY t1.val, t2.val"
+            ;
 
         return query;
     }
