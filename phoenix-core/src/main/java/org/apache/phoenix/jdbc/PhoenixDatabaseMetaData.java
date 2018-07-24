@@ -333,6 +333,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SEQUENCE_TABLE_TYPE = SYSTEM_SEQUENCE_TABLE;
 
     public static final String SYNC_INDEX_CREATED_DATE = "SYNC_INDEX_CREATED_DATE";
+    public static final String SYSTEM_MUTEX_COLUMN_NAME = "MUTEX_VALUE";
+    public static final byte[] SYSTEM_MUTEX_COLUMN_NAME_BYTES = Bytes.toBytes(SYSTEM_MUTEX_COLUMN_NAME);
     public static final String SYSTEM_MUTEX_TABLE_NAME = "MUTEX";
     public static final String SYSTEM_MUTEX_NAME = SchemaUtil.getTableName(QueryConstants.SYSTEM_SCHEMA_NAME, SYSTEM_MUTEX_TABLE_NAME);
     public static final TableName SYSTEM_MUTEX_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_MUTEX_NAME);

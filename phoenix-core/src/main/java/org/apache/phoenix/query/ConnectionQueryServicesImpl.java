@@ -65,6 +65,7 @@ import static org.apache.phoenix.util.UpgradeUtil.moveChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
@@ -114,6 +115,7 @@ import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -331,9 +333,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
     private final int maxConnectionsAllowed;
     private final boolean shouldThrottleNumConnections;
-    public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
-    public static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
-    public static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
+    public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes();
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -2535,6 +2535,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     protected String getChildLinkDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_CHILD_LINK_METADATA);
     }
+    
+    protected String getMutexDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
+    }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
@@ -2708,13 +2712,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             .setTimeToLive(TTL_FOR_MUTEX).build())
                     .build();
             admin.createTable(tableDesc);
-            try (Table sysMutexTable = getTable(mutexTableName.getName())) {
-                byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
-                Put put = new Put(mutexRowKey);
-                put.addColumn(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
-                sysMutexTable.put(put);
-            }
         } catch (IOException e) {
             if(!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class)) ||
                     !Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), org.apache.hadoop.hbase.TableNotFoundException.class))) {
@@ -2751,13 +2748,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate(getChildLinkDDL());
         } catch (TableAlreadyExistsException e) {}
-        // Catch the IOException to log the error message and then bubble it up for the client to retry.
         try {
-            createSysMutexTableIfNotExists(hbaseAdmin);
-        } catch (IOException exception) {
-            logger.error("Failed to created SYSMUTEX table. Upgrade or migration is not possible without it. Please retry.");
-            throw exception;
-        }
+            metaConnection.createStatement().executeUpdate(getMutexDDL());
+        } catch (TableAlreadyExistsException e) {}
+        // Catch the IOException to log the error message and then bubble it up for the client to retry.
     }
 
     /**
@@ -3052,8 +3046,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         String sysCatalogTableName = null;
         SQLException toThrow = null;
         boolean acquiredMutexLock = false;
-        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
         boolean snapshotCreated = false;
         try {
             if (!isUpgradeRequired()) {
@@ -3084,7 +3076,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sysCatalogTableName = SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getNameAsString();
                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, ConnectionQueryServicesImpl.this.getProps())) {
                     // Try acquiring a lock in SYSMUTEX table before migrating the tables since it involves disabling the table.
-                    if (acquiredMutexLock = acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP, mutexRowKey)) {
+                    if (acquiredMutexLock = acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP)) {
                         logger.debug("Acquired lock in SYSMUTEX table for migrating SYSTEM tables to SYSTEM namespace "
                           + "and/or upgrading " + sysCatalogTableName);
                     }
@@ -3103,7 +3095,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // Try acquiring a lock in SYSMUTEX table before upgrading SYSCAT. If we cannot acquire the lock,
                     // it means some old client is either migrating SYSTEM tables or trying to upgrade the schema of
                     // SYSCAT table and hence it should not be interrupted
-                    if (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp, mutexRowKey)) {
+                    if (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp)) {
                         logger.debug("Acquired lock in SYSMUTEX table for upgrading " + sysCatalogTableName);
                         snapshotName = getSysCatalogSnapshotName(currentServerSideTableTimeStamp);
                         createSnapshot(snapshotName, sysCatalogTableName);
@@ -3203,6 +3195,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 metaConnection.createStatement().executeUpdate(getChildLinkDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
+            try {
+                metaConnection.createStatement().executeUpdate(getMutexDDL());
+            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
@@ -3246,7 +3241,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 } finally {
                     if (acquiredMutexLock) {
                         try {
-                            releaseUpgradeMutex(mutexRowKey);
+                            releaseUpgradeMutex();
                         } catch (IOException e) {
                             logger.warn("Release of upgrade mutex failed ", e);
                         }
@@ -3440,16 +3435,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // No tables exist matching "SYSTEM\..*", they are all already in "SYSTEM:.*"
             if (tableNames.size() == 0) { return; }
             // Try to move any remaining tables matching "SYSTEM\..*" into "SYSTEM:"
-            if (tableNames.size() > 5) {
-                logger.warn("Expected 5 system tables but found " + tableNames.size() + ":" + tableNames);
+            if (tableNames.size() > 7) {
+                logger.warn("Expected 7 system tables but found " + tableNames.size() + ":" + tableNames);
             }
-
-            // Handle the upgrade of SYSMUTEX table separately since it doesn't have any entries in SYSCAT
-            logger.info("Migrating SYSTEM.MUTEX table to SYSTEM namespace.");
-            String sysMutexSrcTableName = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
-            String sysMutexDestTableName = SchemaUtil.getPhysicalName(sysMutexSrcTableName.getBytes(), this.getProps()).getNameAsString();
-            UpgradeUtil.mapTableToNamespace(admin, sysMutexSrcTableName, sysMutexDestTableName, PTableType.SYSTEM);
-            tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME);
 
             byte[] mappedSystemTable = SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName();
@@ -3494,64 +3482,95 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws SQLException
      */
     @VisibleForTesting
-    public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] rowToLock) throws IOException,
+    public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp)
+            throws IOException,
             SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-
         byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
         if(sysMutexPhysicalTableNameBytes == null) {
             throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
                     getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
         }
+        if (!writeMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null)) {
+            throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
+                    getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
+        }
+        return true;
+    }
 
-        try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
-            byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
-            byte[] qualifier = UPGRADE_MUTEX;
-            byte[] oldValue = UPGRADE_MUTEX_UNLOCKED;
-            byte[] newValue = UPGRADE_MUTEX_LOCKED;
-            Put put = new Put(rowToLock);
-            put.addColumn(family, qualifier, newValue);
-            boolean acquired =  sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
-            if (!acquired) {
-                /*
-                 * Because of TTL on the SYSTEM_MUTEX_FAMILY, it is very much possible that the cell
-                 * has gone away. So we need to retry with an old value of null. Note there is a small
-                 * race condition here that between the two checkAndPut calls, it is possible that another
-                 * request would have set the value back to UPGRADE_MUTEX_UNLOCKED. In that scenario this
-                 * following checkAndPut would still return false even though the lock was available.
-                 */
-                acquired =  sysMutexTable.checkAndPut(rowToLock, family, qualifier, null, put);
-                if (!acquired) {
-                    throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
-                        getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
+    @Override
+    public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException {
+        try {
+            byte[] rowKey =
+                    columnName != null
+                            ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
+                                familyName)
+                            : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            // at this point the system mutex table should have been created or
+            // an exception thrown
+            byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
+            try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
+                byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+                byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
+                byte[] value = MUTEX_LOCKED;
+                Put put = new Put(rowKey);
+                put.addColumn(family, qualifier, value);
+                boolean checkAndPut =
+                        sysMutexTable.checkAndPut(rowKey, family, qualifier, null, put);
+                String processName = ManagementFactory.getRuntimeMXBean().getName();
+                String msg =
+                        " tenantId : " + tenantId + " schemaName : " + schemaName + " tableName : "
+                                + tableName + " columnName : " + columnName + " familyName : "
+                                + familyName;
+                if (!checkAndPut) {
+                    logger.error(processName + " failed to acquire mutex for "+ msg);
                 }
+                else {
+                    logger.debug(processName + " acquired mutex for "+ msg);
+                }
+                return checkAndPut;
             }
-            return true;
+        } catch (IOException e) {
+            throw ServerUtil.parseServerException(e);
         }
     }
 
     @VisibleForTesting
-    public boolean releaseUpgradeMutex(byte[] mutexRowKey) throws IOException, SQLException {
-        boolean released = false;
+    public void releaseUpgradeMutex() throws IOException, SQLException {
+        deleteMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null);
+    }
 
-        byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
-        if(sysMutexPhysicalTableNameBytes == null) {
-            // We shouldn't never be really in this situation where neither SYSMUTEX or SYS:MUTEX exists
-            return true;
+    @Override
+    public void deleteMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException {
+        try {
+            byte[] rowKey =
+                    columnName != null
+                            ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
+                                familyName)
+                            : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            // at this point the system mutex table should have been created or
+            // an exception thrown
+            byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
+            try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
+                byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+                byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
+                Delete delete = new Delete(rowKey);
+                delete.addColumn(family, qualifier);
+                sysMutexTable.delete(delete);
+                String processName = ManagementFactory.getRuntimeMXBean().getName();
+                String msg =
+                        " tenantId : " + tenantId + " schemaName : " + schemaName + " tableName : "
+                                + tableName + " columnName : " + columnName + " familyName : "
+                                + familyName;
+                logger.debug(processName + " released mutex for "+ msg);
+            }
+        } catch (IOException e) {
+            throw ServerUtil.parseServerException(e);
         }
-
-        try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
-            byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
-            byte[] qualifier = UPGRADE_MUTEX;
-            byte[] expectedValue = UPGRADE_MUTEX_LOCKED;
-            byte[] newValue = UPGRADE_MUTEX_UNLOCKED;
-            Put put = new Put(mutexRowKey);
-            put.addColumn(family, qualifier, newValue);
-            released = sysMutexTable.checkAndPut(mutexRowKey, family, qualifier, expectedValue, put);
-        } catch (Exception e) {
-            logger.warn("Release of upgrade mutex failed", e);
-        }
-        return released;
     }
 
     private byte[] getSysMutexPhysicalTableNameBytes() throws IOException, SQLException {

@@ -181,6 +181,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     protected String getChildLinkDDL() {
         return setSystemDDLProperties(QueryConstants.CREATE_CHILD_LINK_METADATA);
     }
+    
+    protected String getMutexDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
+    }
 
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
@@ -380,6 +384,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 try {
                     metaConnection.createStatement()
                             .executeUpdate(getChildLinkDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {
+                }
+                try {
+                    metaConnection.createStatement()
+                            .executeUpdate(getMutexDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {
@@ -732,5 +741,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public PhoenixTransactionClient initTransactionClient(Provider provider) {
         return null; // Client is not necessary
+    }
+
+    @Override
+    public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public void deleteMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException {
     }
 }

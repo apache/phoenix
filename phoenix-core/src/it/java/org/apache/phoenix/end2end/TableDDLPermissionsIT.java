@@ -58,6 +58,10 @@ public class TableDDLPermissionsIT extends BasePermissionsIT{
                         Action.READ, Action.EXEC);
                 grantPermissions(unprivilegedUser.getName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
                         Action.READ, Action.EXEC);
+                grantPermissions(regularUser1.getShortName(), Collections.singleton("SYSTEM:MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM:MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
                 
             } else {
                 grantPermissions(regularUser1.getName(), PHOENIX_SYSTEM_TABLES, Action.READ, Action.EXEC);
@@ -68,6 +72,10 @@ public class TableDDLPermissionsIT extends BasePermissionsIT{
                         Action.READ, Action.EXEC);
                 grantPermissions(unprivilegedUser.getName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
                         Action.READ, Action.EXEC);
+                grantPermissions(regularUser1.getShortName(), Collections.singleton("SYSTEM.MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
+            grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM.MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
             }
         } catch (Throwable e) {
             if (e instanceof Exception) {

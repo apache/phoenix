@@ -1870,6 +1870,24 @@ public class MetaDataClient {
         }
         return false;
     }
+    
+    /**
+     * If we are creating a view we write a cell to the SYSTEM.MUTEX table with the rowkey of the
+     * parent table to prevent concurrent modifications
+     */
+    private boolean writeCell(String tenantId, String schemaName, String tableName, String columnName)
+            throws SQLException {
+        return connection.getQueryServices().writeMutexCell(tenantId, schemaName, tableName, columnName, null);
+    }
+
+    /**
+     * Remove the cell that was written to to the SYSTEM.MUTEX table with the rowkey of the
+     * parent table to prevent concurrent modifications
+     */
+    private void deleteCell(String tenantId, String schemaName, String tableName, String columnName)
+            throws SQLException {
+        connection.getQueryServices().deleteMutexCell(tenantId, schemaName, tableName, columnName, null);
+    }
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType,
@@ -1880,6 +1898,7 @@ public class MetaDataClient {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
+        boolean acquiredMutex = false;
         try {
             connection.setAutoCommit(false);
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(statement.getColumnDefs().size() + 3);
@@ -1909,6 +1928,21 @@ public class MetaDataClient {
             boolean isLocalIndex = indexType == IndexType.LOCAL;
             QualifierEncodingScheme encodingScheme = NON_ENCODED_QUALIFIERS;
             ImmutableStorageScheme immutableStorageScheme = ONE_CELL_PER_COLUMN;
+            
+            if (tableType == PTableType.VIEW) {
+                PName physicalName = parent.getPhysicalName();
+                String physicalSchemaName =
+                        SchemaUtil.getSchemaNameFromFullName(physicalName.getString());
+                String physicalTableName =
+                        SchemaUtil.getTableNameFromFullName(physicalName.getString());
+                // acquire the mutex using the global physical table name to
+                // prevent creating views while concurrently dropping the base
+                // table
+                acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName, null);
+                if (!acquiredMutex) {
+                    throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                }
+            }
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 storeNulls = parent.getStoreNulls();
@@ -2829,6 +2863,16 @@ public class MetaDataClient {
             }
         } finally {
             connection.setAutoCommit(wasAutoCommit);
+            if (acquiredMutex && tableType == PTableType.VIEW) {
+                PName physicalName = parent.getPhysicalName();
+                String physicalSchemaName =
+                        SchemaUtil.getSchemaNameFromFullName(physicalName.getString());
+                String physicalTableName =
+                        SchemaUtil.getTableNameFromFullName(physicalName.getString());
+                // releasing mutex on the table (required to prevent creating views while concurrently
+                // dropping the base table)
+                deleteCell(null, physicalSchemaName, physicalTableName, null);
+            }
         }
     }
 
@@ -2938,9 +2982,11 @@ public class MetaDataClient {
             boolean ifExists, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
+        PName tenantId = connection.getTenantId();
+        String tenantIdStr = tenantId == null ? null : tenantId.getString();
+        boolean acquiredMutex = false;
+        String physicalTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
-            PName tenantId = connection.getTenantId();
-            String tenantIdStr = tenantId == null ? null : tenantId.getString();
             byte[] key = SchemaUtil.getTableKey(tenantIdStr, schemaName, tableName);
             Long scn = connection.getSCN();
             long clientTimeStamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
@@ -2952,6 +2998,14 @@ public class MetaDataClient {
                 byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
+            }
+            if (tableType == PTableType.TABLE) {
+                // acquire a mutex on the table to prevent creating views while concurrently
+                // dropping the base table
+                acquiredMutex = writeCell(null, schemaName, tableName, null);
+                if (!acquiredMutex) {
+                    throw new ConcurrentTableMutationException(schemaName, schemaName);
+                }
             }
             MetaDataMutationResult result = connection.getQueryServices().dropTable(tableMetaData, tableType, cascade, skipAddingParentColumns);
             MutationCode code = result.getMutationCode();
@@ -3030,6 +3084,11 @@ public class MetaDataClient {
             return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
+            // releasing mutex on the table (required to prevent creating views while concurrently
+            // dropping the base table)
+            if (acquiredMutex && tableType == PTableType.TABLE) {
+                deleteCell(null, schemaName, tableName, null);
+            }
         }
     }
 
@@ -3248,11 +3307,18 @@ public class MetaDataClient {
                     throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
+		List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ? origColumnDefs.size() : 0);
+        PName tenantId = connection.getTenantId();
+        String schemaName = table.getSchemaName().getString();
+        String tableName = table.getTableName().getString();
+        PName physicalName = table.getPhysicalName();
+        String physicalSchemaName =
+                SchemaUtil.getSchemaNameFromFullName(physicalName.getString());
+        String physicalTableName =
+                SchemaUtil.getTableNameFromFullName(physicalName.getString());
+        Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
         try {
             connection.setAutoCommit(false);
-            PName tenantId = connection.getTenantId();
-            String schemaName = table.getSchemaName().getString();
-            String tableName = table.getTableName().getString();
 
             List<ColumnDef> columnDefs = null;
             if (table.isAppendOnlySchema()) {
@@ -3332,7 +3398,6 @@ public class MetaDataClient {
                 boolean willBeTxnl = metaProperties.getNonTxToTx();
                 Long timeStamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional() || willBeTxnl, table.isTransactional() ? table.getTransactionProvider() : metaPropertiesEvaluated.getTransactionProvider());
                 int numPkColumnsAdded = 0;
-                List<PColumn> columns = Lists.newArrayListWithExpectedSize(numCols);
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
                 Set<String> families = new LinkedHashSet<>();
                 PTable tableForCQCounters = tableType == PTableType.VIEW ? PhoenixRuntime.getTable(connection, table.getPhysicalName().getString()) : table;
@@ -3529,6 +3594,18 @@ public class MetaDataClient {
                     }
                 }
 
+                boolean acquiredMutex = true;
+                for (PColumn pColumn : columns) {
+                    // acquire the mutex using the global physical table name to
+                    // prevent creating the same column on a table or view with
+                    // a conflicting type etc
+                    acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
+                        pColumn.getName().getString());
+                    if (!acquiredMutex) {
+                        throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                    }
+                    acquiredColumnMutexSet.add(pColumn.getName().getString());
+                }
                 MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded, columns);
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
@@ -3599,6 +3676,12 @@ public class MetaDataClient {
             }
         } finally {
             connection.setAutoCommit(wasAutoCommit);
+            if (!acquiredColumnMutexSet.isEmpty()) {
+                for (String columnName : acquiredColumnMutexSet) {
+                    // release the mutex (used to prevent concurrent conflicting add column changes)
+                    deleteCell(null, physicalSchemaName, physicalTableName, columnName);
+                }
+            }
         }
     }
 

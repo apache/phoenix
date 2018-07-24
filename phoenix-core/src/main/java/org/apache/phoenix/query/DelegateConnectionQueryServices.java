@@ -371,4 +371,15 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public PhoenixTransactionClient initTransactionClient(Provider provider) {
         return getDelegate().initTransactionClient(provider);
     }
+
+    @Override
+    public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public void deleteMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException {
+    }
 }
