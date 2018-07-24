@@ -38,11 +38,13 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
+import org.apache.phoenix.util.MetaDataUtil;
 
 /**
  *
@@ -170,7 +172,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private PName tableName;
         private List<PColumn> columns;
         private List<PName> physicalNames;
-        private Short viewIndexId;
+        private PDataType viewIndexType;
+        private Long viewIndexId;
         
         public SharedTableState(PTable table) {
             this.tenantId = table.getTenantId();
@@ -178,6 +181,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.tableName = table.getTableName();
             this.columns = table.getColumns();
             this.physicalNames = table.getPhysicalNames();
+            this.viewIndexType = table.getViewIndexType();
             this.viewIndexId = table.getViewIndexId();
         }
         
@@ -200,7 +204,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
                     return PNameFactory.newName(physicalName.toByteArray());
                 }
             });
-            this.viewIndexId = (short)sharedTable.getViewIndexId();
+            this.viewIndexId = sharedTable.getViewIndexId();
+            this.viewIndexType = sharedTable.hasUseLongViewIndexId()
+                    ? MetaDataUtil.getViewIndexIdDataType()
+                    : MetaDataUtil.getLegacyViewIndexIdDataType();
         }
 
         public PName getTenantId() {
@@ -223,10 +230,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
             return physicalNames;
         }
 
-        public Short getViewIndexId() {
+        public Long getViewIndexId() {
             return viewIndexId;
         }
-        
+
+        public PDataType getViewIndexType() {
+          return viewIndexType;
+        }
   }
     
   public static class MetaDataMutationResult {
@@ -239,8 +249,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private byte[] familyName;
         private boolean wasUpdated;
         private PSchema schema;
-        private Short viewIndexId;
-
+        private Long viewIndexId;
+        private PDataType viewIndexType;
         private List<PFunction> functions = new ArrayList<PFunction>(1);
         private long autoPartitionNum;
 
@@ -285,9 +295,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.tableNamesToDelete = tableNamesToDelete;
         }
         
-        public MetaDataMutationResult(MutationCode returnCode, int currentTime, PTable table, int viewIndexId) {
+        public MetaDataMutationResult(MutationCode returnCode, int currentTime, PTable table, long viewIndexId, PDataType viewIndexType ) {
             this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
-            this.viewIndexId = (short)viewIndexId;
+            this.viewIndexId = viewIndexId;
+            this.viewIndexType = viewIndexType;
         }
         
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete, List<SharedTableState> sharedTablesToDelete) {
@@ -343,11 +354,15 @@ public abstract class MetaDataProtocol extends MetaDataService {
             return autoPartitionNum;
         }
         
-        public Short getViewIndexId() {
+        public Long getViewIndexId() {
             return viewIndexId;
         }
 
-        public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
+      public PDataType getViewIndexType() {
+          return viewIndexType;
+      }
+
+      public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
           result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
           result.mutationTime = proto.getMutationTime();
@@ -388,9 +403,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
           if (proto.hasAutoPartitionNum()) {
               result.autoPartitionNum = proto.getAutoPartitionNum();
           }
-            if (proto.hasViewIndexId()) {
-                result.viewIndexId = (short)proto.getViewIndexId();
-            }
+          if (proto.hasViewIndexId()) {
+              result.viewIndexId = proto.getViewIndexId();
+          }
+          result.viewIndexType = proto.hasUseLongViewIndexId()
+                  ? MetaDataUtil.getViewIndexIdDataType()
+                  : MetaDataUtil.getLegacyViewIndexIdDataType();
           return result;
         }
 
@@ -431,6 +449,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 sharedTableStateBuilder.setSchemaName(ByteStringer.wrap(sharedTableState.getSchemaName().getBytes()));
                 sharedTableStateBuilder.setTableName(ByteStringer.wrap(sharedTableState.getTableName().getBytes()));
                 sharedTableStateBuilder.setViewIndexId(sharedTableState.getViewIndexId());
+                sharedTableStateBuilder.setUseLongViewIndexId(MetaDataUtil.getViewIndexIdDataType().equals(sharedTableState.viewIndexType));
                 builder.addSharedTablesToDelete(sharedTableStateBuilder.build());
               }
             }
@@ -440,6 +459,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
             builder.setAutoPartitionNum(result.getAutoPartitionNum());
                 if (result.getViewIndexId() != null) {
                     builder.setViewIndexId(result.getViewIndexId());
+                    builder.setUseLongViewIndexId(MetaDataUtil.getViewIndexIdDataType().equals(result.getViewIndexType()));
                 }
           }
           return builder.build();

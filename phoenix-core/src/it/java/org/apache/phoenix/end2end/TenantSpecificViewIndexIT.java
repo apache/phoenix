@@ -126,12 +126,12 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String tenantId2 = TENANT2;
         createViewAndIndexesWithTenantId(tableName, viewName1, localIndex, tenantId1, isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, viewName2, localIndex, tenantId2, isNamespaceEnabled);
-        
+
         String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId2), isNamespaceEnabled);
         String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId1), isNamespaceEnabled);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
-        verifySequenceValue(isNamespaceEnabled? tenantId2 : null, sequenceNameA, sequenceSchemaName, -32767);
-        verifySequenceValue(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName, -32767);
+        verifySequenceValue(isNamespaceEnabled? tenantId2 : null, sequenceNameA, sequenceSchemaName, -9223372036854775807L);
+        verifySequenceValue(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName, -9223372036854775807L);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
@@ -207,7 +207,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
                         SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes()))
-                    + " [-32768,'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
+                    + " [-9223372036854775808,'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
                     QueryUtil.getExplainPlan(rs));
         }
 
@@ -252,7 +252,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String tenantId2 = TENANT2;
         String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String viewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-        
+
         String ddl = "CREATE TABLE " + tableName + " (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
