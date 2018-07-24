@@ -18,8 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX;
-import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX_UNLOCKED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -43,8 +41,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.curator.shaded.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -425,38 +421,21 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         }
     }
     
-    private void putUnlockKVInSysMutex(byte[] row) throws Exception {
-        try (Connection conn = getConnection(false, null)) {
-            ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            try (Table sysMutexTable = services.getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
-                byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
-                byte[] qualifier = UPGRADE_MUTEX;
-                Put put = new Put(row);
-                put.addColumn(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
-                sysMutexTable.put(put);
-            }
-        }
-    }
-    
     @Test
     public void testAcquiringAndReleasingUpgradeMutex() throws Exception {
         ConnectionQueryServices services = null;
-        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                generateUniqueName());
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            putUnlockKVInSysMutex(mutexRowKey);
             assertTrue(((ConnectionQueryServicesImpl)services)
-                    .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey));
+                    .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0));
             try {
                 ((ConnectionQueryServicesImpl)services)
-                        .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
+                        .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
                 fail();
             } catch (UpgradeInProgressException expected) {
 
             }
-            assertTrue(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
-            assertFalse(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
+            ((ConnectionQueryServicesImpl)services).releaseUpgradeMutex();
         }
     }
     
@@ -470,7 +449,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            putUnlockKVInSysMutex(mutexKey);
             FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
             FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
             Thread t1 = new Thread(task1);
@@ -508,12 +486,15 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         public Void call() throws Exception {
             try {
                 ((ConnectionQueryServicesImpl)services).acquireUpgradeMutex(
-                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
                 acquireStatus.set(true);
             } catch (UpgradeInProgressException e) {
                 numExceptions.incrementAndGet();
             } finally {
                 latch.countDown();
+                if (acquireStatus.get()) {
+                    ((ConnectionQueryServicesImpl)services).releaseUpgradeMutex();
+                }
             }
             return null;
         }

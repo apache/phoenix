@@ -54,7 +54,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -275,16 +274,15 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     private void changeMutexLock(Properties clientProps, boolean acquire) throws SQLException, IOException {
         ConnectionQueryServices services = null;
-        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
 
         try (Connection conn = DriverManager.getConnection(getJdbcUrl(), clientProps)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
             if(acquire) {
                assertTrue(((ConnectionQueryServicesImpl) services)
-                        .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP, mutexRowKey));
+                        .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP));
             } else {
-                ((ConnectionQueryServicesImpl) services).releaseUpgradeMutex(mutexRowKey);
+                services.deleteMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null);
             }
         }
     }
@@ -397,14 +395,13 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
             }
         }
 
-        // The set will contain SYSMUTEX table since that table is not exposed in SYSCAT
         if (systemTablesMapped) {
             if (!systemSchemaExists) {
                 fail(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME + " entry doesn't exist in SYSTEM.CATALOG table.");
             }
-            assertTrue(namespaceMappedSystemTablesSet.size() == 1);
+            assertTrue(namespaceMappedSystemTablesSet.isEmpty());
         } else {
-            assertTrue(systemTablesSet.size() == 1);
+            assertTrue(systemTablesSet.isEmpty());
         }
     }
 
