@@ -530,7 +530,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             try {
                 // should fail because there are two view with different pk columns
-                conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL PRIMARY KEY, VIEW_COL2 VARCHAR PRIMARY KEY");
+                conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
                 fail();
             }
             catch (SQLException e) {
