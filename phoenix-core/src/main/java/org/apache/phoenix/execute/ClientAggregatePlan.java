@@ -204,6 +204,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
         } else if (useHashAgg) {
             planSteps.add("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+            if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY) {
+                planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
+            }
         } else {
             planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
             planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
