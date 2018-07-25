@@ -24,8 +24,11 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.apache.phoenix.metrics.MetricInfo;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -42,14 +45,21 @@ public class TraceServlet extends HttpServlet {
   private static Connection con;
   protected String DEFAULT_LIMIT = "25";
   protected String DEFAULT_COUNTBY = "hostname";
+  protected String DESCRIPTION_COUNTBY = "description";
   protected String LOGIC_AND = "AND";
   protected String LOGIC_OR = "OR";
   protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
 
-
+  @Override
+  public void init() {
+    Configuration conf = HBaseConfiguration.create();
+    TRACING_TABLE =
+            conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
+                    QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+  }
 
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
-      throws ServletException, IOException {
+          throws ServletException, IOException {
 
     //reading url params
     String action = request.getParameter("action");
@@ -60,7 +70,7 @@ public class TraceServlet extends HttpServlet {
     if ("getall".equals(action)) {
       jsonObject = getAll(limit);
     } else if ("getCount".equals(action)) {
-      jsonObject = getCount("description");
+      jsonObject = getCount(DESCRIPTION_COUNTBY);
     } else if ("getDistribution".equals(action)) {
       jsonObject = getCount(DEFAULT_COUNTBY);
     } else if ("searchTrace".equals(action)) {
@@ -98,33 +108,36 @@ public class TraceServlet extends HttpServlet {
     if(countby == null) {
       countby = DEFAULT_COUNTBY;
     }
-    // Throws exception if the column not present in the trace table.
-    MetricInfo.getColumnName(countby.toLowerCase());
     String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM " + TRACING_TABLE + " GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
     json = getResults(sqlQuery);
     return json;
   }
 
   //search the trace over parent id or trace id
-  protected String searchTrace(String parentId, String traceId,String logic) {
+  protected String searchTrace(String parentId, String traceId, String logic) {
+
     String json = null;
     String query = null;
     // Check the parent Id, trace id type or long or not.
     try {
+      if (parentId != null) {
         Long.parseLong(parentId);
+      }
+      if (traceId != null) {
         Long.parseLong(traceId);
+      }
     } catch (NumberFormatException e) {
-    	throw new RuntimeException("The passed parentId/traceId is not a number.", e);
+      throw new RuntimeException("The passed parentId/traceId is not a number.", e);
     }
-    if(!logic.equals(LOGIC_AND) || !logic.equals(LOGIC_OR)) {
-    	throw new RuntimeException("Wrong logical operator passed to the query. Only "+ LOGIC_AND+","+LOGIC_OR+" are allowed.") ;
+    if (logic != null && !logic.equals(LOGIC_AND) && !logic.equals(LOGIC_OR)) {
+      throw new RuntimeException("Wrong logical operator passed to the query. Only " + LOGIC_AND + "," + LOGIC_OR + " are allowed.");
     }
-    if(parentId != null && traceId != null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
-    }else if (parentId != null && traceId == null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId;
-    }else if(parentId == null && traceId != null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE trace_id="+traceId;
+    if (parentId != null && traceId != null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId + " " + logic + " trace_id=" + traceId;
+    } else if (parentId != null && traceId == null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId;
+    } else if (parentId == null && traceId != null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE trace_id=" + traceId;
     }
     json = getResults(query);
     return getJson(json);
@@ -133,36 +146,36 @@ public class TraceServlet extends HttpServlet {
   //return json string
   protected String getJson(String json) {
     String output = json.toString().replace("_id\":", "_id\":\"")
-        .replace(",\"hostname", "\",\"hostname")
-        .replace(",\"parent", "\",\"parent")
-        .replace(",\"end", "\",\"end");
+            .replace(",\"hostname", "\",\"hostname")
+            .replace(",\"parent", "\",\"parent")
+            .replace(",\"end", "\",\"end");
     return output;
   }
 
   //get results with passing sql query
   protected String getResults(String sqlQuery) {
     String json = null;
-    if(sqlQuery == null){
+    if (sqlQuery == null) {
       json = "{error:true,msg:'SQL was null'}";
-    }else{
-    try {
-      con = ConnectionFactory.getConnection();
-      EntityFactory nutrientEntityFactory = new EntityFactory(con,sqlQuery);
-      List<Map<String, Object>> nutrients = nutrientEntityFactory
-          .findMultiple();
-      ObjectMapper mapper = new ObjectMapper();
-      json = mapper.writeValueAsString(nutrients);
-    } catch (Exception e) {
-      json = "{error:true,msg:'Serrver Error:"+e.getMessage()+"'}";
-    } finally {
-      if (con != null) {
-        try {
-          con.close();
-        } catch (SQLException e) {
-          json = "{error:true,msg:'SQL Serrver Error:"+e.getMessage()+"'}";
+    } else {
+      try {
+        con = ConnectionFactory.getConnection();
+        EntityFactory nutrientEntityFactory = new EntityFactory(con, sqlQuery);
+        List<Map<String, Object>> nutrients = nutrientEntityFactory
+                .findMultiple();
+        ObjectMapper mapper = new ObjectMapper();
+        json = mapper.writeValueAsString(nutrients);
+      } catch (Exception e) {
+        json = "{error:true,msg:'Server Error:" + e.getMessage() + "'}";
+      } finally {
+        if (con != null) {
+          try {
+            con.close();
+          } catch (SQLException e) {
+            json = "{error:true,msg:'SQL Serrver Error:" + e.getMessage() + "'}";
+          }
         }
       }
-    }
     }
     return json;
   }
