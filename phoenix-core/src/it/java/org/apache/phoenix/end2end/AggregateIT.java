@@ -1113,4 +1113,81 @@ public class AggregateIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testOrderByOptimizeForClientAggregatePlanBug4820() throws Exception {
+        doTestOrderByOptimizeForClientAggregatePlanBug4820(false,false);
+        doTestOrderByOptimizeForClientAggregatePlanBug4820(false,true);
+        doTestOrderByOptimizeForClientAggregatePlanBug4820(true,false);
+        doTestOrderByOptimizeForClientAggregatePlanBug4820(true,true);
+    }
+
+    private void doTestOrderByOptimizeForClientAggregatePlanBug4820(boolean desc ,boolean salted) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 varchar not null , " +
+                    " pk2 varchar not null, " +
+                    " pk3 varchar not null," +
+                    " v1 varchar, " +
+                    " v2 varchar, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                        "pk1 "+(desc ? "desc" : "")+", "+
+                        "pk2 "+(desc ? "desc" : "")+", "+
+                        "pk3 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "split on('b')");
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a11','a12','a13','a14','a15')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a21','a22','a23','a24','a25')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a31','a32','a33','a34','a35')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('b11','b12','b13','b14','b15')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('b21','b22','b23','b24','b25')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('b31','b32','b33','b34','b35')");
+            conn.commit();
+
+           sql = "select a.ak3 "+
+                 "from (select pk1 ak1,pk2 ak2,pk3 ak3, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                 "group by a.ak3,a.av1 order by a.ak3 desc,a.av1";
+           ResultSet rs = conn.prepareStatement(sql).executeQuery();
+           assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"},{"a33"},{"a23"},{"a13"}});
+
+           sql = "select a.ak3 "+
+                 "from (select pk1 ak1,pk2 ak2,pk3 ak3, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                 "group by a.ak3,a.av1 order by a.ak3,a.av1";
+           rs = conn.prepareStatement(sql).executeQuery();
+           assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"},{"b13"},{"b23"},{"b33"}});
+
+           sql = "select a.ak3 "+
+                 "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                 "where a.av1 = 'a' group by a.av1,a.ak3 order by a.ak3 desc";
+           rs = conn.prepareStatement(sql).executeQuery();
+           assertResultSet(rs, new Object[][]{{"a33"},{"a23"},{"a13"}});
+
+           sql = "select a.ak3 "+
+                 "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                 "where a.av1 = 'a' group by a.av1,a.ak3 order by a.ak3";
+           rs = conn.prepareStatement(sql).executeQuery();
+           assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"}});
+
+           sql = "select a.ak3 "+
+                 "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                 "where a.av1 = 'b' and a.av2= 'b' group by CASE WHEN a.av1 > a.av2 THEN a.av1 ELSE a.av2 END,a.ak3,a.ak2 order by a.ak3 desc,a.ak2 desc";
+           rs = conn.prepareStatement(sql).executeQuery();
+           assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"}});
+
+           sql = "select a.ak3 "+
+                 "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                 "where a.av1 = 'b' and a.av2= 'b' group by CASE WHEN a.av1 > a.av2 THEN a.av1 ELSE a.av2 END,a.ak3,a.ak2 order by a.ak3,a.ak2 desc";
+           rs = conn.prepareStatement(sql).executeQuery();
+           assertResultSet(rs, new Object[][]{{"b13"},{"b23"},{"b33"}});
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
 }

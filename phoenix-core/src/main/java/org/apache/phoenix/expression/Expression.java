@@ -88,4 +88,10 @@ public interface Expression extends PDatum, Writable {
      * @return
      */
     boolean requiresFinalEvaluation();
+
+    /**
+     *
+     * @return
+     */
+    boolean isConstantIfChildrenAllConstant();
 }

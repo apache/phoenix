@@ -39,4 +39,9 @@ public abstract class CurrentDateTimeFunction extends ScalarFunction {
     public Determinism getDeterminism() {
         return Determinism.PER_STATEMENT;
     }
+
+    @Override
+    public boolean isConstantIfChildrenAllConstant() {
+        return false;
+    }
 }

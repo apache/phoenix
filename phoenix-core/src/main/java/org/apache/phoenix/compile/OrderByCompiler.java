@@ -88,7 +88,8 @@ public class OrderByCompiler {
                                   Integer offset,
                                   RowProjector rowProjector,
                                   TupleProjector tupleProjector,
-                                  boolean isInRowKeyOrder) throws SQLException {
+                                  boolean isInRowKeyOrder,
+                                  Expression whereExpression) throws SQLException {
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         if (orderByNodes.isEmpty()) {
             return OrderBy.EMPTY_ORDER_BY;
@@ -107,7 +108,13 @@ public class OrderByCompiler {
         }
         // accumulate columns in ORDER BY
         OrderPreservingTracker tracker = 
-                new OrderPreservingTracker(context, groupBy, Ordering.ORDERED, orderByNodes.size(), tupleProjector);
+                new OrderPreservingTracker(
+                        context,
+                        groupBy,
+                        Ordering.ORDERED,
+                        orderByNodes.size(),
+                        tupleProjector,
+                        whereExpression);
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             ParseNode parseNode = node.getNode();
