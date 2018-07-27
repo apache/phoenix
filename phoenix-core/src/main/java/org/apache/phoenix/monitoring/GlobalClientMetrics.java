@@ -59,9 +59,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import org.apache.hadoop.hbase.metrics.Gauge;
+import org.apache.hadoop.hbase.metrics.MetricRegistries;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
+import org.apache.hadoop.hbase.metrics.MetricRegistryInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Central place where we keep track of all the global client phoenix metrics. These metrics are different from
@@ -108,14 +114,60 @@ public enum GlobalClientMetrics {
     GLOBAL_HBASE_COUNT_ROWS_SCANNED(COUNT_ROWS_SCANNED),
     GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED);
 
-    
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalClientMetrics.class);
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();
+    private MetricType metricType;
     private GlobalMetric metric;
 
-    public void update(long value) {
+    static {
+        initPhoenixGlobalClientMetrics();
         if (isGlobalMetricsEnabled) {
-            metric.change(value);
+            MetricRegistry metricRegistry = createMetricRegistry();
+            registerPhoenixMetricsToRegistry(metricRegistry);
+            GlobalMetricRegistriesAdapter.getInstance().registerMetricRegistry(metricRegistry);
         }
+    }
+
+    private static void initPhoenixGlobalClientMetrics() {
+        for (GlobalClientMetrics globalMetric : GlobalClientMetrics.values()) {
+            globalMetric.metric = isGlobalMetricsEnabled ?
+                    new GlobalMetricImpl(globalMetric.metricType) : new NoOpGlobalMetricImpl();
+        }
+    }
+
+    private static void registerPhoenixMetricsToRegistry(MetricRegistry metricRegistry) {
+        for (GlobalClientMetrics globalMetric : GlobalClientMetrics.values()) {
+            metricRegistry.register(globalMetric.metricType.columnName(),
+                    new PhoenixGlobalMetricGauge(globalMetric.metric));
+        }
+    }
+
+    private static MetricRegistry createMetricRegistry() {
+        LOG.info("Creating Metric Registry for Phoenix Global Metrics");
+        MetricRegistryInfo registryInfo = new MetricRegistryInfo("PHOENIX", "Phoenix Client Metrics",
+                "phoenix", "Phoenix,sub=CLIENT", true);
+        return MetricRegistries.global().create(registryInfo);
+    }
+
+    /**
+     * Class to convert Phoenix Metric objects into HBase Metric objects (Gauge)
+     */
+    private static class PhoenixGlobalMetricGauge implements Gauge<Long> {
+
+        private final GlobalMetric metric;
+
+        public PhoenixGlobalMetricGauge(GlobalMetric metric) {
+            this.metric = metric;
+        }
+
+        @Override
+        public Long getValue() {
+            return metric.getValue();
+        }
+    }
+
+    public void update(long value) {
+        metric.change(value);
     }
 
     @VisibleForTesting
@@ -123,25 +175,27 @@ public enum GlobalClientMetrics {
         return metric;
     }
 
+    @VisibleForTesting
+    public MetricType getMetricType() {
+        return metricType;
+    }
+
+
     @Override
     public String toString() {
         return metric.toString();
     }
 
     private GlobalClientMetrics(MetricType metricType) {
-        this.metric = new GlobalMetricImpl(metricType);
+        this.metricType = metricType;
     }
 
     public void increment() {
-        if (isGlobalMetricsEnabled) {
-            metric.increment();
-        }
+        metric.increment();
     }
     
     public void decrement() {
-        if (isGlobalMetricsEnabled) {
-            metric.decrement();
-        }
+        metric.decrement();
     }
 
     public static Collection<GlobalMetric> getMetrics() {
