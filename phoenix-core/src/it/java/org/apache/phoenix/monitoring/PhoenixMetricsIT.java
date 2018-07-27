@@ -40,6 +40,7 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -50,6 +51,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -61,6 +63,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -73,6 +78,7 @@ import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.hamcrest.CoreMatchers;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -82,7 +88,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
+/**
+ * Tests that
+ * 1. Phoenix Global metrics are exposed via
+ *   a. PhoenixRuntime b. Hadoop-Metrics2 defined sinks
+ * 2. Phoenix Request level metrics are exposed via
+ *   a. PhoenixRuntime
+ */
 public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
+
+    private static final Log LOG = LogFactory.getLog(PhoenixMetricsIT.class);
+    private static final int MAX_RETRIES = 5;
 
     private static final List<MetricType> mutationMetricsToSkip =
             Lists.newArrayList(MetricType.MUTATION_COMMIT_TIME);
@@ -96,6 +112,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        // Phoenix Global client metrics are enabled by default
         // Enable request metric collection at the driver level
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         // disable renewing leases as this will force spooling to happen.
@@ -103,15 +120,18 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // need the non-test driver for some tests that check number of hconnections, etc.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+
     }
 
     @Test
-    public void testResetGlobalPhoenixMetrics() {
+    public void testResetGlobalPhoenixMetrics() throws Exception {
         resetGlobalMetrics();
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
+            assertThat(m, CoreMatchers.<GlobalMetric>instanceOf(GlobalMetricImpl.class));
             assertEquals(0, m.getTotalSum());
             assertEquals(0, m.getNumberOfSamples());
         }
+        assertTrue(verifyMetricsFromSink());
     }
 
     @Test
@@ -145,6 +165,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getTotalSum() > 0);
         assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getTotalSum() > 0);
         assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getTotalSum() > 0);
+
+        assertTrue(verifyMetricsFromSink());
     }
 
     @Test
@@ -162,6 +184,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getTotalSum());
         assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getTotalSum());
         assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getTotalSum());
+
+        assertTrue(verifyMetricsFromSink());
     }
 
     @Test
@@ -195,12 +219,61 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getTotalSum() > 0);
         assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getTotalSum() > 0);
         assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getTotalSum() > 0);
+
+        assertTrue(verifyMetricsFromSink());
     }
 
     private static void resetGlobalMetrics() {
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
             m.reset();
         }
+    }
+
+    // Phoenix Client Metrics are transported via Hadoop-metrics2 sink
+    // The test sink is defined at GlobalPhoenixMetricsTestSink
+    // Configuration for Hadoop-metrics2 comes from hadoop-metrics2.properties file located in test/resources
+    private boolean verifyMetricsFromSink() {
+        Map<String, Long> expectedMetrics = new HashMap<>();
+        for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
+            expectedMetrics.put(m.getMetricType().name(), m.getTotalSum());
+        }
+
+        for (int i = 0; i < MAX_RETRIES; i++) {
+            LOG.info("Verifying Global Metrics from Hadoop Sink, Retry: " + (i + 1));
+            if (verifyMetricsFromSinkOnce(expectedMetrics)) {
+                LOG.info("Values from Hadoop Metrics Sink match actual values");
+                return true;
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private boolean verifyMetricsFromSinkOnce(Map<String, Long> expectedMetrics) {
+        synchronized (GlobalPhoenixMetricsTestSink.lock) {
+            for (AbstractMetric metric : GlobalPhoenixMetricsTestSink.metrics) {
+                if (expectedMetrics.containsKey(metric.name())) {
+                    Long value = expectedMetrics.get(metric.name());
+                    if (value != null) {
+                        long expectedValue = value;
+                        long actualValue = metric.value().longValue();
+                        if (expectedValue != actualValue) {
+                            LOG.warn("Metric from Hadoop Sink: " + metric.name() + " didn't match expected.");
+                            return false;
+                        }
+                        expectedMetrics.remove(metric.name());
+                    }
+                }
+            }
+        }
+        assertTrue("Metric expected but not present in Hadoop Metrics Sink (GlobalPhoenixMetricsTestSink)",
+                expectedMetrics.size() == 0);
+        return true;
     }
 
     private static void createTableAndInsertValues(String tableName, boolean resetGlobalMetricsAfterTableCreate)
