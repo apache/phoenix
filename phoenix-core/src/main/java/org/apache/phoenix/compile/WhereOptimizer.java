@@ -179,7 +179,7 @@ public class WhereOptimizer {
         // Add unique index ID for shared indexes on views. This ensures
         // that different indexes don't interleave.
         if (hasViewIndex) {
-            byte[] viewIndexBytes = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+            byte[] viewIndexBytes = table.getViewIndexType().toBytes(table.getViewIndexId());
             KeyRange indexIdKeyRange = KeyRange.getKeyRange(viewIndexBytes);
             cnf.add(Collections.singletonList(indexIdKeyRange));
             pkPos++;
