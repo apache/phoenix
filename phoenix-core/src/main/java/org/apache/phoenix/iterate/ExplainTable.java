@@ -205,20 +205,19 @@ public abstract class ExplainTable {
             range = ptr.get();
         }
         if (changeViewIndexId) {
-            PDataType viewIndexDataType = tableRef.getTable().getViewIndexType();
-            buf.append(getViewIndexValue(type, range, viewIndexDataType).toString());
+            buf.append(getViewIndexValue(type, range).toString());
         } else {
             Format formatter = context.getConnection().getFormatter(type);
             buf.append(type.toStringLiteral(range, formatter));
         }
     }
 
-    private Long getViewIndexValue(PDataType type, byte[] range, PDataType viewIndexDataType){
-        boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(viewIndexDataType);
-        Object s =  type.toObject(range);
+    private Long getViewIndexValue(PDataType type, byte[] range) {
+        boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(type);
+        Object s = type.toObject(range);
         return (useLongViewIndex ? (Long) s : (Short) s) - (useLongViewIndex ? Long.MAX_VALUE : Short.MAX_VALUE);
     }
-    
+
     private static class RowKeyValueIterator implements Iterator<byte[]> {
         private final RowKeySchema schema;
         private ImmutableBytesWritable ptr = new ImmutableBytesWritable();

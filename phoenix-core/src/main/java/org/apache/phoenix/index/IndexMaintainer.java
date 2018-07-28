@@ -1225,7 +1225,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         boolean hasViewIndexId = encodedIndexedColumnsAndViewId < 0;
         if (hasViewIndexId) {
             // Fixed length
-            //Use leacy viewIndexIdType for clients older than 4.10 release
+            //Use legacy viewIndexIdType for clients older than 4.10 release
             viewIndexId = new byte[MetaDataUtil.getLegacyViewIndexIdDataType().getByteSize()];
             viewIndexType = MetaDataUtil.getLegacyViewIndexIdDataType();
             input.readFully(viewIndexId);

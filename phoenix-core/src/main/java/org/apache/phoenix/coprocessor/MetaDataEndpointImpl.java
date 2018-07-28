@@ -2223,12 +2223,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             throw sqlExceptions[0];
                         }
                         long seqValue = seqValues[0];
-                        if (seqValue > Long.MAX_VALUE) {
-                            builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            done.run(builder.build());
-                            return;
-                        }
                         Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
 
                         NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
@@ -2246,7 +2240,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                     VIEW_INDEX_ID_BYTES.length, cell.getTimestamp(), bytes, 0,
                                     bytes.length, cell.getType());
                         cells.add(indexIdCell);
-                        indexId = (long) seqValue;
+                        indexId = seqValue;
                     }
                 }
                 

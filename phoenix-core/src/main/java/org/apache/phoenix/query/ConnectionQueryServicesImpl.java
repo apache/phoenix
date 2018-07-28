@@ -3037,6 +3037,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             addViewIndexToParentLinks(metaConnection);
             moveChildLinks(metaConnection);
         }
+        if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0) {
+            metaConnection = addColumnsIfNotExists(
+                    metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0,
+                    PhoenixDatabaseMetaData.USE_LONG_VIEW_INDEX + " "
+                            + PBoolean.INSTANCE.getSqlTypeName());
+        }
         return metaConnection;
     }
 
