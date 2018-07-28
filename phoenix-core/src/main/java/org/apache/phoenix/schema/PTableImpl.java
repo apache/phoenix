@@ -69,6 +69,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
@@ -1243,11 +1244,11 @@ public class PTableImpl implements PTable {
             indexState = PIndexState.fromSerializedValue(table.getIndexState());
         }
         Long viewIndexId = null;
-        if(table.hasViewIndexId()){
-            viewIndexId = (long)table.getViewIndexId();
+        if (table.hasViewIndexId()) {
+            viewIndexId = table.getViewIndexId();
         }
-        PDataType viewIndexType = table.hasUseLongViewIndexId()
-                ? MetaDataUtil.getViewIndexIdDataType()
+        PDataType viewIndexType = table.hasViewIndexType()
+                ? PDataType.fromTypeId(table.getViewIndexType())
                 : MetaDataUtil.getLegacyViewIndexIdDataType();
         IndexType indexType = IndexType.getDefault();
         if(table.hasIndexType()){
@@ -1385,7 +1386,7 @@ public class PTableImpl implements PTable {
         }
         if(table.getViewIndexId() != null) {
           builder.setViewIndexId(table.getViewIndexId());
-          builder.setUseLongViewIndexId(MetaDataUtil.getViewIndexIdDataType().equals(table.getViewIndexType()));
+          builder.setViewIndexType(table.getViewIndexType().getSqlType());
 		}
         if(table.getIndexType() != null) {
             builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));

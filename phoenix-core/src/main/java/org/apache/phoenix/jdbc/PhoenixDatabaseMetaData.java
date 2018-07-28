@@ -222,8 +222,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] IS_VIEW_REFERENCED_BYTES = Bytes.toBytes(IS_VIEW_REFERENCED);
     public static final String VIEW_INDEX_ID = "VIEW_INDEX_ID";
     public static final byte[] VIEW_INDEX_ID_BYTES = Bytes.toBytes(VIEW_INDEX_ID);
-    public static final String USE_LONG_VIEW_INDEX = "USE_LONG_VIEW_INDEX";
-    public static final byte[] USE_LONG_VIEW_INDEX_BYTES = Bytes.toBytes(USE_LONG_VIEW_INDEX);
+    public static final String VIEW_INDEX_ID_DATA_TYPE = "VIEW_INDEX_ID_DATA_TYPE";
+    public static final byte[] VIEW_INDEX_ID_DATA_TYPE_BYTES = Bytes.toBytes(VIEW_INDEX_ID_DATA_TYPE);
     public static final String BASE_COLUMN_COUNT = "BASE_COLUMN_COUNT";
     public static final byte[] BASE_COLUMN_COUNT_BYTES = Bytes.toBytes(BASE_COLUMN_COUNT);
     public static final String IS_ROW_TIMESTAMP = "IS_ROW_TIMESTAMP";

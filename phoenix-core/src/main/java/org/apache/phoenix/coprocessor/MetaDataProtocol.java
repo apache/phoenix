@@ -210,8 +210,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 }
             });
             this.viewIndexId = sharedTable.getViewIndexId();
-            this.viewIndexType = sharedTable.hasUseLongViewIndexId()
-                    ? MetaDataUtil.getViewIndexIdDataType()
+            this.viewIndexType = sharedTable.hasViewIndexType()
+                    ? PDataType.fromTypeId(sharedTable.getViewIndexType())
                     : MetaDataUtil.getLegacyViewIndexIdDataType();
         }
 
@@ -409,11 +409,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
               result.autoPartitionNum = proto.getAutoPartitionNum();
           }
           if (proto.hasViewIndexId()) {
-              result.viewIndexId = proto.getViewIndexId();
+               result.viewIndexId = proto.getViewIndexId();
           }
-          result.viewIndexType = proto.hasUseLongViewIndexId()
-                  ? MetaDataUtil.getViewIndexIdDataType()
-                  : MetaDataUtil.getLegacyViewIndexIdDataType();
+
+          result.viewIndexType = proto.hasViewIndexType()
+                    ? PDataType.fromTypeId(proto.getViewIndexType())
+                    : MetaDataUtil.getLegacyViewIndexIdDataType();
           return result;
         }
 
@@ -454,7 +455,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 sharedTableStateBuilder.setSchemaName(ByteStringer.wrap(sharedTableState.getSchemaName().getBytes()));
                 sharedTableStateBuilder.setTableName(ByteStringer.wrap(sharedTableState.getTableName().getBytes()));
                 sharedTableStateBuilder.setViewIndexId(sharedTableState.getViewIndexId());
-                sharedTableStateBuilder.setUseLongViewIndexId(MetaDataUtil.getViewIndexIdDataType().equals(sharedTableState.viewIndexType));
+                sharedTableStateBuilder.setViewIndexType(sharedTableState.viewIndexType.getSqlType());
                 builder.addSharedTablesToDelete(sharedTableStateBuilder.build());
               }
             }
@@ -462,10 +463,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
               builder.setSchema(PSchema.toProto(result.schema));
             }
             builder.setAutoPartitionNum(result.getAutoPartitionNum());
-                if (result.getViewIndexId() != null) {
-                    builder.setViewIndexId(result.getViewIndexId());
-                    builder.setUseLongViewIndexId(MetaDataUtil.getViewIndexIdDataType().equals(result.getViewIndexType()));
-                }
+            if (result.getViewIndexId() != null) {
+                builder.setViewIndexId(result.getViewIndexId());
+                builder.setViewIndexType(result.getViewIndexType().getSqlType());
+            }
           }
           return builder.build();
         }

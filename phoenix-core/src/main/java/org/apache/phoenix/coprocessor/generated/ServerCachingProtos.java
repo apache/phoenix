@@ -2158,15 +2158,15 @@ public final class ServerCachingProtos {
      */
     int getImmutableStorageScheme();
 
-    // optional bool useLongViewIndex = 22;
+    // optional int32 viewIndexType = 22;
     /**
-     * <code>optional bool useLongViewIndex = 22;</code>
+     * <code>optional int32 viewIndexType = 22;</code>
      */
-    boolean hasUseLongViewIndex();
+    boolean hasViewIndexType();
     /**
-     * <code>optional bool useLongViewIndex = 22;</code>
+     * <code>optional int32 viewIndexType = 22;</code>
      */
-    boolean getUseLongViewIndex();
+    int getViewIndexType();
   }
   /**
    * Protobuf type {@code IndexMaintainer}
@@ -2362,7 +2362,7 @@ public final class ServerCachingProtos {
             }
             case 176: {
               bitField0_ |= 0x00010000;
-              useLongViewIndex_ = input.readBool();
+              viewIndexType_ = input.readInt32();
               break;
             }
           }
@@ -2849,20 +2849,20 @@ public final class ServerCachingProtos {
       return immutableStorageScheme_;
     }
 
-    // optional bool useLongViewIndex = 22;
-    public static final int USELONGVIEWINDEX_FIELD_NUMBER = 22;
-    private boolean useLongViewIndex_;
+    // optional int32 viewIndexType = 22;
+    public static final int VIEWINDEXTYPE_FIELD_NUMBER = 22;
+    private int viewIndexType_;
     /**
-     * <code>optional bool useLongViewIndex = 22;</code>
+     * <code>optional int32 viewIndexType = 22;</code>
      */
-    public boolean hasUseLongViewIndex() {
+    public boolean hasViewIndexType() {
       return ((bitField0_ & 0x00010000) == 0x00010000);
     }
     /**
-     * <code>optional bool useLongViewIndex = 22;</code>
+     * <code>optional int32 viewIndexType = 22;</code>
      */
-    public boolean getUseLongViewIndex() {
-      return useLongViewIndex_;
+    public int getViewIndexType() {
+      return viewIndexType_;
     }
 
     private void initFields() {
@@ -2887,7 +2887,7 @@ public final class ServerCachingProtos {
       indexedColumnInfo_ = java.util.Collections.emptyList();
       encodingScheme_ = 0;
       immutableStorageScheme_ = 0;
-      useLongViewIndex_ = false;
+      viewIndexType_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3049,7 +3049,7 @@ public final class ServerCachingProtos {
         output.writeInt32(21, immutableStorageScheme_);
       }
       if (((bitField0_ & 0x00010000) == 0x00010000)) {
-        output.writeBool(22, useLongViewIndex_);
+        output.writeInt32(22, viewIndexType_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -3151,7 +3151,7 @@ public final class ServerCachingProtos {
       }
       if (((bitField0_ & 0x00010000) == 0x00010000)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBoolSize(22, useLongViewIndex_);
+          .computeInt32Size(22, viewIndexType_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -3266,10 +3266,10 @@ public final class ServerCachingProtos {
         result = result && (getImmutableStorageScheme()
             == other.getImmutableStorageScheme());
       }
-      result = result && (hasUseLongViewIndex() == other.hasUseLongViewIndex());
-      if (hasUseLongViewIndex()) {
-        result = result && (getUseLongViewIndex()
-            == other.getUseLongViewIndex());
+      result = result && (hasViewIndexType() == other.hasViewIndexType());
+      if (hasViewIndexType()) {
+        result = result && (getViewIndexType()
+            == other.getViewIndexType());
       }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
@@ -3368,9 +3368,9 @@ public final class ServerCachingProtos {
         hash = (37 * hash) + IMMUTABLESTORAGESCHEME_FIELD_NUMBER;
         hash = (53 * hash) + getImmutableStorageScheme();
       }
-      if (hasUseLongViewIndex()) {
-        hash = (37 * hash) + USELONGVIEWINDEX_FIELD_NUMBER;
-        hash = (53 * hash) + hashBoolean(getUseLongViewIndex());
+      if (hasViewIndexType()) {
+        hash = (37 * hash) + VIEWINDEXTYPE_FIELD_NUMBER;
+        hash = (53 * hash) + getViewIndexType();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3548,7 +3548,7 @@ public final class ServerCachingProtos {
         bitField0_ = (bitField0_ & ~0x00080000);
         immutableStorageScheme_ = 0;
         bitField0_ = (bitField0_ & ~0x00100000);
-        useLongViewIndex_ = false;
+        viewIndexType_ = 0;
         bitField0_ = (bitField0_ & ~0x00200000);
         return this;
       }
@@ -3690,7 +3690,7 @@ public final class ServerCachingProtos {
         if (((from_bitField0_ & 0x00200000) == 0x00200000)) {
           to_bitField0_ |= 0x00010000;
         }
-        result.useLongViewIndex_ = useLongViewIndex_;
+        result.viewIndexType_ = viewIndexType_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -3869,8 +3869,8 @@ public final class ServerCachingProtos {
         if (other.hasImmutableStorageScheme()) {
           setImmutableStorageScheme(other.getImmutableStorageScheme());
         }
-        if (other.hasUseLongViewIndex()) {
-          setUseLongViewIndex(other.getUseLongViewIndex());
+        if (other.hasViewIndexType()) {
+          setViewIndexType(other.getViewIndexType());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -5636,35 +5636,35 @@ public final class ServerCachingProtos {
         return this;
       }
 
-      // optional bool useLongViewIndex = 22;
-      private boolean useLongViewIndex_ ;
+      // optional int32 viewIndexType = 22;
+      private int viewIndexType_ ;
       /**
-       * <code>optional bool useLongViewIndex = 22;</code>
+       * <code>optional int32 viewIndexType = 22;</code>
        */
-      public boolean hasUseLongViewIndex() {
+      public boolean hasViewIndexType() {
         return ((bitField0_ & 0x00200000) == 0x00200000);
       }
       /**
-       * <code>optional bool useLongViewIndex = 22;</code>
+       * <code>optional int32 viewIndexType = 22;</code>
        */
-      public boolean getUseLongViewIndex() {
-        return useLongViewIndex_;
+      public int getViewIndexType() {
+        return viewIndexType_;
       }
       /**
-       * <code>optional bool useLongViewIndex = 22;</code>
+       * <code>optional int32 viewIndexType = 22;</code>
        */
-      public Builder setUseLongViewIndex(boolean value) {
+      public Builder setViewIndexType(int value) {
         bitField0_ |= 0x00200000;
-        useLongViewIndex_ = value;
+        viewIndexType_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>optional bool useLongViewIndex = 22;</code>
+       * <code>optional int32 viewIndexType = 22;</code>
        */
-      public Builder clearUseLongViewIndex() {
+      public Builder clearViewIndexType() {
         bitField0_ = (bitField0_ & ~0x00200000);
-        useLongViewIndex_ = false;
+        viewIndexType_ = 0;
         onChanged();
         return this;
       }
@@ -8705,7 +8705,7 @@ public final class ServerCachingProtos {
       "ength\030\003 \002(\005\"4\n\017ColumnReference\022\016\n\006family" +
       "\030\001 \002(\014\022\021\n\tqualifier\030\002 \002(\014\"4\n\nColumnInfo\022" +
       "\022\n\nfamilyName\030\001 \001(\t\022\022\n\ncolumnName\030\002 \002(\t\"" +
-      "\340\005\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
+      "\335\005\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
       "\022\025\n\risMultiTenant\030\002 \002(\010\022\023\n\013viewIndexId\030\003" +
       " \001(\014\022(\n\016indexedColumns\030\004 \003(\0132\020.ColumnRef" +
       "erence\022 \n\030indexedColumnTypeOrdinal\030\005 \003(\005",
@@ -8722,23 +8722,23 @@ public final class ServerCachingProtos {
       "ed\030\020 \002(\010\022\033\n\023indexRowKeyByteSize\030\021 \002(\005\022\021\n" +
       "\timmutable\030\022 \002(\010\022&\n\021indexedColumnInfo\030\023 " +
       "\003(\0132\013.ColumnInfo\022\026\n\016encodingScheme\030\024 \002(\005" +
-      "\022\036\n\026immutableStorageScheme\030\025 \002(\005\022\030\n\020useL" +
-      "ongViewIndex\030\026 \001(\010\"\334\001\n\025AddServerCacheReq" +
-      "uest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\022" +
-      ")\n\010cachePtr\030\003 \002(\0132\027.ImmutableBytesWritab" +
-      "le\022)\n\014cacheFactory\030\004 \002(\0132\023.ServerCacheFa" +
-      "ctory\022\017\n\007txState\030\005 \001(\014\022\"\n\032hasProtoBufInd" +
-      "exMaintainer\030\006 \001(\010\022\025\n\rclientVersion\030\007 \001(",
-      "\005\"(\n\026AddServerCacheResponse\022\016\n\006return\030\001 " +
-      "\002(\010\"=\n\030RemoveServerCacheRequest\022\020\n\010tenan" +
-      "tId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\"+\n\031RemoveServ" +
-      "erCacheResponse\022\016\n\006return\030\001 \002(\0102\245\001\n\024Serv" +
-      "erCachingService\022A\n\016addServerCache\022\026.Add" +
-      "ServerCacheRequest\032\027.AddServerCacheRespo" +
-      "nse\022J\n\021removeServerCache\022\031.RemoveServerC" +
-      "acheRequest\032\032.RemoveServerCacheResponseB" +
-      "G\n(org.apache.phoenix.coprocessor.genera" +
-      "tedB\023ServerCachingProtosH\001\210\001\001\240\001\001"
+      "\022\036\n\026immutableStorageScheme\030\025 \002(\005\022\025\n\rview" +
+      "IndexType\030\026 \001(\005\"\334\001\n\025AddServerCacheReques" +
+      "t\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\022)\n\010" +
+      "cachePtr\030\003 \002(\0132\027.ImmutableBytesWritable\022" +
+      ")\n\014cacheFactory\030\004 \002(\0132\023.ServerCacheFacto" +
+      "ry\022\017\n\007txState\030\005 \001(\014\022\"\n\032hasProtoBufIndexM" +
+      "aintainer\030\006 \001(\010\022\025\n\rclientVersion\030\007 \001(\005\"(",
+      "\n\026AddServerCacheResponse\022\016\n\006return\030\001 \002(\010" +
+      "\"=\n\030RemoveServerCacheRequest\022\020\n\010tenantId" +
+      "\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\"+\n\031RemoveServerC" +
+      "acheResponse\022\016\n\006return\030\001 \002(\0102\245\001\n\024ServerC" +
+      "achingService\022A\n\016addServerCache\022\026.AddSer" +
+      "verCacheRequest\032\027.AddServerCacheResponse" +
+      "\022J\n\021removeServerCache\022\031.RemoveServerCach" +
+      "eRequest\032\032.RemoveServerCacheResponseBG\n(" +
+      "org.apache.phoenix.coprocessor.generated" +
+      "B\023ServerCachingProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8768,7 +8768,7 @@ public final class ServerCachingProtos {
           internal_static_IndexMaintainer_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_IndexMaintainer_descriptor,
-              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "UseLongViewIndex", });
+              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexType", });
           internal_static_AddServerCacheRequest_descriptor =
             getDescriptor().getMessageTypes().get(4);
           internal_static_AddServerCacheRequest_fieldAccessorTable = new

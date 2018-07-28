@@ -72,9 +72,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQU
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_LONG_VIEW_INDEX_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
@@ -321,7 +322,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     /**
      * A designator for choosing the right type for viewIndex (Short vs Long) to be backward compatible.
      * **/
-    private static final KeyValue USE_LONG_VIEW_INDEX_ID_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_LONG_VIEW_INDEX_BYTES);
+    private static final KeyValue VIEW_INDEX_ID_DATA_TYPE_BYTES_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_INDEX_ID_DATA_TYPE_BYTES);
     private static final KeyValue INDEX_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_TYPE_BYTES);
     private static final KeyValue INDEX_DISABLE_TIMESTAMP_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
     private static final KeyValue STORE_NULLS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORE_NULLS_BYTES);
@@ -333,11 +334,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final KeyValue UPDATE_CACHE_FREQUENCY_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, UPDATE_CACHE_FREQUENCY_BYTES);
     private static final KeyValue IS_NAMESPACE_MAPPED_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
-    private static final KeyValue AUTO_PARTITION_SEQ_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, AUTO_PARTITION_SEQ_BYTES);
-    private static final KeyValue APPEND_ONLY_SCHEMA_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, APPEND_ONLY_SCHEMA_BYTES);
-    private static final KeyValue STORAGE_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORAGE_SCHEME_BYTES);
-    private static final KeyValue ENCODING_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ENCODING_SCHEME_BYTES);
-    private static final KeyValue USE_STATS_FOR_PARALLELIZATION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_STATS_FOR_PARALLELIZATION_BYTES);
+    private static final Cell AUTO_PARTITION_SEQ_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, AUTO_PARTITION_SEQ_BYTES);
+    private static final Cell APPEND_ONLY_SCHEMA_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, APPEND_ONLY_SCHEMA_BYTES);
+    private static final Cell STORAGE_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORAGE_SCHEME_BYTES);
+    private static final Cell ENCODING_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ENCODING_SCHEME_BYTES);
+    private static final Cell USE_STATS_FOR_PARALLELIZATION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_STATS_FOR_PARALLELIZATION_BYTES);
     
     private static final List<Cell> TABLE_KV_COLUMNS = Arrays.<Cell>asList(
             EMPTY_KEYVALUE_KV,
@@ -355,7 +356,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             MULTI_TENANT_KV,
             VIEW_TYPE_KV,
             VIEW_INDEX_ID_KV,
-            USE_LONG_VIEW_INDEX_ID_KV,
+            VIEW_INDEX_ID_DATA_TYPE_BYTES_KV,
             INDEX_TYPE_KV,
             INDEX_DISABLE_TIMESTAMP_KV,
             STORE_NULLS_KV,
@@ -388,7 +389,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final int DISABLE_WAL_INDEX = TABLE_KV_COLUMNS.indexOf(DISABLE_WAL_KV);
     private static final int MULTI_TENANT_INDEX = TABLE_KV_COLUMNS.indexOf(MULTI_TENANT_KV);
     private static final int VIEW_TYPE_INDEX = TABLE_KV_COLUMNS.indexOf(VIEW_TYPE_KV);
-    private static final int USE_LONG_VIEW_INDEX = TABLE_KV_COLUMNS.indexOf(USE_LONG_VIEW_INDEX_ID_KV);
+    private static final int VIEW_INDEX_ID_DATA_TYPE = TABLE_KV_COLUMNS.indexOf(VIEW_INDEX_ID_DATA_TYPE_BYTES_KV);
     private static final int VIEW_INDEX_ID_INDEX = TABLE_KV_COLUMNS.indexOf(VIEW_INDEX_ID_KV);
     private static final int INDEX_TYPE_INDEX = TABLE_KV_COLUMNS.indexOf(INDEX_TYPE_KV);
     private static final int STORE_NULLS_INDEX = TABLE_KV_COLUMNS.indexOf(STORE_NULLS_KV);
@@ -1449,31 +1450,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     /**
-     * check the value for {@value USE_LONG_VIEW_INDEX} and if its present consider viewIndexId as long otherwise
-     * read as short and convert it to long
+     * Returns viewIndexId based on its underlying data type
      *
      * @param tableKeyValues
      * @param viewIndexType
      * @return
      */
-    private Long decodeViewIndexId(Cell viewIndexIdKv,  PDataType viewIndexType) {
-        boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(viewIndexType);
-		return new Long(
-				useLongViewIndex
-						? viewIndexType.getCodec().decodeLong(viewIndexIdKv.getValueArray(),
-						viewIndexIdKv.getValueOffset(), SortOrder.getDefault())
-						: MetaDataUtil.getLegacyViewIndexIdDataType().getCodec().decodeShort(viewIndexIdKv.getValueArray(),
-						viewIndexIdKv.getValueOffset(), SortOrder.getDefault())
-		);
+    private Long decodeViewIndexId(Cell viewIndexIdKv, PDataType viewIndexType) {
+        return viewIndexType.getCodec().decodeLong(viewIndexIdKv.getValueArray(),
+                viewIndexIdKv.getValueOffset(), SortOrder.getDefault());
     }
 
     private PDataType getViewIndexType(Cell[] tableKeyValues) {
-        Cell useLongViewIndexKv = tableKeyValues[USE_LONG_VIEW_INDEX];
-        boolean useLongViewIndex = useLongViewIndexKv != null;
-        return useLongViewIndex ?
-                MetaDataUtil.getViewIndexIdDataType()
-                : MetaDataUtil.getLegacyViewIndexIdDataType();
+        Cell dataTypeKv = tableKeyValues[VIEW_INDEX_ID_DATA_TYPE];
+        return PDataType.fromTypeId(PInteger.INSTANCE.getCodec()
+                .decodeInt(dataTypeKv.getValueArray(), dataTypeKv.getValueOffset(), SortOrder.getDefault()));
     }
+
     private boolean isQualifierCounterKV(Cell kv) {
         int cmp =
                 Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(),
@@ -2316,8 +2309,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 long currentTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                 if (indexId != null) {
-                    builder.setViewIndexId(indexId);
-                    builder.setUseLongViewIndexId(true);
+                   builder.setViewIndexId(indexId);
+                   builder.setViewIndexType(PLong.INSTANCE.getSqlType());
                 }
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());

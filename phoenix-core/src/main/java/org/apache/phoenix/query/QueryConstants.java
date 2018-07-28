@@ -193,7 +193,7 @@ public interface QueryConstants {
             MULTI_TENANT + " BOOLEAN,\n" +
             VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
             VIEW_INDEX_ID + " BIGINT,\n" +
-            USE_LONG_VIEW_INDEX + " BOOLEAN,\n" +
+            VIEW_INDEX_ID_DATA_TYPE + " INTEGER,\n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

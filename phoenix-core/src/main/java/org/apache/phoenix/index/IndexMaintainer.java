@@ -101,6 +101,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -1344,8 +1345,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         maintainer.nIndexSaltBuckets = proto.getSaltBuckets();
         maintainer.isMultiTenant = proto.getIsMultiTenant();
         maintainer.viewIndexId = proto.hasViewIndexId() ? proto.getViewIndexId().toByteArray() : null;
-        maintainer.viewIndexType = proto.hasUseLongViewIndex()
-                ? MetaDataUtil.getViewIndexIdDataType()
+        maintainer.viewIndexType = proto.hasViewIndexType()
+                ? PDataType.fromTypeId(proto.getViewIndexType())
                 : MetaDataUtil.getLegacyViewIndexIdDataType();
         List<ServerCachingProtos.ColumnReference> indexedColumnsList = proto.getIndexedColumnsList();
         maintainer.indexedColumns = new HashSet<ColumnReference>(indexedColumnsList.size());
@@ -1466,7 +1467,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setIsMultiTenant(maintainer.isMultiTenant);
         if (maintainer.viewIndexId != null) {
             builder.setViewIndexId(ByteStringer.wrap(maintainer.viewIndexId));
-            builder.setUseLongViewIndex(MetaDataUtil.getViewIndexIdDataType().equals(maintainer.viewIndexType));
+            builder.setViewIndexType(maintainer.viewIndexType.getSqlType());
         }
         for (ColumnReference colRef : maintainer.indexedColumns) {
             ServerCachingProtos.ColumnReference.Builder cRefBuilder =  ServerCachingProtos.ColumnReference.newBuilder();
