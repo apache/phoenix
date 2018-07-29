@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 
 /**
- * Used by the event handler to write RingBufferEvent, this is done in a seperate thread from the application configured
+ * Used by the event handler to write RingBufferEvent, this is done in a separate thread from the application configured
  * during disruptor
  */
 public interface LogWriter {
