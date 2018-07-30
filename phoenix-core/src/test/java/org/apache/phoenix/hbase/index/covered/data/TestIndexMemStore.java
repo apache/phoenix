@@ -39,10 +39,10 @@ public class TestIndexMemStore {
 
   @Test
   public void testCorrectOverwritting() throws Exception {
-    IndexMemStore store = new IndexMemStore(new CellComparatorImpl(){
+    IndexMemStore store = new IndexMemStore(new DelegateComparator(new CellComparatorImpl()){
         @Override
-        public int compare(Cell a, Cell b) {
-            return super.compare(a, b, true);
+        public int compare(Cell leftCell, Cell rightCell) {
+            return super.compare(leftCell, rightCell, true);
         }
     });
     long ts = 10;
