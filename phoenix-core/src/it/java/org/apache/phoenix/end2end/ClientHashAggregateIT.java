@@ -64,8 +64,19 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
     }
 
     private void testTable(Connection conn, String table) throws Exception {
-        verifyExplain(conn, table);
-        verifyResults(conn, table);
+        verifyExplain(conn, table, false, false);
+        verifyExplain(conn, table, false, true);
+        verifyExplain(conn, table, true, false);
+        verifyExplain(conn, table, true, true);
+
+        verifyResults(conn, table, 13, 0, false, false);
+        verifyResults(conn, table, 13, 0, false, true);
+        verifyResults(conn, table, 13, 0, true, false);
+        verifyResults(conn, table, 13, 0, true, true);
+
+        verifyResults(conn, table, 13, 17, false, true);
+        verifyResults(conn, table, 13, 17, true, true);
+
         dropTable(conn, table);
     }
 
@@ -97,7 +108,7 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         return table;
     }
 
-    private String getQuery(String table, boolean hash) {
+    private String getQuery(String table, boolean hash, boolean swap, boolean sort) {
 
         String query = "SELECT /*+ USE_SORT_MERGE_JOIN"
             + (hash ? " HASH_AGGREGATE" : "") + " */"
@@ -105,28 +116,30 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
             + " FROM " + table + " t1 JOIN " + table + " t2"
             + " ON (t1.keyB = t2.keyB)"
             + " WHERE t1.keyA = 10 AND t2.keyA = 20"
-            + " GROUP BY t1.val, t2.val"
-            + " ORDER BY t1.val, t2.val"
+            + " GROUP BY "
+            + (swap ? "t2.val, t1.val" : "t1.val, t2.val")
+            + (sort ? " ORDER BY t1.val, t2.val" : "")
             ;
 
         return query;
     }
 
-    private void verifyExplain(Connection conn, String table) throws Exception {
+    private void verifyExplain(Connection conn, String table, boolean swap, boolean sort) throws Exception {
 
-        String query = "EXPLAIN " + getQuery(table, true);
+        String query = "EXPLAIN " + getQuery(table, true, swap, sort);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(query);
         String plan = QueryUtil.getExplainPlan(rs);
         rs.close();
         assertTrue(plan != null && plan.contains("CLIENT HASH AGGREGATE"));
+        assertTrue(plan != null && (sort == plan.contains("CLIENT SORTED BY")));
     }
 
-    private void verifyResults(Connection conn, String table) throws Exception {
+    private void verifyResults(Connection conn, String table, int c1, int c2, boolean swap, boolean sort) throws Exception {
 
         String upsert = "UPSERT INTO " + table + "(keyA, keyB, val) VALUES(?, ?, ?)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
-        for (int i = 0; i < 13; i++) {
+        for (int i = 0; i < c1; i++) {
             upsertStmt.setInt(1, 10);
             upsertStmt.setInt(2, 100+i);
             upsertStmt.setInt(3, 1);
@@ -137,7 +150,7 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
             upsertStmt.setInt(3, 2);
             upsertStmt.execute();
         }
-        for (int i = 0; i < 17; i++) {
+        for (int i = 0; i < c2; i++) {
             upsertStmt.setInt(1, 10);
             upsertStmt.setInt(2, 200+i);
             upsertStmt.setInt(3, 2);
@@ -150,29 +163,33 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         }
         conn.commit();
 
-        String hashQuery = getQuery(table, true);
-        String sortQuery = getQuery(table, false);
+        String hashQuery = getQuery(table, true, swap, sort);
+        String sortQuery = getQuery(table, false, swap, sort);
         Statement stmt = conn.createStatement();
         ResultSet hrs = stmt.executeQuery(hashQuery);
         ResultSet srs = stmt.executeQuery(sortQuery);
 
         try {
-            assertTrue(hrs.next());
-            assertTrue(srs.next());
-            assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-            assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-            assertEquals(hrs.getInt("c"), srs.getInt("c"));
-            assertEquals(hrs.getInt("v1"), 1);
-            assertEquals(hrs.getInt("v2"), 2);
-            assertEquals(hrs.getInt("c"), 13);
-            assertTrue(hrs.next());
-            assertTrue(srs.next());
-            assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-            assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-            assertEquals(hrs.getInt("c"), srs.getInt("c"));
-            assertEquals(hrs.getInt("v1"), 2);
-            assertEquals(hrs.getInt("v2"), 1);
-            assertEquals(hrs.getInt("c"), 17);
+            if (c1 > 0) {
+                assertTrue(hrs.next());
+                assertTrue(srs.next());
+                assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
+                assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
+                assertEquals(hrs.getInt("c"), srs.getInt("c"));
+                assertEquals(hrs.getInt("v1"), 1);
+                assertEquals(hrs.getInt("v2"), 2);
+                assertEquals(hrs.getInt("c"), c1);
+            }
+            if (c2 > 0) {
+                assertTrue(hrs.next());
+                assertTrue(srs.next());
+                assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
+                assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
+                assertEquals(hrs.getInt("c"), srs.getInt("c"));
+                assertEquals(hrs.getInt("v1"), 2);
+                assertEquals(hrs.getInt("v2"), 1);
+                assertEquals(hrs.getInt("c"), c2);
+            }
             assertFalse(hrs.next());
             assertFalse(srs.next());
         } finally {

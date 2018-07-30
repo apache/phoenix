@@ -154,8 +154,8 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 }
 
                 if (useHashAgg) {
-                    boolean sort = orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY;
-                    aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions, sort);
+                    // Pass in orderBy to apply any sort that has been optimized away
+                    aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions, orderBy);
                 } else {
                     iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
                     aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
@@ -204,7 +204,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
         } else if (useHashAgg) {
             planSteps.add("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
-            if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY) {
+            if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY) {
                 planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
             }
         } else {

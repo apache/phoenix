@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
@@ -60,14 +62,14 @@ public class ClientHashAggregatingResultIterator
     private final ResultIterator resultIterator;
     private final Aggregators aggregators;
     private final List<Expression> groupByExpressions;
-    private final boolean sort;
+    private final OrderBy orderBy;
     private final MemoryChunk memoryChunk;
     private HashMap<ImmutableBytesWritable, Aggregator[]> hash;
     private List<ImmutableBytesWritable> keyList;
     private Iterator<ImmutableBytesWritable> keyIterator;
 
     public ClientHashAggregatingResultIterator(StatementContext context, ResultIterator resultIterator,
-                                               Aggregators aggregators, List<Expression> groupByExpressions, boolean sort) {
+                                               Aggregators aggregators, List<Expression> groupByExpressions, OrderBy orderBy) {
 
         Objects.requireNonNull(resultIterator);
         Objects.requireNonNull(aggregators);
@@ -75,7 +77,7 @@ public class ClientHashAggregatingResultIterator
         this.resultIterator = resultIterator;
         this.aggregators = aggregators;
         this.groupByExpressions = groupByExpressions;
-        this.sort = sort;
+        this.orderBy = orderBy;
         memoryChunk = context.getConnection().getQueryServices().getMemoryManager().allocate(CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE);
     }
 
@@ -83,7 +85,21 @@ public class ClientHashAggregatingResultIterator
     public Tuple next() throws SQLException {
         if (keyIterator == null) {
             hash = populateHash();
-            if (sort) {
+            /********
+             *
+             * Perform a post-aggregation sort only when required. There are 3 possible scenarios:
+             * (1) The query DOES NOT have an ORDER BY -- in this case, we DO NOT perform a sort, and the results will be in random order.
+             * (2) The query DOES have an ORDER BY, the ORDER BY keys match the GROUP BY keys, and all the ORDER BY keys are ASCENDING
+             *     -- in this case, we DO perform a sort. THE ORDER BY has been optimized away, because the non-hash client aggregation
+             *        generates results in ascending order of the GROUP BY keys.
+             * (3) The query DOES have an ORDER BY, but the ORDER BY keys do not match the GROUP BY keys, or at least one ORDER BY key is DESCENDING
+             *     -- in this case, we DO NOT perform a sort, because the ORDER BY has not been optimized away and will be performed later by the
+             *        client aggregation code.
+             *
+             * Finally, we also handle optimization of reverse sort here. This is currently defensive, because reverse sort is not optimized away.
+             *
+             ********/
+            if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY) {
                 keyList = sortKeys();
                 keyIterator = keyList.iterator();
             } else {
@@ -184,7 +200,11 @@ public class ClientHashAggregatingResultIterator
 
         keyList = new ArrayList<ImmutableBytesWritable>(hash.size());
         keyList.addAll(hash.keySet());
-        Collections.sort(keyList, new ImmutableBytesWritable.Comparator());
+        Comparator<ImmutableBytesWritable> comp = new ImmutableBytesWritable.Comparator();
+        if (orderBy == OrderBy.REV_ROW_KEY_ORDER_BY) {
+            comp = Collections.reverseOrder(comp);
+        }
+        Collections.sort(keyList, comp);
         return keyList;
     }
 }
