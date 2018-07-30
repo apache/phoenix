@@ -118,6 +118,11 @@ public class RandomFunction extends ScalarFunction {
     }
 
     @Override
+    public boolean isConstantIfChildrenAllConstant() {
+        return false;
+    }
+
+    @Override
     public boolean isStateless() {
         return true;
     }
