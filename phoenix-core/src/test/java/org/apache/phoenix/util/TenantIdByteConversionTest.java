@@ -22,20 +22,40 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
-import org.apache.hadoop.hbase.util.Base64;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.phoenix.schema.*;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PUnsignedDouble;
+import org.apache.phoenix.schema.types.PUnsignedFloat;
+import org.apache.phoenix.schema.types.PUnsignedInt;
+import org.apache.phoenix.schema.types.PUnsignedLong;
+import org.apache.phoenix.schema.types.PUnsignedSmallint;
+import org.apache.phoenix.schema.types.PUnsignedTinyint;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-import org.mockito.Mockito;
 
 /*Test the getTenantIdBytes method in ScanUtil*/
 @RunWith(Parameterized.class)
@@ -201,7 +221,7 @@ public class TenantIdByteConversionTest {
 
         //Binary
         byte[] bytes = new byte[] {0, 1, 2, 3};
-        String byteString = new String( Base64.encodeBytes(bytes) );
+        String byteString = new String( Base64.getEncoder().encode(bytes) );
         testCases.add(new Object[] {
                 getDataSchema(PBinary.INSTANCE, SortOrder.getDefault()),
                 false,
