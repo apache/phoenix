@@ -21,13 +21,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
 
 import javax.annotation.Nullable;
 
 import org.apache.commons.csv.CSVRecord;
-import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.function.EncodeFormat;
 import org.apache.phoenix.query.QueryServices;
@@ -189,7 +189,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                 Object object = null;
                 switch (format) {
                     case BASE64:
-                        object = Base64.decode(input);
+                        object = Base64.getDecoder().decode(input);
                         if (object == null) { throw new IllegalDataException(
                                 "Input: [" + input + "]  is not base64 encoded"); }
                         break;
