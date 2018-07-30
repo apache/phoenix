@@ -19,8 +19,8 @@ package org.apache.phoenix.schema.types;
 
 import java.sql.Types;
 import java.text.Format;
+import java.util.Base64;
 
-import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
@@ -131,7 +131,7 @@ public class PVarbinary extends PBinaryBase {
         if (value == null || value.length() == 0) {
             return null;
         }
-        Object object = Base64.decode(value);
+        Object object = Base64.getDecoder().decode(value);
         if (object == null) { throw newIllegalDataException(
                 "Input: [" + value + "]  is not base64 encoded"); }
         return object;
