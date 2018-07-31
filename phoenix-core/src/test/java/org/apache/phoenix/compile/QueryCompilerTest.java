@@ -2951,7 +2951,129 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
-    
+
+    @Test
+    public void testOrderPreservingGroupByForNotPkColumns() throws Exception {
+
+        try (Connection conn= DriverManager.getConnection(getUrl())) {
+
+            conn.createStatement().execute("CREATE TABLE test (\n" +
+                    "            pk1 varchar, \n" +
+                    "            pk2 varchar, \n" +
+                    "            pk3 varchar, \n" +
+                    "            pk4 varchar, \n" +
+                    "            v1 varchar, \n" +
+                    "            v2 varchar,\n" +
+                    "            CONSTRAINT pk PRIMARY KEY (\n" +
+                    "               pk1,\n" +
+                    "               pk2,\n" +
+                    "               pk3,\n" +
+                    "               pk4\n" +
+                    "             )\n" +
+                    "         )");
+            String[] queries = new String[] {
+                    "SELECT pk3 FROM test WHERE v2 = 'a' GROUP BY substr(v2,0,1),pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 'c' and v2 = substr('abc',1,1) GROUP BY v2,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE v1 = 'a' and v2 = 'b' GROUP BY length(v1)+length(v2),pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 'a' and v2 = 'b' GROUP BY length(pk1)+length(v2),pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE v1 = 'a' and v2 = substr('abc',2,1) GROUP BY pk4,CASE WHEN v1 > v2 THEN v1 ELSE v2 END,pk3 ORDER BY pk4,pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 'a' and v2 = substr('abc',2,1) GROUP BY pk4,CASE WHEN pk1 > v2 THEN pk1 ELSE v2 END,pk3 ORDER BY pk4,pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 'a' and pk2 = 'b' and v1 = 'c' GROUP BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3 ORDER BY pk3"
+            };
+            int index = 0;
+            for (String query : queries) {
+                QueryPlan plan = getQueryPlan(conn, query);
+                assertTrue((index + 1) + ") " + queries[index], plan.getOrderBy().getOrderByExpressions().isEmpty());
+                index++;
+            }
+        }
+    }
+
+    @Test
+    public void testOrderPreservingGroupByForClientAggregatePlan() throws Exception {
+        Connection conn = null;
+         try {
+             conn = DriverManager.getConnection(getUrl());
+             String tableName1 = "test_table";
+             String sql = "create table " + tableName1 + "( "+
+                     " pk1 varchar not null , " +
+                     " pk2 varchar not null, " +
+                     " pk3 varchar not null," +
+                     " v1 varchar, " +
+                     " v2 varchar, " +
+                     " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                        "pk1,"+
+                        "pk2,"+
+                        "pk3 ))";
+             conn.createStatement().execute(sql);
+
+             String[] queries = new String[] {
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "group by a.ak3,a.av1 order by a.ak3,a.av1",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.av2 = 'a' GROUP BY substr(a.av2,0,1),ak3 ORDER BY ak3",
+
+                   //for InListExpression
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.av2 in('a') GROUP BY substr(a.av2,0,1),ak3 ORDER BY ak3",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 'c' and a.av2 = substr('abc',1,1) GROUP BY a.av2,a.ak3 ORDER BY a.ak3",
+
+                   //for RVC
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where (a.ak1,a.av2) = ('c', substr('abc',1,1)) GROUP BY a.av2,a.ak3 ORDER BY a.ak3",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' and a.av2 = 'b' GROUP BY length(a.av1)+length(a.av2),a.ak3 ORDER BY a.ak3",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 'a' and a.av2 = 'b' GROUP BY length(a.ak1)+length(a.av2),a.ak3 ORDER BY a.ak3",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3, coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' and a.av2 = substr('abc',2,1) GROUP BY a.ak4,CASE WHEN a.av1 > a.av2 THEN a.av1 ELSE a.av2 END,a.ak3 ORDER BY a.ak4,a.ak3",
+
+                   "select a.ak3 "+
+                   "from (select rand() ak1,length(pk2) ak2,length(pk3) ak3,length(v1) av1,length(v2) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 0.0 and a.av2 = (5+3*2) GROUP BY a.ak3,CASE WHEN a.ak1 > a.av2 THEN a.ak1 ELSE a.av2 END,a.av1 ORDER BY a.ak3,a.av1",
+
+                   //for CoerceExpression
+                   "select a.ak3 "+
+                   "from (select rand() ak1,length(pk2) ak2,length(pk3) ak3,length(v1) av1,length(v2) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where CAST(a.ak1 AS INTEGER) = 0 and a.av2 = (5+3*2) GROUP BY a.ak3,CASE WHEN a.ak1 > a.av2 THEN a.ak1 ELSE a.av2 END,a.av1 ORDER BY a.ak3,a.av1",
+
+                   "select a.ak3 "+
+                   "from (select rand() ak1,length(pk2) ak2,length(pk3) ak3,length(v1) av1,length(v2) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 0.0 and a.av2 = length(substr('abc',1,1)) GROUP BY a.ak3,CASE WHEN a.ak1 > a.av2 THEN a.ak1 ELSE a.av2 END,a.av1 ORDER BY a.ak3,a.av1",
+
+                   "select a.ak3 "+
+                   "from (select rand() ak1,length(pk2) ak2,length(pk3) ak3,length(v1) av1,length(v2) av2 from "+tableName1+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 0.0 and a.av2 = length(substr('abc',1,1)) GROUP BY a.ak3,CASE WHEN coalesce(a.ak1,1) > coalesce(a.av2,2) THEN coalesce(a.ak1,1) ELSE coalesce(a.av2,2) END,a.av1 ORDER BY a.ak3,a.av1"
+             };
+
+             int index = 0;
+             for (String query : queries) {
+                 QueryPlan plan =  TestUtil.getOptimizeQueryPlan(conn, query);
+                 assertTrue((index + 1) + ") " + queries[index], plan.getOrderBy()== OrderBy.FWD_ROW_KEY_ORDER_BY);
+                 index++;
+             }
+         }
+         finally {
+             if(conn != null) {
+                 conn.close();
+             }
+         }
+    }
+
     @Test
     public void testNotOrderPreservingGroupBy() throws Exception {
         try (Connection conn= DriverManager.getConnection(getUrl())) {
@@ -2986,7 +3108,188 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
-    
+
+    @Test
+    public void testNotOrderPreservingGroupByForNotPkColumns() throws Exception {
+        try (Connection conn= DriverManager.getConnection(getUrl())) {
+
+            conn.createStatement().execute("CREATE TABLE test (\n" +
+                    "            pk1 varchar,\n" +
+                    "            pk2 varchar,\n" +
+                    "            pk3 varchar,\n" +
+                    "            pk4 varchar,\n" +
+                    "            v1 varchar,\n" +
+                    "            v2 varchar,\n" +
+                    "            CONSTRAINT pk PRIMARY KEY (\n" +
+                    "               pk1,\n" +
+                    "               pk2,\n" +
+                    "               pk3,\n" +
+                    "               pk4\n" +
+                    "             )\n" +
+                    "         )");
+            String[] queries = new String[] {
+               "SELECT pk3 FROM test WHERE (pk1 = 'a' and pk2 = 'b') or v1 ='c' GROUP BY pk4,CASE WHEN pk1 > pk2 THEN coalesce(v1,'1') ELSE pk2 END,pk3 ORDER BY pk4,pk3",
+               "SELECT pk3 FROM test WHERE pk1 = 'a' or pk2 = 'b' GROUP BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3 ORDER BY pk3",
+               "SELECT pk3 FROM test WHERE pk1 = 'a' and (pk2 = 'b' or v1 = 'c') GROUP BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3 ORDER BY pk3",
+               "SELECT v2 FROM test GROUP BY v1,v2 ORDER BY v2",
+               "SELECT pk3 FROM test WHERE v1 = 'a' GROUP BY v1,v2,pk3 ORDER BY pk3",
+               "SELECT length(pk3) FROM test WHERE v1 = 'a' GROUP BY RAND()+length(v1),length(v2),length(pk3) ORDER BY length(v2),length(pk3)",
+               "SELECT length(pk3) FROM test WHERE v1 = 'a' and v2 = 'b' GROUP BY CASE WHEN v1 > v2 THEN length(v1) ELSE RAND(1) END,length(pk3) ORDER BY length(pk3)",
+            };
+            int index = 0;
+            for (String query : queries) {
+                QueryPlan plan = getQueryPlan(conn, query);
+                 assertFalse((index + 1) + ") " + queries[index], plan.getOrderBy().getOrderByExpressions().isEmpty());
+                index++;
+            }
+        }
+    }
+
+    @Test
+    public void testNotOrderPreservingGroupByForClientAggregatePlan() throws Exception {
+        Connection conn = null;
+         try {
+             conn = DriverManager.getConnection(getUrl());
+             String tableName = "table_test";
+             String sql = "create table " + tableName + "( "+
+                     " pk1 varchar not null , " +
+                     " pk2 varchar not null, " +
+                     " pk3 varchar not null," +
+                     " v1 varchar, " +
+                     " v2 varchar, " +
+                     " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                        "pk1,"+
+                        "pk2,"+
+                        "pk3 ))";
+             conn.createStatement().execute(sql);
+
+             String[] queries = new String[] {
+                  "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where (a.ak1 = 'a' and a.ak2 = 'b') or a.av1 ='c' GROUP BY a.ak4,CASE WHEN a.ak1 > a.ak2 THEN coalesce(a.av1,'1') ELSE a.ak2 END,a.ak3 ORDER BY a.ak4,a.ak3",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 'a' or a.ak2 = 'b' GROUP BY CASE WHEN a.ak1 > a.ak2 THEN a.av1 WHEN a.ak1 = a.ak2 THEN a.ak1 ELSE a.ak2 END,a.ak3 ORDER BY a.ak3",
+
+                   //for in
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 in ( 'a','b') GROUP BY CASE WHEN a.ak1 > a.ak2 THEN a.av1 WHEN a.ak1 = a.ak2 THEN a.ak1 ELSE a.ak2 END,a.ak3 ORDER BY a.ak3",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 'a' and (a.ak2 = 'b' or a.av1 = 'c') GROUP BY CASE WHEN a.ak1 > a.ak2 THEN a.av1 WHEN a.ak1 = a.ak2 THEN a.ak1 ELSE a.ak2 END,a.ak3 ORDER BY a.ak3",
+
+                   "select a.av2 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "GROUP BY a.av1,a.av2 ORDER BY a.av2",
+
+                   "select a.ak3 "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' GROUP BY a.av1,a.av2,a.ak3 ORDER BY a.ak3",
+
+                   "select length(a.ak3) "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' GROUP BY RAND()+length(a.av1),length(a.av2),length(a.ak3) ORDER BY length(a.av2),length(a.ak3)",
+
+                   "select length(a.ak3) "+
+                   "from (select substr(pk1,1,1) ak1,substr(pk2,1,1) ak2,substr(pk3,1,1) ak3,coalesce(pk3,'1') ak4, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' and a.av2 = 'b' GROUP BY CASE WHEN a.av1 > a.av2 THEN length(a.av1) ELSE RAND(1) END,length(a.ak3) ORDER BY length(a.ak3)",
+
+                   "select a.ak3 "+
+                   "from (select rand() ak1,length(pk2) ak2,length(pk3) ak3,length(v1) av1,length(v2) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 > 0.0 and a.av2 = (5+3*2) GROUP BY a.ak3,CASE WHEN a.ak1 > a.av2 THEN a.ak1 ELSE a.av2 END,a.av1 ORDER BY a.ak3,a.av1",
+
+                   "select a.ak3 "+
+                   "from (select rand() ak1,length(pk2) ak2,length(pk3) ak3,length(v1) av1,length(v2) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.ak1 = 0.0 or a.av2 = length(substr('abc',1,1)) GROUP BY a.ak3,CASE WHEN coalesce(a.ak1,1) > coalesce(a.av2,2) THEN coalesce(a.ak1,1) ELSE coalesce(a.av2,2) END,a.av1 ORDER BY a.ak3,a.av1"
+             };
+
+            int index = 0;
+            for (String query : queries) {
+                QueryPlan plan = TestUtil.getOptimizeQueryPlan(conn, query);
+                assertTrue((index + 1) + ") " + queries[index], plan.getOrderBy().getOrderByExpressions().size() > 0);
+                index++;
+            }
+         }
+         finally {
+             if(conn != null) {
+                 conn.close();
+             }
+         }
+    }
+
+    @Test
+    public void testOrderByOptimizeForClientAggregatePlanAndDesc() throws Exception {
+         Connection conn = null;
+         try {
+             conn = DriverManager.getConnection(getUrl());
+             String tableName = "test_table";
+             String sql = "create table " + tableName + "( "+
+                     " pk1 varchar not null, " +
+                     " pk2 varchar not null, " +
+                     " pk3 varchar not null, " +
+                     " v1 varchar, " +
+                     " v2 varchar, " +
+                     " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                        "pk1 desc,"+
+                        "pk2 desc,"+
+                        "pk3 desc))";
+             conn.createStatement().execute(sql);
+             String[] queries = new String[] {
+                   "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3, substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "group by a.ak3,a.av1 order by a.ak3 desc,a.av1",
+
+                   "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' group by a.av1,a.ak3 order by a.ak3 desc",
+
+                   "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' and a.av2= 'b' group by CASE WHEN a.av1 > a.av2 THEN a.av1 ELSE a.av2 END,a.ak3,a.ak2 order by a.ak3 desc,a.ak2 desc"
+             };
+
+             int index = 0;
+             for (String query : queries) {
+                 QueryPlan plan =  TestUtil.getOptimizeQueryPlan(conn, query);
+                 assertTrue((index + 1) + ") " + queries[index], plan.getOrderBy()== OrderBy.FWD_ROW_KEY_ORDER_BY);
+                 index++;
+             }
+
+             queries = new String[] {
+                   "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "group by a.ak3,a.av1 order by a.ak3,a.av1",
+
+                   "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' group by a.av1,a.ak3 order by a.ak3",
+
+                    "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' and a.av2= 'b' group by CASE WHEN a.av1 > a.av2 THEN a.av1 ELSE a.av2 END,a.ak3,a.ak2 order by a.ak3,a.ak2",
+
+                   "select a.ak3 "+
+                   "from (select pk1 ak1,pk2 ak2,pk3 ak3,substr(v1,1,1) av1,substr(v2,1,1) av2 from "+tableName+" order by pk2,pk3 limit 10) a "+
+                   "where a.av1 = 'a' and a.av2= 'b' group by CASE WHEN a.av1 > a.av2 THEN a.av1 ELSE a.av2 END,a.ak3,a.ak2 order by a.ak3 asc,a.ak2 desc"
+            };
+
+            index = 0;
+            for (String query : queries) {
+                QueryPlan plan = TestUtil.getOptimizeQueryPlan(conn, query);
+                assertTrue((index + 1) + ") " + queries[index], plan.getOrderBy().getOrderByExpressions().size() > 0);
+                index++;
+            }
+         }
+         finally {
+             if(conn != null) {
+                 conn.close();
+             }
+         }
+    }
+
     @Test
     public void testGroupByDescColumnBug3451() throws Exception {
 

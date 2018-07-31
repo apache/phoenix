@@ -101,6 +101,11 @@ public class DelegateExpression implements Expression {
     }
 
     @Override
+    public boolean isConstantIfChildrenAllConstant() {
+        return delegate.isConstantIfChildrenAllConstant();
+    }
+
+    @Override
     public boolean requiresFinalEvaluation() {
         return delegate.requiresFinalEvaluation();
     }
