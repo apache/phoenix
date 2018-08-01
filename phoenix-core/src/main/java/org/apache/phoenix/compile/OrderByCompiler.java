@@ -88,7 +88,8 @@ public class OrderByCompiler {
                                   Integer offset,
                                   RowProjector rowProjector,
                                   TupleProjector tupleProjector,
-                                  boolean isInRowKeyOrder) throws SQLException {
+                                  boolean isInRowKeyOrder,
+                                  Expression whereExpression) throws SQLException {
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         if (orderByNodes.isEmpty()) {
             return OrderBy.EMPTY_ORDER_BY;
@@ -105,9 +106,22 @@ public class OrderByCompiler {
         } else {
             compiler = new ExpressionCompiler(context, groupBy);
         }
+
+        if(groupBy != GroupBy.EMPTY_GROUP_BY) {
+        //if there is groupBy,the groupBy.expressions are viewed as new rowKey columns,so
+        //tupleProjector and isInRowKeyOrder is cleared
+            tupleProjector = null;
+            isInRowKeyOrder = true;
+        }
         // accumulate columns in ORDER BY
         OrderPreservingTracker tracker = 
-                new OrderPreservingTracker(context, groupBy, Ordering.ORDERED, orderByNodes.size(), tupleProjector);
+                new OrderPreservingTracker(
+                        context,
+                        groupBy,
+                        Ordering.ORDERED,
+                        orderByNodes.size(),
+                        tupleProjector,
+                        whereExpression);
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             ParseNode parseNode = node.getNode();
