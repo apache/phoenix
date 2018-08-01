@@ -142,7 +142,13 @@ public class GroupByCompiler {
             boolean isOrderPreserving = this.isOrderPreserving;
             int orderPreservingColumnCount = 0;
             if (isOrderPreserving) {
-                OrderPreservingTracker tracker = new OrderPreservingTracker(context, GroupBy.EMPTY_GROUP_BY, Ordering.UNORDERED, expressions.size(), tupleProjector);
+                OrderPreservingTracker tracker = new OrderPreservingTracker(
+                        context,
+                        GroupBy.EMPTY_GROUP_BY,
+                        Ordering.UNORDERED,
+                        expressions.size(),
+                        tupleProjector,
+                        null);
                 for (int i = 0; i < expressions.size(); i++) {
                     Expression expression = expressions.get(i);
                     tracker.track(expression);
