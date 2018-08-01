@@ -113,4 +113,9 @@ public abstract class BaseSingleExpression extends BaseExpression {
     public boolean requiresFinalEvaluation() {
         return children.get(0).requiresFinalEvaluation();
     }
+
+    @Override
+    public Determinism getDeterminism() {
+        return children.get(0).getDeterminism();
+    }
 }

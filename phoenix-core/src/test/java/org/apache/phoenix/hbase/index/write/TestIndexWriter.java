@@ -17,12 +17,9 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,35 +35,35 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.StubAbortable;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
-import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import com.google.common.collect.LinkedListMultimap;
-import com.google.common.collect.Multimap;
-
 public class TestIndexWriter {
   private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
   @Rule
-  public TableName testName = new TableName();
+  public IndexTableName testName = new IndexTableName();
   private final byte[] row = Bytes.toBytes("row");
 
   @Test
@@ -77,7 +74,6 @@ public class TestIndexWriter {
     assertNotNull(IndexWriter.getCommitter(env));
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void getDefaultFailurePolicy() throws Exception {
     Configuration conf = new Configuration(false);
@@ -85,7 +81,8 @@ public class TestIndexWriter {
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
     Mockito.when(env.getConfiguration()).thenReturn(conf);
-    Mockito.when(region.getTableDesc()).thenReturn(new HTableDescriptor());
+    Mockito.when(region.getTableDescriptor()).thenReturn(
+        TableDescriptorBuilder.newBuilder(TableName.valueOf("dummy")).build());
     assertNotNull(IndexWriter.getFailurePolicy(env));
   }
 
@@ -94,7 +91,6 @@ public class TestIndexWriter {
    * all index writes for a mutation/batch are completed.
    * @throws Exception on failure
    */
-  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
     LOG.info("Starting " + testName.getTableNameString());
@@ -105,38 +101,45 @@ public class TestIndexWriter {
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    TableDescriptor mockTableDesc = Mockito.mock(TableDescriptor.class);
+    Mockito.when(mockRegion.getTableDescriptor()).thenReturn(mockTableDesc);
+    TableName mockTN = TableName.valueOf("test");
+    Mockito.when(mockTableDesc.getTableName()).thenReturn(mockTN);
+    Connection mockConnection = Mockito.mock(Connection.class);
+    Mockito.when(e.getConnection()).thenReturn(mockConnection);
     ExecutorService exec = Executors.newFixedThreadPool(1);
-    Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
+    Map<ImmutableBytesPtr, Table> tables = new HashMap<ImmutableBytesPtr, Table>();
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     Collection<Pair<Mutation, byte[]>> indexUpdates = Arrays.asList(new Pair<Mutation, byte[]>(m,
         tableName));
 
-    HTableInterface table = Mockito.mock(HTableInterface.class);
+    Table table = Mockito.mock(Table.class);
     final boolean[] completed = new boolean[] { false };
-    Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
-
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        // just keep track that it was called
-        completed[0] = true;
-        return null;
-      }
-    });
-    Mockito.when(table.getTableName()).thenReturn(testName.getTableName());
+        Mockito.doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                // just keep track that it was called
+                completed[0] = true;
+                return null;
+            }
+        }).when(table).batch(Mockito.anyList(), Mockito.any());
+    Mockito.when(table.getName()).thenReturn(TableName.valueOf(testName.getTableName()));
     // add the table to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // setup the writer and failure policy
     TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    committer.setup(factory, exec, abort, stop, e);
+    committer.setup(factory, exec, stop, e);
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
-    policy.setup(stop, abort);
+    policy.setup(stop, e);
     IndexWriter writer = new IndexWriter(committer, policy);
-    writer.write(indexUpdates);
+    writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.testName.getTableNameString() + " finished");
@@ -149,55 +152,61 @@ public class TestIndexWriter {
    * that we correctly end the task
    * @throws Exception on failure
    */
-  @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testShutdownInterruptsAsExpected() throws Exception {
     Stoppable stop = Mockito.mock(Stoppable.class);
     Abortable abort = new StubAbortable();
     // single thread factory so the older request gets queued
     ExecutorService exec = Executors.newFixedThreadPool(1);
-    Map<ImmutableBytesPtr, HTableInterface> tables = new HashMap<ImmutableBytesPtr, HTableInterface>();
+    Map<ImmutableBytesPtr, Table> tables = new HashMap<ImmutableBytesPtr, Table>();
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);
     Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
+    Region mockRegion = Mockito.mock(Region.class);
+    Mockito.when(e.getRegion()).thenReturn(mockRegion);
+    TableDescriptor mockTableDesc = Mockito.mock(TableDescriptor.class);
+    Mockito.when(mockRegion.getTableDescriptor()).thenReturn(mockTableDesc);
+    Mockito.when(mockTableDesc.getTableName()).thenReturn(TableName.valueOf("test"));
+    Connection mockConnection = Mockito.mock(Connection.class);
+    Mockito.when(e.getConnection()).thenReturn(mockConnection);
     FakeTableFactory factory = new FakeTableFactory(tables);
 
     byte[] tableName = this.testName.getTableName();
-    HTableInterface table = Mockito.mock(HTableInterface.class);
-    Mockito.when(table.getTableName()).thenReturn(tableName);
+    Table table = Mockito.mock(Table.class);
+    Mockito.when(table.getName()).thenReturn(TableName.valueOf(tableName));
     final CountDownLatch writeStartedLatch = new CountDownLatch(1);
     // latch never gets counted down, so we wait forever
     final CountDownLatch waitOnAbortedLatch = new CountDownLatch(1);
-    Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        LOG.info("Write started");
-        writeStartedLatch.countDown();
-        // when we interrupt the thread for shutdown, we should see this throw an interrupt too
-        try {
-        waitOnAbortedLatch.await();
-        } catch (InterruptedException e) {
-          LOG.info("Correctly interrupted while writing!");
-          throw e;
-        }
-        return null;
-      }
-    });
+        Mockito.doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                LOG.info("Write started");
+                writeStartedLatch.countDown();
+                // when we interrupt the thread for shutdown, we should see this throw an interrupt too
+                try {
+                    waitOnAbortedLatch.await();
+                } catch (InterruptedException e) {
+                    LOG.info("Correctly interrupted while writing!");
+                    throw e;
+                }
+                return null;
+            }
+        }).when(table).batch(Mockito.anyListOf(Row.class), Mockito.any());
     // add the tables to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 
     // update a single table
     Put m = new Put(row);
-    m.add(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
+    m.addColumn(Bytes.toBytes("family"), Bytes.toBytes("qual"), null);
     final List<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
     indexUpdates.add(new Pair<Mutation, byte[]>(m, tableName));
 
     // setup the writer
     TrackingParallelWriterIndexCommitter committer = new TrackingParallelWriterIndexCommitter(VersionInfo.getVersion());
-    committer.setup(factory, exec, abort, stop, e );
+    committer.setup(factory, exec, stop, e );
     KillServerOnFailurePolicy policy = new KillServerOnFailurePolicy();
-    policy.setup(stop, abort);
+    policy.setup(stop, e);
     final IndexWriter writer = new IndexWriter(committer, policy);
 
     final boolean[] failedWrite = new boolean[] { false };
@@ -206,7 +215,7 @@ public class TestIndexWriter {
       @Override
       public void run() {
         try {
-          writer.write(indexUpdates);
+          writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IndexWriteException e) {
           failedWrite[0] = true;
         }

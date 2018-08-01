@@ -19,16 +19,19 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Coprocessor;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.RawCellBuilder;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
+import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 /**
  * Class to encapsulate {@link RegionCoprocessorEnvironment} for phoenix coprocessors. Often we
@@ -39,10 +42,12 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
 
     private final Configuration config;
     private RegionCoprocessorEnvironment delegate;
+    private ConnectionType connectionType;
 
-    public DelegateRegionCoprocessorEnvironment(Configuration config, RegionCoprocessorEnvironment delegate) {
-        this.config = config;
+    public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate, ConnectionType connectionType) {
         this.delegate = delegate;
+        this.connectionType = connectionType;
+        this.config = ConnectionFactory.getTypeSpecificConfiguration(connectionType, delegate.getConfiguration());
     }
 
     @Override
@@ -53,11 +58,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     @Override
     public String getHBaseVersion() {
         return delegate.getHBaseVersion();
-    }
-
-    @Override
-    public Coprocessor getInstance() {
-        return delegate.getInstance();
     }
 
     @Override
@@ -76,17 +76,6 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public HTableInterface getTable(TableName tableName) throws IOException {
-        return delegate.getTable(tableName);
-    }
-
-    @Override
-    public HTableInterface getTable(TableName tableName, ExecutorService service)
-            throws IOException {
-        return delegate.getTable(tableName, service);
-    }
-
-    @Override
     public ClassLoader getClassLoader() {
         return delegate.getClassLoader();
     }
@@ -97,13 +86,8 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
     }
 
     @Override
-    public HRegionInfo getRegionInfo() {
+    public RegionInfo getRegionInfo() {
         return delegate.getRegionInfo();
-    }
-
-    @Override
-    public RegionServerServices getRegionServerServices() {
-        return delegate.getRegionServerServices();
     }
 
     @Override
@@ -111,4 +95,40 @@ public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEn
         return delegate.getSharedData();
     }
 
+    @Override
+    public RegionCoprocessor getInstance() {
+        return delegate.getInstance();
+    }
+
+    @Override
+    public OnlineRegions getOnlineRegions() {
+        return delegate.getOnlineRegions();
+    }
+
+    @Override
+    public ServerName getServerName() {
+        return delegate.getServerName();
+    }
+
+    @Override
+    public Connection getConnection() {
+        return ConnectionFactory.getConnection(connectionType, delegate);
+    }
+
+    @Override
+    public MetricRegistry getMetricRegistryForRegionServer() {
+        return delegate.getMetricRegistryForRegionServer();
+    }
+
+    @Override
+    public Connection createConnection(Configuration conf) throws IOException {
+        return delegate.createConnection(conf);
+    }
+
+    @Override
+    public RawCellBuilder getCellBuilder() {
+        return delegate.getCellBuilder();
+    }
+   
+    
 }

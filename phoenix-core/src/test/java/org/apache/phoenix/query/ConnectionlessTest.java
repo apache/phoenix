@@ -31,7 +31,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -118,8 +119,8 @@ public class ConnectionlessTest {
         statement.setDate(5,now);
         statement.execute();
         
-        Iterator<Pair<byte[],List<KeyValue>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-        Iterator<KeyValue> iterator = dataIterator.next().getSecond().iterator();
+        Iterator<Pair<byte[],List<Cell>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        Iterator<Cell> iterator = dataIterator.next().getSecond().iterator();
 
         byte[] expectedRowKey1 = saltBuckets == null ? unsaltedRowKey1 : saltedRowKey1;
         byte[] expectedRowKey2 = saltBuckets == null ? unsaltedRowKey2 : saltedRowKey2;
@@ -136,34 +137,34 @@ public class ConnectionlessTest {
         conn.rollback(); // to clear the list of mutations for the next
     }
     
-    private static void assertRow1(Iterator<KeyValue> iterator, byte[] expectedRowKey1) {
-        KeyValue kv;
+    private static void assertRow1(Iterator<Cell> iterator, byte[] expectedRowKey1) {
+        Cell kv;
         assertTrue(iterator.hasNext());
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
+        assertArrayEquals(expectedRowKey1, CellUtil.cloneRow(kv));        
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(CellUtil.cloneValue(kv)));
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(name1, PVarchar.INSTANCE.toObject(kv.getValue()));
+        assertArrayEquals(expectedRowKey1, CellUtil.cloneRow(kv));        
+        assertEquals(name1, PVarchar.INSTANCE.toObject(CellUtil.cloneValue(kv)));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
+        assertArrayEquals(expectedRowKey1, CellUtil.cloneRow(kv));        
+        assertEquals(now, PDate.INSTANCE.toObject(CellUtil.cloneValue(kv)));
     }
 
-    private static void assertRow2(Iterator<KeyValue> iterator, byte[] expectedRowKey2) {
-        KeyValue kv;
+    private static void assertRow2(Iterator<Cell> iterator, byte[] expectedRowKey2) {
+        Cell kv;
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
+        assertArrayEquals(expectedRowKey2, CellUtil.cloneRow(kv));        
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(CellUtil.cloneValue(kv)));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(name2, PVarchar.INSTANCE.toObject(kv.getValue()));
+        assertArrayEquals(expectedRowKey2, CellUtil.cloneRow(kv));        
+        assertEquals(name2, PVarchar.INSTANCE.toObject(CellUtil.cloneValue(kv)));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
+        assertArrayEquals(expectedRowKey2, CellUtil.cloneRow(kv));        
+        assertEquals(now, PDate.INSTANCE.toObject(CellUtil.cloneValue(kv)));
     }
     
     @Test

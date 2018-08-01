@@ -20,16 +20,14 @@ package org.apache.phoenix.hbase.index.parallel;
 import static org.junit.Assert.*;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.junit.Rule;
 import org.junit.Test;
-
-import org.apache.phoenix.hbase.index.TableName;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
 
 public class TestThreadPoolBuilder {
 
   @Rule
-  public TableName name = new TableName();
+  public IndexTableName name = new IndexTableName();
 
   @Test
   public void testCoreThreadTimeoutNonZero() {

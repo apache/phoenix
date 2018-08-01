@@ -489,7 +489,9 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 }
                 i++;
                 // If we run out of slots in our key, it means we have a partial key.
-                if (schema.next(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), maxOffset, slotSpan[i]) == null) {
+                int rowKeyPos = ScanUtil.getRowKeyPosition(slotSpan, i);
+                int slotSpans = slotSpan[i];
+                if (schema.next(ptr, rowKeyPos, maxOffset, slotSpans) < rowKeyPos + slotSpans) {
                     // If the rest of the slots are checking for IS NULL, then break because
                     // that's the case (since we don't store trailing nulls).
                     if (allTrailingNulls(i)) {

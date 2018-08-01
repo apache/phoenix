@@ -33,18 +33,23 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
@@ -54,15 +59,17 @@ import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.hadoop.hbase.wal.WALSplitter;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.hbase.index.util.TestIndexManagementUtil;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,11 +88,12 @@ import org.mockito.Mockito;
  * times, which is probably not what you want to do (mostly because its so much effort).
  */
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   public static final Log LOG = LogFactory.getLog(WALReplayWithIndexWritesAndCompressedWALIT.class);
   @Rule
-  public TableName table = new TableName();
+  public IndexTableName table = new IndexTableName();
   private String INDEX_TABLE_NAME = table.getTableNameString() + "_INDEX";
 
   final HBaseTestingUtility UTIL = new HBaseTestingUtility();
@@ -98,8 +106,8 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   @Before
   public void setUp() throws Exception {
     setupCluster();
-    Path hbaseRootDir = UTIL.getDataTestDir();
     this.conf = HBaseConfiguration.create(UTIL.getConfiguration());
+    this.conf.setBoolean(QueryServices.INDEX_FAILURE_THROW_EXCEPTION_ATTRIB, false);
     this.fs = UTIL.getDFSCluster().getFileSystem();
     this.hbaseRootDir = new Path(this.conf.get(HConstants.HBASE_DIR));
     this.oldLogDir = new Path(this.hbaseRootDir, HConstants.HREGION_OLDLOGDIR_NAME);
@@ -165,15 +173,13 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * seqids.
    * @throws Exception on failure
    */
-  @SuppressWarnings("deprecation")
 @Test
   public void testReplayEditsWrittenViaHRegion() throws Exception {
     final String tableNameStr = "testReplayEditsWrittenViaHRegion";
-    final HRegionInfo hri = new HRegionInfo(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr), 
-        null, null, false);
+    final RegionInfo hri = RegionInfoBuilder.newBuilder(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr)).setSplit(false).build();
     final Path basedir = FSUtils.getTableDir(hbaseRootDir, org.apache.hadoop.hbase.TableName.valueOf(tableNameStr));
     deleteDir(basedir);
-    final HTableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
+    final TableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
     
     //setup basic indexing for the table
     // enable indexing to a non-existant index table
@@ -183,15 +189,14 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     CoveredColumnIndexSpecifierBuilder builder = new CoveredColumnIndexSpecifierBuilder();
     builder.addIndexGroup(fam1);
     builder.build(htd);
+    WALFactory walFactory = new WALFactory(this.conf, "localhost,1234");
 
+    WAL wal = createWAL(this.conf, walFactory);
     // create the region + its WAL
-    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd); // FIXME: Uses private type
+    HRegion region0 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal); // FIXME: Uses private type
     region0.close();
     region0.getWAL().close();
 
-    WALFactory walFactory = new WALFactory(this.conf, null, "localhost,1234");
-
-    WAL wal = createWAL(this.conf, walFactory);
     HRegionServer mockRS = Mockito.mock(HRegionServer.class);
     // mock out some of the internals of the RSS, so we can run CPs
     when(mockRS.getWAL(null)).thenReturn(wal);
@@ -202,13 +207,12 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     when(mockRS.getServerName()).thenReturn(mockServerName);
     HRegion region = spy(new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS));
     region.initialize();
-    when(region.getSequenceId()).thenReturn(0l);
 
 
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
     Put p = new Put(rowkey);
-    p.add(family, Bytes.toBytes("qual"), Bytes.toBytes("value"));
+    p.addColumn(family, Bytes.toBytes("qual"), Bytes.toBytes("value"));
     region.put(p);
 
     // we should then see the server go down
@@ -216,7 +220,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
       Mockito.any(Exception.class));
 
     // then create the index table so we are successful on WAL replay
-    TestIndexManagementUtil.createIndexTable(UTIL.getHBaseAdmin(), INDEX_TABLE_NAME);
+    TestIndexManagementUtil.createIndexTable(UTIL.getAdmin(), INDEX_TABLE_NAME);
 
     // run the WAL split and setup the region
     runWALSplit(this.conf, walFactory);
@@ -225,9 +229,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
     // initialize the region - this should replay the WALEdits from the WAL
     region1.initialize();
+    org.apache.hadoop.hbase.client.Connection hbaseConn =
+            ConnectionFactory.createConnection(UTIL.getConfiguration());
 
     // now check to ensure that we wrote to the index table
-    HTable index = new HTable(UTIL.getConfiguration(), INDEX_TABLE_NAME);
+    Table index = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(INDEX_TABLE_NAME));
     int indexSize = getKeyValueCount(index);
     assertEquals("Index wasn't propertly updated from WAL replay!", 1, indexSize);
     Get g = new Get(rowkey);
@@ -235,9 +241,9 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     assertEquals("Primary region wasn't updated from WAL replay!", 1, result.size());
 
     // cleanup the index table
-    HBaseAdmin admin = UTIL.getHBaseAdmin();
-    admin.disableTable(INDEX_TABLE_NAME);
-    admin.deleteTable(INDEX_TABLE_NAME);
+    Admin admin = UTIL.getAdmin();
+    admin.disableTable(TableName.valueOf(INDEX_TABLE_NAME));
+    admin.deleteTable(TableName.valueOf(INDEX_TABLE_NAME));
     admin.close();
   }
 
@@ -246,16 +252,15 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @param tableName name of the table descriptor
    * @return
    */
-  private HTableDescriptor createBasic3FamilyHTD(final String tableName) {
-    @SuppressWarnings("deprecation")
-    HTableDescriptor htd = new HTableDescriptor(tableName);
-    HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
-    htd.addFamily(a);
-    HColumnDescriptor b = new HColumnDescriptor(Bytes.toBytes("b"));
-    htd.addFamily(b);
-    HColumnDescriptor c = new HColumnDescriptor(Bytes.toBytes("c"));
-    htd.addFamily(c);
-    return htd;
+  private TableDescriptor createBasic3FamilyHTD(final String tableName) {
+    TableDescriptorBuilder tableBuilder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor  a = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("a"));
+    tableBuilder.addColumnFamily(a);
+    ColumnFamilyDescriptor b = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("b"));
+    tableBuilder.addColumnFamily(b);
+    ColumnFamilyDescriptor c = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("c"));
+    tableBuilder.addColumnFamily(c);
+    return tableBuilder.build();
   }
 
   /*
@@ -264,7 +269,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    * @throws IOException
    */
   private WAL createWAL(final Configuration c, WALFactory walFactory) throws IOException {
-    WAL wal = walFactory.getWAL(new byte[]{}, null);
+    WAL wal = walFactory.getWAL(null);
 
     // Set down maximum recovery so we dfsclient doesn't linger retrying something
     // long gone.
@@ -292,14 +297,14 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   }
 
   @SuppressWarnings("deprecation")
-private int getKeyValueCount(HTable table) throws IOException {
+private int getKeyValueCount(Table table) throws IOException {
     Scan scan = new Scan();
     scan.setMaxVersions(Integer.MAX_VALUE - 1);
 
     ResultScanner results = table.getScanner(scan);
     int count = 0;
     for (Result res : results) {
-      count += res.list().size();
+      count += res.listCells().size();
       LOG.debug(count + ") " + res);
     }
     results.close();

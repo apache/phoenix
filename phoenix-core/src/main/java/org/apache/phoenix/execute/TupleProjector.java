@@ -30,7 +30,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -48,7 +47,7 @@ import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -171,7 +170,7 @@ public class TupleProjector {
         long timestamp;
         ImmutableBytesWritable projectedValue = new ImmutableBytesWritable();
         int bitSetLen;
-        KeyValue keyValue;
+        Cell keyValue;
 
         public ProjectedValueTuple(Tuple keyBase, long timestamp, byte[] projectedValue, int valueOffset, int valueLength, int bitSetLen) {
             keyBase.getKey(this.keyPtr);
@@ -209,7 +208,7 @@ public class TupleProjector {
         }
 
         @Override
-        public KeyValue getValue(int index) {
+        public Cell getValue(int index) {
             if (index != 0) {
                 throw new IndexOutOfBoundsException(Integer.toString(index));
             }
@@ -217,9 +216,9 @@ public class TupleProjector {
         }
 
         @Override
-        public KeyValue getValue(byte[] family, byte[] qualifier) {
+        public Cell getValue(byte[] family, byte[] qualifier) {
             if (keyValue == null) {
-                keyValue = KeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(), 
+                keyValue = PhoenixKeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(), 
                         VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER, timestamp, projectedValue.get(), projectedValue.getOffset(), projectedValue.getLength());
             }
             return keyValue;
@@ -256,15 +255,15 @@ public class TupleProjector {
         }
 
         @Override
-        public KeyValue getValue(int index) {
+        public Cell getValue(int index) {
             if (index != 0) { throw new IndexOutOfBoundsException(Integer.toString(index)); }
             return getValue(VALUE_COLUMN_FAMILY, OLD_VALUE_COLUMN_QUALIFIER);
         }
 
         @Override
-        public KeyValue getValue(byte[] family, byte[] qualifier) {
+        public Cell getValue(byte[] family, byte[] qualifier) {
             if (keyValue == null) {
-                keyValue = KeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(),
+                keyValue = PhoenixKeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(),
                         VALUE_COLUMN_FAMILY, OLD_VALUE_COLUMN_QUALIFIER, timestamp, projectedValue.get(),
                         projectedValue.getOffset(), projectedValue.getLength());
             }

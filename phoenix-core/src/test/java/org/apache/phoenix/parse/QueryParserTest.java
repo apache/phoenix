@@ -26,9 +26,12 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
@@ -55,7 +58,58 @@ public class QueryParserTest {
         }
         assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
     }
-    
+
+    private void parseQueryThatShouldFail(String sql) throws Exception {
+        try {
+            parseQuery(sql);
+            fail("Query should throw a PhoenixParserException \n " + sql);
+        }
+        catch (PhoenixParserException e){
+        }
+    }
+
+    @Test
+    public void testParseGrantQuery() throws Exception {
+
+        String sql0 = "GRANT 'RX' ON SYSTEM.\"SEQUENCE\" TO 'user'";
+        parseQuery(sql0);
+        String sql1 = "GRANT 'RWXCA' ON TABLE some_table0 TO 'user0'";
+        parseQuery(sql1);
+        String sql2 = "GRANT 'RWX' ON some_table1 TO 'user1'";
+        parseQuery(sql2);
+        String sql3 = "GRANT 'CA' ON SCHEMA some_schema2 TO 'user2'";
+        parseQuery(sql3);
+        String sql4 = "GRANT 'RXW' ON some_table3 TO GROUP 'group3'";
+        parseQuery(sql4);
+        String sql5 = "GRANT 'RXW' ON \"some_schema5\".\"some_table5\" TO GROUP 'group5'";
+        parseQuery(sql5);
+        String sql6 = "GRANT 'RWA' TO 'user6'";
+        parseQuery(sql6);
+        String sql7 = "GRANT 'A' TO GROUP 'group7'";
+        parseQuery(sql7);
+        String sql8 = "GRANT 'ARXRRRRR' TO GROUP 'group8'";
+        parseQueryThatShouldFail(sql8);
+    }
+
+    @Test
+    public void testParseRevokeQuery() throws Exception {
+
+        String sql0 = "REVOKE ON SCHEMA SYSTEM FROM 'user0'";
+        parseQuery(sql0);
+        String sql1 = "REVOKE ON SYSTEM.\"SEQUENCE\" FROM 'user1'";
+        parseQuery(sql1);
+        String sql2 = "REVOKE ON TABLE some_table2 FROM GROUP 'group2'";
+        parseQuery(sql2);
+        String sql3 = "REVOKE ON some_table3 FROM GROUP 'group2'";
+        parseQuery(sql3);
+        String sql4 = "REVOKE FROM 'user4'";
+        parseQuery(sql4);
+        String sql5 = "REVOKE FROM GROUP 'group5'";
+        parseQuery(sql5);
+        String sql6 = "REVOKE 'RRWWXAAA' FROM GROUP 'group6'";
+        parseQueryThatShouldFail(sql6);
+    }
+
     @Test
     public void testParsePreQuery0() throws Exception {
         String sql = ((
@@ -781,5 +835,16 @@ public class QueryParserTest {
         String unicodeEnSpace = String.valueOf(Character.toChars(8194));
         String sql = Joiner.on(unicodeEnSpace).join(new String[] {"SELECT", "*", "FROM", "T"});
         parseQuery(sql);
+    }
+
+    @Test
+    public void testInvalidTableOrSchemaName() throws Exception {
+        // namespace separator (:) cannot be used
+        parseQueryThatShouldFail("create table a:b (id varchar not null primary key)");
+        parseQueryThatShouldFail("create table \"a:b\" (id varchar not null primary key)");
+        // name separator (.) cannot be used without double quotes
+        parseQueryThatShouldFail("create table a.b.c.d (id varchar not null primary key)");
+        parseQuery("create table \"a.b\".\"c.d\" (id varchar not null primary key)");
+        parseQuery("create table \"a.b.c.d\" (id varchar not null primary key)");
     }
 }

@@ -19,9 +19,9 @@ package org.apache.phoenix.hbase.index.covered.filter;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Inclusive filter on the maximum timestamp allowed. Excludes all elements greater than (but not
@@ -42,17 +42,12 @@ public class MaxTimestampFilter extends FilterBase {
     // with other filters too much.
     KeyValue kv = null;
     try {
-        kv = KeyValueUtil.ensureKeyValue(currentKV).clone();
+        kv = PhoenixKeyValueUtil.maybeCopyCell(currentKV).clone();
     } catch (CloneNotSupportedException e) {
         // the exception should not happen at all
         throw new IllegalArgumentException(e);
     }
-    int offset =kv.getTimestampOffset();
-    //set the timestamp in the buffer
-    byte[] buffer = kv.getBuffer();
-    byte[] ts = Bytes.toBytes(this.ts);
-    System.arraycopy(ts, 0, buffer, offset, ts.length);
-
+    kv.setTimestamp(ts);
     return kv;
   }
 

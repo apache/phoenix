@@ -27,8 +27,10 @@ import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.MasterNotRunningException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ZooKeeperConnectionException;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
@@ -49,7 +51,7 @@ public class RecoveryIndexWriter extends IndexWriter {
 
     private static final Log LOG = LogFactory.getLog(RecoveryIndexWriter.class);
     private Set<HTableInterfaceReference> nonExistingTablesList = new HashSet<HTableInterfaceReference>();
-    private HBaseAdmin admin;
+    private Admin admin;
 
     /**
      * Directly specify the {@link IndexCommitter} and {@link IndexFailurePolicy}. Both are expected to be fully setup
@@ -65,16 +67,16 @@ public class RecoveryIndexWriter extends IndexWriter {
     public RecoveryIndexWriter(IndexFailurePolicy policy, RegionCoprocessorEnvironment env, String name)
             throws MasterNotRunningException, ZooKeeperConnectionException, IOException {
         super(new TrackingParallelWriterIndexCommitter(), policy, env, name);
-        this.admin = new HBaseAdmin(env.getConfiguration());
+        this.admin = ConnectionFactory.createConnection(env.getConfiguration()).getAdmin();
     }
 
     @Override
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates) throws IOException {
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates, int clientVersion) throws IOException {
         try {
-            write(resolveTableReferences(toWrite), allowLocalUpdates);
+            write(resolveTableReferences(toWrite), allowLocalUpdates, clientVersion);
         } catch (MultiIndexWriteFailureException e) {
             for (HTableInterfaceReference table : e.getFailedTables()) {
-                if (!admin.tableExists(table.getTableName())) {
+                if (!admin.tableExists(TableName.valueOf(table.getTableName()))) {
                     LOG.warn("Failure due to non existing table: " + table.getTableName());
                     nonExistingTablesList.add(table);
                 } else {

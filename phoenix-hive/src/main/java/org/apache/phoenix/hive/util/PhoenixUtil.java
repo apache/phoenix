@@ -24,8 +24,8 @@ import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -170,7 +170,7 @@ public class PhoenixUtil {
     }
 
     public static void flush(Connection conn, String tableName) throws SQLException {
-        try (HBaseAdmin admin = ((PhoenixConnection) conn).getQueryServices().getAdmin()) {
+        try (Admin admin = ((PhoenixConnection) conn).getQueryServices().getAdmin()) {
             admin.flush(TableName.valueOf(tableName));
         } catch (IOException e) {
             throw new SQLException(e);

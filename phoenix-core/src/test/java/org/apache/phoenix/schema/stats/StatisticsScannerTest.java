@@ -28,7 +28,9 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
@@ -36,6 +38,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.stats.StatisticsScanner.StatisticsScannerCallable;
 import org.junit.Before;
 import org.junit.Test;
+
 
 /**
  * Test to verify that we don't try to update stats when a RS is stopping.
@@ -50,9 +53,11 @@ public class StatisticsScannerTest {
     private StatisticsScanner mockScanner;
     private StatisticsCollector tracker;
     private InternalScanner delegate;
-    private HRegionInfo regionInfo;
+    private RegionInfo regionInfo;
 
     private Configuration config;
+    private RegionCoprocessorEnvironment env;
+    private Connection conn;
 
     @Before
     public void setupMocks() throws Exception {
@@ -67,17 +72,20 @@ public class StatisticsScannerTest {
         this.mockScanner = mock(StatisticsScanner.class);
         this.tracker = mock(StatisticsCollector.class);
         this.delegate = mock(InternalScanner.class);
-        this.regionInfo = mock(HRegionInfo.class);
+        this.regionInfo = mock(RegionInfo.class);
+        this.env = mock(RegionCoprocessorEnvironment.class);
+        this.conn = mock(Connection.class);
 
         // Wire up the mocks to the mock StatisticsScanner
         when(mockScanner.getStatisticsWriter()).thenReturn(statsWriter);
-        when(mockScanner.getRegionServerServices()).thenReturn(rsServices);
         when(mockScanner.createCallable()).thenReturn(callable);
         when(mockScanner.getStatsCollectionRunTracker(any(Configuration.class))).thenReturn(runTracker);
         when(mockScanner.getRegion()).thenReturn(region);
         when(mockScanner.getConfig()).thenReturn(config);
         when(mockScanner.getTracker()).thenReturn(tracker);
         when(mockScanner.getDelegate()).thenReturn(delegate);
+        when(env.getConnection()).thenReturn(conn);
+        when(mockScanner.getConnection()).thenReturn(conn);
 
         // Wire up the HRegionInfo mock to the Region mock
         when(region.getRegionInfo()).thenReturn(regionInfo);
@@ -88,25 +96,25 @@ public class StatisticsScannerTest {
 
     @Test
     public void testCheckRegionServerStoppingOnClose() throws Exception {
-        when(rsServices.isStopping()).thenReturn(true);
-        when(rsServices.isStopped()).thenReturn(false);
+        when(conn.isClosed()).thenReturn(true);
+        when(conn.isAborted()).thenReturn(false);
 
         mockScanner.close();
 
-        verify(rsServices).isStopping();
+        verify(conn).isClosed();
         verify(callable, never()).call();
         verify(runTracker, never()).runTask(callable);
     }
 
     @Test
     public void testCheckRegionServerStoppedOnClose() throws Exception {
-        when(rsServices.isStopping()).thenReturn(false);
-        when(rsServices.isStopped()).thenReturn(true);
+        when(conn.isClosed()).thenReturn(false);
+        when(conn.isAborted()).thenReturn(true);
 
         mockScanner.close();
 
-        verify(rsServices).isStopping();
-        verify(rsServices).isStopped();
+        verify(conn).isClosed();
+        verify(conn).isAborted();
         verify(callable, never()).call();
         verify(runTracker, never()).runTask(callable);
     }
@@ -117,13 +125,13 @@ public class StatisticsScannerTest {
         StatisticsScannerCallable realCallable = mockScanner.new StatisticsScannerCallable();
         doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(Region.class), any(StatisticsCollector.class),
                 any(ImmutableBytesPtr.class), any(List.class));
-        when(rsServices.isStopping()).thenReturn(true);
-        when(rsServices.isStopped()).thenReturn(false);
+        when(conn.isClosed()).thenReturn(true);
+        when(conn.isAborted()).thenReturn(false);
 
         // Should not throw an exception
         realCallable.call();
 
-        verify(rsServices).isStopping();
+        verify(conn).isClosed();
     }
 
     @SuppressWarnings("unchecked")
@@ -132,13 +140,13 @@ public class StatisticsScannerTest {
         StatisticsScannerCallable realCallable = mockScanner.new StatisticsScannerCallable();
         doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(Region.class), any(StatisticsCollector.class),
                 any(ImmutableBytesPtr.class), any(List.class));
-        when(rsServices.isStopping()).thenReturn(false);
-        when(rsServices.isStopped()).thenReturn(true);
+        when(conn.isClosed()).thenReturn(false);
+        when(conn.isAborted()).thenReturn(true);
 
         // Should not throw an exception
         realCallable.call();
 
-        verify(rsServices).isStopping();
-        verify(rsServices).isStopped();
+        verify(conn).isClosed();
+        verify(conn).isAborted();
     }
 }

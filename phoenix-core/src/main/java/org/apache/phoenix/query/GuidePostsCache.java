@@ -24,9 +24,9 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableNotFoundException;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -90,7 +90,7 @@ public class GuidePostsCache {
         @Override
         public GuidePostsInfo load(GuidePostsKey statsKey) throws Exception {
             @SuppressWarnings("deprecation")
-            HTableInterface statsHTable = queryServices.getTable(SchemaUtil.getPhysicalName(
+            Table statsHTable = queryServices.getTable(SchemaUtil.getPhysicalName(
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
                             queryServices.getProps()).getName());
             try {
@@ -186,9 +186,9 @@ public class GuidePostsCache {
         }
     }
     
-    public void invalidateAll(HTableDescriptor htableDesc) {
+    public void invalidateAll(TableDescriptor htableDesc) {
         byte[] tableName = htableDesc.getTableName().getName();
-        for (byte[] fam : htableDesc.getFamiliesKeys()) {
+        for (byte[] fam : htableDesc.getColumnFamilyNames()) {
             invalidate(new GuidePostsKey(tableName, fam));
         }
     }

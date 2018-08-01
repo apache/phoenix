@@ -46,7 +46,7 @@ public class ResultUtil {
     public static Result toResult(ImmutableBytesWritable bytes) {
         byte [] buf = bytes.get();
         int offset = bytes.getOffset();
-        int finalOffset = bytes.getSize() + offset;
+        int finalOffset = bytes.getLength() + offset;
         List<Cell> kvs = new ArrayList<Cell>();
         while(offset < finalOffset) {
           int keyLength = Bytes.toInt(buf, offset);
@@ -70,9 +70,8 @@ public class ResultUtil {
         //key.set(getRawBytes(r), getKeyOffset(r), getKeyLength(r));
     }
     
-    @SuppressWarnings("deprecation")
-    public static void getKey(KeyValue value, ImmutableBytesWritable key) {
-        key.set(value.getBuffer(), value.getRowOffset(), value.getRowLength());
+    public static void getKey(Cell value, ImmutableBytesWritable key) {
+        key.set(value.getRowArray(), value.getRowOffset(), value.getRowLength());
     }
     
     /**
@@ -109,7 +108,7 @@ public class ResultUtil {
      * @param r
      */
     static int getKeyOffset(Result r) {
-        KeyValue firstKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(r.rawCells()[0]);
+        KeyValue firstKV = PhoenixKeyValueUtil.maybeCopyCell(r.rawCells()[0]);
         return firstKV.getOffset();
     }
     
@@ -118,9 +117,8 @@ public class ResultUtil {
         return Bytes.toShort(getRawBytes(r), getKeyOffset(r) - Bytes.SIZEOF_SHORT);
     }
     
-    @SuppressWarnings("deprecation")
     static byte[] getRawBytes(Result r) {
-        KeyValue firstKV = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(r.rawCells()[0]);
+        KeyValue firstKV = PhoenixKeyValueUtil.maybeCopyCell(r.rawCells()[0]);
         return firstKV.getBuffer();
     }
 

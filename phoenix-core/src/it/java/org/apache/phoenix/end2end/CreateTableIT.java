@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_REPLICATION_SCOPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -27,16 +26,18 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.BloomType;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -112,10 +113,10 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
         }
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        assertNotNull(admin.getTableDescriptor(Bytes.toBytes(tableName)));
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
@@ -134,8 +135,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
-            assertNotEquals(null, admin.getTableDescriptor(
-                SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName()));
+            assertNotEquals(null, admin.getDescriptor(TableName.valueOf(
+                SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName())));
         } finally {
             admin.close();
         }
@@ -183,9 +184,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
     }
@@ -236,9 +237,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
         assertEquals("B", columnFamilies[0].getNameAsString());
@@ -262,9 +263,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("0", columnFamilies[0].getNameAsString());
         assertEquals(86400, columnFamilies[0].getTimeToLive());
@@ -290,12 +291,12 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("0", columnFamilies[0].getNameAsString());
-        assertEquals(DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
+        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
         assertEquals("B", columnFamilies[1].getNameAsString());
         assertEquals(1, columnFamilies[1].getScope());
     }
@@ -317,9 +318,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("B", columnFamilies[0].getNameAsString());
         assertEquals(0, columnFamilies[0].getScope());
@@ -342,9 +343,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
@@ -364,9 +365,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
@@ -383,9 +384,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        HColumnDescriptor[] columnFamilies =
-                admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
     }
 
@@ -414,7 +415,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail(" Non pk column ENTRY_POINT_NAME has a NOT NULL constraint");
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
@@ -430,7 +431,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail(" Non pk column V has a NOT NULL constraint");
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),
+            assertEquals(SQLExceptionCode.KEY_VALUE_NOT_NULL.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
@@ -719,7 +720,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testSetHTableDescriptorPropertyOnView() throws Exception {
+    public void testSetTableDescriptorPropertyOnView() throws Exception {
         Properties props = new Properties();
         final String dataTableFullName = generateUniqueName();
         String ddl =
@@ -743,4 +744,75 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
         conn2.close();
     }
+
+    @Test
+    public void testSettingGuidePostWidth() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTable = generateUniqueName();
+            int guidePostWidth = 20;
+            String ddl =
+                    "CREATE TABLE " + dataTable + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth;
+            conn.createStatement().execute(ddl);
+            assertEquals(20, checkGuidePostWidth(dataTable));
+            String viewName = "V_" + generateUniqueName();
+            ddl =
+                    "CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+
+            // let the view creation go through
+            ddl = "CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable;
+            conn.createStatement().execute(ddl);
+
+            String globalIndex = "GI_" + generateUniqueName();
+            ddl =
+                    "CREATE INDEX " + globalIndex + " ON " + dataTable
+                            + "(a) INCLUDE (b) GUIDE_POSTS_WIDTH = " + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+            String localIndex = "LI_" + generateUniqueName();
+            ddl =
+                    "CREATE LOCAL INDEX " + localIndex + " ON " + dataTable
+                            + "(b) INCLUDE (a) GUIDE_POSTS_WIDTH = " + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+            String viewIndex = "VI_" + generateUniqueName();
+            ddl =
+                    "CREATE LOCAL INDEX " + viewIndex + " ON " + dataTable
+                            + "(b) INCLUDE (a) GUIDE_POSTS_WIDTH = " + guidePostWidth;
+            try {
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
+                    e.getErrorCode());
+            }
+        }
+    }
+
+    private int checkGuidePostWidth(String tableName) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String query =
+                    "SELECT GUIDE_POSTS_WIDTH FROM SYSTEM.CATALOG WHERE TABLE_NAME = ? AND COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL";
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, tableName);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            return rs.getInt(1);
+        }
+    }
+
 }

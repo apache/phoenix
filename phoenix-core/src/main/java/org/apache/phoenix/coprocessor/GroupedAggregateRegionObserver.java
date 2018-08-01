@@ -36,13 +36,15 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -62,6 +64,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -71,8 +74,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
@@ -86,10 +89,16 @@ import com.google.common.collect.Maps;
  *
  * @since 0.1
  */
-public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
+public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver implements RegionCoprocessor {
     private static final Logger logger = LoggerFactory
             .getLogger(GroupedAggregateRegionObserver.class);
     public static final int MIN_DISTINCT_VALUES = 100;
+    
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
+
 
     /**
      * Replaces the RegionScanner s with a RegionScanner that groups by the key formed by the list
@@ -110,6 +119,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             keyOrdered = true;
         }
         int offset = 0;
+        boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         if (ScanUtil.isLocalIndex(scan)) {
             /*
              * For local indexes, we need to set an offset on row key expressions to skip
@@ -122,53 +132,56 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         }
 
         List<Expression> expressions = deserializeGroupByExpressions(expressionBytes, 0);
-        ServerAggregators aggregators =
-                ServerAggregators.deserialize(scan
-                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
-                        .getEnvironment().getConfiguration());
-
-        RegionScanner innerScanner = s;
-        boolean useProto = false;
-        byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
-        useProto = localIndexBytes != null;
-        if (localIndexBytes == null) {
-            localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
-        }
-        List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
-        TupleProjector tupleProjector = null;
-        byte[][] viewConstants = null;
-        ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
-        if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
-            if (dataColumns != null) {
-                tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+        final TenantCache tenantCache = GlobalCache.getTenantCache(c.getEnvironment(), ScanUtil.getTenantId(scan));
+        try (MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
+            ServerAggregators aggregators =
+                    ServerAggregators.deserialize(scan
+                            .getAttribute(BaseScannerRegionObserver.AGGREGATORS), c
+                            .getEnvironment().getConfiguration(), em);
+    
+            RegionScanner innerScanner = s;
+            boolean useProto = false;
+            byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
+            useProto = localIndexBytes != null;
+            if (localIndexBytes == null) {
+                localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
             }
-            ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
-            innerScanner =
-                    getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
-                            c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
-        } 
-
-        if (j != null) {
-            innerScanner =
-                    new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
-                            c.getEnvironment(), useQualifierAsIndex, useNewValueColumnQualifier);
-        }
-
-        long limit = Long.MAX_VALUE;
-        byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
-        if (limitBytes != null) {
-            limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
-        }
-        if (keyOrdered) { // Optimize by taking advantage that the rows are
-                          // already in the required group by key order
-            return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
-        } else { // Otherwse, collect them all up in an in memory map
-            return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
+            List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
+            TupleProjector tupleProjector = null;
+            byte[][] viewConstants = null;
+            ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+    
+            final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+            final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+            boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
+            if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
+                if (dataColumns != null) {
+                    tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+                    viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+                }
+                ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
+                innerScanner =
+                        getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
+                                c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
+            } 
+    
+            if (j != null) {
+                innerScanner =
+                        new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
+                                c.getEnvironment(), useQualifierAsIndex, useNewValueColumnQualifier);
+            }
+    
+            long limit = Long.MAX_VALUE;
+            byte[] limitBytes = scan.getAttribute(GROUP_BY_LIMIT);
+            if (limitBytes != null) {
+                limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
+            }
+            if (keyOrdered) { // Optimize by taking advantage that the rows are
+                              // already in the required group by key order
+                return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
+            } else { // Otherwse, collect them all up in an in memory map
+                return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
+            }
         }
     }
 
@@ -297,7 +310,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             long estSize = sizeOfUnorderedGroupByMap(aggregateMap.size(), aggregators.getEstimatedByteSize());
             chunk.resize(estSize);
 
-            final List<KeyValue> aggResults = new ArrayList<KeyValue>(aggregateMap.size());
+            final List<Cell> aggResults = new ArrayList<Cell>(aggregateMap.size());
 
             final Iterator<Map.Entry<ImmutableBytesPtr, Aggregator[]>> cacheIter =
                     aggregateMap.entrySet().iterator();
@@ -314,8 +327,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             + " with aggregators " + Arrays.asList(rowAggregators).toString()
                             + " value = " + Bytes.toStringBinary(value), customAnnotations));
                 }
-                KeyValue keyValue =
-                        KeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(),
+                Cell keyValue =
+                        PhoenixKeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(),
                             SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0,
                             value.length);
                 aggResults.add(keyValue);
@@ -395,6 +408,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
         final boolean spillableEnabled =
                 conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
+        final PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
 
         GroupByCache groupByCache =
                 GroupByCacheFactory.INSTANCE.newCache(
@@ -466,6 +480,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         }
         final Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
         final boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
+        final PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
         return new BaseRegionScanner(scanner) {
             private long rowCount = 0;
             private ImmutableBytesPtr currentKey = null;
@@ -522,19 +537,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
 
                 if (currentKey != null) {
                     byte[] value = aggregators.toBytes(rowAggregators);
-                    KeyValue keyValue =
-                            KeyValueUtil.newKeyValue(currentKey.get(), currentKey.getOffset(),
+                    Cell keyValue =
+                            PhoenixKeyValueUtil.newKeyValue(currentKey.get(), currentKey.getOffset(),
                                 currentKey.getLength(), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
                                 AGG_TIMESTAMP, value, 0, value.length);
                     results.add(keyValue);
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(LogUtil.addCustomAnnotations("Adding new aggregate row: "
-                                + keyValue
-                                + ",for current key "
-                                + Bytes.toStringBinary(currentKey.get(), currentKey.getOffset(),
-                                    currentKey.getLength()) + ", aggregated values: "
-                                + Arrays.asList(rowAggregators), ScanUtil.getCustomAnnotations(scan)));
-                    }
                     // If we're at an aggregation boundary, reset the
                     // aggregators and
                     // aggregate with the current result (which is not a part of

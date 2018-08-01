@@ -27,6 +27,7 @@ import java.sql.DriverManager;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -95,19 +96,19 @@ public class MutationStateTest {
             conn.createStatement().execute("upsert into MUTATION_TEST2(id2,appId2) values(222,'app2')");
 
 
-            Iterator<Pair<byte[],List<KeyValue>>> dataTableNameAndMutationKeyValuesIter =
+            Iterator<Pair<byte[],List<Cell>>> dataTableNameAndMutationKeyValuesIter =
                     PhoenixRuntime.getUncommittedDataIterator(conn);
 
 
             assertTrue(dataTableNameAndMutationKeyValuesIter.hasNext());
-            Pair<byte[],List<KeyValue>> pair=dataTableNameAndMutationKeyValuesIter.next();
+            Pair<byte[],List<Cell>> pair=dataTableNameAndMutationKeyValuesIter.next();
             String tableName1=Bytes.toString(pair.getFirst());
-            List<KeyValue> keyValues1=pair.getSecond();
+            List<Cell> keyValues1=pair.getSecond();
 
             assertTrue(dataTableNameAndMutationKeyValuesIter.hasNext());
             pair=dataTableNameAndMutationKeyValuesIter.next();
             String tableName2=Bytes.toString(pair.getFirst());
-            List<KeyValue> keyValues2=pair.getSecond();
+            List<Cell> keyValues2=pair.getSecond();
 
             if("MUTATION_TEST1".equals(tableName1)) {
                 assertTable(tableName1, keyValues1, tableName2, keyValues2);
@@ -124,7 +125,7 @@ public class MutationStateTest {
         }
     }
 
-    private void assertTable(String tableName1,List<KeyValue> keyValues1,String tableName2,List<KeyValue> keyValues2) {
+    private void assertTable(String tableName1,List<Cell> keyValues1,String tableName2,List<Cell> keyValues2) {
         assertTrue("MUTATION_TEST1".equals(tableName1));
         assertTrue(Bytes.equals(PUnsignedInt.INSTANCE.toBytes(111),CellUtil.cloneRow(keyValues1.get(0))));
         assertTrue("app1".equals(PVarchar.INSTANCE.toObject(CellUtil.cloneValue(keyValues1.get(1)))));

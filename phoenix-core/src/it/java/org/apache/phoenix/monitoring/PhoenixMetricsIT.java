@@ -10,6 +10,10 @@
 package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_SCANNED_REGIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
@@ -60,11 +64,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixMetricsLog;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -136,6 +141,11 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue(GLOBAL_QUERY_TIME.getMetric().getTotalSum() > 0);
         assertTrue(GLOBAL_TASK_END_TO_END_TIME.getMetric().getTotalSum() > 0);
         assertTrue(GLOBAL_TASK_EXECUTION_TIME.getMetric().getTotalSum() > 0);
+
+        assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getTotalSum() > 0);
     }
 
     @Test
@@ -181,6 +191,11 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getTotalSum());
         assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getTotalSum());
         assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getTotalSum());
+
+        assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getTotalSum() > 0);
     }
 
     private static void resetGlobalMetrics() {
@@ -354,6 +369,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         insertRowsInTable(tableName, numRows);
         Properties props = new Properties();
         props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "false");
+        props.setProperty(QueryServices.LOG_LEVEL, LogLevel.OFF.name());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         while (rs.next()) {}
@@ -683,7 +699,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private void changeInternalStateForTesting(PhoenixResultSet rs) {
         // get and set the internal state for testing purposes.
-        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(true);
+        ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.OFF,true);
         StatementContext ctx = (StatementContext)Whitebox.getInternalState(rs, "context");
         Whitebox.setInternalState(ctx, "readMetricsQueue", testMetricsQueue);
         Whitebox.setInternalState(rs, "readMetricsQueue", testMetricsQueue);
@@ -749,8 +765,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private class TestReadMetricsQueue extends ReadMetricQueue {
 
-        public TestReadMetricsQueue(boolean isRequestMetricsEnabled) {
-            super(isRequestMetricsEnabled);
+        public TestReadMetricsQueue(LogLevel connectionLogLevel, boolean isRequestMetricsEnabled) {
+            super(isRequestMetricsEnabled, connectionLogLevel);
         }
 
         @Override
@@ -1075,5 +1091,4 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             mutationReadMetricsMap.get(tableName1).size() > 0);
         protectedConn.close();
     }
-
 }

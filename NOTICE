@@ -19,3 +19,5 @@ The file bin/daemon.py is based on the file of the same name in python-daemon 2.
 # Copyright © 2003 Clark Evans
 # Copyright © 2002 Noah Spurrier
 # Copyright © 2001 Jürgen Hermann
+
+The file bin/argparse-1.4.0/argparse.py is (c) 2006-2009 Steven J. Bethard <steven.bethard@gmail.com>.

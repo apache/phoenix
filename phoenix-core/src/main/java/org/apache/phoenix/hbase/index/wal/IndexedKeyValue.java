@@ -29,7 +29,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
@@ -66,14 +66,6 @@ public class IndexedKeyValue extends KeyValue {
         return mutation;
     }
 
-    /*
-     * Returns a faked column family for an IndexedKeyValue instance
-     */
-    @Override
-    public byte [] getFamily() {
-      return WALEdit.METAFAMILY;
-    }
-    
     @Override
     public byte[] getFamilyArray() {
         return WALEdit.METAFAMILY;

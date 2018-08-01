@@ -668,7 +668,11 @@ public class ProjectionCompiler {
                              PTable table = context.getCurrentTable().getTable();
                              KeyValueColumnExpression keyValueColumnExpression;
                              if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
-                                 keyValueColumnExpression = new SingleCellColumnExpression(col, col.getName().getString(), table.getEncodingScheme());
+                                keyValueColumnExpression =
+                                        new SingleCellColumnExpression(col,
+                                                col.getName().getString(),
+                                                table.getEncodingScheme(),
+                                                table.getImmutableStorageScheme());
                              } else {
                                  keyValueColumnExpression = new KeyValueColumnExpression(col);
                              }

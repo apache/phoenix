@@ -25,17 +25,20 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -46,6 +49,8 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.transaction.PhoenixTransactionClient;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
@@ -66,34 +71,49 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * @return the HTableInterface
      * @throws SQLException 
      */
-    public HTableInterface getTable(byte[] tableName) throws SQLException;
+    public Table getTable(byte[] tableName) throws SQLException;
 
-    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
+    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
 
-    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimetamp) throws SQLException;
+    /**
+     * @param tableTimestamp timestamp of table if its present in the client side cache
+     * @param clientTimetamp if the client connection has an scn, or of the table is transactional
+     *            the txn write pointer
+     * @param skipAddingIndexes if true will the returned PTable will not include any indexes
+     * @param skipAddingParentColumns if true will the returned PTable will not include any columns
+     *            derived from ancestors
+     * @param lockedAncestorTable ancestor table table that is being mutated (as we won't be able to
+     *            resolve this table as its locked)
+     * @return PTable for the given tenant id, schema and table name
+     */
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName,
+            long tableTimestamp, long clientTimetamp, boolean skipAddingIndexes,
+            boolean skipAddingParentColumns, PTable lockedAncestorTable) throws SQLException;
     public MetaDataMutationResult getFunctions(PName tenantId, List<Pair<byte[], Long>> functionNameAndTimeStampPairs, long clientTimestamp) throws SQLException;
 
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] tableName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException;
-    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade) throws SQLException;
+            boolean isNamespaceMapped, boolean allocateIndexId, boolean isDoNotUpgradePropSet) throws SQLException;
+    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException;
     public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists) throws SQLException;
     public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException;
     public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata, PTableType tableType) throws SQLException;
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException;
+    public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName,  Map<String, List<Pair<String,Object>>> stmtProperties,  PTable table) throws SQLException;
+
     public MutationState updateData(MutationPlan plan) throws SQLException;
 
     public void init(String url, Properties props) throws SQLException;
 
     public int getLowestClusterHBaseVersion();
-    public HBaseAdmin getAdmin() throws SQLException;
+    public Admin getAdmin() throws SQLException;
 
-    void clearTableRegionCache(byte[] tableName) throws SQLException;
+    void clearTableRegionCache(TableName name) throws SQLException;
 
     boolean hasIndexWALCodec();
     
@@ -144,4 +164,10 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     void upgradeSystemTables(String url, Properties props) throws SQLException;
     
     public Configuration getConfiguration();
+
+    public User getUser();
+
+    public QueryLoggerDisruptor getQueryDisruptor();
+    
+    public PhoenixTransactionClient initTransactionClient(TransactionFactory.Provider provider);
 }

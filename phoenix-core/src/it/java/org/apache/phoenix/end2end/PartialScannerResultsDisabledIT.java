@@ -151,7 +151,7 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
         return RandomStringUtils.randomAlphabetic(length);
     }
     
-    private void writeSingleBatch(Connection connection, int batchSize, int numBatches, String tableName) throws Exception {
+    public static void writeSingleBatch(Connection connection, int batchSize, int numBatches, String tableName) throws Exception {
         for (int j = 0; j < numBatches; j++) {
             try (PreparedStatement statement =
                     connection.prepareStatement(String.format(UPSERT_INTO_DATA_TABLE, tableName))) {

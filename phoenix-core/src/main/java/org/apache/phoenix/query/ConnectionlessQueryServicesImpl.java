@@ -31,15 +31,17 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionInfoBuilder;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -55,6 +57,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.FunctionNotFoundException;
@@ -80,11 +83,15 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.transaction.PhoenixTransactionClient;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
@@ -102,6 +109,7 @@ import com.google.common.collect.Maps;
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
     
+    private final ReadOnlyProps props;
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
     private final String userName;
@@ -111,10 +119,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     private final GuidePostsCache guidePostsCache;
     private final Configuration config;
+
+    private User user;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
         userName = connInfo.getPrincipal();
+        user = connInfo.getUser();
         metaData = newEmptyMetaData();
 
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
@@ -135,12 +146,46 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
-        TransactionFactory.getTransactionFactory().getTransactionContext().setInMemoryTransactionClient(config);
         this.guidePostsCache = new GuidePostsCache(this, config);
+        // set replication required parameter
+        ConfigUtil.setReplicationConfigIfAbsent(this.config);
+        this.props = new ReadOnlyProps(this.config.iterator());
     }
 
     private PMetaData newEmptyMetaData() {
         return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps());
+    }
+
+    protected String getSystemCatalogTableDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TABLE_METADATA);
+    }
+
+    protected String getSystemSequenceTableDDL(int nSaltBuckets) {
+        String schema = String.format(setSystemDDLProperties(QueryConstants.CREATE_SEQUENCE_METADATA));
+        return Sequence.getCreateTableStatement(schema, nSaltBuckets);
+    }
+
+    protected String getFunctionTableDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_FUNCTION_METADATA);
+    }
+
+    protected String getLogTableDDL() {
+        return setSystemLogDDLProperties(QueryConstants.CREATE_LOG_METADATA);
+    }
+    
+    private String setSystemLogDDLProperties(String ddl) {
+        return String.format(ddl, props.getInt(LOG_SALT_BUCKETS_ATTRIB, QueryServicesOptions.DEFAULT_LOG_SALT_BUCKETS));
+
+    }
+    
+    protected String getChildLinkDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CHILD_LINK_METADATA);
+    }
+
+    private String setSystemDDLProperties(String ddl) {
+        return String.format(ddl,
+          props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
+          props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
     }
 
     @Override
@@ -149,7 +194,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public HTableInterface getTable(byte[] tableName) throws SQLException {
+    public Table getTable(byte[] tableName) throws SQLException {
         throw new UnsupportedOperationException();
     }
 
@@ -159,9 +204,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         if (regions != null) {
             return regions;
         }
-        return Collections.singletonList(new HRegionLocation(
-            new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
-            SERVER_NAME, -1));
+        RegionInfo hri =
+                RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
+                        .setStartKey(HConstants.EMPTY_START_ROW)
+                        .setStartKey(HConstants.EMPTY_END_ROW).build();
+        return Collections.singletonList(new HRegionLocation(hri, SERVER_NAME, -1));
     }
 
     @Override
@@ -193,7 +240,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp, boolean skipAddingIndexes, boolean skipCombiningColumns, PTable ancestorTable) throws SQLException {
         // Return result that will cause client to use it's own metadata instead of needing
         // to get anything from the server (since we don't have a connection)
         try {
@@ -222,22 +269,27 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         byte[] startKey = HConstants.EMPTY_START_ROW;
         List<HRegionLocation> regions = Lists.newArrayListWithExpectedSize(splits.length);
         for (byte[] split : splits) {
-            regions.add(new HRegionLocation(
-                    new HRegionInfo(TableName.valueOf(physicalName), startKey, split),
-                    SERVER_NAME, -1));
+            regions.add(new HRegionLocation(RegionInfoBuilder
+                    .newBuilder(TableName.valueOf(physicalName)).setStartKey(startKey)
+                    .setEndKey(split).build(), SERVER_NAME, -1));
             startKey = split;
         }
-        regions.add(new HRegionLocation(
-                new HRegionInfo(TableName.valueOf(physicalName), startKey, HConstants.EMPTY_END_ROW),
-                SERVER_NAME, -1));
+        regions.add(new HRegionLocation(RegionInfoBuilder
+                .newBuilder(TableName.valueOf(physicalName)).setStartKey(startKey)
+                .setEndKey(HConstants.EMPTY_END_ROW).build(), SERVER_NAME, -1));
         return regions;
     }
     
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException {
-        if (splits != null) {
+            boolean isNamespaceMapped, boolean allocateIndexId, boolean isDoNotUpgradePropSet) throws SQLException {
+        if (tableType == PTableType.INDEX && IndexUtil.isLocalIndexFamily(Bytes.toString(families.iterator().next().getFirst()))) {
+            Object dataTableName = tableProps.get(PhoenixDatabaseMetaData.DATA_TABLE_NAME);
+            List<HRegionLocation> regionLocations = tableSplits.get(dataTableName);
+            byte[] tableName = getTableName(tableMetaData, physicalName);
+            tableSplits.put(Bytes.toString(tableName), regionLocations);
+        } else if (splits != null) {
             byte[] tableName = getTableName(tableMetaData, physicalName);
             tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
         }
@@ -249,7 +301,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade) throws SQLException {
+    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
         byte[] tableName = getTableName(tableMetadata, null);
         tableSplits.remove(Bytes.toString(tableName));
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
@@ -296,14 +348,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
                 metaConnection.setRunningUpgrade(true);
                 try {
-                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
+                    metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
                 } catch (TableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.TABLE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                 }
                 try {
                     int nSaltBuckets = getSequenceSaltBuckets();
-                    String createTableStatement = Sequence.getCreateTableStatement(nSaltBuckets);
+                    String createTableStatement = getSystemSequenceTableDDL(nSaltBuckets);
                    metaConnection.createStatement().executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
@@ -319,7 +371,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 }
                 
                 try {
-                   metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_FUNCTION_METADATA);
+                    metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {
+                }
+                try {
+                    metaConnection.createStatement().executeUpdate(getLogTableDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {}
+                try {
+                    metaConnection.createStatement()
+                            .executeUpdate(getChildLinkDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {
@@ -358,7 +418,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public HBaseAdmin getAdmin() throws SQLException {
+    public Admin getAdmin() throws SQLException {
         throw new UnsupportedOperationException();
     }
 
@@ -383,12 +443,19 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
+    public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata,
+            String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties,
+            PTable table) throws SQLException {
+        return updateIndexState(tableMetadata,parentTableName);
+    }
+
+    @Override
     public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
         return null;
     }
 
     @Override
-    public void clearTableRegionCache(byte[] tableName) throws SQLException {
+    public void clearTableRegionCache(TableName tableName) throws SQLException {
     }
 
     @Override
@@ -582,16 +649,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
        List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
        if (regions != null) {
-               for(HRegionLocation region: regions) {
-                       if (Bytes.compareTo(region.getRegionInfo().getStartKey(), row) <= 0
-                                       && Bytes.compareTo(region.getRegionInfo().getEndKey(), row) > 0) {
-                           return region;
-                       }
-               }
+            for (HRegionLocation region : regions) {
+                if (Bytes.compareTo(region.getRegion().getStartKey(), row) <= 0
+                        && Bytes.compareTo(region.getRegion().getEndKey(), row) > 0) {
+                    return region;
+                }
+            }
        }
-       return new HRegionLocation(
-                       new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
-                       SERVER_NAME, -1);
+        return new HRegionLocation(RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
+                .setStartKey(HConstants.EMPTY_START_ROW).setEndKey(HConstants.EMPTY_END_ROW)
+                .build(), SERVER_NAME, -1);
     }
 
     @Override
@@ -650,5 +717,20 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public Configuration getConfiguration() {
         return config;
+    }
+
+    @Override
+    public User getUser() {
+        return user;
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return null;
+    }
+    
+    @Override
+    public PhoenixTransactionClient initTransactionClient(Provider provider) {
+        return null; // Client is not necessary
     }
 }

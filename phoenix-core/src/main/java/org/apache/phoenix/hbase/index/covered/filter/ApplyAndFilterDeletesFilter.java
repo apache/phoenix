@@ -27,10 +27,10 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Only allow the 'latest' timestamp of each family:qualifier pair, ensuring that they aren't
@@ -53,7 +53,6 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  */
 public class ApplyAndFilterDeletesFilter extends FilterBase {
 
-  private boolean done = false;
   List<ImmutableBytesPtr> families;
   private final DeleteTracker coveringDelete = new DeleteTracker();
   private Hinter currentHint;
@@ -95,23 +94,17 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   @Override
   public void reset(){
     this.coveringDelete.reset();
-    this.done = false;
   }
   
   
   @Override
   public Cell getNextCellHint(Cell peeked){
-    return currentHint.getHint(KeyValueUtil.ensureKeyValue(peeked));
+    return currentHint.getHint(PhoenixKeyValueUtil.maybeCopyCell(peeked));
   }
 
   @Override
   public ReturnCode filterKeyValue(Cell next) {
-    // we marked ourselves done, but the END_ROW_KEY didn't manage to seek to the very last key
-    if (this.done) {
-      return ReturnCode.SKIP;
-    }
-
-    KeyValue nextKV = KeyValueUtil.ensureKeyValue(next);
+    KeyValue nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
     switch (KeyValue.Type.codeToType(next.getTypeByte())) {
     /*
      * DeleteFamily will always sort first because those KVs (we assume) don't have qualifiers (or
@@ -170,7 +163,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
    * Get the next hint for a given peeked keyvalue
    */
   interface Hinter {
-    public abstract KeyValue getHint(KeyValue peek);
+    public abstract Cell getHint(Cell peek);
   }
 
   /**
@@ -181,19 +174,18 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   class DeleteFamilyHinter implements Hinter {
 
     @Override
-    public KeyValue getHint(KeyValue peeked) {
+    public Cell getHint(Cell peeked) {
       // check to see if we have another column to seek
       ImmutableBytesPtr nextFamily =
-          getNextFamily(new ImmutableBytesPtr(peeked.getBuffer(), peeked.getFamilyOffset(),
+          getNextFamily(new ImmutableBytesPtr(peeked.getFamilyArray(), peeked.getFamilyOffset(),
               peeked.getFamilyLength()));
       if (nextFamily == null) {
-        // no known next family, so we can be completely done
-        done = true;
         return KeyValue.LOWESTKEY;
       }
         // there is a valid family, so we should seek to that
-      return KeyValue.createFirstOnRow(peeked.getRow(), nextFamily.copyBytesIfNecessary(),
-        HConstants.EMPTY_BYTE_ARRAY);
+      return org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(peeked.getRowArray(),
+          peeked.getRowOffset(), peeked.getRowLength(), nextFamily.get(),
+          nextFamily.getOffset(), nextFamily.getLength(), HConstants.EMPTY_BYTE_ARRAY, 0, 0);
     }
 
   }
@@ -205,8 +197,8 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   class DeleteColumnHinter implements Hinter {
 
     @Override
-    public KeyValue getHint(KeyValue kv) {
-      return KeyValueUtil.createLastOnRow(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+    public Cell getHint(Cell kv) {
+      return org.apache.hadoop.hbase.KeyValueUtil.createLastOnRow(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
         kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(),
         kv.getQualifierOffset(), kv.getQualifierLength());
     }

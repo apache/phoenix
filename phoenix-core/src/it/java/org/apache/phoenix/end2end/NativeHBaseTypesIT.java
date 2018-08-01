@@ -32,16 +32,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -66,25 +68,23 @@ import org.junit.Test;
 
 public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     
-    @SuppressWarnings("deprecation")
     private String initTableValues() throws Exception {
         final String tableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         final byte[] tableBytes = tableName.getBytes();
         final byte[] familyName = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
         final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
-            HTableDescriptor descriptor = new HTableDescriptor(tableBytes);
-            HColumnDescriptor columnDescriptor =  new HColumnDescriptor(familyName);
-            columnDescriptor.setKeepDeletedCells(true);
-            descriptor.addFamily(columnDescriptor);
-            admin.createTable(descriptor, splits);
+            admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(tableBytes))
+                    .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
+                            .setKeepDeletedCells(KeepDeletedCells.TRUE).build())
+                    .build(), splits);
         } finally {
             admin.close();
         }
         
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        HTableInterface hTable = services.getTable(tableBytes);
+        Table hTable = services.getTable(tableBytes);
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             List<Row> mutations = new ArrayList<Row>();
@@ -96,8 +96,8 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
             
             bKey = key = ByteUtil.concat(Bytes.toBytes(20), Bytes.toBytes(200L), Bytes.toBytes("b"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50000L));
             mutations.add(put);
             // FIXME: the version of the Delete constructor without the lock args was introduced
             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
@@ -106,33 +106,33 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
             Delete del = new Delete(key, ts);
             mutations.add(del);
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(2000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(20000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(2000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(20000L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(10), Bytes.toBytes(100L), Bytes.toBytes("a"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50L));
             mutations.add(put);
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(30), Bytes.toBytes(300L), Bytes.toBytes("c"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(3000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(30000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(3000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(30000L));
             mutations.add(put);
             
             key = ByteUtil.concat(Bytes.toBytes(40), Bytes.toBytes(400L), Bytes.toBytes("d"));
             put = new Put(key);
-            put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(4000));
-            put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
+            put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(4000));
+            put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
             mutations.add(put);
             
-            hTable.batch(mutations);
+            hTable.batch(mutations, null);
             
             Result r = hTable.get(new Get(bKey));
             assertFalse(r.isEmpty());
@@ -148,7 +148,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
                 "    \"1\".uint_col unsigned_int," +
                 "    \"1\".ulong_col unsigned_long" +
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
-                     HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'";
+                ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'";
         
         try (Connection conn = DriverManager.getConnection(url)) {
             conn.createStatement().execute(ddl);
@@ -161,7 +161,6 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testRangeQuery1() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and ulong_key >= 400";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -180,7 +179,6 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     public void testRangeQuery2() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT uint_key, ulong_key, string_key FROM " + tableName + " WHERE uint_key > 20 and uint_key < 40";
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -267,13 +265,12 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         }
     }
     
-    @SuppressWarnings("deprecation")
     @Test
     public void testNegativeCompareNegativeValue() throws Exception {
         String tableName = initTableValues();
         String query = "SELECT string_key FROM " + tableName + " WHERE uint_key > 100000";
         PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
-        HTableInterface hTable = conn.getQueryServices().getTable(tableName.getBytes());
+        Table hTable = conn.getQueryServices().getTable(tableName.getBytes());
         
         List<Row> mutations = new ArrayList<Row>();
         byte[] family = Bytes.toBytes("1");
@@ -286,11 +283,11 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         // negative number for an unsigned type
         key = ByteUtil.concat(Bytes.toBytes(-10), Bytes.toBytes(100L), Bytes.toBytes("e"));
         put = new Put(key);
-        put.add(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
-        put.add(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
-        put.add(family, QueryConstants.EMPTY_COLUMN_BYTES, HConstants.LATEST_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY);
+        put.addColumn(family, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(10));
+        put.addColumn(family, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(100L));
+        put.addColumn(family, QueryConstants.EMPTY_COLUMN_BYTES, HConstants.LATEST_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
-        hTable.batch(mutations);
+        hTable.batch(mutations, null);
     
         // Demonstrates weakness of HBase Bytes serialization. Negative numbers
         // show up as bigger than positive numbers

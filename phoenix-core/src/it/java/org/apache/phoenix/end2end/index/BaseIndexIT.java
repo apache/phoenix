@@ -37,20 +37,25 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -68,6 +73,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -119,6 +125,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
@@ -135,12 +142,12 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
                 assertEquals(
-                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
+                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\n" +
                                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                                 "CLIENT MERGE SORT",
                                 QueryUtil.getExplainPlan(rs));
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n"
+                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
 
@@ -163,7 +170,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
 
-            query = "SELECT char_col1, int_col1 from "+indexName;
+            query = "SELECT char_col1, int_col1 from "+fullIndexName;
             try{
                 rs = conn.createStatement().executeQuery(query);
                 fail();
@@ -202,6 +209,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
             assertEquals(1,conn.createStatement().executeUpdate(dml));
+            assertNoClientSideIndexMutations(conn);
             conn.commit();
 
             String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
@@ -229,6 +237,21 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
+        }
+    }
+
+    private void assertNoClientSideIndexMutations(Connection conn) throws SQLException {
+        Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+        if (iterator.hasNext()) {
+            byte[] tableName = iterator.next().getFirst(); // skip data table mutations
+            PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
+            boolean clientSideUpdate = !localIndex && (!mutable || transactional);
+            if (!clientSideUpdate) {
+                assertTrue(table.getType() == PTableType.TABLE); // should be data table
+            }
+            boolean hasIndexData = iterator.hasNext();
+            // global immutable and global transactional tables are processed client side
+            assertEquals(clientSideUpdate, hasIndexData); 
         }
     }
 
@@ -367,6 +390,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
             assertEquals(1,conn.createStatement().executeUpdate(dml));
+            assertNoClientSideIndexMutations(conn);
             conn.commit();
 
             // query the data table
@@ -478,7 +502,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
 
-            query = "SELECT * FROM " + tableName;
+            query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
@@ -750,10 +774,25 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + "(k, v1) VALUES(?,?)");
-            stmt.setString(1, "a");
-            stmt.setString(2, "y");
+            if (mutable) {
+	            stmt.setString(1, "a");
+	            stmt.setString(2, "y");
+	            stmt.execute();
+	            conn.commit();
+            }
+            stmt.setString(1, "b");
+            stmt.setString(2, "x");
             stmt.execute();
             conn.commit();
+	            
+            // the index table is one row
+            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(fullTableName.getBytes());
+            ResultScanner resultScanner = table.getScanner(new Scan());
+            for (Result result : resultScanner) {
+            	System.out.println(result);
+            }
+            resultScanner.close();
+            table.close();
 
             query = "SELECT * FROM " + fullTableName;
 
@@ -761,10 +800,15 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
-            assertEquals("y", rs.getString(2));
+            assertEquals(mutable ? "y" : "x", rs.getString(2));
+            assertEquals("1", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals("x", rs.getString(2));
+            assertNull(rs.getString(3));
             assertFalse(rs.next());
+            }
         }
-    }
 
     @Test
     public void testMultipleUpdatesAcrossRegions() throws Exception {
@@ -954,7 +998,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
             PTable index = pconn.getTable(new PTableKey(null, fullIndexName));
             byte[] physicalIndexTable = index.getPhysicalName().getBytes();
-            try (HTableInterface hIndex = pconn.getQueryServices().getTable(physicalIndexTable)) {
+            try (Table hIndex = pconn.getQueryServices().getTable(physicalIndexTable)) {
                 Scan scan = new Scan();
                 scan.setRaw(true);
                 if (this.transactional) {
@@ -967,7 +1011,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     CellScanner cellScanner = result.cellScanner();
                     while (cellScanner.advance()) {
                         Cell current = cellScanner.current();
-                        assertEquals (KeyValue.Type.Put.getCode(), current.getTypeByte());
+                        assertTrue(CellUtil.isPut(current));
                     }
                 }
             };
@@ -1047,8 +1091,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         // Check system tables priorities.
-        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
+        try (Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
                 Connection c = DriverManager.getConnection(getUrl())) {
             ResultSet rs = c.getMetaData().getTables("", 
                     "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
@@ -1059,7 +1104,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
                 String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
                 org.apache.hadoop.hbase.TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tName), p);
-                HTableDescriptor htd = admin.getTableDescriptor(hbaseTableName);
+                TableDescriptor htd = admin.getDescriptor(hbaseTableName);
                 String val = htd.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + htd, val);
                 assertTrue(Integer.parseInt(val)
@@ -1078,14 +1123,14 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 stmt.execute(ddl);
             }
 
-            HTableDescriptor dataTable = admin.getTableDescriptor(
+            TableDescriptor dataTable = admin.getDescriptor(
                     org.apache.hadoop.hbase.TableName.valueOf(fullTableName));
             String val = dataTable.getValue("PRIORITY");
             assertTrue(val == null || Integer.parseInt(val) < HConstants.HIGH_QOS);
 
             if (!localIndex && mutable) {
-                HTableDescriptor indexTable = admin.getTableDescriptor(
-                        org.apache.hadoop.hbase.TableName.valueOf(indexName));
+                TableDescriptor indexTable = admin.getDescriptor(
+                        org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
                 val = indexTable.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + indexTable, val);
                 assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
@@ -1118,7 +1163,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 ddl += "(p1 desc, p2))";
             }
             stmt.executeUpdate(ddl);
-            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + fullIndexName + " on " + fullTableName + "(a)";
+            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " on " + fullTableName + "(a)";
             stmt.executeUpdate(ddl);
 
             // upsert a single row

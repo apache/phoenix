@@ -33,10 +33,10 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -46,7 +46,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -66,7 +65,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 		if (transactional) {
 			optionBuilder.append(" TRANSACTIONAL=true ");
 		}
-		this.schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
+		this.schemaName = "S_" + generateUniqueName();
 		this.tableDDLOptions = optionBuilder.toString();
 		this.tableName = "T_" + generateUniqueName();
         this.fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -85,7 +84,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         // Confirm that dropping the view also deletes the rows in the index
         if (saltBuckets == null) {
             try (Connection conn = DriverManager.getConnection(getUrl())) {
-                HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
+                Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
                 if(ScanUtil.isLocalIndex(scan)) {
                     ScanUtil.setLocalIndexAttributes(scan, 0, HConstants.EMPTY_BYTE_ARRAY, HConstants.EMPTY_BYTE_ARRAY, scan.getStartRow(), scan.getStopRow());
                 }
@@ -166,7 +165,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
         String viewIndexName1 = "I_" + generateUniqueName();
-        String viewIndexPhysicalName = MetaDataUtil.getViewIndexName(schemaName, tableName);
+        String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(fullTableName);
         if (localIndex) {
             conn.createStatement().execute("CREATE LOCAL INDEX " + viewIndexName1 + " on " + viewName + "(k3)");
         } else {
@@ -231,7 +230,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         String physicalTableName;
         if (localIndex) {
-            physicalTableName = tableName;
+            physicalTableName = fullTableName;
             assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER " + fullTableName +" [" + (2) + ",'foo']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));

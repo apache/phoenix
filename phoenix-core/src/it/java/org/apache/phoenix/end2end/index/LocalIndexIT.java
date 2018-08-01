@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertArrayEquals;
@@ -32,7 +33,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
@@ -40,23 +40,27 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PNameFactory;
@@ -67,8 +71,9 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Ignore;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 public class LocalIndexIT extends BaseLocalIndexIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
@@ -170,15 +175,16 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTableDescriptor htd = admin
-                .getTableDescriptor(Bytes.toBytes(indexPhysicalTableName));
-        assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
-        try (HTable userTable = new HTable(admin.getConfiguration(),
-                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
-            try (HTable indexTable = new HTable(admin.getConfiguration(), Bytes.toBytes(indexPhysicalTableName))) {
-                assertArrayEquals("Both user table and index table should have same split keys.",
-                        userTable.getStartKeys(), indexTable.getStartKeys());
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        TableDescriptor htd = admin
+                .getDescriptor(TableName.valueOf(indexPhysicalTableName));
+        assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(TableDescriptorBuilder.SPLIT_POLICY));
+        try(org.apache.hadoop.hbase.client.Connection c = ConnectionFactory.createConnection(admin.getConfiguration())) {
+            try (RegionLocator userTable= c.getRegionLocator(SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
+                try (RegionLocator indxTable = c.getRegionLocator(TableName.valueOf(indexPhysicalTableName))) {
+                    assertArrayEquals("Both user table and index table should have same split keys.",
+                        userTable.getStartKeys(), indxTable.getStartKeys());
+                }
             }
         }
     }
@@ -220,9 +226,12 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration(), indexPhysicalTableName);
-        Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Table indexTable =
+                admin.getConnection().getTable(TableName.valueOf(indexPhysicalTableName));
+        Pair<byte[][], byte[][]> startEndKeys =
+                admin.getConnection().getRegionLocator(TableName.valueOf(indexPhysicalTableName))
+                        .getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
         for (int i = 0; i < startKeys.length; i++) {
@@ -262,7 +271,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
             assertTrue(rs.next());
             
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getTableRegions(physicalTableName).size();
             
             String query = "SELECT t_id, k1, k2, k3, V1 FROM " + tableName +" where v1='a'";
@@ -420,9 +429,12 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             conn1.commit();
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(tableName));
-            Pair<byte[][], byte[][]> startEndKeys = table.getStartEndKeys();
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Table table =
+                    admin.getConnection().getTable(TableName.valueOf(tableName));
+            Pair<byte[][], byte[][]> startEndKeys =
+                    admin.getConnection().getRegionLocator(TableName.valueOf(tableName))
+                            .getStartEndKeys();
             byte[][] startKeys = startEndKeys.getFirst();
             byte[][] endKeys = startEndKeys.getSecond();
             // No entry should be present in local index table after drop index.
@@ -430,8 +442,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                 Scan s = new Scan();
                 s.setStartRow(startKeys[i]);
                 s.setStopRow(endKeys[i]);
-                Collection<HColumnDescriptor> families = table.getTableDescriptor().getFamilies();
-                for(HColumnDescriptor cf: families) {
+                ColumnFamilyDescriptor[] families = table.getDescriptor().getColumnFamilies();
+                for(ColumnFamilyDescriptor cf: families) {
                     if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)){
                         s.addFamily(cf.getName());
                     }
@@ -577,8 +589,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testLocalIndexAutomaticRepair() throws Exception {
         if (isNamespaceMapped) { return; }
         PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
-        try (HTableInterface metaTable = conn.getQueryServices().getTable(TableName.META_TABLE_NAME.getName());
-                HBaseAdmin admin = conn.getQueryServices().getAdmin();) {
+        try (Table metaTable = conn.getQueryServices().getTable(TableName.META_TABLE_NAME.getName());
+                Admin admin = conn.getQueryServices().getAdmin();) {
             Statement statement = conn.createStatement();
             final String tableName = "T_AUTO_MATIC_REPAIR";
             String indexName = "IDX_T_AUTO_MATIC_REPAIR";
@@ -594,11 +606,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName);
             assertTrue(rs.next());
             assertEquals(2000, rs.getLong(1));
-            List<HRegionInfo> tableRegions = admin.getTableRegions(TableName.valueOf(tableName));
-            admin.disableTable(tableName);
+            List<RegionInfo> tableRegions = admin.getRegions(TableName.valueOf(tableName));
+            admin.disableTable(TableName.valueOf(tableName));
             copyLocalIndexHFiles(config, tableRegions.get(0), tableRegions.get(1), false);
             copyLocalIndexHFiles(config, tableRegions.get(3), tableRegions.get(0), false);
-            admin.enableTable(tableName);
+            admin.enableTable(TableName.valueOf(tableName));
 
             int count=getCount(conn, tableName, "L#0");
             assertTrue(count > 4000);
@@ -658,14 +670,14 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn1.close();
     }
 
-    private void copyLocalIndexHFiles(Configuration conf, HRegionInfo fromRegion, HRegionInfo toRegion, boolean move)
+    private void copyLocalIndexHFiles(Configuration conf, RegionInfo fromRegion, RegionInfo toRegion, boolean move)
             throws IOException {
         Path root = FSUtils.getRootDir(conf);
 
-        Path seondRegion = new Path(HTableDescriptor.getTableDir(root, fromRegion.getTableName()) + Path.SEPARATOR
+        Path seondRegion = new Path(FSUtils.getTableDir(root, fromRegion.getTable()) + Path.SEPARATOR
                 + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
         Path hfilePath = FSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next().getPath();
-        Path firstRegionPath = new Path(HTableDescriptor.getTableDir(root, toRegion.getTableName()) + Path.SEPARATOR
+        Path firstRegionPath = new Path(FSUtils.getTableDir(root, toRegion.getTable()) + Path.SEPARATOR
                 + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
         FileSystem currentFileSystem = FSUtils.getCurrentFileSystem(conf);
         assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath, move, conf));
@@ -714,4 +726,44 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         }
     }
 
+    @Test // See https://issues.apache.org/jira/browse/PHOENIX-4289
+    public void testEstimatesWithLocalIndexes() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int guidePostWidth = 20;
+            conn.createStatement()
+                    .execute("CREATE TABLE " + tableName
+                            + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (107,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (108,2,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (109,2,4)");
+            conn.commit();
+            conn.createStatement().execute(
+                "CREATE LOCAL INDEX " + indexName + " ON " + tableName + " (a) INCLUDE (b) ");
+            String ddl = "ALTER TABLE " + tableName + " SET USE_STATS_FOR_PARALLELIZATION = false";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql =
+                    "SELECT COUNT(*) " + " FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            assertTrue("Index " + indexName + " should have been used",
+                rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getTableRef()
+                        .getTable().getName().getString().equals(indexName));
+            Estimate info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10l, info.getEstimatedRows());
+            assertTrue(info.getEstimateInfoTs() > 0);
+        }
+    }
 }

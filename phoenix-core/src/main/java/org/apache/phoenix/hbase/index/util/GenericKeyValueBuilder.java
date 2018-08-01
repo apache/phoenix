@@ -22,8 +22,9 @@ import static org.apache.phoenix.hbase.index.util.ImmutableBytesPtr.copyBytesIfN
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -89,8 +90,8 @@ public class GenericKeyValueBuilder extends KeyValueBuilder {
     }
 
     @Override
-    public KVComparator getKeyValueComparator() {
-        return KeyValue.COMPARATOR;
+    public CellComparator getKeyValueComparator() {
+        return CellComparatorImpl.COMPARATOR;
     }
 
     @Override

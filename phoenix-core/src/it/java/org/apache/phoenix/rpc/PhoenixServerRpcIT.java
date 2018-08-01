@@ -34,13 +34,14 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
+import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -208,20 +209,20 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
 	private void ensureTablesOnDifferentRegionServers(String tableName1, String tableName2) throws Exception  {
 		byte[] table1 = Bytes.toBytes(tableName1);
 		byte[] table2 = Bytes.toBytes(tableName2);
-		HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
+		Admin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
 		HBaseTestingUtility util = getUtility();
 		MiniHBaseCluster cluster = util.getHBaseCluster();
 		HMaster master = cluster.getMaster();
 		AssignmentManager am = master.getAssignmentManager();
    
 		// verify there is only a single region for data table
-		List<HRegionInfo> tableRegions = admin.getTableRegions(table1);
+		List<RegionInfo> tableRegions = admin.getRegions(TableName.valueOf(table1));
 		assertEquals("Expected single region for " + table1, tableRegions.size(), 1);
-		HRegionInfo hri1 = tableRegions.get(0);
+		RegionInfo hri1 = tableRegions.get(0);
    
 		// verify there is only a single region for index table
-		tableRegions = admin.getTableRegions(table2);
-		HRegionInfo hri2 = tableRegions.get(0);
+		tableRegions = admin.getRegions(TableName.valueOf(table2));
+		RegionInfo hri2 = tableRegions.get(0);
 		assertEquals("Expected single region for " + table2, tableRegions.size(), 1);
    
 		ServerName serverName1 = am.getRegionStates().getRegionServerOfRegion(hri1);
@@ -245,15 +246,15 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
 		    while (dstServer.getOnlineRegion(hri2.getRegionName()) == null
 		            || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
 		            || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-		            || master.getAssignmentManager().getRegionStates().isRegionsInTransition()) {
+		            || master.getAssignmentManager().getRegionStates().isRegionInTransition(hri2)) {
 		        // wait for the move to be finished
 		        Thread.sleep(1);
 		    }
 		}
    
-		hri1 = admin.getTableRegions(table1).get(0);
+		hri1 = admin.getRegions(TableName.valueOf(table1)).get(0);
 		serverName1 = am.getRegionStates().getRegionServerOfRegion(hri1);
-		hri2 = admin.getTableRegions(table2).get(0);
+		hri2 = admin.getRegions(TableName.valueOf(table2)).get(0);
 		serverName2 = am.getRegionStates().getRegionServerOfRegion(hri2);
 
 		// verify index and data tables are on different servers

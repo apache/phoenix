@@ -40,10 +40,11 @@ DIR_BIN=$DIR_REL_BIN_PATH/bin
 DIR_PHERF_CONF=phoenix-pherf/config
 DIR_EXAMPLES=$DIR_REL_BIN_PATH/examples
 DIR_DOCS=dev/release_files
+DIR_PYTHON=$DIR_REL_BIN_PATH/python
 
 # Verify no target exists
 mvn clean; rm -rf $DIR_REL_BASE;
-RESULT=$(find -iname target)
+RESULT=$(find . -iname target)
 
 if [ -z "$RESULT" ]
 then
@@ -64,6 +65,7 @@ mkdir $DIR_REL_BIN_TAR_PATH;
 mkdir $DIR_REL_SRC_TAR_PATH;
 mkdir $DIR_EXAMPLES;
 mkdir $DIR_BIN;
+mkdir $DIR_PYTHON;
 
 # Move src tar
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
@@ -73,19 +75,22 @@ mvn clean apache-rat:check package -DskipTests -Dcheckstyle.skip=true -q;
 rm -rf $(find . -type d -name archive-tmp);
 
 # Copy all phoenix-*.jars to release dir
-phx_jars=$(find -iwholename "./*/target/phoenix-*.jar")
+phx_jars=$(find . -iwholename "./*/target/phoenix-*.jar")
 cp $phx_jars $DIR_REL_BIN_PATH;
 
 # Copy bin
-cp bin/* $DIR_BIN;
+cp -r bin/* $DIR_BIN;
 cp -R $DIR_PHERF_CONF $DIR_BIN;
 
 # Copy release docs
-
+cp README* $DIR_REL_BIN_PATH;
 cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 
 # Copy examples
 cp -r examples/* $DIR_EXAMPLES
+
+# Copy the python driver
+cp -r python/* $DIR_PYTHON
 
 # Generate bin tar
 tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT apache-phoenix-$PHOENIX-bin;
@@ -97,10 +102,18 @@ echo "Now signing source and binary tars"
 # Sign
 function_sign() {
   phoenix_tar=$(find apache-phoenix-*.gz);
-  gpg --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
-  md5sum -b $phoenix_tar > $phoenix_tar.md5;
-  sha512sum -b $phoenix_tar > $phoenix_tar.sha;
-  sha256sum -b $phoenix_tar >> $phoenix_tar.sha;
+
+  # if on MAC OS
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    gpg2 --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
+    openssl dgst -sha512 $phoenix_tar > $phoenix_tar.sha512;
+    openssl dgst -sha256 $phoenix_tar >> $phoenix_tar.sha256;
+  # all other OS
+  else
+    gpg --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
+    sha512sum -b $phoenix_tar > $phoenix_tar.sha512;
+    sha256sum -b $phoenix_tar >> $phoenix_tar.sha256;
+  fi
 }
 
 cd $DIR_REL_BIN_TAR_PATH; function_sign;
@@ -111,7 +124,7 @@ read -p "Do you want add tag for this RC in GIT? (Y for yes or any other key to 
 if [[ $prompt =~ [yY](es)* ]]
 then
   echo "Tagging..."
-  read -p "Enter tag (Example 5.0.0-rc0):" prompt
+  read -p "Enter tag (Example 4.13.0-HBase-0.98-rc0):" prompt
   echo "Setting tag: $prompt";sleep 5s
   git tag -a $prompt -m "$prompt"; git push origin $prompt
   mv $DIR_REL_ROOT $DIR_REL_BASE/phoenix-$prompt

@@ -33,10 +33,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
@@ -133,8 +135,9 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         rs1.next();
         assertNull(rs1.getString(1));
         rs1.next();
-        
-        HTable htable = new HTable(getUtility().getConfiguration(), dataTableName);
+        Table htable =
+                ConnectionFactory.createConnection(getUtility().getConfiguration()).getTable(
+                    TableName.valueOf(dataTableName));
         Scan s = new Scan();
         s.setRaw(true);
         ResultScanner scanner = htable.getScanner(s);
@@ -145,7 +148,11 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         byte[] qualifier = table.getImmutableStorageScheme()== ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES : nameColumn.getColumnQualifierBytes();
         assertTrue(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, qualifier));
         assertTrue(rs.size() == 2); // 2 because it also includes the empty key value column
-        KeyValueColumnExpression colExpression = table.getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? new SingleCellColumnExpression(nameColumn, "NAME", table.getEncodingScheme()) : new KeyValueColumnExpression(nameColumn);
+        KeyValueColumnExpression colExpression =
+                table.getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+                        ? new SingleCellColumnExpression(nameColumn, "NAME",
+                                table.getEncodingScheme(), table.getImmutableStorageScheme())
+                        : new KeyValueColumnExpression(nameColumn);
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         colExpression.evaluate(new ResultTuple(rs), ptr);
         assertEquals(new ImmutableBytesPtr(PVarchar.INSTANCE.toBytes("v1")), ptr);

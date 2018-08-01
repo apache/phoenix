@@ -22,7 +22,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -32,14 +31,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.util.Base64;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -280,7 +279,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
                 values[i] = rs.getObject(i + 1);
             }
             conn = getTenantSpecificConnection(tenantId);
-            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodeColumnValues(conn, tableOrViewName.toUpperCase(), values, columns)));
+            pkIds.add(Bytes.toString(Base64.getEncoder().encode(PhoenixRuntime.encodeColumnValues(conn, tableOrViewName.toUpperCase(), values, columns))));
         }
         return pkIds.toArray(new String[pkIds.size()]);
     }
@@ -298,7 +297,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         PreparedStatement stmt = conn.prepareStatement(query);
         int bindCounter = 1;
         for (int i = 0; i < cursorIds.length; i++) {
-            Object[] pkParts = PhoenixRuntime.decodeColumnValues(conn, tableName.toUpperCase(), Base64.decode(cursorIds[i]), columns);
+            Object[] pkParts = PhoenixRuntime.decodeColumnValues(conn, tableName.toUpperCase(), Base64.getDecoder().decode(cursorIds[i]), columns);
             for (int j = 0; j < pkParts.length; j++) {
                 stmt.setObject(bindCounter++, pkParts[j]);
             }
@@ -374,9 +373,6 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
     }
     
-    // FIXME: this repros PHOENIX-3382, but turned up two more issues:
-    // 1) PHOENIX-3383 Comparison between descending row keys used in RVC is reverse
-    // 2) PHOENIX-3384 Optimize RVC expressions for non leading row key columns
     @Test
     public void testRVCOnDescWithLeadingPKEquality() throws Exception {
         final Connection conn = DriverManager.getConnection(getUrl());
@@ -400,14 +396,11 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',1,'02')");
         conn.commit();
 
-        // FIXME: PHOENIX-3383
-        // This comparison is really backwards: it should be (score, entity_id) < (2, '04'),
-        // but because we're matching a descending key, our comparison has to be switched.
         try (Statement stmt = conn.createStatement()) {
             final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
                     "FROM " + fullTableName + "\n" + 
                     "WHERE organization_id = 'org1'\n" + 
-                    "AND (score, entity_id) > (2, '04')\n" + 
+                    "AND (score, entity_id) < (2, '04')\n" + 
                     "ORDER BY score DESC, entity_id DESC\n" + 
                     "LIMIT 3");
             assertTrue(rs.next());
@@ -418,13 +411,11 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
             assertEquals(1.0, rs.getDouble(2), 0.001);
             assertFalse(rs.next());
         }
-        // FIXME: PHOENIX-3384
-        // It should not be necessary to specify organization_id in this query
         try (Statement stmt = conn.createStatement()) {
             final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
                     "FROM " + fullTableName + "\n" + 
                     "WHERE organization_id = 'org1'\n" + 
-                    "AND (organization_id, score, entity_id) > ('org1', 2, '04')\n" + 
+                    "AND (organization_id, score, entity_id) < ('org1', 2, '04')\n" + 
                     "ORDER BY score DESC, entity_id DESC\n" + 
                     "LIMIT 3");
             assertTrue(rs.next());
@@ -510,46 +501,6 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         assertEquals(4L, connection.getMutationState().getBatchCount());
     }
     
-    @Test
-    public void testMaxMutationSize() throws Exception {
-        Properties connectionProperties = new Properties();
-        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "3");
-        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "1000000");
-        PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
-        String fullTableName = generateUniqueName();
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute("CREATE TABLE " + fullTableName + "(\n" +
-                "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" +
-                "    SCORE DOUBLE NOT NULL,\n" +
-                "    ENTITY_ID CHAR(15) NOT NULL\n" +
-                "    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n" +
-                "        ORGANIZATION_ID,\n" +
-                "        SCORE DESC,\n" +
-                "        ENTITY_ID DESC\n" +
-                "    )\n" +
-                ") MULTI_TENANT=TRUE");
-        }
-        try {
-            upsertRows(connection, fullTableName);
-            fail();
-        }
-        catch(SQLException e) {
-            assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getErrorCode(), e.getErrorCode());
-        }
-        
-        // set the max mutation size (bytes) to a low value
-        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000");
-        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "4");
-        connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
-        try {
-            upsertRows(connection, fullTableName);
-            fail();
-        }
-        catch(SQLException e) {
-            assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getErrorCode(), e.getErrorCode());
-        }
-    }
-
     private void upsertRows(PhoenixConnection conn, String fullTableName) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement("upsert into " + fullTableName +
                 " (organization_id, entity_id, score) values (?,?,?)");

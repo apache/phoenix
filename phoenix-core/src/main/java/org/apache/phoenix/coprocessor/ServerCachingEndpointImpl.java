@@ -18,11 +18,11 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.util.Collections;
 
-import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
-import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.GlobalCache;
@@ -36,6 +36,7 @@ import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachin
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.protobuf.RpcCallback;
@@ -49,10 +50,15 @@ import com.google.protobuf.Service;
  * 
  * @since 0.1
  */
-public class ServerCachingEndpointImpl extends ServerCachingService implements CoprocessorService,
-    Coprocessor {
+public class ServerCachingEndpointImpl extends ServerCachingService implements RegionCoprocessor 
+     {
 
   private RegionCoprocessorEnvironment env;
+  
+  @Override
+  public Iterable<Service> getServices() {
+      return Collections.singleton(this);
+  }
 
   @Override
   public void addServerCache(RpcController controller, AddServerCacheRequest request,
@@ -73,7 +79,8 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
           (Class<ServerCacheFactory>) Class.forName(request.getCacheFactory().getClassName());
           ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
           tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
-              cachePtr, txState, cacheFactory, request.hasHasProtoBufIndexMaintainer() && request.getHasProtoBufIndexMaintainer());
+              cachePtr, txState, cacheFactory, request.hasHasProtoBufIndexMaintainer() && request.getHasProtoBufIndexMaintainer(),
+              request.hasClientVersion() ? request.getClientVersion() : ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (Throwable e) {
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException("Error when adding cache: ", e));
@@ -113,8 +120,4 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
     // nothing to do
   }
 
-  @Override
-  public Service getService() {
-    return this;
-  }
 }

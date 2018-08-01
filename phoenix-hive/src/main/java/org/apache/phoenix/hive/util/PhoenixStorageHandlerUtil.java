@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.hive.util;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Maps;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -35,8 +35,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.naming.NamingException;
+
 import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.util.Strings;
@@ -55,11 +59,17 @@ import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
+import com.google.common.base.Joiner;
+import com.google.common.collect.Maps;
+
 /**
  * Misc utils for PhoenixStorageHandler
  */
 
 public class PhoenixStorageHandlerUtil {
+    private static final Log LOG = LogFactory.getLog(PhoenixStorageHandlerUtil.class);
+    private static final AtomicReference<Method> GET_BUCKET_METHOD_REF = new AtomicReference<>();
+    private static final AtomicReference<Method> GET_BUCKET_ID_METHOD_REF = new AtomicReference<>();
 
     public static String getTargetTableName(Table table) {
         Map<String, String> tableParameterMap = table.getParameters();
@@ -268,11 +278,11 @@ public class PhoenixStorageHandlerUtil {
     public static String getOptionsValue(Options options) {
         StringBuilder content = new StringBuilder();
 
-        int bucket = options.getBucket();
+        int bucket = getBucket(options);
         String inspectorInfo = options.getInspector().getCategory() + ":" + options.getInspector()
                 .getTypeName();
-        long maxTxnId = options.getMaximumTransactionId();
-        long minTxnId = options.getMinimumTransactionId();
+        long maxTxnId = options.getMaximumWriteId();
+        long minTxnId = options.getMinimumWriteId();
         int recordIdColumn = options.getRecordIdColumn();
         boolean isCompresses = options.isCompressed();
         boolean isWritingBase = options.isWritingBase();
@@ -284,5 +294,28 @@ public class PhoenixStorageHandlerUtil {
                 .append(isWritingBase);
 
         return content.toString();
+    }
+
+    private static int getBucket(Options options) {
+        Method getBucketMethod = GET_BUCKET_METHOD_REF.get();
+        try {
+            if (getBucketMethod == null) {
+                getBucketMethod = Options.class.getMethod("getBucket");
+                GET_BUCKET_METHOD_REF.set(getBucketMethod);
+            }
+            return (int) getBucketMethod.invoke(options);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException e) {
+            LOG.trace("Failed to invoke Options.getBucket()", e);
+        }
+        Method getBucketIdMethod = GET_BUCKET_ID_METHOD_REF.get();
+        try {
+            if (getBucketIdMethod == null) {
+                getBucketIdMethod = Options.class.getMethod("getBucketId");
+                GET_BUCKET_ID_METHOD_REF.set(getBucketMethod);
+            }
+            return (int) getBucketIdMethod.invoke(options);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException e) {
+            throw new RuntimeException("Failed to invoke Options.getBucketId()", e);
+        }
     }
 }

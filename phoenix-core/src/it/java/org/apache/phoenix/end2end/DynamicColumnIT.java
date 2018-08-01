@@ -31,13 +31,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -68,15 +68,15 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
         tableName = generateUniqueName();
         try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices services = pconn.getQueryServices();
-            try (HBaseAdmin admin = services.getAdmin()) {
-                HTableDescriptor htd = new HTableDescriptor(TableName.valueOf(tableName));
-                htd.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
-                htd.addFamily(new HColumnDescriptor(FAMILY_NAME_A));
-                htd.addFamily(new HColumnDescriptor(FAMILY_NAME_B));
-                admin.createTable(htd);
+            try (Admin admin = services.getAdmin()) {
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_A));
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_B));
+                admin.createTable(builder.build());
             }
 
-            try (HTableInterface hTable = services.getTable(Bytes.toBytes(tableName))) {
+            try (Table hTable = services.getTable(Bytes.toBytes(tableName))) {
                 // Insert rows using standard HBase mechanism with standard HBase "types"
                 List<Row> mutations = new ArrayList<Row>();
                 byte[] dv = Bytes.toBytes("DV");
@@ -88,15 +88,15 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 byte[] key = Bytes.toBytes("entry1");
 
                 Put put = new Put(key);
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
-                put.add(FAMILY_NAME_A, f1v1, Bytes.toBytes("f1value1"));
-                put.add(FAMILY_NAME_A, f1v2, Bytes.toBytes("f1value2"));
-                put.add(FAMILY_NAME_B, f2v1, Bytes.toBytes("f2value1"));
-                put.add(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
+                put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
+                put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
+                put.addColumn(FAMILY_NAME_A, f1v1, Bytes.toBytes("f1value1"));
+                put.addColumn(FAMILY_NAME_A, f1v2, Bytes.toBytes("f1value2"));
+                put.addColumn(FAMILY_NAME_B, f2v1, Bytes.toBytes("f2value1"));
+                put.addColumn(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
                 mutations.add(put);
 
-                hTable.batch(mutations);
+                hTable.batch(mutations, null);
 
                 // Create Phoenix table after HBase table was created through the native APIs
                 // The timestamp of the table creation must be later than the timestamp of the data
@@ -106,7 +106,7 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
                 "    A.F1v1 varchar," +
                 "    A.F1v2 varchar," +
                 "    B.F2v1 varchar" +
-                "    CONSTRAINT pk PRIMARY KEY (entry))");
+                "    CONSTRAINT pk PRIMARY KEY (entry)) COLUMN_ENCODED_BYTES=NONE");
             }
 
         }

@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -34,10 +34,10 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -49,7 +49,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -197,34 +196,34 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 scan.setRaw(true);
                 scan.setStartRow(key);
                 scan.setStopRow(key);
-                HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+                Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
                 ResultScanner results = table.getScanner(scan);
                 Result result = results.next();
                 assertNotNull(result);
                 
-                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dataCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dataCq).get(0).getTypeByte());
                 assertNull(results.next());
                 
                 // key value for v2 should have been deleted from the global index table
                 scan = new Scan();
                 scan.setRaw(true);
-                table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
+                table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
-                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, globalIndexCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(),  result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, globalIndexCq).get(0).getTypeByte());
                 assertNull(results.next());
                 
                 // key value for v2 should have been deleted from the local index table
                 scan = new Scan();
                 scan.setRaw(true);
                 scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-                table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+                table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
                 assertEquals("data table col"
-                        + "umn value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumn(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES, localIndexCq).get(0).getTypeByte());
+                        + "umn value should have been deleted", KeyValue.Type.DeleteColumn.getCode(),  result.getColumnCells(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES, localIndexCq).get(0).getTypeByte());
                 assertNull(results.next()); 
             }
             else {
@@ -247,13 +246,15 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         byte[] key = Bytes.toBytes("a");
         scan.setStartRow(key);
         scan.setStopRow(key);
-        HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+        Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
         ResultScanner results = table.getScanner(scan);
         Result result = results.next();
         assertNotNull(result);
         byte[] colValue;
         if (!mutable && columnEncoded) {
-            KeyValueColumnExpression colExpression = new SingleCellColumnExpression(dataColumn, "V2", dataTable.getEncodingScheme());
+            KeyValueColumnExpression colExpression =
+                    new SingleCellColumnExpression(dataColumn, "V2", dataTable.getEncodingScheme(),
+                            dataTable.getImmutableStorageScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             colExpression.evaluate(new ResultTuple(result), ptr);
             colValue = ptr.copyBytesIfNecessary();
@@ -267,12 +268,15 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         // key value for v2 should exist in the global index table
         scan = new Scan();
         scan.setRaw(true);
-        table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
+        table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(indexTableName.getBytes());
         results = table.getScanner(scan);
         result = results.next();
         assertNotNull(result);
         if (!mutable && columnEncoded) {
-            KeyValueColumnExpression colExpression = new SingleCellColumnExpression(glovalIndexCol, "0:V2", globalIndexTable.getEncodingScheme());
+            KeyValueColumnExpression colExpression =
+                    new SingleCellColumnExpression(glovalIndexCol, "0:V2",
+                            globalIndexTable.getEncodingScheme(),
+                            globalIndexTable.getImmutableStorageScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             colExpression.evaluate(new ResultTuple(result), ptr);
             colValue = ptr.copyBytesIfNecessary();
@@ -287,14 +291,17 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         scan = new Scan();
         scan.setRaw(true);
         scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-        table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
+        table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
         results = table.getScanner(scan);
         result = results.next();
         assertNotNull(result);
         if (!mutable && columnEncoded) {
-            KeyValueColumnExpression colExpression = new SingleCellColumnExpression(localIndexCol, "0:V2", localIndexTable.getEncodingScheme());
+            KeyValueColumnExpression colExpression =
+                    new SingleCellColumnExpression(localIndexCol, "0:V2",
+                            localIndexTable.getEncodingScheme(),
+                            localIndexTable.getImmutableStorageScheme());
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-            colExpression.evaluate(new ResultTuple(result), ptr);
+            assertTrue(colExpression.evaluate(new ResultTuple(result), ptr));
             colValue = ptr.copyBytesIfNecessary();
         }
         else {
@@ -378,7 +385,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             // there should be a single row belonging to localIndexTableName2 
             Scan scan = new Scan();
             scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(localIndexTablePhysicalName.getBytes());
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(localIndexTablePhysicalName.getBytes());
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);
@@ -386,7 +393,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             PColumn localIndexCol = localIndex2.getColumnForColumnName(indexColumnName);
             byte[] colValue;
             if (!mutable && columnEncoded) {
-                KeyValueColumnExpression colExpression = new SingleCellColumnExpression(localIndexCol, indexColumnName, localIndex2.getEncodingScheme());
+                KeyValueColumnExpression colExpression =
+                        new SingleCellColumnExpression(localIndexCol, indexColumnName,
+                                localIndex2.getEncodingScheme(),
+                                localIndex2.getImmutableStorageScheme());
                 ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                 colExpression.evaluate(new ResultTuple(result), ptr);
                 colValue = ptr.copyBytesIfNecessary();
@@ -399,119 +409,4 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         }
     }
     
-    @Test
-    public void testDroppingIndexedColDropsViewIndex() throws Exception {
-        helpTestDroppingIndexedColDropsViewIndex(false);
-    }
-    
-    @Test
-    public void testDroppingIndexedColDropsMultiTenantViewIndex() throws Exception {
-        helpTestDroppingIndexedColDropsViewIndex(true);
-    }
-    
-    public void helpTestDroppingIndexedColDropsViewIndex(boolean isMultiTenant) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(TENANT_ID_ATTRIB, TENANT_ID);
-        try (Connection conn = getConnection();
-                Connection viewConn = isMultiTenant ? getConnection(props) : conn ) {
-            String tableWithView = generateUniqueName();
-            String viewOfTable = generateUniqueName();
-            String viewIndex1 = generateUniqueName();
-            String viewIndex2 = generateUniqueName();
-            
-            conn.setAutoCommit(false);
-            viewConn.setAutoCommit(false);
-            String ddlFormat = "CREATE TABLE " + tableWithView + " (%s k VARCHAR NOT NULL, v1 VARCHAR, v2 VARCHAR, v3 VARCHAR, v4 VARCHAR CONSTRAINT PK PRIMARY KEY(%s k))%s";
-            String ddl = String.format(ddlFormat, isMultiTenant ? "TENANT_ID VARCHAR NOT NULL, " : "",
-                    isMultiTenant ? "TENANT_ID, " : "", isMultiTenant ? "MULTI_TENANT=true" : "");
-            conn.createStatement().execute(ddl);
-            viewConn.createStatement()
-                    .execute(
-                        "CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableWithView );
-            // create an index with the column that will be dropped
-            viewConn.createStatement().execute("CREATE INDEX " + viewIndex1 + " ON " + viewOfTable + "(v2) INCLUDE (v4)");
-            // create an index without the column that will be dropped
-            viewConn.createStatement().execute("CREATE INDEX " + viewIndex2 + " ON " + viewOfTable + "(v1) INCLUDE (v4)");
-            // verify index was created
-            try {
-                viewConn.createStatement().execute("SELECT * FROM " + viewIndex1 );
-            } catch (TableNotFoundException e) {
-                fail("Index on view was not created");
-            }
-            
-            // upsert a single row
-            PreparedStatement stmt = viewConn.prepareStatement("UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?,?,?)");
-            stmt.setString(1, "a");
-            stmt.setString(2, "b");
-            stmt.setString(3, "c");
-            stmt.setString(4, "d");
-            stmt.setString(5, "e");
-            stmt.setInt(6, 1);
-            stmt.setString(7, "g");
-            stmt.execute();
-            viewConn.commit();
-
-            // verify the index was created
-            PhoenixConnection pconn = viewConn.unwrap(PhoenixConnection.class);
-            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null; 
-            PTable view = pconn.getTable(new PTableKey(tenantId,  viewOfTable ));
-            PTable viewIndex = pconn.getTable(new PTableKey(tenantId,  viewIndex1 ));
-            byte[] viewIndexPhysicalTable = viewIndex.getPhysicalName().getBytes();
-            assertNotNull("Can't find view index", viewIndex);
-            assertEquals("Unexpected number of indexes ", 2, view.getIndexes().size());
-            assertEquals("Unexpected index ",  viewIndex1 , view.getIndexes().get(0).getName()
-                    .getString());
-            assertEquals("Unexpected index ",  viewIndex2 , view.getIndexes().get(1).getName()
-                .getString());
-            
-            // drop two columns
-            conn.createStatement().execute("ALTER TABLE " + tableWithView + " DROP COLUMN v2, v3 ");
-            
-            // verify columns were dropped
-            try {
-                conn.createStatement().execute("SELECT v2 FROM " + tableWithView );
-                fail("Column should have been dropped");
-            } catch (ColumnNotFoundException e) {
-            }
-            try {
-                conn.createStatement().execute("SELECT v3 FROM " + tableWithView );
-                fail("Column should have been dropped");
-            } catch (ColumnNotFoundException e) {
-            }
-            
-            // verify index metadata was dropped
-            try {
-                viewConn.createStatement().execute("SELECT * FROM " + viewIndex1 );
-                fail("Index metadata should have been dropped");
-            } catch (TableNotFoundException e) {
-            }
-            
-            pconn = viewConn.unwrap(PhoenixConnection.class);
-            view = pconn.getTable(new PTableKey(tenantId,  viewOfTable ));
-            try {
-                viewIndex = pconn.getTable(new PTableKey(tenantId,  viewIndex1 ));
-                fail("View index should have been dropped");
-            } catch (TableNotFoundException e) {
-            }
-            assertEquals("Unexpected number of indexes ", 1, view.getIndexes().size());
-            assertEquals("Unexpected index ",  viewIndex2 , view.getIndexes().get(0).getName().getString());
-            
-            // verify that the physical index view table is *not* dropped
-            conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(viewIndexPhysicalTable);
-            
-            // scan the physical table and verify there is a single row for the second local index
-            Scan scan = new Scan();
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
-            ResultScanner results = table.getScanner(scan);
-            Result result = results.next();
-            assertNotNull(result);
-            PTable viewIndexPTable = pconn.getTable(new PTableKey(pconn.getTenantId(), viewIndex2));
-            PColumn column = viewIndexPTable.getColumnForColumnName(IndexUtil.getIndexColumnName(QueryConstants.DEFAULT_COLUMN_FAMILY, "V4"));
-            byte[] cq = column.getColumnQualifierBytes();
-            // there should be a single row belonging to VIEWINDEX2 
-            assertNotNull(viewIndex2 + " row is missing", result.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, cq));
-            assertNull(results.next());
-        }
-    }
-
 }

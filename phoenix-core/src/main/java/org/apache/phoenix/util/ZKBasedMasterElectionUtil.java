@@ -25,7 +25,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
-import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.Ids;
@@ -34,7 +34,7 @@ public class ZKBasedMasterElectionUtil {
 
     private static final Log LOG = LogFactory.getLog(ZKBasedMasterElectionUtil.class);
 
-    public static boolean acquireLock(ZooKeeperWatcher zooKeeperWatcher, String parentNode,
+    public static boolean acquireLock(ZKWatcher zooKeeperWatcher, String parentNode,
             String lockName) throws KeeperException, InterruptedException {
         // Create the parent node as Persistent
         LOG.info("Creating the parent lock node:" + parentNode);

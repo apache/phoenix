@@ -22,7 +22,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Increment;
@@ -96,7 +96,7 @@ public interface IndexBuilder extends Stoppable {
      * @throws IOException on failure
      */
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
-      Collection<KeyValue> filtered, IndexMetaData context)
+      Collection<Cell> filtered, IndexMetaData context)
       throws IOException;
 
   /**

@@ -34,7 +34,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -529,7 +530,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             stmt.setString(3, "T0");
             stmt.executeUpdate();
             conn.commit();
-            try (HBaseAdmin admin =
+            try (Admin admin =
                     conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
                 /*
                  * The split key is 27 bytes instead of at least 30 bytes (CHAR(15) + CHAR(15)).
@@ -537,7 +538,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
                  * it ends up padding the split point bytes to 30.
                  */
                 byte[] smallSplitKey = Bytes.toBytes("00Do0000000a8w10D5o000002Rhv");
-                admin.split(Bytes.toBytes(tableName), smallSplitKey);
+                admin.split(TableName.valueOf(tableName), smallSplitKey);
             }
             ResultSet rs =
                     conn.createStatement().executeQuery("SELECT EXTENSION FROM " + tableName
@@ -561,6 +562,27 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("T0", rs.getString(1));
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSkipScanJoinOptimization() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String idxName = "IDX_" + tableName;
+            conn.setAutoCommit(true);
+            conn.createStatement().execute(
+                    "create table " + tableName + " (PK1 INTEGER NOT NULL, PK2 INTEGER NOT NULL, " +
+                            " ID1 INTEGER, ID2 INTEGER CONSTRAINT PK PRIMARY KEY(PK1 , PK2))SALT_BUCKETS = 4");
+            conn.createStatement().execute("upsert into " + tableName + " values (1,1,1,1)");
+            conn.createStatement().execute("upsert into " + tableName + " values (2,2,2,2)");
+            conn.createStatement().execute("upsert into " + tableName + " values (2,3,1,2)");
+            conn.createStatement().execute("create view " + viewName + " as select * from " +
+                    tableName + " where PK1 in (1,2)");
+            conn.createStatement().execute("create index " + idxName + " on " + viewName + " (ID1)");
+            ResultSet rs = conn.createStatement().executeQuery("select /*+ INDEX(" + viewName + " " + idxName + ") */ * from " + viewName + " where ID1 = 1 ");
+            assertTrue(rs.next());
         }
     }
 }

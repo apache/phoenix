@@ -45,6 +45,9 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.DeleteStatement;
+import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -337,6 +340,44 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals("IDX1", plan.getTableRef().getTable().getTableName().getString());
     }
     
+    @Test
+    public void testDataTableOverIndexHint() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        conn.createStatement().execute("CREATE INDEX idx ON t(v1,v2)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ " + Hint.USE_DATA_OVER_INDEX_TABLE + " */ * FROM t");
+        assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
+        // unhinted still uses index
+        plan = stmt.optimizeQuery("SELECT * FROM t");
+        assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+        // hinting with a WHERE clause still uses the index
+        plan = stmt.optimizeQuery("SELECT /*+ " + Hint.USE_DATA_OVER_INDEX_TABLE + " */ * FROM t WHERE v1 = 'foo'");
+        assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+    }
+
+    // Tests that a DELETE without a WHERE clause uses the data table (for parallel deletion on server side)
+    // DELETE with a WHERE clause should use the index on the client side
+    @Test
+    public void testDelete() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        conn.createStatement().execute("CREATE INDEX idx ON t(v1,v2)");
+        conn.setAutoCommit(true);
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        SQLParser parser = new SQLParser("DELETE FROM t");
+        DeleteStatement delete = (DeleteStatement) parser.parseStatement();
+        DeleteCompiler compiler = new DeleteCompiler(stmt, null);
+        MutationPlan plan = compiler.compile(delete);
+        assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
+        assertTrue(plan.getClass().getName().contains("ServerSelectDeleteMutationPlan"));
+        parser = new SQLParser("DELETE FROM t WHERE v1 = 'foo'");
+        delete = (DeleteStatement) parser.parseStatement();
+        plan = compiler.compile(delete);
+        assertEquals("IDX", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
+        assertTrue(plan.getClass().getName().contains("ClientSelectDeleteMutationPlan"));
+    }
+
     @Test
     public void testChooseSmallerTable() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -701,9 +742,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
         plan = stmt.compileQuery("select * from my_table_mt_view where pkcol1 = 'a' and pkcol2 = 'b' and pkcol3 = 'c' and (pkcol1, pkcol2) < ('z', 'z')");
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
-        // TODO: in theory pkcol2 and pkcol3 could be bound, but we don't have the logic for that yet
         plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol2, pkcol3) > ('0', '0') and pkcol1 = '000000000000000'");
-        assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
     }
 
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {

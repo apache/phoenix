@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.query.QueryServicesTestImpl.DEFAULT_SEQUENCE_CACHE_SIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -38,9 +40,11 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -90,6 +94,19 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 		assertTrue(rs.next());
 	}
 
+    private static class MyClock extends EnvironmentEdge {
+        public volatile long time;
+
+        public MyClock (long time) {
+            this.time = time;
+        }
+
+        @Override
+        public long currentTime() {
+            return time;
+        }
+    }
+
 	@Test
 	public void testDuplicateSequences() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
@@ -105,7 +122,28 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 		}
 	}
 
-	@Test
+    @Test
+    public void testDuplicateSequencesAtSameTimestamp() throws Exception {
+        final MyClock clock = new MyClock(1000);
+        EnvironmentEdgeManager.injectEdge(clock);
+        try {
+            String sequenceName = generateSequenceNameWithSchema();
+            
+            
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
+    
+            try {
+                conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4\n");
+                Assert.fail("Duplicate sequences");
+            } catch (SequenceAlreadyExistsException e){
+    
+            }
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
+    @Test
 	public void testSequenceNotFound() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
 		
@@ -167,6 +205,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         String schemaName = getSchemaName(sequenceName);
         
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        int bucketNum = PhoenixRuntime.getTableNoCache(conn, SYSTEM_CATALOG_SCHEMA + "." + TYPE_SEQUENCE).getBucketNum();
+        assertEquals("Salt bucket for SYSTEM.SEQUENCE should be test default",bucketNum , QueryServicesTestImpl.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
@@ -753,26 +793,31 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         assertSequenceValuesForSingleRow(sequenceName, 1, 2, 3);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1");
         
         assertSequenceValuesForSingleRow(sequenceName, 1, 0, -1);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MINVALUE 10");
         
         assertSequenceValuesForSingleRow(sequenceName, 10, 11, 12);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1 MINVALUE 10 ");
         
         assertSequenceValuesForSingleRow(sequenceName, Long.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE - 2);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " MAXVALUE 0");
         
         assertSequenceValuesForSingleRow(sequenceName, Long.MIN_VALUE, Long.MIN_VALUE + 1, Long.MIN_VALUE + 2);
         conn.createStatement().execute("DROP SEQUENCE " + sequenceName);
         
+        sequenceName = generateSequenceNameWithSchema();
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " INCREMENT BY -1 MAXVALUE 0");
         
         assertSequenceValuesForSingleRow(sequenceName, 0, -1, -2);
@@ -1358,35 +1403,6 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         assertEquals(5, rs.getInt(2));        
     }
     
-    @Test
-    public void testReturnAllSequencesNotCalledForNoOpenConnections() throws Exception {
-        String sequenceName = generateSequenceNameWithSchema();
-        String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
-        String schemaName = getSchemaName(sequenceName);
-        
-        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 3 INCREMENT BY 2 CACHE 5");
-        
-        String query = "SELECT NEXT VALUE FOR " + sequenceName ;
-        ResultSet rs = conn.prepareStatement(query).executeQuery();
-        assertTrue(rs.next());
-        assertEquals(3, rs.getInt(1));
-        assertFalse(rs.next());
-        rs = conn.prepareStatement(query).executeQuery();
-        assertTrue(rs.next());
-        assertEquals(5, rs.getInt(1));
-        assertFalse(rs.next());
-        
-        // verify that calling close() does not return sequence values back to the server
-        query = "SELECT CURRENT_VALUE FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA=? AND SEQUENCE_NAME=?";
-        PreparedStatement preparedStatement = conn.prepareStatement(query);
-        preparedStatement.setString(1, schemaName);
-        preparedStatement.setString(2, sequenceNameWithoutSchema);
-        rs = preparedStatement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(13, rs.getInt(1));
-        assertFalse(rs.next());
-    }
-    
     private static String getSchemaName(String tableName) {
     	return tableName.substring(0, tableName.indexOf("."));
     }
@@ -1394,57 +1410,5 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     private static String getNameWithoutSchema(String tableName) {
     	return tableName.substring(tableName.indexOf(".") + 1, tableName.length());
     }    
-
-    @Test
-    public void testPointInTimeSequence() throws Exception {
-        String seqName = generateSequenceNameWithSchema();    	
-        Properties scnProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
-        Connection beforeSeqConn = DriverManager.getConnection(getUrl(), scnProps);
-
-        ResultSet rs;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SEQUENCE " + seqName + "");
-
-        try {
-            beforeSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
-            fail();
-        } catch (SequenceNotFoundException e) {
-            beforeSeqConn.close();
-        }
-
-        scnProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
-        Connection afterSeqConn = DriverManager.getConnection(getUrl(), scnProps);
-
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(2, rs.getInt(1));
-
-        conn.createStatement().execute("DROP SEQUENCE " + seqName + "");
-        
-        rs = afterSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(3, rs.getInt(1));
-
-        try {
-            rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-            fail();
-        } catch (SequenceNotFoundException e) { // expected
-        }
-
-        conn.createStatement().execute("CREATE SEQUENCE " + seqName);
-        rs = conn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-
-        rs = afterSeqConn.createStatement().executeQuery("SELECT next value for " + seqName);
-        assertTrue(rs.next());
-        assertEquals(4, rs.getInt(1));
-        afterSeqConn.close();
-    }
 
 }

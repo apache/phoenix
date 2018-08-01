@@ -36,8 +36,8 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
@@ -59,7 +59,7 @@ import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -88,6 +88,8 @@ import com.google.common.collect.Lists;
  */
 public class ScanUtil {
     public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
+    public static final int UNKNOWN_CLIENT_VERSION = VersionUtil.encodeVersion(4, 4, 0);
+
     /*
      * Max length that we fill our key when we turn an inclusive key
      * into a exclusive key.
@@ -612,10 +614,12 @@ public class ScanUtil {
     
     public static void setReversed(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.TRUE_BYTES);
+        scan.setLoadColumnFamiliesOnDemand(false);
     }
 
     public static void unsetReversed(Scan scan) {
         scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.FALSE_BYTES);
+        scan.setLoadColumnFamiliesOnDemand(true);
     }
 
     private static byte[] getReversedRow(byte[] startRow) {
@@ -657,10 +661,9 @@ public class ScanUtil {
      * @param lowerInclusiveRegionKey
      * @param upperExclusiveRegionKey
      */
-    public static void setupLocalIndexScan(Scan scan, byte[] lowerInclusiveRegionKey,
-            byte[] upperExclusiveRegionKey) {
-        byte[] prefix = lowerInclusiveRegionKey.length == 0 ? new byte[upperExclusiveRegionKey.length]: lowerInclusiveRegionKey;
-        int prefixLength = lowerInclusiveRegionKey.length == 0? upperExclusiveRegionKey.length: lowerInclusiveRegionKey.length;
+    public static void setupLocalIndexScan(Scan scan) {
+        byte[] prefix = scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length]: scan.getStartRow();
+        int prefixLength = scan.getStartRow().length == 0? scan.getStopRow().length: scan.getStartRow().length;
         if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
             scan.setStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
         }
@@ -669,7 +672,7 @@ public class ScanUtil {
         }
     }
 
-    public static byte[] getActualStartRow(Scan localIndexScan, HRegionInfo regionInfo) {
+    public static byte[] getActualStartRow(Scan localIndexScan, RegionInfo regionInfo) {
         return localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX) == null ? localIndexScan
                 .getStartRow() : ScanRanges.prefixKey(localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX), 0 ,
             regionInfo.getStartKey().length == 0 ? new byte[regionInfo.getEndKey().length]
@@ -892,7 +895,7 @@ public class ScanUtil {
      *         the server side. To make sure HBase doesn't cancel the leases and close the open
      *         scanners, we need to periodically renew leases. To look at the earliest HBase version
      *         that supports renewing leases, see
-     *         {@link PhoenixDatabaseMetaData#MIN_RENEW_LEASE_VERSION}
+     *         {@link MetaDataProtocol#MIN_RENEW_LEASE_VERSION}
      */
     public static boolean isPacingScannersPossible(StatementContext context) {
         return context.getConnection().getQueryServices().isRenewingLeasesEnabled();
@@ -930,5 +933,17 @@ public class ScanUtil {
     public static boolean isIndexRebuild(Scan scan) {
         return scan.getAttribute((BaseScannerRegionObserver.REBUILD_INDEXES)) != null;
     }
+ 
+    public static int getClientVersion(Scan scan) {
+        int clientVersion = UNKNOWN_CLIENT_VERSION;
+        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        if (clientVersionBytes != null) {
+            clientVersion = Bytes.toInt(clientVersionBytes);
+        }
+        return clientVersion;
+    }
     
+    public static void setClientVersion(Scan scan, int version) {
+        scan.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, Bytes.toBytes(version));
+    }
 }

@@ -32,6 +32,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -39,21 +40,20 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -73,7 +73,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.execute.MutationState.RowMutationState;
+import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -100,7 +100,10 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -116,7 +119,6 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
 import com.google.common.collect.Lists;
 
@@ -140,7 +142,7 @@ public class IndexUtil {
     
     // Since we cannot have nullable fixed length in a row key
     // we need to translate to variable length. The verification that we have a valid index
-    // row key was already done, so here we just need to covert from one built-in type to
+    // row key was already done, so here we just need to convert from one built-in type to
     // another.
     public static PDataType getIndexColumnDataType(boolean isNullable, PDataType dataType) {
         if (dataType == null || !isNullable || !dataType.isFixedWidth()) {
@@ -195,6 +197,17 @@ public class IndexUtil {
         String dataColumnFamilyName = SchemaUtil.isPKColumn(dataColumn) ? null : dataColumn.getFamilyName().getString();
         return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
     }
+    
+	public static PColumn getIndexPKColumn(int position, PColumn dataColumn) {
+		assert (SchemaUtil.isPKColumn(dataColumn));
+		PName indexColumnName = PNameFactory.newName(getIndexColumnName(null, dataColumn.getName().getString()));
+		PColumn column = new PColumnImpl(indexColumnName, null, dataColumn.getDataType(), dataColumn.getMaxLength(),
+				dataColumn.getScale(), dataColumn.isNullable(), position, dataColumn.getSortOrder(),
+				dataColumn.getArraySize(), null, false, dataColumn.getExpressionStr(), dataColumn.isRowTimestamp(), false,
+				// TODO set the columnQualifierBytes correctly
+				/*columnQualifierBytes*/null, HConstants.LATEST_TIMESTAMP); 
+		return column;
+	}
 
     public static String getLocalIndexColumnFamily(String dataColumnFamilyName) {
         return dataColumnFamilyName == null ? null
@@ -207,27 +220,35 @@ public class IndexUtil {
     }
     
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
+        PColumn column = getDataColumnOrNull(dataTable, indexColumnName);
+        if (column == null) {
+            throw new IllegalArgumentException("Could not find column \"" + SchemaUtil.getColumnName(getDataColumnFamilyName(indexColumnName), getDataColumnName(indexColumnName)) + " in " + dataTable);
+        }
+        return column;
+    }
+    
+    public static PColumn getDataColumnOrNull(PTable dataTable, String indexColumnName) {
         int pos = indexColumnName.indexOf(INDEX_COLUMN_NAME_SEP);
         if (pos < 0) {
-            throw new IllegalArgumentException("Could not find expected '" + INDEX_COLUMN_NAME_SEP +  "' separator in index column name of \"" + indexColumnName + "\"");
+            return null;
         }
         if (pos == 0) {
             try {
                 return dataTable.getPKColumn(indexColumnName.substring(1));
             } catch (ColumnNotFoundException e) {
-                throw new IllegalArgumentException("Could not find PK column \"" +  indexColumnName.substring(pos+1) + "\" in index column name of \"" + indexColumnName + "\"", e);
+                return null;
             }
         }
         PColumnFamily family;
         try {
             family = dataTable.getColumnFamily(getDataColumnFamilyName(indexColumnName));                
         } catch (ColumnFamilyNotFoundException e) {
-            throw new IllegalArgumentException("Could not find column family \"" +  indexColumnName.substring(0, pos) + "\" in index column name of \"" + indexColumnName + "\"", e);
+            return null;
         }
         try {
             return family.getPColumnForColumnName(indexColumnName.substring(pos+1));
         } catch (ColumnNotFoundException e) {
-            throw new IllegalArgumentException("Could not find column \"" +  indexColumnName.substring(pos+1) + "\" in index column name of \"" + indexColumnName + "\"", e);
+            return null;
         }
     }
     
@@ -261,34 +282,8 @@ public class IndexUtil {
                             .getLength()) == 0);
     }
 
-    public static List<Delete> generateDeleteIndexData(final PTable table, PTable index,
-            List<Delete> dataMutations, ImmutableBytesWritable ptr, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
-            throws SQLException {
-        try {
-            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
-            List<Delete> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
-            for (final Mutation dataMutation : dataMutations) {
-                long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
-                ptr.set(dataMutation.getRow());
-                byte[] regionStartKey = null;
-                byte[] regionEndkey = null;
-                if(maintainer.isLocalIndex()) {
-                    HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
-                    regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                    regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
-                }
-                Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
-                delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY));
-                indexMutations.add(delete);
-            }
-            return indexMutations;
-        } catch (IOException e) {
-            throw new SQLException(e);
-        }
-    }
-    
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
-            final Map<ImmutableBytesPtr, RowMutationState> valuesMap, List<Mutation> dataMutations, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
+            final MultiRowMutationState multiRowMutationState, List<Mutation> dataMutations, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
             throws SQLException {
         try {
         	final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
@@ -341,8 +336,8 @@ public class IndexUtil {
                     byte[] regionEndkey = null;
                     if(maintainer.isLocalIndex()) {
                         HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
-                        regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                        regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                        regionStartKey = tableRegionLocation.getRegion().getStartKey();
+                        regionEndkey = tableRegionLocation.getRegion().getEndKey();
                     }
                     indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey));
                 }
@@ -460,13 +455,14 @@ public class IndexUtil {
             KeyValueSchema keyValueSchema = deserializeLocalIndexJoinSchemaFromScan(scan); 
             boolean storeColsInSingleCell = scan.getAttribute(BaseScannerRegionObserver.COLUMNS_STORED_IN_SINGLE_CELL) != null;
             QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+            ImmutableStorageScheme immutableStorageScheme = EncodedColumnsUtil.getImmutableStorageScheme(scan);
             Expression[] colExpressions = storeColsInSingleCell ? new SingleCellColumnExpression[dataColumns.length] : new KeyValueColumnExpression[dataColumns.length];
             for (int i = 0; i < dataColumns.length; i++) {
                 byte[] family = dataColumns[i].getFamily();
                 byte[] qualifier = dataColumns[i].getQualifier();
                 Field field = keyValueSchema.getField(i);
                 Expression dataColumnExpr =
-                        storeColsInSingleCell ? new SingleCellColumnExpression(field, family, qualifier, encodingScheme)
+                        storeColsInSingleCell ? new SingleCellColumnExpression(field, family, qualifier, encodingScheme, immutableStorageScheme)
                             : new KeyValueColumnExpression(field, family, qualifier);
                 colExpressions[i] = dataColumnExpr;
             }
@@ -533,10 +529,10 @@ public class IndexUtil {
             } else {
                 TableName dataTable =
                         TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
-                            environment.getRegion().getTableDesc().getNameAsString()));
-                HTableInterface table = null;
+                            environment.getRegion().getTableDescriptor().getTableName().getNameAsString()));
+                Table table = null;
                 try {
-                    table = environment.getTable(dataTable);
+                    table = environment.getConnection().getTable(dataTable);
                     joinResult = table.get(get);
                 } finally {
                     if (table != null) table.close();
@@ -550,8 +546,8 @@ public class IndexUtil {
             byte[] value =
                     tupleProjector.getSchema().toBytes(joinTuple, tupleProjector.getExpressions(),
                         tupleProjector.getValueBitSet(), ptr);
-            KeyValue keyValue =
-                    KeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
+            Cell keyValue =
+                    PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
             result.add(keyValue);
         }
@@ -617,11 +613,6 @@ public class IndexUtil {
                     return cell.getTypeByte();
                 }
 
-                @Override
-                public long getMvccVersion() {
-                    return cell.getMvccVersion();
-                }
-
                 @Override public long getSequenceId() {
                     return cell.getSequenceId();
                 }
@@ -657,23 +648,8 @@ public class IndexUtil {
                 }
 
                 @Override
-                public byte[] getValue() {
-                    return cell.getValue();
-                }
-
-                @Override
-                public byte[] getFamily() {
-                    return cell.getFamily();
-                }
-
-                @Override
-                public byte[] getQualifier() {
-                    return cell.getQualifier();
-                }
-
-                @Override
-                public byte[] getRow() {
-                    return cell.getRow();
+                public Type getType() {
+                    return cell.getType();
                 }
             };
             itr.set(newCell);
@@ -686,7 +662,7 @@ public class IndexUtil {
     }
 
     public static byte[][] getViewConstants(PTable dataTable) {
-        if (dataTable.getType() != PTableType.VIEW) return null;
+        if (dataTable.getType() != PTableType.VIEW && dataTable.getType() != PTableType.PROJECTED) return null;
         int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         List<byte[]> viewConstants = new ArrayList<byte[]>();
@@ -711,26 +687,24 @@ public class IndexUtil {
                 m.setDurability(Durability.SKIP_WAL);
             }
         }
-        region.batchMutate(
-            mutations.toArray(new Mutation[mutations.size()]),
-            HConstants.NO_NONCE, HConstants.NO_NONCE);
+        region.batchMutate(mutations.toArray(new Mutation[mutations.size()]));
     }
     
     public static MetaDataMutationResult updateIndexState(String indexTableName, long minTimeStamp,
-            HTableInterface metaTable, PIndexState newState) throws Throwable {
+            Table metaTable, PIndexState newState) throws Throwable {
         byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
         return updateIndexState(indexTableKey, minTimeStamp, metaTable, newState);
     }
     
     public static MetaDataMutationResult updateIndexState(byte[] indexTableKey, long minTimeStamp,
-            HTableInterface metaTable, PIndexState newState) throws Throwable {
+            Table metaTable, PIndexState newState) throws Throwable {
         // Mimic the Put that gets generated by the client on an update of the index state
         Put put = new Put(indexTableKey);
-        put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
+        put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
                 newState.getSerializedBytes());
-        put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
+        put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
                 PLong.INSTANCE.toBytes(minTimeStamp));
-        put.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP_BYTES,
+        put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP_BYTES,
                 PLong.INSTANCE.toBytes(0));
         final List<Mutation> tableMetadata = Collections.<Mutation> singletonList(put);
 
@@ -768,10 +742,10 @@ public class IndexUtil {
     }
 
     public static boolean isLocalIndexStore(Store store) {
-        return store.getFamily().getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
+        return store.getColumnFamilyDescriptor().getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
     }
     
-    public static PTable getPDataTable(Connection conn, HTableDescriptor tableDesc) throws SQLException {
+    public static PTable getPDataTable(Connection conn, TableDescriptor tableDesc) throws SQLException {
         String dataTableName = Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
         String physicalTableName = tableDesc.getTableName().getNameAsString();
         PTable pDataTable = null;
@@ -834,6 +808,13 @@ public class IndexUtil {
     				.setMessage("indexState=" + newState).setSchemaName(schemaName)
     				.setTableName(indexName).build().buildException();
     	}
+    }
+
+    public static List<PTable> getClientMaintainedIndexes(PTable table) {
+        Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this client-side mechanism
+        (table.isImmutableRows() || table.isTransactional()) ? IndexMaintainer.maintainedGlobalIndexes(table
+                .getIndexes().iterator()) : Collections.<PTable> emptyIterator();
+        return Lists.newArrayList(indexIterator);
     }
     
 }

@@ -25,7 +25,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -34,7 +33,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -42,6 +40,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.covered.Batch;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
@@ -130,7 +129,10 @@ public class IndexManagementUtil {
         boolean matches = false;
         outer: for (KeyValue kv : update) {
             for (ColumnReference ref : columns) {
-                if (ref.matchesFamily(kv.getFamily()) && ref.matchesQualifier(kv.getQualifier())) {
+                if (ref.matchesFamily(kv.getFamilyArray(), kv.getFamilyOffset(),
+                    kv.getFamilyLength())
+                        && ref.matchesQualifier(kv.getQualifierArray(), kv.getQualifierOffset(),
+                            kv.getQualifierLength())) {
                     matches = true;
                     // if a single column matches a single kv, we need to build a whole scanner
                     break outer;
@@ -152,7 +154,10 @@ public class IndexManagementUtil {
         boolean matches = false;
         outer: for (ColumnReference ref : columns) {
             for (KeyValue kv : update) {
-                if (ref.matchesFamily(kv.getFamily()) && ref.matchesQualifier(kv.getQualifier())) {
+                if (ref.matchesFamily(kv.getFamilyArray(), kv.getFamilyOffset(),
+                    kv.getFamilyLength())
+                        && ref.matchesQualifier(kv.getQualifierArray(), kv.getQualifierOffset(),
+                            kv.getQualifierLength())) {
                     matches = true;
                     // if a single column matches a single kv, we need to build a whole scanner
                     break outer;
@@ -192,10 +197,11 @@ public class IndexManagementUtil {
     public static void rethrowIndexingException(Throwable e) throws IOException {
         try {
             throw e;
-        } catch (IOException e1) {
+        } catch (IOException | FatalIndexBuildingFailureException e1) {
             LOG.info("Rethrowing " + e);
             throw e1;
-        } catch (Throwable e1) {
+        }
+        catch (Throwable e1) {
             LOG.info("Rethrowing " + e1 + " as a " + IndexBuildingFailureException.class.getSimpleName());
             throw new IndexBuildingFailureException("Failed to build index for unexpected reason!", e1);
         }

@@ -17,33 +17,26 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.hadoop.hbase.regionserver.ConstantSizeRegionSplitPolicy;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 
-import org.apache.phoenix.util.SchemaUtil;
+public class MetaDataSplitPolicy extends SplitOnLeadingVarCharColumnsPolicy {
 
+	@Override
+	protected boolean shouldSplit() {
+		Configuration conf = getConf();
+		return super.shouldSplit() && conf.getBoolean(QueryServices.SYSTEM_CATALOG_SPLITTABLE,
+				QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_SPLITTABLE);
+	}
 
-public class MetaDataSplitPolicy extends ConstantSizeRegionSplitPolicy {
-
-    @Override
-    protected byte[] getSplitPoint() {
-        byte[] splitPoint = super.getSplitPoint();
-        int offset = SchemaUtil.getVarCharLength(splitPoint, 0, splitPoint.length);
-        // Split only on Phoenix schema name, so this is ok b/c we won't be splitting
-        // in the middle of a Phoenix table.
-        if (offset == splitPoint.length) {
-            return splitPoint;
-        }
-//        offset = SchemaUtil.getVarCharLength(splitPoint, offset+1, splitPoint.length-offset-1);
-//        // Split only on Phoenix schema and table name, so this is ok b/c we won't be splitting
-//        // in the middle of a Phoenix table.
-//        if (offset == splitPoint.length) {
-//            return splitPoint;
-//        }
-        // Otherwise, an attempt is being made to split in the middle of a table.
-        // Just return a split point at the schema boundary instead
-        byte[] newSplitPoint = new byte[offset + 1];
-        System.arraycopy(splitPoint, 0, newSplitPoint, 0, offset+1);
-        return newSplitPoint;
-    }
+	@Override
+	protected int getColumnToSplitAt() {
+		// SYSTEM.CATALOG rowkey is (tenant id, schema name, table name, column name,
+		// column family) ensure all meta data rows for a given schema are in the same
+		// region (indexes and tables are in the same schema as we lock the parent table
+		// when modifying an index)
+		return 2;
+	}
 
 }

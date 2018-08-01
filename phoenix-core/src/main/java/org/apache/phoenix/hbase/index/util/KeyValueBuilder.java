@@ -22,10 +22,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.KVComparator;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -60,7 +60,7 @@ public abstract class KeyValueBuilder {
     @SuppressWarnings("javadoc")
     public static void deleteQuietly(Delete delete, KeyValueBuilder builder, KeyValue kv) {
         try {
-            delete.addDeleteMarker(kv);
+            delete.add(kv);
         } catch (IOException e) {
             throw new RuntimeException("KeyValue Builder " + builder + " created an invalid kv: "
                     + kv + "!");
@@ -122,7 +122,7 @@ public abstract class KeyValueBuilder {
    */
   public abstract void getValueAsPtr(Cell kv, ImmutableBytesWritable ptr);
   
-  public abstract KVComparator getKeyValueComparator();
+  public abstract CellComparator getKeyValueComparator();
   
   public abstract List<Mutation> cloneIfNecessary(List<Mutation> mutations);
 

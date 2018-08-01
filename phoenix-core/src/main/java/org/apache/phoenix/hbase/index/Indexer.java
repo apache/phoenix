@@ -24,8 +24,6 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,6 +31,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -42,7 +41,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
@@ -51,31 +49,27 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.InternalScanner;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.ScanType;
-import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
-import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
-import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.LockManager.RowLock;
+import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
@@ -90,19 +84,15 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
@@ -128,7 +118,7 @@ import com.google.common.collect.Multimap;
  * Phoenix always does batch mutations.
  * <p>
  */
-public class Indexer extends BaseRegionObserver {
+public class Indexer implements RegionObserver, RegionCoprocessor {
 
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
@@ -142,8 +132,13 @@ public class Indexer extends BaseRegionObserver {
   // Hack to get around not being able to save any state between
   // coprocessor calls. TODO: remove after HBASE-18127 when available
   private static class BatchMutateContext {
+      public final int clientVersion;
       public Collection<Pair<Mutation, byte[]>> indexUpdates = Collections.emptyList();
       public List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+
+      public BatchMutateContext(int clientVersion) {
+          this.clientVersion = clientVersion;
+      }
   }
   
   private ThreadLocal<BatchMutateContext> batchMutateContext =
@@ -194,7 +189,6 @@ public class Indexer extends BaseRegionObserver {
   private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
-  private Configuration compactionConfig;
   
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
@@ -208,56 +202,36 @@ public class Indexer extends BaseRegionObserver {
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
 
   @Override
+  public Optional<RegionObserver> getRegionObserver() {
+    return Optional.of(this);
+  }
+
+  @Override
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
-        String serverName = env.getRegionServerServices().getServerName().getServerName();
+        String serverName = env.getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
           // make sure the right version <-> combinations are allowed.
           String errormsg = Indexer.validateVersion(env.getHBaseVersion(), env.getConfiguration());
           if (errormsg != null) {
-            IOException ioe = new IOException(errormsg);
-            env.getRegionServerServices().abort(errormsg, ioe);
-            throw ioe;
+              throw new FatalIndexBuildingFailureException(errormsg);
           }
         }
     
         this.builder = new IndexBuildManager(env);
         // Clone the config since it is shared
-        Configuration clonedConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
-        /*
-         * Set the rpc controller factory so that the HTables used by IndexWriter would
-         * set the correct priorities on the remote RPC calls.
-         */
-        clonedConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
-                InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
-        // lower the number of rpc retries.  We inherit config from HConnectionManager#setServerSideHConnectionRetries,
-        // which by default uses a multiplier of 10.  That is too many retries for our synchronous index writes
-        clonedConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
-            env.getConfiguration().getInt(INDEX_WRITER_RPC_RETRIES_NUMBER,
-                DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER));
-        clonedConfig.setInt(HConstants.HBASE_CLIENT_PAUSE, env.getConfiguration()
-            .getInt(INDEX_WRITER_RPC_PAUSE, DEFAULT_INDEX_WRITER_RPC_PAUSE));
-        DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
+        DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
         // setup the actual index writer
         this.writer = new IndexWriter(indexWriterEnv, serverName + "-index-writer");
         
-        this.rowLockWaitDuration = clonedConfig.getInt("hbase.rowlock.wait.duration",
+        this.rowLockWaitDuration = env.getConfiguration().getInt("hbase.rowlock.wait.duration",
                 DEFAULT_ROWLOCK_WAIT_DURATION);
         this.lockManager = new LockManager();
 
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
         this.metricSource = MetricsIndexerSourceFactory.getInstance().create();
         setSlowThresholds(e.getConfiguration());
-
-        compactionConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
-        // lower the number of rpc retries, so we don't hang the compaction
-        compactionConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
-            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRIES_NUMBER,
-                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRIES_NUMBER));
-        compactionConfig.setInt(HConstants.HBASE_CLIENT_PAUSE,
-            e.getConfiguration().getInt(QueryServices.METADATA_WRITE_RETRY_PAUSE,
-                QueryServicesOptions.DEFAULT_METADATA_WRITE_RETRY_PAUSE));
 
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
@@ -275,7 +249,6 @@ public class Indexer extends BaseRegionObserver {
         }
       } catch (NoSuchMethodError ex) {
           disabled = true;
-          super.start(e);
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
       }
   }
@@ -310,7 +283,6 @@ public class Indexer extends BaseRegionObserver {
       return;
     }
     if (this.disabled) {
-        super.stop(e);
         return;
       }
     this.stopped = true;
@@ -340,14 +312,12 @@ public class Indexer extends BaseRegionObserver {
           // Causes the Increment to be ignored as we're committing the mutations
           // ourselves below.
           e.bypass();
-          e.complete();
           // ON DUPLICATE KEY IGNORE will return empty list if row already exists
           // as no action is required in that case.
           if (!mutations.isEmpty()) {
               Region region = e.getEnvironment().getRegion();
               // Otherwise, submit the mutations directly here
-                region.batchMutate(mutations.toArray(new Mutation[0]), HConstants.NO_NONCE,
-                    HConstants.NO_NONCE);
+                region.batchMutate(mutations.toArray(new Mutation[0]));
           }
           return Result.EMPTY_RESULT;
       } catch (Throwable t) {
@@ -371,7 +341,6 @@ public class Indexer extends BaseRegionObserver {
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
       if (this.disabled) {
-          super.preBatchMutate(c, miniBatchOp);
           return;
       }
       long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -408,7 +377,7 @@ public class Indexer extends BaseRegionObserver {
           
       Durability defaultDurability = Durability.SYNC_WAL;
       if(c.getEnvironment().getRegion() != null) {
-          defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
+          defaultDurability = c.getEnvironment().getRegion().getTableDescriptor().getDurability();
           defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
                   Durability.SYNC_WAL : defaultDurability;
       }
@@ -416,7 +385,7 @@ public class Indexer extends BaseRegionObserver {
        * Exclusively lock all rows so we get a consistent read
        * while determining the index updates
        */
-      BatchMutateContext context = new BatchMutateContext();
+      BatchMutateContext context = new BatchMutateContext(this.builder.getIndexMetaData(miniBatchOp).getClientVersion());
       setBatchMutateContext(c, context);
       Durability durability = Durability.SKIP_WAL;
       boolean copyMutations = false;
@@ -544,7 +513,7 @@ public class Indexer extends BaseRegionObserver {
           metricSource.updateIndexPrepareTime(duration);
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
-          byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
+          byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
           Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
           while(indexUpdatesItr.hasNext()) {
@@ -587,7 +556,6 @@ public class Indexer extends BaseRegionObserver {
   public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
       if (this.disabled) {
-          super.postBatchMutateIndispensably(c, miniBatchOp, success);
           return;
       }
       long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -644,7 +612,7 @@ public class Indexer extends BaseRegionObserver {
           long start = EnvironmentEdgeManager.currentTimeMillis();
           
           current.addTimelineAnnotation("Actually doing index update for first time");
-          writer.writeAndKillYourselfOnFailure(context.indexUpdates, false);
+          writer.writeAndKillYourselfOnFailure(context.indexUpdates, false, context.clientVersion);
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexWriteThreshold) {
@@ -696,7 +664,6 @@ public class Indexer extends BaseRegionObserver {
     Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
     
     if (this.disabled) {
-        super.postOpen(c);
         return;
     }
 
@@ -713,7 +680,7 @@ public class Indexer extends BaseRegionObserver {
         // do the usual writer stuff, killing the server again, if we can't manage to make the index
         // writes succeed again
         try {
-            writer.writeAndKillYourselfOnFailure(updates, true);
+            writer.writeAndKillYourselfOnFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IOException e) {
                 LOG.error("During WAL replay of outstanding index updates, "
                         + "Exception is thrown instead of killing server during index writing", e);
@@ -731,10 +698,12 @@ public class Indexer extends BaseRegionObserver {
   }
 
   @Override
-  public void preWALRestore(ObserverContext<RegionCoprocessorEnvironment> env, HRegionInfo info,
-      HLogKey logKey, WALEdit logEdit) throws IOException {
+    public void preWALRestore(
+            org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+            org.apache.hadoop.hbase.client.RegionInfo info, org.apache.hadoop.hbase.wal.WALKey logKey, WALEdit logEdit)
+            throws IOException {
+  
       if (this.disabled) {
-          super.preWALRestore(env, info, logKey, logEdit);
           return;
       }
 
@@ -751,7 +720,7 @@ public class Indexer extends BaseRegionObserver {
            * hopes they come up before the primary table finishes.
            */
           Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-          recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true);
+          recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowPreWALRestoreThreshold) {
@@ -764,29 +733,6 @@ public class Indexer extends BaseRegionObserver {
       }
   }
 
-  /**
-   * Create a custom {@link InternalScanner} for a compaction that tracks the versions of rows that
-   * are removed so we can clean then up from the the index table(s).
-   * <p>
-   * This is not yet implemented - its not clear if we should even mess around with the Index table
-   * for these rows as those points still existed. TODO: v2 of indexing
-   */
-  @Override
-  public InternalScanner preCompactScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-          final Store store, final List<? extends KeyValueScanner> scanners, final ScanType scanType,
-          final long earliestPutTs, final InternalScanner s) throws IOException {
-      // Compaction and split upcalls run with the effective user context of the requesting user.
-      // This will lead to failure of cross cluster RPC if the effective user is not
-      // the login user. Switch to the login user context to ensure we have the expected
-      // security context.
-      // NOTE: Not necessary here at this time but leave in place to document this critical detail.
-      return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-          @Override
-          public InternalScanner run() throws Exception {
-              return Indexer.super.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s);
-          }
-      });
-  }
 
   /**
    * Exposed for testing!
@@ -825,63 +771,20 @@ public class Indexer extends BaseRegionObserver {
 
   /**
    * Enable indexing on the given table
-   * @param desc {@link HTableDescriptor} for the table on which indexing should be enabled
+   * @param desc {@link TableDescriptor} for the table on which indexing should be enabled
  * @param builder class to use when building the index for this table
  * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
  * @param priority TODO
    * @throws IOException the Indexer coprocessor cannot be added
    */
-  public static void enableIndexing(HTableDescriptor desc, Class<? extends IndexBuilder> builder,
+  public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,
       Map<String, String> properties, int priority) throws IOException {
     if (properties == null) {
       properties = new HashMap<String, String>();
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-    desc.addCoprocessor(Indexer.class.getName(), null, priority, properties);
-  }
-  
-  @Override
-  public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-          final StoreFile resultFile, CompactionRequest request) throws IOException {
-      // If we're compacting all files, then delete markers are removed
-      // and we must permanently disable an index that needs to be
-      // partially rebuild because we're potentially losing the information
-      // we need to successfully rebuilt it.
-      if (request.isAllFiles() || request.isMajor()) {
-          // Compaction and split upcalls run with the effective user context of the requesting user.
-          // This will lead to failure of cross cluster RPC if the effective user is not
-          // the login user. Switch to the login user context to ensure we have the expected
-          // security context.
-          User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-              @Override
-              public Void run() throws Exception {
-                  String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                  try {
-                      PhoenixConnection conn =  QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class);
-                      PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
-                      // FIXME: we may need to recurse into children of this table too
-                      for (PTable index : table.getIndexes()) {
-                          if (index.getIndexDisableTimestamp() != 0) {
-                              try {
-                                  LOG.info("Major compaction running while index on table is disabled.  Clearing index disable timestamp: " + fullTableName);
-                                  IndexUtil.updateIndexState(conn, index.getName().getString(), PIndexState.DISABLE, Long.valueOf(0L));
-                              } catch (SQLException e) {
-                                  LOG.warn("Unable to permanently disable index " + index.getName().getString(), e);
-                              }
-                          }
-                      }
-                  } catch (Exception e) {
-                      // If we can't reach the stats table, don't interrupt the normal
-                      // compaction operation, just log a warning.
-                      if (LOG.isWarnEnabled()) {
-                          LOG.warn("Unable to permanently disable indexes being partially rebuild for " + fullTableName, e);
-                      }
-                  }
-                  return null;
-              }
-          });
-      }
+     descBuilder.addCoprocessor(Indexer.class.getName(), null, priority, properties);
   }
 }
 

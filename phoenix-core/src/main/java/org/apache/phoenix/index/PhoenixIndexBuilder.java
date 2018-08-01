@@ -28,10 +28,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -58,7 +57,6 @@ import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisit
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -77,7 +75,14 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     private static final byte[] ON_DUP_KEY_IGNORE_BYTES = new byte[] {1}; // boolean true
     private static final int ON_DUP_KEY_HEADER_BYTE_SIZE = Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN;
     
-
+    private PhoenixIndexMetaDataBuilder indexMetaDataBuilder;
+    
+    @Override
+    public void setup(RegionCoprocessorEnvironment env) throws IOException {
+        super.setup(env);
+        this.indexMetaDataBuilder = new PhoenixIndexMetaDataBuilder(env);
+    }
+    
     private static List<Cell> flattenCells(Mutation m, int estimatedSize) throws IOException {
         List<Cell> flattenedCells = Lists.newArrayListWithExpectedSize(estimatedSize);
         flattenCells(m, flattenedCells);
@@ -91,22 +96,12 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     }
     
     @Override
-    public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-        return new PhoenixIndexMetaData(env, miniBatchOp.getOperation(0).getAttributesMap());
+    public PhoenixIndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+        return indexMetaDataBuilder.getIndexMetaData(miniBatchOp);
     }
 
     protected PhoenixIndexCodec getCodec() {
         return (PhoenixIndexCodec)codec;
-    }
-
-    @Override
-    public void setup(RegionCoprocessorEnvironment env) throws IOException {
-        super.setup(env);
-        Configuration conf = env.getConfiguration();
-        // Install handler that will attempt to disable the index first before killing the region
-        // server
-        conf.setIfUnset(IndexWriter.INDEX_FAILURE_POLICY_CONF_KEY,
-            PhoenixIndexFailurePolicy.class.getName());
     }
 
     @Override
@@ -221,7 +216,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                 // ordered correctly). We only need the list sorted if the expressions are going to be
                 // executed, not when the outer loop is exited. Hence we do it here, at the top of the loop.
                 if (flattenedCells != null) {
-                    Collections.sort(flattenedCells,KeyValue.COMPARATOR);
+                    Collections.sort(flattenedCells,CellComparatorImpl.COMPARATOR);
                 }
                 PRow row = table.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
                 int adjust = table.getBucketNum() == null ? 1 : 2;
@@ -272,7 +267,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                     transferAttributes(inc, delete);
                     mutations.add(delete);
                 }
-                delete.addDeleteMarker(cell);
+                delete.add(cell);
             }
         }
         return mutations;
@@ -388,4 +383,5 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     public ReplayWrite getReplayWrite(Mutation m) {
         return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
+    
 }

@@ -81,26 +81,71 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
         String tableName = initTables(conn);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(nullVarChar,'34567'),ARRAY_PREPEND('34567',nullVarChar) FROM " + tableName + " LIMIT 1");
-        assertTrue(rs.next());
-
         String[] strings = new String[]{"34567"};
-
         Array array = conn.createArrayOf("VARCHAR", strings);
 
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(null,'34567') FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
         assertEquals(array, rs.getArray(1));
-        assertEquals(array, rs.getArray(2));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('34567',null) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
         assertFalse(rs.next());
 
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(nullBigint,123),ARRAY_PREPEND(123,nullBigint) FROM " + tableName + " LIMIT 1");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(nullVarChar,'34567') FROM " + tableName + " LIMIT 1");
         assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
 
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('34567',nullVarChar) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+
+        Integer[] ints = new Integer[]{123};
+        array = conn.createArrayOf("INTEGER", ints);
+
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(null,123) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(123,null) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+        
         Long[] longs = new Long[]{123L};
-
         array = conn.createArrayOf("BIGINT", longs);
 
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(nullBigint,123) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
         assertEquals(array, rs.getArray(1));
-        assertEquals(array, rs.getArray(2));
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(123,nullBigint) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testUpsertEmptyArrayModification() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        ResultSet rs;
+        String[] strings = new String[]{"34567"};
+        Array array = conn.createArrayOf("VARCHAR", strings);
+
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (region_name,nullVarChar) SELECT region_name,ARRAY_APPEND(nullVarChar,'34567') FROM " + tableName);
+        conn.commit();
+        
+        rs = conn.createStatement().executeQuery("SELECT nullVarChar FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+        assertEquals(array, rs.getArray(1));
         assertFalse(rs.next());
     }
     
@@ -111,6 +156,26 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(varchars,'34567') FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
+
+        String[] strings = new String[]{"2345", "46345", "23234", "34567"};
+
+        Array array = conn.createArrayOf("VARCHAR", strings);
+
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testUpsertArrayAppendFunctionVarchar() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (region_name,varchars) SELECT region_name,ARRAY_APPEND(varchars,'34567') as varchars FROM " + tableName+ " WHERE region_name = 'SF Bay Area'");
+        conn.commit();
+        
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"2345", "46345", "23234", "34567"};

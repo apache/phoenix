@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -51,7 +52,19 @@ public abstract class ScalarFunction extends FunctionExpression {
         byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
         return key;
     }
-    
+
+    /**
+     * Retrieve the literal value at childIndex. The argument must be a constant 
+     * (i.e. marked as isConstant=true)
+     */
+    protected final <T> T getLiteralValue(int childIndex, Class<T> type) {
+    	Expression expression = getChildren().get(childIndex);
+    	// It's safe to assume expression is a LiteralExpression since
+    	// only arguments marked as isConstant = true should be handled through
+    	// this method.
+    	return type.cast(((LiteralExpression) expression).getValue());
+    }
+
     @Override
     public <T> T accept(ExpressionVisitor<T> visitor) {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));

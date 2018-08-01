@@ -34,7 +34,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
@@ -80,8 +79,7 @@ public class HashJoinCacheIT extends BaseJoinIT {
         public static Random rand= new Random();
         public static List<ImmutableBytesPtr> lastRemovedJoinIds=new ArrayList<ImmutableBytesPtr>();
         @Override
-        public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
-                final RegionScanner s) throws IOException {
+        public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan) throws IOException {
             final HashJoinInfo joinInfo = HashJoinInfo.deserializeHashJoinFromScan(scan);
             if (joinInfo != null) {
                 TenantCache cache = GlobalCache.getTenantCache(c.getEnvironment(), null);
@@ -94,7 +92,6 @@ public class HashJoinCacheIT extends BaseJoinIT {
                     }
                 }
             }
-            return s;
         }
         
     }

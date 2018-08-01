@@ -85,4 +85,8 @@ public abstract class ClientProcessingPlan extends DelegateQueryPlan {
     public FilterableStatement getStatement() {
         return statement;
     }
+
+    public Expression getWhere() {
+        return where;
+    }
 }

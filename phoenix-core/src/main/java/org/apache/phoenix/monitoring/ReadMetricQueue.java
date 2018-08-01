@@ -1,27 +1,21 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE
+ * file distributed with this work for additional information regarding copyright ownership. The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by
+ * applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  */
 package org.apache.phoenix.monitoring;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Queue;
@@ -31,6 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.annotation.Nonnull;
 
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -44,19 +39,28 @@ public class ReadMetricQueue {
 
     private final ConcurrentMap<MetricKey, Queue<CombinableMetric>> metricsMap = new ConcurrentHashMap<>();
 
-    private final boolean isRequestMetricsEnabled;
+    private final List<ScanMetricsHolder> scanMetricsHolderList = new ArrayList<ScanMetricsHolder>();
 
-    public ReadMetricQueue(boolean isRequestMetricsEnabled) {
+
+    private LogLevel connectionLogLevel;
+
+    private boolean isRequestMetricsEnabled;
+
+    public ReadMetricQueue(boolean isRequestMetricsEnabled, LogLevel connectionLogLevel) {
         this.isRequestMetricsEnabled = isRequestMetricsEnabled;
+        this.connectionLogLevel = connectionLogLevel;
     }
 
     public CombinableMetric allotMetric(MetricType type, String tableName) {
-        if (!isRequestMetricsEnabled) { return NoOpRequestMetric.INSTANCE; }
-        MetricKey key = new MetricKey(type, tableName);
-        Queue<CombinableMetric> q = getMetricQueue(key);
-        CombinableMetric metric = getMetric(type);
-        q.offer(metric);
-        return metric;
+        if (type.isLoggingEnabled(connectionLogLevel) || isRequestMetricsEnabled) {
+            MetricKey key = new MetricKey(type, tableName);
+            Queue<CombinableMetric> q = getMetricQueue(key);
+            CombinableMetric metric = getMetric(type);
+            q.offer(metric);
+            return metric;
+        } else {
+            return NoOpRequestMetric.INSTANCE;
+        }
     }
 
     @VisibleForTesting
@@ -85,7 +89,7 @@ public class ReadMetricQueue {
         }
         return publishedMetrics;
     }
-    
+
     public void clearMetrics() {
         metricsMap.clear(); // help gc
     }
@@ -94,7 +98,8 @@ public class ReadMetricQueue {
         int size = metrics.size();
         if (size == 0) { throw new IllegalArgumentException("Metrics collection needs to have at least one element"); }
         Iterator<CombinableMetric> itr = metrics.iterator();
-        CombinableMetric combinedMetric = itr.next();
+        //Clone first metric for combining so that aggregate always give consistent result
+        CombinableMetric combinedMetric = itr.next().clone();
         while (itr.hasNext()) {
             combinedMetric = combinedMetric.combine(itr.next());
         }
@@ -177,8 +182,16 @@ public class ReadMetricQueue {
         return q;
     }
 
-	public boolean isRequestMetricsEnabled() {
-		return isRequestMetricsEnabled;
-	}
+    public void addScanHolder(ScanMetricsHolder holder){
+        scanMetricsHolderList.add(holder);
+    }
+
+    public List<ScanMetricsHolder> getScanMetricsHolderList() {
+        return scanMetricsHolderList;
+    }
+    
+    public boolean isRequestMetricsEnabled() {
+        return isRequestMetricsEnabled;
+    }    
 
 }

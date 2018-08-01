@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
-
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -29,10 +27,13 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
@@ -66,6 +67,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PColumnFamilyImpl;
@@ -73,9 +75,9 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
-import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -187,7 +189,7 @@ public class FromCompiler {
                 boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(), connection.getQueryServices().getProps());
                 byte[] fullTableName = SchemaUtil.getPhysicalHBaseTableName(
                     baseTable.getSchemaName(), baseTable.getTableName(), isNamespaceMapped).getBytes();
-                HTableInterface htable = null;
+                Table htable = null;
                 try {
                     htable = services.getTable(fullTableName);
                 } catch (UnsupportedOperationException ignore) {
@@ -273,7 +275,8 @@ public class FromCompiler {
             Expression sourceExpression = projector.getColumnProjector(column.getPosition()).getExpression();
             PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(),
                     sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
-                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes());
+                    column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
+                column.getTimestamp());
             projectedColumns.add(projectedColumn);
         }
         PTable t = PTableImpl.makePTable(table, projectedColumns);
@@ -574,8 +577,9 @@ public class FromCompiler {
                 MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
                 timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
                 theTable = result.getTable();
+                MutationCode mutationCode = result.getMutationCode();
                 if (theTable == null) {
-                    throw new TableNotFoundException(schemaName, tableName, timeStamp);
+					throw new TableNotFoundException(schemaName, tableName, timeStamp);
                 }
             } else {
                 try {
@@ -711,7 +715,8 @@ public class FromCompiler {
                         familyName = PNameFactory.newName(family);
                     }
                     allcolumns.add(new PColumnImpl(name, familyName, dynColumn.getDataType(), dynColumn.getMaxLength(),
-                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, dynColumn.getExpression(), false, true, Bytes.toBytes(dynColumn.getColumnDefName().getColumnName())));
+                            dynColumn.getScale(), dynColumn.isNull(), position, dynColumn.getSortOrder(), dynColumn.getArraySize(), null, false, dynColumn.getExpression(), false, true, Bytes.toBytes(dynColumn.getColumnDefName().getColumnName()),
+                        HConstants.LATEST_TIMESTAMP));
                     position++;
                 }
                 theTable = PTableImpl.makePTable(theTable, allcolumns);
@@ -816,13 +821,14 @@ public class FromCompiler {
                 PName name = PNameFactory.newName(alias);
                 PColumnImpl column = new PColumnImpl(PNameFactory.newName(alias),
                         PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY),
-                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null, false, false, name.getBytes());
+                        null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null, false, false, name.getBytes(),
+                    HConstants.LATEST_TIMESTAMP);
                 columns.add(column);
             }
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, PTableType.SUBQUERY, null,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, null, null, columns, null, null,
                     Collections.<PTable> emptyList(), false, Collections.<PName> emptyList(), null, null, false, false,
-                    false, null, null, null, false, false, 0, 0L, SchemaUtil
+                    false, null, null, null, false, null, 0, 0L, SchemaUtil
                             .isNamespaceMappingEnabled(PTableType.SUBQUERY, connection.getQueryServices().getProps()), null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
 
             String alias = subselectNode.getAlias();
@@ -871,7 +877,9 @@ public class FromCompiler {
                     TableRef tableRef = iterator.next();
                     try {
                         PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
-                        if (theColumnFamilyRef != null) { throw new TableNotFoundException(cfName); }
+                        if (columnFamily == null) { 
+                            throw new TableNotFoundException(cfName); 
+                        }
                         theColumnFamilyRef = new ColumnFamilyRef(tableRef, columnFamily);
                     } catch (ColumnFamilyNotFoundException e) {}
                 }
@@ -914,10 +922,42 @@ public class FromCompiler {
                     PColumn column = tableRef.getTable().getColumnForColumnName(colName);
                     return new ColumnRef(tableRef, column.getPosition());
                 } catch (TableNotFoundException e) {
-                    // Try using the tableName as a columnFamily reference instead
-                    ColumnFamilyRef cfRef = resolveColumnFamily(schemaName, tableName);
-                    PColumn column = cfRef.getFamily().getPColumnForColumnName(colName);
-                    return new ColumnRef(cfRef.getTableRef(), column.getPosition());
+                    TableRef theTableRef = null;
+                    PColumn theColumn = null;
+                    PColumnFamily theColumnFamily = null;
+                    if (schemaName != null) {
+                        try {
+                            // Try schemaName as the tableName and use tableName as column family name
+                            theTableRef = resolveTable(null, schemaName);
+                            theColumnFamily = theTableRef.getTable().getColumnFamily(tableName);
+                            theColumn = theColumnFamily.getPColumnForColumnName(colName);
+                        } catch (MetaDataEntityNotFoundException e2) {
+                        }
+                    } 
+                    if (theColumn == null) {
+                        // Try using the tableName as a columnFamily reference instead
+                        // and resolve column in each column family.
+                        Iterator<TableRef> iterator = tables.iterator();
+                        while (iterator.hasNext()) {
+                            TableRef tableRef = iterator.next();
+                            try {
+                                PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(tableName);
+                                PColumn column = columnFamily.getPColumnForColumnName(colName);
+                                if (theColumn != null) {
+                                    throw new AmbiguousColumnException(colName);
+                                }
+                                theTableRef = tableRef;
+                                theColumnFamily = columnFamily;
+                                theColumn = column;
+                            } catch (MetaDataEntityNotFoundException e1) {
+                            }
+                        }
+                        if (theColumn == null) { 
+                            throw new ColumnNotFoundException(colName);
+                        }
+                    }
+                    ColumnFamilyRef cfRef = new ColumnFamilyRef(theTableRef, theColumnFamily);
+                    return new ColumnRef(cfRef.getTableRef(), theColumn.getPosition());
                 }
             }
         }

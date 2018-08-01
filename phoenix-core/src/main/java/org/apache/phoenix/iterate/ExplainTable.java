@@ -258,16 +258,7 @@ public abstract class ExplainTable {
     
     private void appendScanRow(StringBuilder buf, Bound bound) {
         ScanRanges scanRanges = context.getScanRanges();
-        // TODO: review this and potentially intersect the scan ranges
-        // with the minMaxRange in ScanRanges to prevent having to do all this.
-        KeyRange minMaxRange = scanRanges.getMinMaxRange();
         Iterator<byte[]> minMaxIterator = Collections.emptyIterator();
-        if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
-            RowKeySchema schema = tableRef.getTable().getRowKeySchema();
-            if (!minMaxRange.isUnbound(bound)) {
-                minMaxIterator = new RowKeyValueIterator(schema, minMaxRange.getRange(bound));
-            }
-        }
         boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());
         boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
         int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();

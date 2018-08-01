@@ -27,7 +27,6 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -94,8 +93,7 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
         boolean next = super.next(dataTableResults);
         addMutations(dataTableResults);
         if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)||!next) {
-            region.batchMutate(mutationList.toArray(new Mutation[mutationList.size()]), HConstants.NO_NONCE,
-                    HConstants.NO_NONCE);
+            region.batchMutate(mutationList.toArray(new Mutation[mutationList.size()]));
             mutationList.clear();
         }
         return next;
@@ -125,7 +123,7 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
                             del = new Delete(CellUtil.cloneRow(cell));
                             mutationList.add(del);
                         }
-                        del.addDeleteMarker(cell);
+                        del.add(cell);
                     }
                 }
             }

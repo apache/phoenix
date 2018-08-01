@@ -75,11 +75,11 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.PropertyPolicyProvider;
@@ -105,6 +105,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
@@ -116,6 +117,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.VarBinaryFormatter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -166,6 +168,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue;
     private TableResultIteratorFactory tableResultIteratorFactory;
     private boolean isRunningUpgrade;
+    private LogLevel logLevel;
+    private Double logSamplingRate;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -205,13 +209,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public PhoenixConnection(PhoenixConnection connection, long scn)
             throws SQLException {
-        this(connection.getQueryServices(), connection, scn);
+        this(connection, newPropsWithSCN(scn, connection.getClientInfo()));
     }
 
-    public PhoenixConnection(ConnectionQueryServices services,
-            PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,
-                connection.getClientInfo()), connection.metaData, connection
+	public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
+        this(connection.getQueryServices(), connection.getURL(), props, connection.metaData, connection
                 .getMutationState(), connection.isDescVarLengthRowKeyUpgrade(),
                 connection.isRunningUpgrade(), connection.buildingIndex);
         this.isAutoCommit = connection.isAutoCommit;
@@ -325,9 +327,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         int maxSizeBytes = this.services.getProps().getInt(
                 QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
-        Format dateFormat = DateUtil.getDateFormatter(datePattern);
-        Format timeFormat = DateUtil.getDateFormatter(timePattern);
-        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
+        String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                DateUtil.DEFAULT_TIME_ZONE_ID);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern, timeZoneID);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern, timeZoneID);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, timeZoneID);
         formatters.put(PDate.INSTANCE, dateFormat);
         formatters.put(PTime.INSTANCE, timeFormat);
         formatters.put(PTimestamp.INSTANCE, timestampFormat);
@@ -336,6 +340,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         formatters.put(PUnsignedTimestamp.INSTANCE, timestampFormat);
         formatters.put(PDecimal.INSTANCE,
                 FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
+        formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
         // We do not limit the metaData on a connection less than the global
         // one,
         // as there's not much that will be cached here.
@@ -359,9 +364,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                                 function.getTenantId())));
             }
         };
-        this.isRequestLevelMetricsEnabled = JDBCUtil
-                .isCollectingRequestLevelMetricsEnabled(url, info,
-                        this.services.getProps());
+        this.logLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
+                QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
+        this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info,
+                this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize,
                 maxSizeBytes) : new MutationState(mutationState);
         this.metaData = metaData;
@@ -375,6 +381,9 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.scannerQueue = new LinkedBlockingQueue<>();
         this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
         this.isRunningUpgrade = isRunningUpgrade;
+        
+        this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
+                QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
         GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
 
@@ -645,6 +654,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             } finally {
                 services.removeConnection(this);
             }
+            
         } finally {
             isClosed = true;
             GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
@@ -1233,7 +1243,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     public void addIteratorForLeaseRenewal(@Nonnull TableResultIterator itr) {
-        if (services.supportsFeature(Feature.RENEW_LEASE)) {
+        if (services.isRenewingLeasesEnabled()) {
             checkNotNull(itr);
             scannerQueue.add(new WeakReference<TableResultIterator>(itr));
         }
@@ -1269,6 +1279,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public void setRunningUpgrade(boolean isRunningUpgrade) {
         this.isRunningUpgrade = isRunningUpgrade;
+    }
+
+    public LogLevel getLogLevel(){
+        return this.logLevel;
+    }
+    
+    public Double getLogSamplingRate(){
+        return this.logSamplingRate;
     }
 
 }

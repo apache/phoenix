@@ -30,8 +30,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -68,7 +69,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
         Connection conn = getConnection();
         conn.createStatement().execute("CREATE TABLE " + tableName + "("
                 + "a VARCHAR PRIMARY KEY, b VARCHAR) " 
-                + HTableDescriptor.MAX_FILESIZE + "=" + MAX_FILESIZE + ","
+                + TableDescriptorBuilder.MAX_FILESIZE + "=" + MAX_FILESIZE + ","
                 + " SALT_BUCKETS = 4");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
         int rowCount = 0;
@@ -86,9 +87,9 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
         }
         conn.commit();
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HBaseAdmin admin = services.getAdmin();
+        Admin admin = services.getAdmin();
         try {
-            admin.flush(tableName);
+            admin.flush(TableName.valueOf(tableName));
         } finally {
             admin.close();
         }
@@ -104,9 +105,9 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         int nRegions = services.getAllTableRegions(tableNameBytes).size();
         int nInitialRegions = nRegions;
-        HBaseAdmin admin = services.getAdmin();
+        Admin admin = services.getAdmin();
         try {
-            admin.split(tableName);
+            admin.split(TableName.valueOf(tableName));
             int nTries = 0;
             while (nRegions == nInitialRegions && nTries < 10) {
                 Thread.sleep(1000);

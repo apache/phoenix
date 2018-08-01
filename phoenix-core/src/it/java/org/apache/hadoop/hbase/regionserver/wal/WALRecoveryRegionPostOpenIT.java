@@ -44,12 +44,14 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -123,7 +125,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
                 throw new DoNotRetryIOException();
             }
             Mutation operation = miniBatchOp.getOperation(0);
-            Set<byte[]> keySet = operation.getFamilyMap().keySet();
+            Set<byte[]> keySet = operation.getFamilyCellMap().keySet();
             for(byte[] family: keySet) {
                 if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) && failIndexTableWrite) {
                     throw new DoNotRetryIOException();
@@ -192,7 +194,8 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             this.assertRegionServerDifferent(miniHBaseCluster);
 
             Scan scan = new Scan();
-            HTable primaryTable = new HTable(getUtility().getConfiguration(), DATA_TABLE_NAME);
+            org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(getUtility().getConfiguration());
+            Table primaryTable = hbaseConn.getTable(TableName.valueOf(DATA_TABLE_NAME));
             ResultScanner resultScanner = primaryTable.getScanner(scan);
             int count = 0;
              for (Result result : resultScanner) {
@@ -229,22 +232,22 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             assertTrue(!Arrays.equals(mutations[0].getRow(),Bytes.toBytes("a")));
 
             //wait for data table region repoen.
-            List<Region> dataTableRegions=null;
+            List<HRegion> dataTableRegions=null;
 
             for(int i=1;i<=200;i++) {
-                dataTableRegions=liveRegionServer.getOnlineRegions(TableName.valueOf(DATA_TABLE_NAME));
+                dataTableRegions=liveRegionServer.getRegions(TableName.valueOf(DATA_TABLE_NAME));
                 if(dataTableRegions.size() > 0) {
                     break;
                 }
                 Thread.sleep(ONE_SEC);
             }
 
-            dataTableRegions=liveRegionServer.getOnlineRegions(TableName.valueOf(DATA_TABLE_NAME));
+            dataTableRegions=liveRegionServer.getRegions(TableName.valueOf(DATA_TABLE_NAME));
             assertTrue(dataTableRegions.size()==1);
 
 
             // the index table is one row
-            HTable indexTable = new HTable(getUtility().getConfiguration(), INDEX_TABLE_NAME);
+            Table indexTable = hbaseConn.getTable(TableName.valueOf(INDEX_TABLE_NAME));
             resultScanner = indexTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {
@@ -256,8 +259,8 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
 
             scan = new Scan();
             primaryTable.close();
-            primaryTable = new HTable(getUtility().getConfiguration(), DATA_TABLE_NAME);
-            primaryTable.getConnection().clearRegionCache();
+            primaryTable = hbaseConn.getTable(TableName.valueOf(DATA_TABLE_NAME));
+            ((ClusterConnection)hbaseConn).clearRegionCache();
             resultScanner = primaryTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {

@@ -62,14 +62,19 @@ public class SerialIterators extends BaseResultIterators {
     private final Integer offset;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, Integer offset,
-            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches)
+            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, QueryPlan dataPlan)
             throws SQLException {
-        super(plan, perScanLimit, offset, scanGrouper, scan, caches);
+        super(plan, perScanLimit, offset, scanGrouper, scan, caches, dataPlan);
         this.offset = offset;
         // must be a offset or a limit specified or a SERIAL hint
         Preconditions.checkArgument(
                 offset != null || perScanLimit != null || plan.getStatement().getHint().hasHint(HintNode.Hint.SERIAL));
         this.iteratorFactory = iteratorFactory;
+    }
+
+    @Override
+    protected boolean isSerial() {
+        return true;
     }
 
     @Override
@@ -117,14 +122,6 @@ public class SerialIterators extends BaseResultIterators {
         }
     }
 
-    /**
-     * No need to use stats when executing serially
-     */
-    @Override
-    protected boolean useStats() {
-        return false;
-    }
-    
     @Override
     protected String getName() {
         return NAME;
@@ -174,7 +171,6 @@ public class SerialIterators extends BaseResultIterators {
                 return EMPTY_ITERATOR;
             }
             ReadMetricQueue readMetrics = context.getReadMetricsQueue();
-            boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
             while (index < scans.size()) {
                 Scan currentScan = scans.get(index++);
                 if (remainingOffset != null) {
@@ -182,7 +178,7 @@ public class SerialIterators extends BaseResultIterators {
                 }
                 ScanMetricsHolder scanMetricsHolder =
                         ScanMetricsHolder.getInstance(readMetrics, tableName, currentScan,
-                            isRequestMetricsEnabled);
+                            context.getConnection().getLogLevel());
                 TableResultIterator itr =
                         new TableResultIterator(mutationState, currentScan, scanMetricsHolder,
                                 renewLeaseThreshold, plan, scanGrouper, caches);

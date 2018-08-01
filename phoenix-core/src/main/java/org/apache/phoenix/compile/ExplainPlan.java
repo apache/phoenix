@@ -34,4 +34,14 @@ public class ExplainPlan {
     public List<String> getPlanSteps() {
         return planSteps;
     }
+    
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder();
+        for (String step : planSteps) {
+            buf.append(step);
+            buf.append('\n');
+        }
+        return buf.toString();
+    }
 }

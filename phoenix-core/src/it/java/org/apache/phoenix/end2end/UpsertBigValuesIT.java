@@ -25,10 +25,16 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.junit.Test;
 
+import com.google.common.collect.Lists;
 
 public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
 
@@ -374,4 +380,60 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         */
         conn.close();
     }
+
+    @Test
+    public void testShort() throws Exception {
+        List<Short> testData =
+                Arrays.asList(Short.MIN_VALUE, Short.MAX_VALUE, (short) (Short.MIN_VALUE + 1),
+                    (short) (Short.MAX_VALUE - 1), (short) 0, (short) 1, (short) -1);
+        testValues(false, PSmallint.INSTANCE, testData);
+        testValues(true, PSmallint.INSTANCE, testData);
+    }
+
+    @Test
+    public void testBigInt() throws Exception {
+        List<Long> testData =
+                Arrays.asList(Long.MIN_VALUE, Long.MAX_VALUE, Long.MIN_VALUE + 1L,
+                    Long.MAX_VALUE - 1L, 0L, 1L, -1L);
+        testValues(false, PLong.INSTANCE, testData);
+        testValues(true, PLong.INSTANCE, testData);
+    }
+
+    private <T extends Number> void testValues(boolean immutable, PDataType<?> dataType, List<T> testData) throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                String.format("CREATE %s TABLE %s (K INTEGER PRIMARY KEY, V1 %s)",
+                    immutable ? "IMMUTABLE" : "", tableName, dataType.getSqlTypeName());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            String upsert = "UPSERT INTO " + tableName + " VALUES(?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            int id = 1;
+            for (T testVal : testData) {
+                stmt.setInt(1, id++);
+                stmt.setObject(2, testVal, dataType.getSqlType());
+                stmt.execute();
+            }
+            conn.commit();
+            String query = String.format("SELECT K,V1 FROM %s ORDER BY K ASC", tableName);
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            int index = 0;
+            boolean failed = false;
+            List<String> errors = Lists.newArrayList();
+            while (rs.next()) {
+                Number resultVal = rs.getObject(2, testData.get(0).getClass());
+                T testVal = testData.get(index++);
+                if (!testVal.equals(resultVal)) {
+                    errors.add(String.format("[expected=%s actual=%s] ",
+                        testVal, resultVal));
+                    failed = true;
+                }
+            }
+            String errorMsg =
+                    String.format("Data in table didn't match input: immutable=%s, dataType=%s, %s",
+                        immutable, dataType.getSqlTypeName(), errors);
+            assertFalse(errorMsg, failed);
+        }
+    }
+
 }

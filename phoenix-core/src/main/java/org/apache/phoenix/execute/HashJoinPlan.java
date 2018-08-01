@@ -48,6 +48,9 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
+import org.apache.phoenix.execute.visitor.RowCountVisitor;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
@@ -62,6 +65,7 @@ import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -76,6 +80,7 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.SQLCloseables;
 
 import com.google.common.collect.Lists;
@@ -91,6 +96,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private final boolean recompileWhereClause;
     private final Set<TableRef> tableRefs;
     private final int maxServerCacheTimeToLive;
+    private final long serverCacheLimit;
     private final Map<ImmutableBytesPtr,ServerCache> dependencies = Maps.newHashMap();
     private HashCacheClient hashClient;
     private AtomicLong firstJobEndTime;
@@ -98,7 +104,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private Long estimatedRows;
     private Long estimatedBytes;
     private Long estimateInfoTs;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
     
     public static HashJoinPlan create(SelectStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
@@ -131,8 +137,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
         for (SubPlan subPlan : subPlans) {
             tableRefs.addAll(subPlan.getInnerPlan().getSourceRefs());
         }
-        this.maxServerCacheTimeToLive = plan.getContext().getConnection().getQueryServices().getProps().getInt(
+        QueryServices services = plan.getContext().getConnection().getQueryServices();
+        this.maxServerCacheTimeToLive = services.getProps().getInt(
                 QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
+        this.serverCacheLimit = services.getProps().getLong(
+                QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_SIZE);
     }
     
     @Override
@@ -210,6 +219,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
         boolean hasKeyRangeExpressions = keyRangeExpressions != null && !keyRangeExpressions.isEmpty();
         if (recompileWhereClause || hasKeyRangeExpressions) {
             StatementContext context = delegate.getContext();
+            // Since we are going to compile the WHERE conditions all over again, we will clear
+            // the old filter, otherwise there would be conflicts and would cause PHOENIX-4692.
+            context.getScan().setFilter(null);
             PTable table = context.getCurrentTable().getTable();
             ParseNode viewWhere = table.getViewStatement() == null ? null : new SQLParser(table.getViewStatement()).parseQuery().getWhere();
             context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (delegate.getStatement()), delegate.getContext().getConnection()));
@@ -217,7 +229,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 postFilter = WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, null);
             }
             if (hasKeyRangeExpressions) {
-                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, true, null);
+                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, null);
             }
         }
 
@@ -246,7 +258,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
         int count = subPlans.length;
         for (int i = 0; i < count; i++) {
@@ -262,26 +273,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
         if (joinInfo != null && joinInfo.getLimit() != null) {
             planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
         }
-        for (SubPlan subPlan : subPlans) {
-            if (subPlan.getInnerPlan().getEstimatedBytesToScan() == null
-                    || subPlan.getInnerPlan().getEstimatedRowsToScan() == null
-                    || subPlan.getInnerPlan().getEstimateInfoTimestamp() == null) {
-                /*
-                 * If any of the sub plans doesn't have the estimate info available, then we don't
-                 * provide estimate for the overall plan
-                 */
-                estimatedBytes = null;
-                estimatedRows = null;
-                estimateInfoTs = null;
-                break;
-            } else {
-                estimatedBytes =
-                        add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
-                estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
-                estimateInfoTs =
-                        getMin(estimateInfoTs, subPlan.getInnerPlan().getEstimateInfoTimestamp());
-            }
-        }
         return new ExplainPlan(planSteps);
     }
 
@@ -290,12 +281,101 @@ public class HashJoinPlan extends DelegateQueryPlan {
         return statement;
     }
 
-    protected interface SubPlan {
+    public HashJoinInfo getJoinInfo() {
+        return joinInfo;
+    }
+
+    public SubPlan[] getSubPlans() {
+        return subPlans;
+    }
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
+    }
+
+    @Override
+    public Cost getCost() {
+        try {
+            Long r = delegate.getEstimatedRowsToScan();
+            Double w = delegate.accept(new AvgRowWidthVisitor());
+            if (r == null || w == null) {
+                return Cost.UNKNOWN;
+            }
+
+            int parallelLevel = CostUtil.estimateParallelLevel(
+                    true, getContext().getConnection().getQueryServices());
+
+            double rowWidth = w;
+            double rows = RowCountVisitor.filter(
+                    r.doubleValue(),
+                    RowCountVisitor.stripSkipScanFilter(
+                            delegate.getContext().getScan().getFilter()));
+            double bytes = rowWidth * rows;
+            Cost cost = Cost.ZERO;
+            double rhsByteSum = 0.0;
+            for (int i = 0; i < subPlans.length; i++) {
+                double lhsBytes = bytes;
+                Double rhsRows = subPlans[i].getInnerPlan().accept(new RowCountVisitor());
+                Double rhsWidth = subPlans[i].getInnerPlan().accept(new AvgRowWidthVisitor());
+                if (rhsRows == null || rhsWidth == null) {
+                    return Cost.UNKNOWN;
+                }
+                double rhsBytes = rhsWidth * rhsRows;
+                rows = RowCountVisitor.join(rows, rhsRows, joinInfo.getJoinTypes()[i]);
+                rowWidth = AvgRowWidthVisitor.join(rowWidth, rhsWidth, joinInfo.getJoinTypes()[i]);
+                bytes = rowWidth * rows;
+                cost = cost.plus(CostUtil.estimateHashJoinCost(
+                        lhsBytes, rhsBytes, bytes, subPlans[i].hasKeyRangeExpression(), parallelLevel));
+                rhsByteSum += rhsBytes;
+            }
+
+            if (rhsByteSum > serverCacheLimit) {
+                return Cost.UNKNOWN;
+            }
+
+            // Calculate the cost of aggregation and ordering that is performed with the HashJoinPlan
+            if (delegate instanceof AggregatePlan) {
+                AggregatePlan aggPlan = (AggregatePlan) delegate;
+                double rowsBeforeHaving = RowCountVisitor.aggregate(rows, aggPlan.getGroupBy());
+                double rowsAfterHaving = RowCountVisitor.filter(rowsBeforeHaving, aggPlan.getHaving());
+                double bytesBeforeHaving = rowWidth * rowsBeforeHaving;
+                double bytesAfterHaving = rowWidth * rowsAfterHaving;
+                Cost aggCost = CostUtil.estimateAggregateCost(
+                        bytes, bytesBeforeHaving, aggPlan.getGroupBy(), parallelLevel);
+                cost = cost.plus(aggCost);
+                rows = rowsAfterHaving;
+                bytes = bytesAfterHaving;
+            }
+            double outputRows = RowCountVisitor.limit(rows, delegate.getLimit());
+            double outputBytes = rowWidth * outputRows;
+            if (!delegate.getOrderBy().getOrderByExpressions().isEmpty()) {
+                int parallelLevel2 = CostUtil.estimateParallelLevel(
+                        delegate instanceof ScanPlan, getContext().getConnection().getQueryServices());
+                Cost orderByCost = CostUtil.estimateOrderByCost(
+                        bytes, outputBytes, parallelLevel);
+                cost = cost.plus(orderByCost);
+            }
+
+            // Calculate the cost of child nodes
+            Cost lhsCost = new Cost(0, 0, r.doubleValue() * w);
+            Cost rhsCost = Cost.ZERO;
+            for (SubPlan subPlan : subPlans) {
+                rhsCost = rhsCost.plus(subPlan.getInnerPlan().getCost());
+            }
+            return cost.plus(lhsCost).plus(rhsCost);
+        } catch (SQLException e) {
+        }
+        return Cost.UNKNOWN;
+    }
+
+    public interface SubPlan {
         public ServerCache execute(HashJoinPlan parent) throws SQLException;
         public void postProcess(ServerCache result, HashJoinPlan parent) throws SQLException;
         public List<String> getPreSteps(HashJoinPlan parent) throws SQLException;
         public List<String> getPostSteps(HashJoinPlan parent) throws SQLException;
         public QueryPlan getInnerPlan();
+        public boolean hasKeyRangeExpression();
     }
     
     public static class WhereClauseSubPlan implements SubPlan {
@@ -375,6 +455,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
         public QueryPlan getInnerPlan() {
             return plan;
         }
+
+        @Override
+        public boolean hasKeyRangeExpression() {
+            return false;
+        }
     }
     
     public static class HashSubPlan implements SubPlan {        
@@ -412,7 +497,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     cache =
                             parent.hashClient.addHashCache(ranges, iterator,
                                 plan.getEstimatedSize(), hashExpressions, singleValueOnly,
-                                parent.delegate.getTableRef(), keyRangeRhsExpression,
+                                parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
                                 keyRangeRhsValues);
                     long endTime = System.currentTimeMillis();
                     boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
@@ -487,30 +572,59 @@ public class HashJoinPlan extends DelegateQueryPlan {
         public QueryPlan getInnerPlan() {
             return plan;
         }
+
+        @Override
+        public boolean hasKeyRangeExpression() {
+            return keyRangeLhsExpression != null;
+        }
     }
 
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedBytes;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTs;
+    }
+
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        for (SubPlan subPlan : subPlans) {
+            if (subPlan.getInnerPlan().getEstimatedBytesToScan() == null
+                    || subPlan.getInnerPlan().getEstimatedRowsToScan() == null
+                    || subPlan.getInnerPlan().getEstimateInfoTimestamp() == null) {
+                /*
+                 * If any of the sub plans doesn't have the estimate info available, then we don't
+                 * provide estimate for the overall plan
+                 */
+                estimatedBytes = null;
+                estimatedRows = null;
+                estimateInfoTs = null;
+                break;
+            } else {
+                estimatedBytes =
+                        add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
+                estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
+                estimateInfoTs =
+                        getMin(estimateInfoTs, subPlan.getInnerPlan().getEstimateInfoTimestamp());
+            }
+        }
     }
 }
 

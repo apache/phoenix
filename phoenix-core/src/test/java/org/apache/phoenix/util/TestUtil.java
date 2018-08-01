@@ -55,21 +55,24 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -131,7 +134,7 @@ public class TestUtil {
     private static final Log LOG = LogFactory.getLog(TestUtil.class);
     
     private static final Long ZERO = new Long(0);
-    public static final String DEFAULT_SCHEMA_NAME = "";
+    public static final String DEFAULT_SCHEMA_NAME = "S";
     public static final String DEFAULT_DATA_TABLE_NAME = "T";
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
@@ -227,7 +230,6 @@ public class TestUtil {
     public static final String STABLE_NAME = "STABLE";
     public static final String STABLE_PK_NAME = "ID";
     public static final String STABLE_SCHEMA_NAME = "";
-    public static final String GROUPBYTEST_NAME = "GROUPBYTEST";
     public static final String CUSTOM_ENTITY_DATA_FULL_NAME = "CORE.CUSTOM_ENTITY_DATA";
     public static final String CUSTOM_ENTITY_DATA_NAME = "CUSTOM_ENTITY_DATA";
     public static final String CUSTOM_ENTITY_DATA_SCHEMA_NAME = "CORE";
@@ -451,7 +453,7 @@ public class TestUtil {
 
     public static void clearMetaDataCache(Connection conn) throws Throwable {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        HTableInterface htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table htable = pconn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
             HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, ClearCacheResponse>() {
                 @Override
@@ -722,6 +724,22 @@ public class TestUtil {
                 public String getExpressionStr() {
                     return null;
                 }
+
+                @Override
+                public long getTimestamp() {
+                    return HConstants.LATEST_TIMESTAMP;
+                }
+
+                @Override
+                public boolean isDerived() {
+                    return false;
+                }
+
+                @Override
+                public boolean isExcluded() {
+                    return false;
+                }
+
                 @Override
                 public boolean isRowTimestamp() {
                     return false;
@@ -780,25 +798,25 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         MutationState mutationState = pconn.getMutationState();
         if (table.isTransactional()) {
-            mutationState.startTransaction();
+            mutationState.startTransaction(table.getTransactionProvider());
         }
-        try (HTableInterface htable = mutationState.getHTable(table)) {
+        try (Table htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.put(put);
             Delete delete = new Delete(markerRowKey);
-            delete.deleteColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            delete.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.delete(delete);
             htable.close();
             if (table.isTransactional()) {
                 mutationState.commit();
             }
         
-            HBaseAdmin hbaseAdmin = services.getAdmin();
-            hbaseAdmin.flush(tableName);
-            hbaseAdmin.majorCompact(tableName);
+            Admin hbaseAdmin = services.getAdmin();
+            hbaseAdmin.flush(TableName.valueOf(tableName));
+            hbaseAdmin.majorCompact(TableName.valueOf(tableName));
             hbaseAdmin.close();
         
             boolean compactionDone = false;
@@ -809,7 +827,7 @@ public class TestUtil {
                 scan.setStopRow(Bytes.add(markerRowKey, new byte[] { 0 }));
                 scan.setRaw(true);
         
-                try (HTableInterface htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
+                try (Table htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
                     ResultScanner scanner = htableForRawScan.getScanner(scan);
                     List<Result> results = Lists.newArrayList(scanner);
                     LOG.info("Results: " + results);
@@ -821,8 +839,8 @@ public class TestUtil {
                 // need to run compaction after the next txn snapshot has been written so that compaction can remove deleted rows
                 if (!compactionDone && table.isTransactional()) {
                     hbaseAdmin = services.getAdmin();
-                    hbaseAdmin.flush(tableName);
-                    hbaseAdmin.majorCompact(tableName);
+                    hbaseAdmin.flush(TableName.valueOf(tableName));
+                    hbaseAdmin.majorCompact(TableName.valueOf(tableName));
                     hbaseAdmin.close();
                 }
             }
@@ -830,10 +848,14 @@ public class TestUtil {
     }
 
     public static void createTransactionalTable(Connection conn, String tableName) throws SQLException {
-        conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
+        createTransactionalTable(conn, tableName, "");
     }
 
-    public static void dumpTable(HTableInterface table) throws IOException {
+    public static void createTransactionalTable(Connection conn, String tableName, String extraProps) throws SQLException {
+        conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true" + (extraProps.length() == 0 ? "" : ("," + extraProps)));
+    }
+
+    public static void dumpTable(Table table) throws IOException {
         System.out.println("************ dumping " + table + " **************");
         Scan s = new Scan();
         s.setRaw(true);;
@@ -852,8 +874,27 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
+    public static int getRawRowCount(Table table) throws IOException {
+        Scan s = new Scan();
+        s.setRaw(true);;
+        s.setMaxVersions();
+        int rows = 0;
+        try (ResultScanner scanner = table.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                rows++;
+                CellScanner cellScanner = result.cellScanner();
+                Cell current = null;
+                while (cellScanner.advance()) {
+                    current = cellScanner.current();
+                }
+            }
+        }
+        return rows;
+    }
+
     public static void dumpIndexStatus(Connection conn, String indexName) throws IOException, SQLException {
-        try (HTableInterface table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) { 
+        try (Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) { 
             System.out.println("************ dumping index status for " + indexName + " **************");
             Scan s = new Scan();
             s.setRaw(true);
@@ -964,17 +1005,20 @@ public class TestUtil {
     public static void addCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
         int priority = QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY + 100;
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptorBuilder descriptorBuilder = null;
 		if (!descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
-			descriptor.addCoprocessor(coprocessorClass.getName(), null, priority, null);
+		    descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
+		    descriptorBuilder.addCoprocessor(coprocessorClass.getName(), null, priority, null);
 		}else{
 			return;
 		}
         final int retries = 10;
         int numTries = 10;
-        try (HBaseAdmin admin = services.getAdmin()) {
-            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+        descriptor = descriptorBuilder.build();
+        try (Admin admin = services.getAdmin()) {
+            admin.modifyTable(descriptor);
+            while (!admin.getDescriptor(TableName.valueOf(tableName)).equals(descriptor)
                     && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {
@@ -989,17 +1033,20 @@ public class TestUtil {
 
     public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HTableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        TableDescriptorBuilder descriptorBuilder = null;
         if (descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
-            descriptor.removeCoprocessor(coprocessorClass.getName());
+            descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
+            descriptorBuilder.removeCoprocessor(coprocessorClass.getName());
         }else{
             return;
         }
         final int retries = 10;
         int numTries = retries;
-        try (HBaseAdmin admin = services.getAdmin()) {
-            admin.modifyTable(Bytes.toBytes(tableName), descriptor);
-            while (!admin.getTableDescriptor(Bytes.toBytes(tableName)).equals(descriptor)
+        descriptor = descriptorBuilder.build();
+        try (Admin admin = services.getAdmin()) {
+            admin.modifyTable(descriptor);
+            while (!admin.getDescriptor(TableName.valueOf(tableName)).equals(descriptor)
                     && numTries > 0) {
                 numTries--;
                 if (numTries == 0) {
@@ -1017,4 +1064,31 @@ public class TestUtil {
         return ByteUtil.compare(op, compareResult);
     }
 
+    public static QueryPlan getOptimizeQueryPlan(Connection conn,String sql) throws SQLException {
+        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        QueryPlan queryPlan = statement.optimizeQuery(sql);
+        queryPlan.iterator();
+        return queryPlan;
+    }
+
+    public static void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
+        for(int rowIndex=0; rowIndex < rows.length; rowIndex++) {
+            assertTrue("rowIndex:["+rowIndex+"] rs.next error!",rs.next());
+            for(int columnIndex = 1; columnIndex <= rows[rowIndex].length; columnIndex++) {
+                Object realValue = rs.getObject(columnIndex);
+                Object expectedValue = rows[rowIndex][columnIndex-1];
+                if(realValue == null) {
+                    assertNull("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"]",expectedValue);
+                }
+                else {
+                    assertEquals("rowIndex:["+rowIndex+"],columnIndex:["+columnIndex+"],realValue:["+
+                            realValue+"],expectedValue:["+expectedValue+"]",
+                            expectedValue,
+                            realValue
+                            );
+                }
+            }
+        }
+        assertTrue(!rs.next());
+    }
 }

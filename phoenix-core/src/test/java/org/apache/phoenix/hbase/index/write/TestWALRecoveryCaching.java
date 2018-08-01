@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -34,31 +35,33 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
+import org.apache.hadoop.hbase.wal.WALKey;
+import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
-import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
@@ -88,7 +91,7 @@ public class TestWALRecoveryCaching {
   private static final long TIMEOUT = ONE_MIN;
 
   @Rule
-  public TableName testTable = new TableName();
+  public IndexTableName testTable = new IndexTableName();
 
   private String getIndexTableName() {
     return this.testTable.getTableNameString() + "_index";
@@ -101,11 +104,18 @@ public class TestWALRecoveryCaching {
   // -----------------------------------------------------------------------------------------------
   private static CountDownLatch allowIndexTableToRecover;
 
-  public static class IndexTableBlockingReplayObserver extends BaseRegionObserver {
+  public static class IndexTableBlockingReplayObserver implements RegionObserver, RegionCoprocessor {
 
     @Override
-    public void preWALRestore(ObserverContext<RegionCoprocessorEnvironment> env, HRegionInfo info,
-        HLogKey logKey, WALEdit logEdit) throws IOException {
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
+    }
+
+    @Override
+        public void preWALRestore(
+                org.apache.hadoop.hbase.coprocessor.ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
+                org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
+                org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
       try {
         LOG.debug("Restoring logs for index table");
         if (allowIndexTableToRecover != null) {
@@ -159,7 +169,7 @@ public class TestWALRecoveryCaching {
     // start the cluster with 2 rs
     util.startMiniCluster(2);
 
-    HBaseAdmin admin = util.getHBaseAdmin();
+    Admin admin = util.getHBaseAdmin();
     // setup the index
     byte[] family = Bytes.toBytes("family");
     byte[] qual = Bytes.toBytes("qualifier");
@@ -171,18 +181,19 @@ public class TestWALRecoveryCaching {
     builder.addIndexGroup(columns);
 
     // create the primary table w/ indexing enabled
-    HTableDescriptor primaryTable = new HTableDescriptor(testTable.getTableName());
-    primaryTable.addFamily(new HColumnDescriptor(family));
-    primaryTable.addFamily(new HColumnDescriptor(nonIndexedFamily));
+    TableDescriptor primaryTable = TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
+                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
     builder.addArbitraryConfigForTesting(Indexer.RecoveryFailurePolicyKeyForTesting,
       ReleaseLatchOnFailurePolicy.class.getName());
     builder.build(primaryTable);
     admin.createTable(primaryTable);
 
     // create the index table
-    HTableDescriptor indexTableDesc = new HTableDescriptor(Bytes.toBytes(getIndexTableName()));
-    indexTableDesc.addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
-    TestIndexManagementUtil.createIndexTable(admin, indexTableDesc);
+    TableDescriptorBuilder indexTableBuilder = TableDescriptorBuilder
+                .newBuilder(TableName.valueOf(Bytes.toBytes(getIndexTableName())))
+                .addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
+    TestIndexManagementUtil.createIndexTable(admin, indexTableBuilder);
 
     // figure out where our tables live
     ServerName shared =
@@ -191,17 +202,17 @@ public class TestWALRecoveryCaching {
 
     // load some data into the table
     Put p = new Put(Bytes.toBytes("row"));
-    p.add(family, qual, Bytes.toBytes("value"));
-    HTable primary = new HTable(conf, testTable.getTableName());
+    p.addColumn(family, qual, Bytes.toBytes("value"));
+    Connection hbaseConn = ConnectionFactory.createConnection(conf);
+    Table primary = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(testTable.getTableName()));
     primary.put(p);
-    primary.flushCommits();
 
     // turn on the recovery latch
     allowIndexTableToRecover = new CountDownLatch(1);
 
     // kill the server where the tables live - this should trigger distributed log splitting
     // find the regionserver that matches the passed server
-    List<Region> online = new ArrayList<Region>();
+    List<HRegion> online = new ArrayList<HRegion>();
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
       testTable.getTableName()));
     online.addAll(getRegionsFromServerForTable(util.getMiniHBaseCluster(), shared,
@@ -216,7 +227,8 @@ public class TestWALRecoveryCaching {
         LOG.info("\t== Offline: " + server.getServerName());
         continue;
       }
-      List<HRegionInfo> regions = ProtobufUtil.getOnlineRegions(server.getRSRpcServices());
+      
+      List<HRegion> regions = server.getRegions();
       LOG.info("\t" + server.getServerName() + " regions: " + regions);
     }
 
@@ -234,9 +246,8 @@ public class TestWALRecoveryCaching {
     // make a second put that (1), isn't indexed, so we can be sure of the index state and (2)
     // ensures that our table is back up
     Put p2 = new Put(p.getRow());
-    p2.add(nonIndexedFamily, Bytes.toBytes("Not indexed"), Bytes.toBytes("non-indexed value"));
+    p2.addColumn(nonIndexedFamily, Bytes.toBytes("Not indexed"), Bytes.toBytes("non-indexed value"));
     primary.put(p2);
-    primary.flushCommits();
 
     // make sure that we actually failed the write once (within a 5 minute window)
     assertTrue("Didn't find an error writing to index table within timeout!",
@@ -245,7 +256,7 @@ public class TestWALRecoveryCaching {
     // scan the index to make sure it has the one entry, (that had to be replayed from the WAL,
     // since we hard killed the server)
     Scan s = new Scan();
-    HTable index = new HTable(conf, getIndexTableName());
+    Table index = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(getIndexTableName()));
     ResultScanner scanner = index.getScanner(s);
     int count = 0;
     for (Result r : scanner) {
@@ -267,14 +278,14 @@ public class TestWALRecoveryCaching {
    * @param table
    * @return
    */
-  private List<Region> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
+  private List<HRegion> getRegionsFromServerForTable(MiniHBaseCluster cluster, ServerName server,
       byte[] table) {
-    List<Region> online = Collections.emptyList();
+    List<HRegion> online = Collections.emptyList();
     for (RegionServerThread rst : cluster.getRegionServerThreads()) {
       // if its the server we are going to kill, get the regions we want to reassign
       if (rst.getRegionServer().getServerName().equals(server)) {
-        online = rst.getRegionServer().getOnlineRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
-        break;
+          online = rst.getRegionServer().getRegions(org.apache.hadoop.hbase.TableName.valueOf(table));
+          break;
       }
     }
     return online;
@@ -305,7 +316,7 @@ public class TestWALRecoveryCaching {
       tryIndex = !tryIndex;
       for (ServerName server : servers) {
         // find the regionserver that matches the passed server
-        List<Region> online = getRegionsFromServerForTable(cluster, server, table);
+        List<HRegion> online = getRegionsFromServerForTable(cluster, server, table);
 
         LOG.info("Shutting down and reassigning regions from " + server);
         cluster.stopRegionServer(server);
@@ -313,7 +324,7 @@ public class TestWALRecoveryCaching {
 
         // force reassign the regions from the table
         for (Region region : online) {
-          cluster.getMaster().assignRegion(region.getRegionInfo());
+          cluster.getMaster().getAssignmentManager().assign(region.getRegionInfo());
         }
 
         LOG.info("Starting region server:" + server.getHostname());

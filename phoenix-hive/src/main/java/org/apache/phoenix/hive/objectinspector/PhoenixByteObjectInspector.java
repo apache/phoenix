@@ -19,7 +19,7 @@ package org.apache.phoenix.hive.objectinspector;
 
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.ByteObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
-import org.apache.hadoop.io.ByteWritable;
+import org.apache.hadoop.hive.serde2.io.ByteWritable;
 
 /**
  * ObjectInspector for byte type

@@ -20,12 +20,14 @@ package org.apache.phoenix.coprocessor;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -40,16 +42,18 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -80,6 +84,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -95,7 +100,7 @@ import com.google.common.collect.Maps;
  * to SYSTEM.TABLE.
  */
 @SuppressWarnings("deprecation")
-public class MetaDataRegionObserver extends BaseRegionObserver {
+public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
     public static final String REBUILD_INDEX_APPEND_TO_URL_STRING = "REBUILDINDEX";
     private static final byte[] SYSTEM_CATALOG_KEY = SchemaUtil.getTableKey(
@@ -116,6 +121,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             boolean abortRequested) {
         executor.shutdownNow();
         GlobalCache.getInstance(c.getEnvironment()).getMetaDataCache().invalidateAll();
+    }
+    
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+      return Optional.of(this);
     }
 
     @Override
@@ -154,18 +164,27 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                HTableInterface metaTable = null;
-                HTableInterface statsTable = null;
+                Table metaTable = null;
+                Table statsTable = null;
                 try {
                     ReadOnlyProps props=new ReadOnlyProps(env.getConfiguration().iterator());
                     Thread.sleep(1000);
-                    metaTable = env.getTable(
+                    metaTable = env.getConnection().getTable(
                             SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props));
-                    statsTable = env.getTable(
+                    statsTable = env.getConnection().getTable(
                             SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, props));
-                    if (UpgradeUtil.truncateStats(metaTable, statsTable)) {
-                        LOG.info("Stats are successfully truncated for upgrade 4.7!!");
-                    }
+                    final Table mTable=metaTable;
+                    final Table sTable=statsTable;
+                    User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+                        @Override
+                        public Void run() throws Exception {
+                            if (UpgradeUtil.truncateStats(mTable, sTable)) {
+                                LOG.info("Stats are successfully truncated for upgrade 4.7!!");
+                            }
+                            return null;
+                        }
+                    });
+
                 } catch (Exception exception) {
                     LOG.warn("Exception while truncate stats..,"
                             + " please check and delete stats manually inorder to get proper result with old client!!");
@@ -218,6 +237,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         private final long rebuildIndexBatchSize;
         private final long configuredBatches;
         private final long indexDisableTimestampThreshold;
+        private final long pendingDisableThreshold;
         private final ReadOnlyProps props;
         private final List<String> onlyTheseTables;
 
@@ -236,6 +256,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             this.indexDisableTimestampThreshold =
                     configuration.getLong(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD);
+            this.pendingDisableThreshold =
+                    configuration.getLong(QueryServices.INDEX_PENDING_DISABLE_THRESHOLD,
+                        QueryServicesOptions.DEFAULT_INDEX_PENDING_DISABLE_THRESHOLD);
             this.props = new ReadOnlyProps(env.getConfiguration().iterator());
         }
 
@@ -331,6 +354,18 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     }
                     
                     PIndexState indexState = PIndexState.fromSerializedValue(indexStateBytes[0]);
+                    long elapsedSinceDisable = EnvironmentEdgeManager.currentTimeMillis() - Math.abs(indexDisableTimestamp);
+
+                    // on an index write failure, the server side transitions to PENDING_DISABLE, then the client
+                    // retries, and after retries are exhausted, disables the index
+                    if (indexState == PIndexState.PENDING_DISABLE) {
+                        if (elapsedSinceDisable > pendingDisableThreshold) {
+                            // too long in PENDING_DISABLE - client didn't disable the index, so we do it here
+                            IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.DISABLE, indexDisableTimestamp);
+                        }
+                        continue;
+                    }
+
                     // Only perform relatively expensive check for all regions online when index
                     // is disabled or pending active since that's the state it's placed into when
                     // an index write fails.
@@ -340,7 +375,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                 + indexPTable.getName() + " are online.");
                         continue;
                     }
-                    if (EnvironmentEdgeManager.currentTimeMillis() - Math.abs(indexDisableTimestamp) > indexDisableTimestampThreshold) {
+
+                    if (elapsedSinceDisable > indexDisableTimestampThreshold) {
                         /*
                          * It has been too long since the index has been disabled and any future
                          * attempts to reenable it likely will fail. So we are going to mark the
@@ -405,7 +441,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 						List<Pair<PTable,Long>> pairs = entry.getValue();
                         List<PTable> indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(pairs.size());
 						try (
-                        HTableInterface metaTable = env.getTable(
+                        Table metaTable = env.getConnection().getTable(
 								SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props))) {
 							long earliestDisableTimestamp = Long.MAX_VALUE;
                             long latestUpperBoundTimestamp = Long.MIN_VALUE;
@@ -467,6 +503,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 									conn);
 							byte[] attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
 							dataTableScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
+							ScanUtil.setClientVersion(dataTableScan, MetaDataProtocol.PHOENIX_VERSION);
                             LOG.info("Starting to partially build indexes:" + indexesToPartiallyRebuild
                                     + " on data table:" + dataPTable.getName() + " with the earliest disable timestamp:"
                                     + earliestDisableTimestamp + " till "

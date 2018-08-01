@@ -51,7 +51,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.InsufficientMemoryException;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.util.Closeables;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -364,7 +364,7 @@ public class SpillableGroupByCache implements GroupByCache {
                             + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()) + " with aggregators "
                             + aggs.toString() + " value = " + Bytes.toStringBinary(value));
                 }
-                results.add(KeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(), SINGLE_COLUMN_FAMILY,
+                results.add(PhoenixKeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(), SINGLE_COLUMN_FAMILY,
                         SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
                 return cacheIter.hasNext();
             }

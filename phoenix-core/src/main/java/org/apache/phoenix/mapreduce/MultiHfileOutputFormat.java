@@ -17,11 +17,15 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import static org.apache.hadoop.hbase.regionserver.HStoreFile.BULKLOAD_TASK_KEY;
+import static org.apache.hadoop.hbase.regionserver.HStoreFile.BULKLOAD_TIME_KEY;
+import static org.apache.hadoop.hbase.regionserver.HStoreFile.EXCLUDE_FROM_MINOR_COMPACTION_KEY;
+import static org.apache.hadoop.hbase.regionserver.HStoreFile.MAJOR_COMPACTION_KEY;
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,29 +38,31 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
-import org.apache.hadoop.hbase.io.hfile.AbstractHFileWriter;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.io.hfile.HFileWriterImpl;
 import org.apache.hadoop.hbase.mapreduce.KeyValueSerialization;
 import org.apache.hadoop.hbase.mapreduce.MutationSerialization;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.HStore;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
@@ -126,7 +132,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         // Invented config.  Add to hbase-*.xml if other than default compression.
         final String defaultCompressionStr = conf.get("hfile.compression",
             Compression.Algorithm.NONE.getName());
-        final Algorithm defaultCompression = AbstractHFileWriter
+        final Algorithm defaultCompression = HFileWriterImpl
             .compressionByName(defaultCompressionStr);
         final boolean compactionExclude = conf.getBoolean(
             "hbase.mapreduce.hfileoutputformat.compaction.exclude", false);
@@ -136,13 +142,13 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             private final Map<byte [], WriterLength> writers =
                     new TreeMap<byte [], WriterLength>(Bytes.BYTES_COMPARATOR);
             private byte [] previousRow = HConstants.EMPTY_BYTE_ARRAY;
-            private final byte [] now = Bytes.toBytes(EnvironmentEdgeManager.currentTimeMillis());
+            private final long now = EnvironmentEdgeManager.currentTimeMillis();
             private boolean rollRequested = false;
 
             @Override
             public void write(TableRowkeyPair row, V cell)
                     throws IOException {
-                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                Cell kv = cell;
                 // null input == user explicitly wants to flush
                 if (row == null && kv == null) {
                     rollWriters();
@@ -152,7 +158,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 // phoenix-2216: start : extract table name from the rowkey
                 String tableName = row.getTableName();
                 byte [] rowKey = row.getRowkey().get();
-                long length = kv.getLength();
+                int length = (CellUtil.estimatedSerializedSizeOf(kv)) - Bytes.SIZEOF_INT;
                 byte [] family = CellUtil.cloneFamily(kv);
                 byte[] tableAndFamily = join(tableName, Bytes.toString(family));
                 WriterLength wl = this.writers.get(tableAndFamily);
@@ -185,7 +191,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 }
 
                 // we now have the proper WAL writer. full steam ahead
-                kv.updateLatestStamp(this.now);
+                if (cell.getTimestamp() == HConstants.LATEST_TIMESTAMP) {
+                    CellUtil.setTimestamp(cell, this.now);
+                }
                 wl.writer.append(kv);
                 wl.written += length;
     
@@ -255,9 +263,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
               contextBuilder.withDataBlockEncoding(encoding);
               HFileContext hFileContext = contextBuilder.build();
                                         
-              wl.writer = new StoreFile.WriterBuilder(conf, new CacheConfig(tempConf), fs)
+              wl.writer = new StoreFileWriter.Builder(conf, new CacheConfig(tempConf), fs)
                 .withOutputDir(familydir).withBloomType(bloomType)
-                .withComparator(KeyValue.COMPARATOR)
+                .withComparator(CellComparatorImpl.COMPARATOR)
                 .withFileContext(hFileContext).build();
 
               // join and put it in the writers map .
@@ -269,15 +277,15 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
               return wl;
           }
 
-          private void close(final StoreFile.Writer w) throws IOException {
+          private void close(final StoreFileWriter w) throws IOException {
               if (w != null) {
-                  w.appendFileInfo(StoreFile.BULKLOAD_TIME_KEY,
+                  w.appendFileInfo(BULKLOAD_TIME_KEY,
                           Bytes.toBytes(EnvironmentEdgeManager.currentTimeMillis()));
-                  w.appendFileInfo(StoreFile.BULKLOAD_TASK_KEY,
+                  w.appendFileInfo(BULKLOAD_TASK_KEY,
                           Bytes.toBytes(context.getTaskAttemptID().toString()));
-                  w.appendFileInfo(StoreFile.MAJOR_COMPACTION_KEY,
+                  w.appendFileInfo(MAJOR_COMPACTION_KEY,
                           Bytes.toBytes(true));
-                  w.appendFileInfo(StoreFile.EXCLUDE_FROM_MINOR_COMPACTION_KEY,
+                  w.appendFileInfo(EXCLUDE_FROM_MINOR_COMPACTION_KEY,
                           Bytes.toBytes(compactionExclude));
                   w.appendTrackedTimestampsToMetadata();
                   w.close();
@@ -298,7 +306,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
      */
     static class WriterLength {
       long written = 0;
-      StoreFile.Writer writer = null;
+      StoreFileWriter writer = null;
     }
     
     /**
@@ -327,7 +335,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         }
         Map<byte[], String> stringMap = createFamilyConfValueMap(tableConfigs,COMPRESSION_FAMILIES_CONF_KEY);
         for (Map.Entry<byte[], String> e : stringMap.entrySet()) {
-            Algorithm algorithm = AbstractHFileWriter.compressionByName(e.getValue());
+            Algorithm algorithm = HFileWriterImpl.compressionByName(e.getValue());
             compressionMap.put(e.getKey(), algorithm);
         }
         return compressionMap;
@@ -517,7 +525,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
         value="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE")
     @VisibleForTesting
-    static String configureCompression(HTableDescriptor tableDescriptor)
+    static String configureCompression(TableDescriptor tableDescriptor)
         throws UnsupportedEncodingException {
     
         StringBuilder compressionConfigValue = new StringBuilder();
@@ -525,9 +533,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             // could happen with mock table instance
             return compressionConfigValue.toString();
         }
-        Collection<HColumnDescriptor> families = tableDescriptor.getFamilies();
+        ColumnFamilyDescriptor[] families = tableDescriptor.getColumnFamilies();
         int i = 0;
-        for (HColumnDescriptor familyDescriptor : families) {
+        for (ColumnFamilyDescriptor familyDescriptor : families) {
             if (i++ > 0) {
                 compressionConfigValue.append('&');
             }
@@ -535,7 +543,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                     familyDescriptor.getNameAsString(), "UTF-8"));
             compressionConfigValue.append('=');
             compressionConfigValue.append(URLEncoder.encode(
-                    familyDescriptor.getCompression().getName(), "UTF-8"));
+                    familyDescriptor.getCompressionType().getName(), "UTF-8"));
         }
         return compressionConfigValue.toString();
     }
@@ -550,16 +558,16 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
      *           on failure to read column family descriptors
      */
     @VisibleForTesting
-    static String configureBlockSize(HTableDescriptor tableDescriptor)
+    static String configureBlockSize(TableDescriptor tableDescriptor)
         throws UnsupportedEncodingException {
         StringBuilder blockSizeConfigValue = new StringBuilder();
         if (tableDescriptor == null) {
             // could happen with mock table instance
             return blockSizeConfigValue.toString();
         }
-        Collection<HColumnDescriptor> families = tableDescriptor.getFamilies();
+        ColumnFamilyDescriptor[] families = tableDescriptor.getColumnFamilies();
         int i = 0;
-        for (HColumnDescriptor familyDescriptor : families) {
+        for (ColumnFamilyDescriptor familyDescriptor : families) {
             if (i++ > 0) {
                 blockSizeConfigValue.append('&');
             }
@@ -581,7 +589,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
      * @throws IOException
      *           on failure to read column family descriptors
      */
-    static String configureBloomType(HTableDescriptor tableDescriptor)
+    static String configureBloomType(TableDescriptor tableDescriptor)
         throws UnsupportedEncodingException {
         
         StringBuilder bloomTypeConfigValue = new StringBuilder();
@@ -590,9 +598,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             // could happen with mock table instance
             return bloomTypeConfigValue.toString();
         }
-        Collection<HColumnDescriptor> families = tableDescriptor.getFamilies();
+        ColumnFamilyDescriptor[] families = tableDescriptor.getColumnFamilies();
         int i = 0;
-        for (HColumnDescriptor familyDescriptor : families) {
+        for (ColumnFamilyDescriptor familyDescriptor : families) {
             if (i++ > 0) {
                 bloomTypeConfigValue.append('&');
             }
@@ -601,7 +609,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             bloomTypeConfigValue.append('=');
             String bloomType = familyDescriptor.getBloomFilterType().toString();
             if (bloomType == null) {
-                bloomType = HColumnDescriptor.DEFAULT_BLOOMFILTER;
+                bloomType = ColumnFamilyDescriptorBuilder.DEFAULT_BLOOMFILTER.toString();
             }
             bloomTypeConfigValue.append(URLEncoder.encode(bloomType, "UTF-8"));
         }
@@ -617,7 +625,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
      * @throws IOException
      *           on failure to read column family descriptors
      */
-    static String configureDataBlockEncoding(HTableDescriptor tableDescriptor) throws UnsupportedEncodingException {
+    static String configureDataBlockEncoding(TableDescriptor tableDescriptor) throws UnsupportedEncodingException {
       
         StringBuilder dataBlockEncodingConfigValue = new StringBuilder();
         
@@ -625,9 +633,9 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
             // could happen with mock table instance
             return dataBlockEncodingConfigValue.toString();
         }
-        Collection<HColumnDescriptor> families = tableDescriptor.getFamilies();
+        ColumnFamilyDescriptor[] families = tableDescriptor.getColumnFamilies();
         int i = 0;
-        for (HColumnDescriptor familyDescriptor : families) {
+        for (ColumnFamilyDescriptor familyDescriptor : families) {
             if (i++ > 0) {
                 dataBlockEncodingConfigValue.append('&');
             }
@@ -650,6 +658,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
      * @param tablesToBeLoaded
      * @throws IOException
      */
+    @SuppressWarnings("deprecation")
     public static void configureIncrementalLoad(Job job, List<TargetTableRef> tablesToBeLoaded) throws IOException {
         
         Configuration conf = job.getConfiguration();
@@ -662,13 +671,16 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         Set<TableRowkeyPair> tablesStartKeys = Sets.newTreeSet();
         for(TargetTableRef table : tablesToBeLoaded) {
            final String tableName = table.getPhysicalName();
-           try(HTable htable = new HTable(conf,tableName);){
-               Set<TableRowkeyPair> startKeys = getRegionStartKeys(tableName , htable.getRegionLocator());
+           try(Connection hbaseConn = ConnectionFactory.createConnection(conf);){
+                Set<TableRowkeyPair> startKeys =
+                        getRegionStartKeys(tableName,
+                            hbaseConn.getRegionLocator(TableName.valueOf(tableName)));
                tablesStartKeys.addAll(startKeys);
-               String compressionConfig = configureCompression(htable.getTableDescriptor());
-               String bloomTypeConfig = configureBloomType(htable.getTableDescriptor());
-               String blockSizeConfig = configureBlockSize(htable.getTableDescriptor());
-               String blockEncodingConfig = configureDataBlockEncoding(htable.getTableDescriptor());
+               TableDescriptor tableDescriptor = hbaseConn.getTable(TableName.valueOf(tableName)).getDescriptor();
+               String compressionConfig = configureCompression(tableDescriptor);
+               String bloomTypeConfig = configureBloomType(tableDescriptor);
+               String blockSizeConfig = configureBlockSize(tableDescriptor);
+               String blockEncodingConfig = configureDataBlockEncoding(tableDescriptor);
                Map<String,String> tableConfigs = Maps.newHashMap();
                if(StringUtils.isNotBlank(compressionConfig)) {
                    tableConfigs.put(COMPRESSION_FAMILIES_CONF_KEY, compressionConfig);

@@ -17,10 +17,10 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
-import java.util.Comparator;
 import java.util.concurrent.ConcurrentSkipListMap;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 
 /**
  * Like a {@link KeyValueSkipListSet}, but also exposes useful, atomic methods (e.g.
@@ -30,7 +30,7 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
 
   // this is annoying that we need to keep this extra pointer around here, but its pretty minimal
   // and means we don't need to change the HBase code.
-  private ConcurrentSkipListMap<KeyValue, KeyValue> delegate;
+  private ConcurrentSkipListMap<Cell, Cell> delegate;
 
   /**
    * Create a new {@link IndexKeyValueSkipListSet} based on the passed comparator.
@@ -38,9 +38,9 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
    *          well as object equality in the map.
    * @return a map that uses the passed comparator
    */
-  public static IndexKeyValueSkipListSet create(Comparator<KeyValue> comparator) {
-    ConcurrentSkipListMap<KeyValue, KeyValue> delegate =
-        new ConcurrentSkipListMap<KeyValue, KeyValue>(comparator);
+  public static IndexKeyValueSkipListSet create(CellComparator comparator) {
+    ConcurrentSkipListMap<Cell, Cell> delegate =
+        new ConcurrentSkipListMap<Cell, Cell>(comparator);
     IndexKeyValueSkipListSet ret = new IndexKeyValueSkipListSet(delegate);
     return ret;
   }
@@ -48,7 +48,7 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
   /**
    * @param delegate map to which to delegate all calls
    */
-  public IndexKeyValueSkipListSet(ConcurrentSkipListMap<KeyValue, KeyValue> delegate) {
+  public IndexKeyValueSkipListSet(ConcurrentSkipListMap<Cell, Cell> delegate) {
     super(delegate);
     this.delegate = delegate;
   }
@@ -70,7 +70,7 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
    *           the map
    * @throws NullPointerException if the specified key is null
    */
-  public KeyValue putIfAbsent(KeyValue kv) {
+  public Cell putIfAbsent(Cell kv) {
     return this.delegate.putIfAbsent(kv, kv);
   }
 }

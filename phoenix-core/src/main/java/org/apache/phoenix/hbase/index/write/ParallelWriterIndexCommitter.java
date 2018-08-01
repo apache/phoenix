@@ -20,11 +20,11 @@ import java.util.concurrent.ExecutorService;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
@@ -35,6 +35,7 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
@@ -56,7 +57,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
     private static final Log LOG = LogFactory.getLog(ParallelWriterIndexCommitter.class);
 
-    private HTableFactory factory;
+    private HTableFactory retryingFactory;
+    private HTableFactory noRetriesfactory;
     private Stoppable stopped;
     private QuickFailingTaskRunner pool;
     private KeyValueBuilder kvBuilder;
@@ -77,7 +79,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                 ThreadPoolManager.getExecutor(
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
-                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent, env);
+                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), parent, env);
         this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
@@ -86,14 +88,15 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
      * <p>
      * Exposed for TESTING
      */
-    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, RegionCoprocessorEnvironment env) {
-        this.factory = factory;
+    void setup(HTableFactory factory, ExecutorService pool,Stoppable stop, RegionCoprocessorEnvironment env) {
+        this.retryingFactory = factory;
+        this.noRetriesfactory = IndexWriterUtils.getNoRetriesHTableFactory(env);
         this.pool = new QuickFailingTaskRunner(pool);
         this.stopped = stop;
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws SingleIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws SingleIndexWriteFailureException {
         /*
          * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the writes in
          * parallel to each index table, so each table gets its own task and is submitted to the pool. Where it gets
@@ -114,7 +117,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
 			if (env != null
 					&& !allowLocalUpdates
 					&& tableReference.getTableName().equals(
-							env.getRegion().getTableDesc().getNameAsString())) {
+							env.getRegion().getTableDescriptor().getTableName().getNameAsString())) {
 				continue;
 			}
             /*
@@ -143,12 +146,12 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     if (LOG.isTraceEnabled()) {
                         LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                     }
-                    HTableInterface table = null;
+                    Table table = null;
                     try {
                         if (allowLocalUpdates
                                 && env != null
                                 && tableReference.getTableName().equals(
-                                    env.getRegion().getTableDesc().getNameAsString())) {
+                                    env.getRegion().getTableDescriptor().getTableName().getNameAsString())) {
                             try {
                                 throwFailureIfDone();
                                 IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
@@ -161,17 +164,19 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 }
                             }
                         }
+                     // if the client can retry index writes, then we don't need to retry here
+                        HTableFactory factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesfactory;
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
-                        table.batch(mutations);
+                        table.batch(mutations, null);
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;
                     } catch (IOException e) {
-                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e);
+                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e, PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
                     } catch (InterruptedException e) {
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
-                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e);
+                        throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e, PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
                     }
                     finally{
                         if (table != null) {
@@ -225,7 +230,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public void stop(String why) {
         LOG.info("Shutting down " + this.getClass().getSimpleName() + " because " + why);
         this.pool.stop(why);
-        this.factory.shutdown();
+        this.retryingFactory.shutdown();
+        this.noRetriesfactory.shutdown();
     }
 
     @Override

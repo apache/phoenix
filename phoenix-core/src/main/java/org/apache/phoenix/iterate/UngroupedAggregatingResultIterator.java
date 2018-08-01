@@ -24,7 +24,7 @@ import java.sql.SQLException;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 
 public class UngroupedAggregatingResultIterator extends GroupedAggregatingResultIterator {
@@ -43,7 +43,7 @@ public class UngroupedAggregatingResultIterator extends GroupedAggregatingResult
             aggregators.reset(aggregators.getAggregators());
             byte[] value = aggregators.toBytes(aggregators.getAggregators());
             result = new SingleKeyValueTuple(
-                    KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, 
+                    PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, 
                             SINGLE_COLUMN_FAMILY, 
                             SINGLE_COLUMN, 
                             AGG_TIMESTAMP, 

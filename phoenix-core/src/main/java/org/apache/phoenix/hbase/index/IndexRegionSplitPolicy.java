@@ -18,9 +18,10 @@
 package org.apache.phoenix.hbase.index;
 
 import java.util.List;
+import java.util.Optional;
 
+import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.IncreasingToUpperBoundRegionSplitPolicy;
-import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 
@@ -42,29 +43,29 @@ public class IndexRegionSplitPolicy extends IncreasingToUpperBoundRegionSplitPol
     protected byte[] getSplitPoint() {
         byte[] oldSplitPoint = super.getSplitPoint();
         if (oldSplitPoint == null) return null;
-        List<Store> stores = region.getStores();
+        List<HStore> stores = region.getStores();
         byte[] splitPointFromLargestStore = null;
         long largestStoreSize = 0;
         boolean isLocalIndexKey = false;
-        for (Store s : stores) {
-            if (s.getFamily().getNameAsString()
+        for (HStore s : stores) {
+            if (s.getColumnFamilyName()
                     .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                byte[] splitPoint = s.getSplitPoint();
-                if (oldSplitPoint != null && splitPoint != null
-                        && Bytes.compareTo(oldSplitPoint, splitPoint) == 0) {
+                Optional<byte[]> splitPoint = s.getSplitPoint();
+                if (oldSplitPoint != null && splitPoint.isPresent()
+                        && Bytes.compareTo(oldSplitPoint, splitPoint.get()) == 0) {
                     isLocalIndexKey = true;
                 }
             }
         }
         if (!isLocalIndexKey) return oldSplitPoint;
 
-        for (Store s : stores) {
-            if (!s.getFamily().getNameAsString()
+        for (HStore s : stores) {
+            if (!s.getColumnFamilyName()
                     .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                byte[] splitPoint = s.getSplitPoint();
+                Optional<byte[]> splitPoint = s.getSplitPoint();
                 long storeSize = s.getSize();
-                if (splitPoint != null && largestStoreSize < storeSize) {
-                    splitPointFromLargestStore = splitPoint;
+                if (splitPoint.isPresent() && largestStoreSize < storeSize) {
+                    splitPointFromLargestStore = splitPoint.get();
                     largestStoreSize = storeSize;
                 }
             }

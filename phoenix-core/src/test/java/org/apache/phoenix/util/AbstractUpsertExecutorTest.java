@@ -30,10 +30,10 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
@@ -81,7 +81,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute() throws Exception {
         byte[] binaryData=(byte[])PBinary.INSTANCE.getSampleValue();
-        String encodedBinaryData = Base64.encodeBytes(binaryData);
+        String encodedBinaryData = Bytes.toString(Base64.getEncoder().encode(binaryData));
         getUpsertExecutor().execute(createRecord(123L, "NameValue", 42,
                 Arrays.asList(1, 2, 3), true, encodedBinaryData));
 
@@ -110,7 +110,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_TooManyFields() throws Exception {
         byte[] binaryData=(byte[])PBinary.INSTANCE.getSampleValue();
-        String encodedBinaryData = Base64.encodeBytes(binaryData);
+        String encodedBinaryData = Bytes.toString(Base64.getEncoder().encode(binaryData));
         R recordWithTooManyFields = createRecord(123L, "NameValue", 42, Arrays.asList(1, 2, 3),
                 true, encodedBinaryData, "garbage");
         getUpsertExecutor().execute(recordWithTooManyFields);
@@ -131,7 +131,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_NullField() throws Exception {
         byte[] binaryData=(byte[])PBinary.INSTANCE.getSampleValue();
-        String encodedBinaryData = Base64.encodeBytes(binaryData);
+        String encodedBinaryData = Bytes.toString(Base64.getEncoder().encode(binaryData));
         getUpsertExecutor().execute(createRecord(123L, "NameValue", null,
                 Arrays.asList(1, 2, 3), false, encodedBinaryData));
 
@@ -151,7 +151,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_InvalidType() throws Exception {
         byte[] binaryData=(byte[])PBinary.INSTANCE.getSampleValue();
-        String encodedBinaryData = Base64.encodeBytes(binaryData);
+        String encodedBinaryData = Bytes.toString(Base64.getEncoder().encode(binaryData));
         R recordWithInvalidType = createRecord(123L, "NameValue", "ThisIsNotANumber",
                 Arrays.asList(1, 2, 3), true, encodedBinaryData);
         getUpsertExecutor().execute(recordWithInvalidType);
@@ -163,7 +163,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_InvalidBoolean() throws Exception {
         byte[] binaryData=(byte[])PBinary.INSTANCE.getSampleValue();
-        String encodedBinaryData = Base64.encodeBytes(binaryData);
+        String encodedBinaryData = Bytes.toString(Base64.getEncoder().encode(binaryData));
         R csvRecordWithInvalidType = createRecord("123,NameValue,42,1:2:3,NotABoolean,"+encodedBinaryData);
         getUpsertExecutor().execute(csvRecordWithInvalidType);
 

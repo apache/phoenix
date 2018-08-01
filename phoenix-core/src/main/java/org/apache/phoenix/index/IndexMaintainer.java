@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
@@ -100,7 +101,6 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -108,6 +108,7 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.base.Preconditions;
@@ -193,13 +194,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        Iterator<PTable> indexesItr = maintainedIndexes(indexes.iterator());
-        if ((dataTable.isImmutableRows()) || !indexesItr.hasNext()) {
-            indexesItr = maintainedLocalIndexes(indexesItr);
-            if (!indexesItr.hasNext()) {
-                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                return;
-            }
+        Iterator<PTable> indexesItr;
+        boolean onlyLocalIndexes = dataTable.isImmutableRows() || dataTable.isTransactional();
+        if (onlyLocalIndexes) {
+            indexesItr = maintainedLocalIndexes(indexes.iterator());
+        } else {
+            indexesItr = maintainedIndexes(indexes.iterator());
+        }
+        if (!indexesItr.hasNext()) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return;
         }
         int nIndexes = 0;
         while (indexesItr.hasNext()) {
@@ -213,9 +217,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
             // Write out data row key schema once, since it's the same for all index maintainers
             dataTable.getRowKeySchema().write(output);
-            indexesItr =
-                    dataTable.isImmutableRows() ? maintainedLocalIndexes(indexes.iterator())
-                            : maintainedIndexes(indexes.iterator());
+            indexesItr = onlyLocalIndexes 
+                        ? maintainedLocalIndexes(indexes.iterator())
+                        : maintainedIndexes(indexes.iterator());
             while (indexesItr.hasNext()) {
                     org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(indexesItr.next().getIndexMaintainer(dataTable, connection));
                     byte[] protoBytes = proto.toByteArray();
@@ -365,7 +369,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection) {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
-        assert(dataTable.getType() == PTableType.SYSTEM || dataTable.getType() == PTableType.TABLE || dataTable.getType() == PTableType.VIEW);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
         this.viewIndexId = index.getViewIndexId() == null ? null : MetaDataUtil.getViewIndexIdDataType().toBytes(index.getViewIndexId());
@@ -410,15 +413,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nDataPKColumns = dataRowKeySchema.getFieldCount() - dataPosOffset;
         // For indexes on views, we need to remember which data columns are "constants"
         // These are the values in a VIEW where clause. For these, we don't put them in the
-        // index, as they're the same for every row in the index.
-        if (dataTable.getType() == PTableType.VIEW) {
-            List<PColumn>dataPKColumns = dataTable.getPKColumns();
-            for (int i = dataPosOffset; i < dataPKColumns.size(); i++) {
-                PColumn dataPKColumn = dataPKColumns.get(i);
-                if (dataPKColumn.getViewConstant() != null) {
-                    bitSet.set(i);
-                    nDataPKColumns--;
-                }
+        // index, as they're the same for every row in the index. The data table can be
+        // either a VIEW or PROJECTED
+        List<PColumn>dataPKColumns = dataTable.getPKColumns();
+        for (int i = dataPosOffset; i < dataPKColumns.size(); i++) {
+            PColumn dataPKColumn = dataPKColumns.get(i);
+            if (dataPKColumn.getViewConstant() != null) {
+                bitSet.set(i);
+                nDataPKColumns--;
             }
         }
         this.indexTableName = indexTableName;
@@ -542,11 +544,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         for (int i = 0; i < index.getColumnFamilies().size(); i++) {
             PColumnFamily family = index.getColumnFamilies().get(i);
             for (PColumn indexColumn : family.getColumns()) {
-                PColumn dataColumn = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-                byte[] dataColumnCq = dataColumn.getColumnQualifierBytes();
-                byte[] indexColumnCq = indexColumn.getColumnQualifierBytes();
-                this.coveredColumnsMap.put(new ColumnReference(dataColumn.getFamilyName().getBytes(), dataColumnCq), 
-                        new ColumnReference(indexColumn.getFamilyName().getBytes(), indexColumnCq));
+                PColumn dataColumn = IndexUtil.getDataColumnOrNull(dataTable, indexColumn.getName().getString());
+                // This can happen during deletion where we don't need covered columns
+                if (dataColumn != null) {
+                    byte[] dataColumnCq = dataColumn.getColumnQualifierBytes();
+                    byte[] indexColumnCq = indexColumn.getColumnQualifierBytes();
+                    this.coveredColumnsMap.put(new ColumnReference(dataColumn.getFamilyName().getBytes(), dataColumnCq), 
+                            new ColumnReference(indexColumn.getFamilyName().getBytes(), indexColumnCq));
+                }
             }
         }
         this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
@@ -757,8 +762,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int minLength = length - maxTrailingNulls;
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            while (length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+            int index = dataRowKeySchema.getFieldCount() - 1;
+            while (index >= 0 && !dataRowKeySchema.getField(index).getDataType().isFixedWidth() && length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
                 length--;
+                index--;
             }
             // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
             // we store this in nIndexSaltBuckets, as we only use this function for local indexes
@@ -1006,7 +1013,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         public PDataType getDataType() {
                             return null;
                         }
-                    }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme);
+                    }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme, immutableStorageScheme);
                     ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                     expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
                     byte[] value = ptr.copyBytesIfNecessary();
@@ -1048,38 +1055,54 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private enum DeleteType {SINGLE_VERSION, ALL_VERSIONS};
-    private DeleteType getDeleteTypeOrNull(Collection<KeyValue> pendingUpdates) {
+    private DeleteType getDeleteTypeOrNull(Collection<? extends Cell> pendingUpdates) {
+        return getDeleteTypeOrNull(pendingUpdates, this.nDataCFs);
+    }
+   
+    private DeleteType getDeleteTypeOrNull(Collection<? extends Cell> pendingUpdates, int nCFs) {
         int nDeleteCF = 0;
         int nDeleteVersionCF = 0;
-        for (KeyValue kv : pendingUpdates) {
+        for (Cell kv : pendingUpdates) {
         	if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
                 nDeleteVersionCF++;
             }
         	else if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()
         			// Since we don't include the index rows in the change set for txn tables, we need to detect row deletes that have transformed by TransactionProcessor
-        			|| (CellUtil.matchingQualifier(kv, TransactionFactory.getTransactionFactory().getTransactionContext().getFamilyDeleteMarker()) && CellUtil.matchingValue(kv, HConstants.EMPTY_BYTE_ARRAY))) {
+        	        || TransactionUtil.isDeleteFamily(kv)) {
         	    nDeleteCF++;
         	}
         }
         // This is what a delete looks like on the server side for mutable indexing...
         // Should all be one or the other for DeleteFamily versus DeleteFamilyVersion, but just in case not
         DeleteType deleteType = null; 
-        if (nDeleteVersionCF > 0 && nDeleteVersionCF >= this.nDataCFs) {
+        if (nDeleteVersionCF > 0 && nDeleteVersionCF >= nCFs) {
         	deleteType = DeleteType.SINGLE_VERSION;
         } else {
 			int nDelete = nDeleteCF + nDeleteVersionCF;
-			if (nDelete>0 && nDelete >= this.nDataCFs) {
+			if (nDelete>0 && nDelete >= nCFs) {
 				deleteType = DeleteType.ALL_VERSIONS;
 			}
 		}
         return deleteType;
     }
     
-    public boolean isRowDeleted(Collection<KeyValue> pendingUpdates) {
+    public boolean isRowDeleted(Collection<? extends Cell> pendingUpdates) {
         return getDeleteTypeOrNull(pendingUpdates) != null;
     }
     
-    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<KeyValue> pendingUpdates, long ts) throws IOException {
+    public boolean isRowDeleted(Mutation m) {
+        if (m.getFamilyCellMap().size() < this.nDataCFs) {
+            return false;
+        }
+        for (List<Cell> cells : m.getFamilyCellMap().values()) {
+            if (getDeleteTypeOrNull(cells, 1) == null) { // Checking CFs one by one
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean hasIndexedColumnChanged(ValueGetter oldState, Collection<? extends Cell> pendingUpdates, long ts) throws IOException {
         if (pendingUpdates.isEmpty()) {
             return false;
         }
@@ -1116,10 +1139,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * since we can build the corresponding index row key.
      */
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ImmutableBytesWritable dataRowKeyPtr, long ts) throws IOException {
-        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<KeyValue>emptyList(), ts, null, null);
+        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<Cell>emptyList(), ts, null, null);
     }
     
-    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<KeyValue> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         // Delete the entire row if any of the indexed columns changed
         DeleteType deleteType = null;
@@ -1131,15 +1154,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 ColumnReference indexColumn = coveredColumnsMap.get(ref);
                 // If table delete was single version, then index delete should be as well
                 if (deleteType == DeleteType.SINGLE_VERSION) {
-                    delete.deleteFamilyVersion(indexColumn.getFamily(), ts);
+                    delete.addFamilyVersion(indexColumn.getFamily(), ts);
                 } else {
-                    delete.deleteFamily(indexColumn.getFamily(), ts);
+                    delete.addFamily(indexColumn.getFamily(), ts);
                 }
             }
             if (deleteType == DeleteType.SINGLE_VERSION) {
-                delete.deleteFamilyVersion(emptyCF, ts);
+                delete.addFamilyVersion(emptyCF, ts);
             } else {
-                delete.deleteFamily(emptyCF, ts);
+                delete.addFamily(emptyCF, ts);
             }
             delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
             return delete;
@@ -1149,7 +1172,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Delete columns for missing key values
         for (Cell kv : pendingUpdates) {
             if (kv.getTypeByte() != KeyValue.Type.Put.getCode()) {
-                ColumnReference ref = new ColumnReference(kv.getFamily(), kv.getQualifier());
+                ColumnReference ref =
+                        new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(),
+                                kv.getFamilyLength(), kv.getQualifierArray(),
+                                kv.getQualifierOffset(), kv.getQualifierLength());
                 if (dataTableColRefs.contains(ref)) {
                     if (delete == null) {
                         delete = new Delete(indexRowKey);                    
@@ -1158,9 +1184,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     ColumnReference indexColumn = coveredColumnsMap.get(ref);
                     // If point delete for data table, then use point delete for index as well
                     if (kv.getTypeByte() == KeyValue.Type.Delete.getCode()) { 
-                        delete.deleteColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
+                        delete.addColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     } else {
-                        delete.deleteColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
+                        delete.addColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     }
                 }
             }

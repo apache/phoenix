@@ -21,9 +21,11 @@ import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -31,10 +33,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -42,24 +49,44 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.tephra.TxConstants;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
+@RunWith(Parameterized.class)
 public class TransactionIT  extends ParallelStatsDisabledIT {
+    private final String txProvider;
+    private final String tableDDLOptions;
+    
+    public TransactionIT(String provider) {
+        txProvider = provider;
+        tableDDLOptions = PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + "='" + provider + "'";
+    }
 
+    @Parameters(name="TransactionIT_provider={0}") // name is used by failsafe as file name in reports
+    public static Collection<String[]> data() {
+        return Arrays.asList(new String[][] {     
+                 {"TEPHRA"/*,"OMID"*/}});
+    }
+    
     @Test
     public void testQueryWithSCN() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(
-                    "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
+                    "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true," + tableDDLOptions);
         }
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(EnvironmentEdgeManager.currentTimeMillis()));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
@@ -83,7 +110,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         stmt.execute("DROP TABLE " + tableName);
-        stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
+        stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true," + tableDDLOptions);
         stmt.execute("CREATE INDEX " + tableName + "_IDX ON " + tableName + " (v1) INCLUDE(v2)");
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).isTransactional());
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,  tableName + "_IDX")).isTransactional());
@@ -97,7 +124,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             conn.setAutoCommit(false);
             Statement stmt = conn.createStatement();
             try {
-                stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP)) TRANSACTIONAL=true");
+                stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP)) TRANSACTIONAL=true," + tableDDLOptions);
                 fail();
             }
             catch(SQLException e) {
@@ -121,7 +148,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             String transactTableName = generateUniqueName();
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + transactTableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " +
-                "TRANSACTIONAL=true");
+                "TRANSACTIONAL=true," + tableDDLOptions);
             conn.commit();
 
             DatabaseMetaData dbmd = conn.getMetaData();
@@ -129,6 +156,11 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("Transactional table was not marked as transactional in JDBC API.",
                 "true", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
+            assertEquals(txProvider, rs.getString(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER));
+            
+            // Ensure round-trip-ability of TRANSACTION_PROVIDER
+            PTable table = PhoenixRuntime.getTableNoCache(conn, transactTableName);
+            assertEquals(txProvider, table.getTransactionProvider().name());
 
             String nonTransactTableName = generateUniqueName();
             Statement stmt2 = conn.createStatement();
@@ -139,6 +171,15 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertTrue(rs2.next());
             assertEquals("Non-transactional table was marked as transactional in JDBC API.",
                 "false", rs2.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
+            assertNull(rs2.getString(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER));
+            
+            try {
+                stmt.execute("CREATE TABLE " + transactTableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " +
+                        "TRANSACTION_PROVIDER=foo");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.UNKNOWN_TRANSACTION_PROVIDER.getErrorCode(), e.getErrorCode());
+            }
         }
     }
     
@@ -147,7 +188,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         // TODO: we should support having a transactional table defined for a connectionless connection
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String transactTableName = generateUniqueName();
-            conn.createStatement().execute("CREATE TABLE " + transactTableName + " (k integer not null primary key, v bigint) TRANSACTIONAL=true");
+            conn.createStatement().execute("CREATE TABLE " + transactTableName + " (k integer not null primary key, v bigint) TRANSACTIONAL=true," + tableDDLOptions);
             conn.createStatement().execute("UPSERT INTO " + transactTableName + " VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
             fail();
         } catch (SQLException e) {
@@ -158,84 +199,99 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     @Test
     public void testProperties() throws Exception {
         String nonTxTableName = generateUniqueName();
+        String txTableName = generateUniqueName();
+        String idx1 = generateUniqueName();
+        String idx2 = generateUniqueName();
 
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX idx1 ON " + nonTxTableName + "1(a.v, b.v) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX idx2 ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX " + idx1 + " ON " + nonTxTableName + "1(a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX " + idx2 + " ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v) TTL=1000");
 
-        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true");
-
-        HTableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(nonTxTableName + "1"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
-            assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
-            assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+        try {
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true," + tableDDLOptions);
+            if (TransactionFactory.Provider.OMID.name().equals(txProvider)) {
+                fail("Omid shouldn't allow converting a non transactional table to be transactional");
+            }
+        } catch (SQLException e) { // Should fail for Omid, but not Tephra
+            if (TransactionFactory.Provider.TEPHRA.name().equals(txProvider)) {
+                throw e;
+            }
+            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL.getErrorCode(), e.getErrorCode());
+            // FIXME: should verify Omid table properties too, but the checks below won't be valid for Omid
+            return;
         }
 
-        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX1"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        TableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(nonTxTableName + "1"));
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
+        }
+
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(idx1));
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
+            assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
+            assertEquals(1000, colDesc.getTimeToLive());
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
         
-        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX2"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(idx2));
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
         
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
-            assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
-            assertEquals(null, colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL));
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, colDesc.getTimeToLive());
+            assertEquals(null, colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES));
         }
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TTL=1000");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
 
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
-        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "3 SET TRANSACTIONAL=true, b.VERSIONS=10, c.VERSIONS=20");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "3 SET TRANSACTIONAL=true, b.VERSIONS=10, c.VERSIONS=20," + tableDDLOptions);
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "3"));
-        assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, desc.getFamily(Bytes.toBytes("A")).getMaxVersions());
-        assertEquals(10, desc.getFamily(Bytes.toBytes("B")).getMaxVersions());
-        assertEquals(20, desc.getFamily(Bytes.toBytes("C")).getMaxVersions());
+        assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, desc.getColumnFamily(Bytes.toBytes("A")).getMaxVersions());
+        assertEquals(10, desc.getColumnFamily(Bytes.toBytes("B")).getMaxVersions());
+        assertEquals(20, desc.getColumnFamily(Bytes.toBytes("C")).getMaxVersions());
 
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "4(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
         try {
-            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "4 SET TRANSACTIONAL=true, VERSIONS=1");
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "4 SET TRANSACTIONAL=true, VERSIONS=1," + tableDDLOptions);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
         }
 
         try {
-            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "4 SET TRANSACTIONAL=true, b.VERSIONS=1");
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "4 SET TRANSACTIONAL=true, b.VERSIONS=1," + tableDDLOptions);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
         }
         
-        conn.createStatement().execute("CREATE TABLE TX_TABLE1(k INTEGER PRIMARY KEY, v VARCHAR) TTL=1000, TRANSACTIONAL=true");
-        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("TX_TABLE1"));
-        for (HColumnDescriptor colDesc : desc.getFamilies()) {
+        conn.createStatement().execute("CREATE TABLE " + txTableName + "(k INTEGER PRIMARY KEY, v VARCHAR) TTL=1000, TRANSACTIONAL=true," + tableDDLOptions);
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(txTableName));
+        for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
-            assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
-            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
-            assertEquals(1000, Integer.parseInt(propertyTTL));
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, colDesc.getTimeToLive());
+            byte[] propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL_BYTES);
+            assertEquals(1000, Integer.parseInt(Bytes.toString(propertyTTL)));
         }
     }
     
@@ -245,7 +301,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
-            TestUtil.createTransactionalTable(conn1, fullTableName);
+            TestUtil.createTransactionalTable(conn1, fullTableName, tableDDLOptions);
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(false);
             String selectSql = "SELECT * FROM "+fullTableName;
@@ -284,7 +340,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true," + tableDDLOptions);
             stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
             conn.commit();
             
@@ -317,6 +373,31 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             
         } finally {
             conn.close();
+        }
+    }
+    
+    private static void assertTTL(Admin admin, String tableName, int ttl) throws Exception {
+        TableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
+        for (ColumnFamilyDescriptor colDesc : tableDesc.getColumnFamilies()) {
+            assertEquals(ttl,Integer.parseInt(Bytes.toString(colDesc.getValue(Bytes.toBytes(TxConstants.PROPERTY_TTL)))));
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL,colDesc.getTimeToLive());
+        }
+    }
+    
+    @Test
+    public void testSetTTL() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        TransactionFactory.Provider txProvider = TransactionFactory.Provider.valueOf(this.txProvider);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props); Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + 
+                    "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "',TTL=100");
+            assertTTL(admin, tableName, 100);
+            tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName + 
+                    "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET TTL=" + 200);
+            assertTTL(admin, tableName, 200);
         }
     }
 }

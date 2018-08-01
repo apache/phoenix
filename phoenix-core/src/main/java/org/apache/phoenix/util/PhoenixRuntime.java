@@ -53,7 +53,6 @@ import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -88,7 +87,6 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.transaction.TransactionFactory;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -264,7 +262,6 @@ public class PhoenixRuntime {
                 String srcTable = execCmd.getSrcTable();
                 System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
-                UpgradeUtil.mapChildViewsToNamespace(conn, srcTable,props);
             } else if (execCmd.isUpgrade()) {
                 if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
                         "May not specify the CURRENT_SCN property when upgrading"); }
@@ -358,8 +355,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     @Deprecated
-    public static List<KeyValue> getUncommittedData(Connection conn) throws SQLException {
-        Iterator<Pair<byte[],List<KeyValue>>> iterator = getUncommittedDataIterator(conn);
+    public static List<Cell> getUncommittedData(Connection conn) throws SQLException {
+        Iterator<Pair<byte[],List<Cell>>> iterator = getUncommittedDataIterator(conn);
         if (iterator.hasNext()) {
             return iterator.next().getSecond();
         }
@@ -373,7 +370,7 @@ public class PhoenixRuntime {
      * @return the list of HBase mutations for uncommitted data
      * @throws SQLException
      */
-    public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn) throws SQLException {
+    public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn) throws SQLException {
         return getUncommittedDataIterator(conn, false);
     }
 
@@ -384,10 +381,10 @@ public class PhoenixRuntime {
      * @return the list of HBase mutations for uncommitted data
      * @throws SQLException
      */
-    public static Iterator<Pair<byte[],List<KeyValue>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
+    public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
         final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes);
-        return new Iterator<Pair<byte[],List<KeyValue>>>() {
+        return new Iterator<Pair<byte[],List<Cell>>>() {
 
             @Override
             public boolean hasNext() {
@@ -395,18 +392,18 @@ public class PhoenixRuntime {
             }
 
             @Override
-            public Pair<byte[], List<KeyValue>> next() {
+            public Pair<byte[], List<Cell>> next() {
                 Pair<byte[],List<Mutation>> pair = iterator.next();
-                List<KeyValue> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
+                List<Cell> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
                 for (Mutation mutation : pair.getSecond()) {
                     for (List<Cell> keyValueList : mutation.getFamilyCellMap().values()) {
                         for (Cell keyValue : keyValueList) {
-                            keyValues.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(keyValue));
+                            keyValues.add(PhoenixKeyValueUtil.maybeCopyCell(keyValue));
                         }
                     }
                 }
                 Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
-                return new Pair<byte[], List<KeyValue>>(pair.getFirst(),keyValues);
+                return new Pair<byte[], List<Cell>>(pair.getFirst(),keyValues);
             }
 
             @Override
@@ -430,8 +427,15 @@ public class PhoenixRuntime {
         return result.getTable();
 
     }
+    
     /**
-     * 
+     * Returns the table if it is found in the connection metadata cache. If the metadata of this
+     * table has changed since it was put in the cache these changes will not necessarily be
+     * reflected in the returned table. If the table is not found, makes a call to the server to
+     * fetch the latest metadata of the table. This is different than how a table is resolved when
+     * it is referenced from a query (a call is made to the server to fetch the latest metadata of the table
+     * depending on the UPDATE_CACHE_FREQUENCY property)
+     * See https://issues.apache.org/jira/browse/PHOENIX-4475
      * @param conn
      * @param name requires a pre-normalized table name or a pre-normalized schema and table name
      * @return
@@ -445,7 +449,8 @@ public class PhoenixRuntime {
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
             String tableName = SchemaUtil.getTableNameFromFullName(name);
-            MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(schemaName, tableName);
+            MetaDataMutationResult result =
+                    new MetaDataClient(pconn).updateCache(schemaName, tableName);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 throw e;
             }
@@ -1507,7 +1512,7 @@ public class PhoenixRuntime {
      * @return wall clock time in milliseconds (i.e. Epoch time) of a given Cell time stamp.
      */
     public static long getWallClockTimeFromCellTimeStamp(long tsOfCell) {
-        return TransactionFactory.getTransactionFactory().getTransactionContext().isPreExistingVersion(tsOfCell) ? tsOfCell : TransactionUtil.convertToMilliseconds(tsOfCell);
+        return TransactionUtil.isTransactionalTimestamp(tsOfCell) ? TransactionUtil.convertToMilliseconds(tsOfCell) : tsOfCell;
     }
 
     public static long getCurrentScn(ReadOnlyProps props) {

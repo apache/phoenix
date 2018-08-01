@@ -22,4 +22,8 @@
         <name>phoenix.query.threadPoolSize</name>
         <value>128</value>
     </property>
+    <property>
+       <name>hbase.localcluster.assign.random.ports</name>
+       <value>true</value>
+    </property>
 </configuration>

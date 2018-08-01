@@ -25,17 +25,20 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.PColumn;
@@ -47,6 +50,8 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.transaction.PhoenixTransactionClient;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
 
 public class DelegateConnectionQueryServices extends DelegateQueryServices implements ConnectionQueryServices {
@@ -66,7 +71,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public HTableInterface getTable(byte[] tableName) throws SQLException {
+    public Table getTable(byte[] tableName) throws SQLException {
         return getDelegate().getTable(tableName);
     }
 
@@ -103,21 +108,21 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
-        return getDelegate().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp);
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp, boolean skipAddingIndexes, boolean skipAddingParentColumns, PTable ancestorTable) throws SQLException {
+        return getDelegate().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp, skipAddingIndexes, skipAddingParentColumns, ancestorTable);
     }
 
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException {
+            boolean isNamespaceMapped, boolean allocateIndexId, boolean isDoNotUpgradePropSet) throws SQLException {
         return getDelegate().createTable(tableMetaData, physicalName, tableType, tableProps, families, splits,
-                isNamespaceMapped, allocateIndexId);
+                isNamespaceMapped, allocateIndexId, isDoNotUpgradePropSet);
     }
 
     @Override
-    public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade) throws SQLException {
-        return getDelegate().dropTable(tabeMetaData, tableType, cascade);
+    public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
+        return getDelegate().dropTable(tabeMetaData, tableType, cascade, skipAddingParentColumns);
     }
 
     @Override
@@ -135,7 +140,13 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException {
         return getDelegate().updateIndexState(tableMetadata, parentTableName);
     }
-    
+
+    @Override public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata,
+            String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties,
+            PTable table) throws SQLException {
+        return getDelegate().updateIndexState(tableMetadata, parentTableName, stmtProperties,table);
+    }
+
     @Override
     public void init(String url, Properties props) throws SQLException {
         getDelegate().init(url, props);
@@ -152,17 +163,17 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public HBaseAdmin getAdmin() throws SQLException {
+    public Admin getAdmin() throws SQLException {
         return getDelegate().getAdmin();
     }
 
     @Override
-    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
         return getDelegate().getTableDescriptor(tableName);
     }
 
     @Override
-    public void clearTableRegionCache(byte[] tableName) throws SQLException {
+    public void clearTableRegionCache(TableName tableName) throws SQLException {
         getDelegate().clearTableRegionCache(tableName);
     }
 
@@ -344,5 +355,20 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public Configuration getConfiguration() {
         return getDelegate().getConfiguration();
+    }
+
+    @Override
+    public User getUser() {
+        return getDelegate().getUser();
+    }
+
+    @Override
+    public QueryLoggerDisruptor getQueryDisruptor() {
+        return getDelegate().getQueryDisruptor();
+    }
+    
+    @Override
+    public PhoenixTransactionClient initTransactionClient(Provider provider) {
+        return getDelegate().initTransactionClient(provider);
     }
 }

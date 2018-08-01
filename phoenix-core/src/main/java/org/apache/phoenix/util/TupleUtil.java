@@ -137,18 +137,17 @@ public class TupleUtil {
         }
     }
     
-    @SuppressWarnings("deprecation")
     public static int write(Tuple result, DataOutput out) throws IOException {
         int size = 0;
         for(int i = 0; i < result.size(); i++) {
-            KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i));
+            KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i));
             size += kv.getLength();
             size += Bytes.SIZEOF_INT; // kv.getLength
           }
 
         WritableUtils.writeVInt(out, size);
         for(int i = 0; i < result.size(); i++) {
-            KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i));
+            KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i));
             out.writeInt(kv.getLength());
             out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
           }

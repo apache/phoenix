@@ -31,7 +31,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -103,11 +103,11 @@ public class RebuildIndexConnectionPropsIT extends BaseUniqueNamesOwnClusterIT {
                     Long.toString(NUM_RPC_RETRIES),
                     rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
                 ConnectionQueryServices rebuildQueryServices = rebuildIndexConnection.getQueryServices();
-                HConnection rebuildIndexHConnection =
-                        (HConnection) Whitebox.getInternalState(rebuildQueryServices,
+                Connection rebuildIndexHConnection =
+                        (Connection) Whitebox.getInternalState(rebuildQueryServices,
                             "connection");
-                HConnection regularHConnection =
-                        (HConnection) Whitebox.getInternalState(
+                Connection regularHConnection =
+                        (Connection) Whitebox.getInternalState(
                             regularConnection.getQueryServices(), "connection");
                 // assert that a new HConnection was created
                 assertFalse(

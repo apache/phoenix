@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -367,17 +366,17 @@ public class ParseNodeFactory {
     }
 
     public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
-        return new DropTableStatement(tableName, tableType, ifExists, cascade);
+        return new DropTableStatement(tableName, tableType, ifExists, cascade, false);
     }
 
     public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {
         return new DropIndexStatement(indexName, tableName, ifExists);
     }
 
-    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async) {
-        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, async);
+    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async, ListMultimap<String,Pair<String,Object>> props) {
+        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, async, props);
     }
-    
+
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false);
     }
@@ -925,4 +924,10 @@ public class ParseNodeFactory {
     public UseSchemaStatement useSchema(String schemaName) {
         return new UseSchemaStatement(schemaName);
     }
+
+    public ChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName
+            , String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
+        return new ChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
+    }
+
 }

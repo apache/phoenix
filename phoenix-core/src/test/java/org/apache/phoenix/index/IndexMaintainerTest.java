@@ -34,8 +34,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -123,14 +124,14 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
                 stmt.setObject(i+1, values[i]);
             }
             stmt.execute();
-            	Iterator<Pair<byte[],List<KeyValue>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
-            List<KeyValue> dataKeyValues = iterator.next().getSecond();
+            	Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
+            List<Cell> dataKeyValues = iterator.next().getSecond();
             Map<ColumnReference,byte[]> valueMap = Maps.newHashMapWithExpectedSize(dataKeyValues.size());
-            byte[] row = dataKeyValues.get(0).getRow();
-			ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable(row);
-            Put dataMutation = new Put(rowKeyPtr.copyBytes());
-            for (KeyValue kv : dataKeyValues) {
-                valueMap.put(new ColumnReference(kv.getFamily(),kv.getQualifier()), kv.getValue());
+			ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable(dataKeyValues.get(0).getRowArray(), dataKeyValues.get(0).getRowOffset(), dataKeyValues.get(0).getRowLength());
+            byte[] row = rowKeyPtr.copyBytes();
+            Put dataMutation = new Put(row);
+            for (Cell kv : dataKeyValues) {
+                valueMap.put(new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength()), CellUtil.cloneValue(kv));
                 dataMutation.add(kv);
             }
             ValueGetter valueGetter = newValueGetter(row, valueMap);
@@ -148,7 +149,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
                 valueMap.get(ref);
             }
             byte[] dataRowKey = im1.buildDataRowKey(indexKeyPtr, null);
-            assertArrayEquals(dataRowKey, dataKeyValues.get(0).getRow());
+            assertArrayEquals(dataRowKey, CellUtil.cloneRow(dataKeyValues.get(0)));
         } finally {
             try {
                 conn.createStatement().execute("DROP TABLE " + fullTableName);

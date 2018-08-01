@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -31,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -46,22 +47,25 @@ public class ConnectionQueryServicesImplTest {
         ConnectionQueryServicesImpl cqs = mock(ConnectionQueryServicesImpl.class);
         // Invoke the real methods for these two calls
         when(cqs.createSchema(any(List.class), anyString())).thenCallRealMethod();
-        doCallRealMethod().when(cqs).ensureSystemTablesUpgraded(any(ReadOnlyProps.class));
+        doCallRealMethod().when(cqs).ensureSystemTablesMigratedToSystemNamespace();
+        // Do nothing for this method, just check that it was invoked later
+        doNothing().when(cqs).createSysMutexTableIfNotExists(any(Admin.class));
 
         // Spoof out this call so that ensureSystemTablesUpgrade() will return-fast.
-        when(cqs.getSystemTableNames(any(HBaseAdmin.class))).thenReturn(Collections.<TableName> emptyList());
+        when(cqs.getSystemTableNamesInDefaultNamespace(any(Admin.class))).thenReturn(Collections.<TableName> emptyList());
 
         // Throw a special exception to check on later
         doThrow(PHOENIX_IO_EXCEPTION).when(cqs).ensureNamespaceCreated(anyString());
 
-        // Make sure that ensureSystemTablesUpgraded will try to migrate the system tables.
+        // Make sure that ensureSystemTablesMigratedToSystemNamespace will try to migrate the system tables.
         Map<String,String> props = new HashMap<>();
         props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        cqs.ensureSystemTablesUpgraded(new ReadOnlyProps(props));
+        when(cqs.getProps()).thenReturn(new ReadOnlyProps(props));
+        cqs.ensureSystemTablesMigratedToSystemNamespace();
 
         // Should be called after upgradeSystemTables()
         // Proves that execution proceeded
-        verify(cqs).getSystemTableNames(any(HBaseAdmin.class));
+        verify(cqs).getSystemTableNamesInDefaultNamespace(any(Admin.class));
 
         try {
             // Verifies that the exception is propagated back to the caller

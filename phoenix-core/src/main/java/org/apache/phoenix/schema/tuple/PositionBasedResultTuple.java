@@ -48,8 +48,8 @@ public class PositionBasedResultTuple extends BaseTuple {
     }
 
     @Override
-    public KeyValue getValue(byte[] family, byte[] qualifier) {
-        return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cells.getCellForColumnQualifier(qualifier));
+    public Cell getValue(byte[] family, byte[] qualifier) {
+        return cells.getCellForColumnQualifier(qualifier);
     }
 
     @Override
@@ -81,14 +81,14 @@ public class PositionBasedResultTuple extends BaseTuple {
     }
 
     @Override
-    public KeyValue getValue(int index) {
-        return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(index == 0 ? cells.getFirstCell() : cells.get(index));
+    public Cell getValue(int index) {
+        return index == 0 ? cells.getFirstCell() : cells.get(index);
     }
 
     @Override
     public boolean getValue(byte[] family, byte[] qualifier,
             ImmutableBytesWritable ptr) {
-        KeyValue kv = getValue(family, qualifier);
+        Cell kv = getValue(family, qualifier);
         if (kv == null)
             return false;
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());

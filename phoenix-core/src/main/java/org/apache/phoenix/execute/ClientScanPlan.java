@@ -26,6 +26,8 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -34,10 +36,12 @@ import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.CostUtil;
 
 import com.google.common.collect.Lists;
 
@@ -47,6 +51,31 @@ public class ClientScanPlan extends ClientProcessingPlan {
             RowProjector projector, Integer limit, Integer offset, Expression where, OrderBy orderBy,
             QueryPlan delegate) {
         super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
+    }
+
+    @Override
+    public Cost getCost() {
+        Double inputBytes = this.getDelegate().accept(new ByteCountVisitor());
+        Double outputBytes = this.accept(new ByteCountVisitor());
+
+        if (inputBytes == null || outputBytes == null) {
+            return Cost.UNKNOWN;
+        }
+
+        int parallelLevel = CostUtil.estimateParallelLevel(
+                false, context.getConnection().getQueryServices());
+        Cost cost = new Cost(0, 0, 0);
+        if (!orderBy.getOrderByExpressions().isEmpty()) {
+            Cost orderByCost =
+                    CostUtil.estimateOrderByCost(inputBytes, outputBytes, parallelLevel);
+            cost = cost.plus(orderByCost);
+        }
+        return super.getCost().plus(cost);
+    }
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
     }
 
     @Override

@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.FamilyFilter;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -71,7 +72,7 @@ public class ScannerBuilder {
     // filter out kvs based on deletes
     ApplyAndFilterDeletesFilter deleteFilter = new ApplyAndFilterDeletesFilter(getAllFamilies(indexedColumns));
     filters.addFilter(deleteFilter);
-
+    
     // combine the family filters and the rest of the filters as a
     return getFilteredScanner(filters, returnNullIfRowNotFound, deleteFilter.getDeleteTracker());
   }
@@ -97,6 +98,15 @@ public class ScannerBuilder {
                 ref.getQualifier())));
       }
       columnFilters.addFilter(columnFilter);
+    }
+    
+    if(columns.isEmpty()){
+        columnFilters.addFilter(new FilterBase(){
+            @Override
+            public boolean filterAllRemaining() throws IOException {
+                return true;
+            }
+        });
     }
     return columnFilters;
   }

@@ -33,9 +33,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.PhoenixParserException;
@@ -109,34 +109,34 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     @SuppressWarnings("deprecation")
     private static void initTableValues() throws Exception {
         ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        HTableInterface hTable = services.getTable(SchemaUtil.getTableNameAsBytes(WEB_STATS_SCHEMA_NAME,WEB_STATS));
+        Table hTable = services.getTable(SchemaUtil.getTableNameAsBytes(WEB_STATS_SCHEMA_NAME,WEB_STATS));
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             Put put;
             List<Row> mutations = new ArrayList<Row>();
             put = new Put(Bytes.toBytes("entry1"));
-            put.add(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
-            put.add(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID2_BYTES), PInteger.INSTANCE.toBytes(ENTRY1_CLICK_COUNT));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID1_BYTES), PTime.INSTANCE.toBytes(ENTRY1_USER_ID1_LOGIN_TIME));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PTime.INSTANCE.toBytes(ENTRY1_USER_ID2_LOGIN_TIME));
+            put.addColumn(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+            put.addColumn(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID2_BYTES), PInteger.INSTANCE.toBytes(ENTRY1_CLICK_COUNT));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID1_BYTES), PTime.INSTANCE.toBytes(ENTRY1_USER_ID1_LOGIN_TIME));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PTime.INSTANCE.toBytes(ENTRY1_USER_ID2_LOGIN_TIME));
             mutations.add(put);
             
             put = new Put(Bytes.toBytes("entry2"));
-            put.add(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
-            put.add(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID3_BYTES), PInteger.INSTANCE.toBytes(ENTRY2_CLICK_COUNT));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PTime.INSTANCE.toBytes(ENTRY2_USER_ID2_LOGIN_TIME));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID3_BYTES), PTime.INSTANCE.toBytes(ENTRY2_USER_ID3_LOGIN_TIME));
+            put.addColumn(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+            put.addColumn(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID3_BYTES), PInteger.INSTANCE.toBytes(ENTRY2_CLICK_COUNT));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PTime.INSTANCE.toBytes(ENTRY2_USER_ID2_LOGIN_TIME));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID3_BYTES), PTime.INSTANCE.toBytes(ENTRY2_USER_ID3_LOGIN_TIME));
             mutations.add(put);
             
             put = new Put(Bytes.toBytes("entry3"));
-            put.add(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
-            put.add(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID1_BYTES), PInteger.INSTANCE.toBytes(ENTRY3_CLICK_COUNT));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID1_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID1_LOGIN_TIME));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID2_LOGIN_TIME));
-            put.add(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID3_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID3_LOGIN_TIME));
+            put.addColumn(A_CF, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
+            put.addColumn(A_CF, ByteUtil.concat(MAX_CLICK_COUNT_DYNCOL_PREFIX, USER_ID1_BYTES), PInteger.INSTANCE.toBytes(ENTRY3_CLICK_COUNT));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID1_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID1_LOGIN_TIME));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID2_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID2_LOGIN_TIME));
+            put.addColumn(B_CF, ByteUtil.concat(LAST_LOGIN_TIME_DYNCOL_PREFIX, USER_ID3_BYTES), PTime.INSTANCE.toBytes(ENTRY3_USER_ID3_LOGIN_TIME));
             mutations.add(put);
 
-            hTable.batch(mutations);
+            hTable.batch(mutations, null);
 
         } finally {
             hTable.close();

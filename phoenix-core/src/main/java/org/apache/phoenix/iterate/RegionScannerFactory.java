@@ -21,6 +21,7 @@ package org.apache.phoenix.iterate;
 import com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -41,6 +42,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.*;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -54,8 +56,6 @@ import java.util.Set;
 public abstract class RegionScannerFactory {
 
   protected RegionCoprocessorEnvironment env;
-  protected boolean useNewValueColumnQualifier;
-  protected PTable.QualifierEncodingScheme encodingScheme;
 
   /**
    * Returns the region based on the value of the
@@ -105,8 +105,9 @@ public abstract class RegionScannerFactory {
     return new RegionScanner() {
 
       private boolean hasReferences = checkForReferenceFiles();
-      private HRegionInfo regionInfo = env.getRegionInfo();
+      private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
+      private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
       // If there are any reference files after local index region merge some cases we might
       // get the records less than scan start row key. This will happen when we replace the
@@ -150,7 +151,7 @@ public abstract class RegionScannerFactory {
       }
 
       @Override
-      public HRegionInfo getRegionInfo() {
+      public RegionInfo getRegionInfo() {
         return s.getRegionInfo();
       }
 

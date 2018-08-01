@@ -21,7 +21,9 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -197,10 +199,11 @@ public class RowKeySchema extends ValueSchema {
      * @return true if a value was found and ptr was set, false if the value is null and ptr was not
      * set, and null if the value is null and there are no more values
      */
-    public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
-      Boolean returnValue = next(ptr, position, maxOffset);
-        readExtraFields(ptr, position + 1, maxOffset, extraSpan);
-        return returnValue;
+    public int next(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
+        if (next(ptr, position, maxOffset) == null) {
+            return position-1;
+        }
+        return readExtraFields(ptr, position + 1, maxOffset, extraSpan);
     }
     
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
@@ -337,18 +340,97 @@ public class RowKeySchema extends ValueSchema {
      * @param maxOffset  the maximum offset into the bytes pointer to allow
      * @param extraSpan  the number of extra fields to expand the ptr to contain.
      */
-    private void readExtraFields(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
+    private int readExtraFields(ImmutableBytesWritable ptr, int position, int maxOffset, int extraSpan) {
         int initialOffset = ptr.getOffset();
 
-        for(int i = 0; i < extraSpan; i++) {
-            Boolean returnValue = next(ptr, position + i, maxOffset);
+        int i = 0;
+        Boolean hasValue = Boolean.FALSE;
+        for(i = 0; i < extraSpan; i++) {
+            hasValue = next(ptr, position + i, maxOffset);
 
-            if(returnValue == null) {
+            if(hasValue == null) {
                 break;
             }
         }
 
         int finalLength = ptr.getOffset() - initialOffset + ptr.getLength();
         ptr.set(ptr.get(), initialOffset, finalLength);
+        return position + i - (Boolean.FALSE.equals(hasValue) ? 1 : 0);
+    }
+
+    public int computeMaxSpan(int pkPos, KeyRange result, ImmutableBytesWritable ptr) {
+        int maxOffset = iterator(result.getLowerRange(), ptr);
+        int lowerSpan = 0;
+        int i = pkPos;
+        while (this.next(ptr, i++, maxOffset) != null) {
+            lowerSpan++;
+        }
+        int upperSpan = 0;
+        i = pkPos;
+        maxOffset = iterator(result.getUpperRange(), ptr);
+        while (this.next(ptr, i++, maxOffset) != null) {
+            upperSpan++;
+        }
+        return Math.max(Math.max(lowerSpan, upperSpan), 1);
+    }
+
+    public int computeMinSpan(int pkPos, KeyRange keyRange, ImmutableBytesWritable ptr) {
+        if (keyRange == KeyRange.EVERYTHING_RANGE) {
+            return 0;
+        }
+        int lowerSpan = Integer.MAX_VALUE;
+        byte[] range = keyRange.getLowerRange();
+        if (range != KeyRange.UNBOUND) {
+            lowerSpan = 0;
+            int maxOffset = iterator(range, ptr);
+            int i = pkPos;
+            while (this.next(ptr, i++, maxOffset) != null) {
+                lowerSpan++;
+            }
+        }
+        int upperSpan = Integer.MAX_VALUE;
+        range = keyRange.getUpperRange();
+        if (range != KeyRange.UNBOUND) {
+            upperSpan = 0;
+            int maxOffset = iterator(range, ptr);
+            int i = pkPos;
+            while (this.next(ptr, i++, maxOffset) != null) {
+                upperSpan++;
+            }
+        }
+        return Math.min(lowerSpan, upperSpan);
+    }
+
+    /**
+     * Clip the left hand portion of the keyRange up to the spansToClip. If keyRange is shorter in
+     * spans than spansToClip, the portion of the range that exists will be returned.
+     * @param pkPos the leading pk position of the keyRange.
+     * @param keyRange the key range to clip
+     * @param spansToClip the number of spans to clip
+     * @param ptr an ImmutableBytesWritable to use for temporary storage.
+     * @return the clipped portion of the keyRange
+     */
+    public KeyRange clipLeft(int pkPos, KeyRange keyRange, int spansToClip, ImmutableBytesWritable ptr) {
+        if (spansToClip < 0) {
+            throw new IllegalArgumentException("Cannot specify a negative spansToClip (" + spansToClip + ")");
+        }
+        if (spansToClip == 0) {
+            return keyRange;
+        }
+        byte[] lowerRange = keyRange.getLowerRange();
+        if (lowerRange != KeyRange.UNBOUND) {
+            ptr.set(lowerRange);
+            this.position(ptr, pkPos, pkPos+spansToClip-1);
+            ptr.set(lowerRange, 0, ptr.getOffset() + ptr.getLength());
+            lowerRange = ByteUtil.copyKeyBytesIfNecessary(ptr);
+        }
+        byte[] upperRange = keyRange.getUpperRange();
+        if (upperRange != KeyRange.UNBOUND) {
+            ptr.set(upperRange);
+            this.position(ptr, pkPos, pkPos+spansToClip-1);
+            ptr.set(upperRange, 0, ptr.getOffset() + ptr.getLength());
+            upperRange = ByteUtil.copyKeyBytesIfNecessary(ptr);
+        }
+        return KeyRange.getKeyRange(lowerRange, true, upperRange, true);
     }
 }

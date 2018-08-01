@@ -30,11 +30,10 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.mapreduce.RegionSizeCalculator;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.RegionSizeCalculator;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -48,6 +47,7 @@ import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PhoenixRuntime;
 
@@ -95,12 +95,12 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
-        org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(config);
+        try(org.apache.hadoop.hbase.client.Connection connection =
+                    HBaseFactoryProvider.getHConnectionFactory().createConnection(config)) {
         RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
                 .getTableRef().getTable().getPhysicalName().toString()));
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
                 .getAdmin());
-
 
         final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
         for (List<Scan> scans : qplan.getScans()) {
@@ -114,7 +114,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
             // Get the region size
             long regionSize = sizeCalculator.getRegionSize(
-                    location.getRegionInfo().getRegionName()
+                    location.getRegion().getRegionName()
             );
 
             // Generate splits based off statistics, or just region splits?
@@ -131,8 +131,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
                     psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
                 }
-            }
-            else {
+                } else {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
                             .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
@@ -155,6 +154,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         }
         return psplits;
     }
+    }
     
     /**
      * Returns the query plan associated with the select query.
@@ -169,32 +169,39 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         try {
             final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
             final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
+            final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
             final Properties overridingProps = new Properties();
             if(txnScnValue==null && currentScnValue!=null) {
                 overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
             }
-            final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps);
-            final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
-            Preconditions.checkNotNull(selectStatement);
-            final Statement statement = connection.createStatement();
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            // Optimize the query plan so that we potentially use secondary indexes            
-            final QueryPlan queryPlan = pstmt.optimizeQuery(selectStatement);
-            final Scan scan = queryPlan.getContext().getScan();
-            // since we can't set a scn on connections with txn set TX_SCN attribute so that the max time range is set by BaseScannerRegionObserver 
-            if (txnScnValue!=null) {
-                scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
+            if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
+                overridingProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             }
+            try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps);
+                 final Statement statement = connection.createStatement()) {
 
-            // setting the snapshot configuration
-            String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
-            if (snapshotName != null)
+              final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
+              Preconditions.checkNotNull(selectStatement);
+
+              final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
+              // Optimize the query plan so that we potentially use secondary indexes
+              final QueryPlan queryPlan = pstmt.optimizeQuery(selectStatement);
+              final Scan scan = queryPlan.getContext().getScan();
+              // since we can't set a scn on connections with txn set TX_SCN attribute so that the max time range is set by BaseScannerRegionObserver
+              if (txnScnValue != null) {
+                scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
+              }
+
+              // setting the snapshot configuration
+              String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
+              if (snapshotName != null)
                 PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
                     getQueryServices().getConfiguration(), snapshotName);
 
-            // Initialize the query plan so it sets up the parallel scans
-            queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
-            return queryPlan;
+              // Initialize the query plan so it sets up the parallel scans
+              queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
+              return queryPlan;
+            }
         } catch (Exception exception) {
             LOG.error(String.format("Failed to get the query plan with error [%s]",
                 exception.getMessage()));

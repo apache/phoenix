@@ -33,16 +33,16 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -57,16 +57,14 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         
-        HBaseAdmin admin = conn.getQueryServices().getAdmin();
+        Admin admin = conn.getQueryServices().getAdmin();
         try {
             // Create table then get the single region for our new table.
-            HTableDescriptor descriptor = new HTableDescriptor(tableName);
-            HColumnDescriptor columnDescriptor1 =  new HColumnDescriptor(Bytes.toBytes("cf1"));
-            HColumnDescriptor columnDescriptor2 =  new HColumnDescriptor(Bytes.toBytes("cf2"));
-            descriptor.addFamily(columnDescriptor1);
-            descriptor.addFamily(columnDescriptor2);
-            admin.createTable(descriptor);
-            HTableInterface t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
+            TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
+            builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf1")))
+                    .addColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf2")));
+            admin.createTable(builder.build());
+            Table t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             insertData(tableName.getName(), admin, t);
             t.close();
             // create phoenix table that maps to existing HBase table
@@ -95,23 +93,22 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
             ResultScanner results = t.getScanner(scan);
             Result result = results.next();
             assertNotNull("Expected single row", result);
-            List<KeyValue> kvs = result.getColumn(Bytes.toBytes("cf2"), Bytes.toBytes("q2"));
+            List<Cell> kvs = result.getColumnCells(Bytes.toBytes("cf2"), Bytes.toBytes("q2"));
             assertEquals("Expected single value ", 1, kvs.size());
-            assertEquals("Column Value", "value2", Bytes.toString(kvs.get(0).getValue()));
+            assertEquals("Column Value", "value2", Bytes.toString(kvs.get(0).getValueArray(), kvs.get(0).getValueOffset(), kvs.get(0).getValueLength()));
             assertNull("Expected single row", results.next());
         } finally {
             admin.close();
         }
     }
 
-    private void insertData(final byte[] tableName, HBaseAdmin admin, HTableInterface t) throws IOException,
+    private void insertData(final byte[] tableName, Admin admin, Table t) throws IOException,
             InterruptedException {
         Put p = new Put(Bytes.toBytes("row"));
-        p.add(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
-        p.add(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
+        p.addColumn(Bytes.toBytes("cf1"), Bytes.toBytes("q1"), Bytes.toBytes("value1"));
+        p.addColumn(Bytes.toBytes("cf2"), Bytes.toBytes("q2"), Bytes.toBytes("value2"));
         t.put(p);
-        t.flushCommits();
-        admin.flush(tableName);
+        admin.flush(TableName.valueOf(tableName));
     }
 
     /**
@@ -119,7 +116,7 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
      */
     private void createPhoenixTable(String tableName) throws SQLException {
         String ddl = "create table IF NOT EXISTS " + tableName+ " (" + " id varchar NOT NULL primary key,"
-                + " \"cf1\".\"q1\" varchar" + " ) ";
+                + " \"cf1\".\"q1\" varchar" + " ) COLUMN_ENCODED_BYTES=NONE";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);

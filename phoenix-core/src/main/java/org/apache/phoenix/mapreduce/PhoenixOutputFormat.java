@@ -19,6 +19,8 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,6 +38,15 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
  */
 public class PhoenixOutputFormat <T extends DBWritable> extends OutputFormat<NullWritable,T> {
     private static final Log LOG = LogFactory.getLog(PhoenixOutputFormat.class);
+    private final Set<String> propsToIgnore;
+    
+    public PhoenixOutputFormat() {
+        this(Collections.<String>emptySet());
+    }
+    
+    public PhoenixOutputFormat(Set<String> propsToIgnore) {
+        this.propsToIgnore = propsToIgnore;
+    }
     
     @Override
     public void checkOutputSpecs(JobContext jobContext) throws IOException, InterruptedException {      
@@ -52,7 +63,7 @@ public class PhoenixOutputFormat <T extends DBWritable> extends OutputFormat<Nul
     @Override
     public RecordWriter<NullWritable, T> getRecordWriter(TaskAttemptContext context) throws IOException, InterruptedException {
         try {
-            return new PhoenixRecordWriter<T>(context.getConfiguration());
+            return new PhoenixRecordWriter<T>(context.getConfiguration(), propsToIgnore);
         } catch (SQLException e) {
             LOG.error("Error calling PhoenixRecordWriter "  + e.getMessage());
             throw new RuntimeException(e);

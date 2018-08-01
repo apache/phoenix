@@ -25,6 +25,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.Date;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,12 +33,12 @@ import java.util.List;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
@@ -46,6 +47,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.Mut
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -59,7 +61,8 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.TimeKeeper;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
+import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 import com.google.protobuf.ServiceException;
 
@@ -81,24 +84,24 @@ public class StatisticsWriter implements Closeable {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
         }
-        HTableInterface statsWriterTable = env.getTable(
+        Table statsWriterTable = ConnectionFactory.getConnection(ConnectionType.DEFAULT_SERVER_CONNECTION, env).getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
-        HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
+        Table statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
                 clientTimeStamp, guidePostDepth);
         return statsTable;
     }
 
-    private final HTableInterface statsWriterTable;
+    private final Table statsWriterTable;
     // In HBase 0.98.4 or above, the reader and writer will be the same.
     // In pre HBase 0.98.4, there was a bug in using the HTable returned
     // from a coprocessor for scans, so in that case it'll be different.
-    private final HTableInterface statsReaderTable;
+    private final Table statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
     private final long guidePostDepth;
     
-    private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName,
+    private StatisticsWriter(Table statsReaderTable, Table statsWriterTable, String tableName,
             long clientTimeStamp, long guidePostDepth) {
         this.statsReaderTable = statsReaderTable;
         this.statsWriterTable = statsWriterTable;
@@ -187,13 +190,13 @@ public class StatisticsWriter implements Closeable {
     private void addGuidepost(ImmutableBytesPtr cfKey, List<Mutation> mutations, ImmutableBytesWritable ptr, long byteCount, long rowCount, long timeStamp) {
         byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, ptr);
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
                 timeStamp, PLong.INSTANCE.toBytes(byteCount));
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
                 PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, timeStamp,
                 PLong.INSTANCE.toBytes(rowCount));
         // Add our empty column value so queries behave correctly
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp,
                 ByteUtil.EMPTY_BYTE_ARRAY);
         mutations.add(put);
     }
@@ -208,30 +211,38 @@ public class StatisticsWriter implements Closeable {
         }
     }
 
-    public void commitStats(List<Mutation> mutations, StatisticsCollector statsCollector) throws IOException {
-        commitLastStatsUpdatedTime(statsCollector);
-        if (mutations.size() > 0) {
-            byte[] row = mutations.get(0).getRow();
-            MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
-            for (Mutation m : mutations) {
-                mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
+    public void commitStats(final List<Mutation> mutations, final StatisticsCollector statsCollector)
+            throws IOException {
+        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+            @Override
+            public Void run() throws Exception {
+                commitLastStatsUpdatedTime(statsCollector);
+                if (mutations.size() > 0) {
+                    byte[] row = mutations.get(0).getRow();
+                    MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
+                    for (Mutation m : mutations) {
+                        mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
+                    }
+                    MutateRowsRequest mrm = mrmBuilder.build();
+                    CoprocessorRpcChannel channel = statsWriterTable.coprocessorService(row);
+                    MultiRowMutationService.BlockingInterface service = MultiRowMutationService
+                            .newBlockingStub(channel);
+                    try {
+                        service.mutateRows(null, mrm);
+                    } catch (ServiceException ex) {
+                        ProtobufUtil.toIOException(ex);
+                    }
+                }
+                return null;
             }
-            MutateRowsRequest mrm = mrmBuilder.build();
-            CoprocessorRpcChannel channel = statsWriterTable.coprocessorService(row);
-            MultiRowMutationService.BlockingInterface service = MultiRowMutationService.newBlockingStub(channel);
-            try {
-                service.mutateRows(null, mrm);
-            } catch (ServiceException ex) {
-                ProtobufUtil.toIOException(ex);
-            }
-        }
+        });
     }
 
     private Put getLastStatsUpdatedTimePut(long timeStamp) {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         byte[] prefix = tableName;
         Put put = new Put(prefix);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME_BYTES,
                 timeStamp, PDate.INSTANCE.toBytes(new Date(currentTime)));
         return put;
     }

@@ -40,6 +40,7 @@ import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -150,15 +151,26 @@ public interface PTable extends PMetaDataEntity {
         PARENT_TABLE((byte)3),
         /**
          * Link from a parent table to its child view
+         * (these are stored in SYSTEM.CHILD_LINK for scalability)
          */
-        CHILD_TABLE((byte)4);
+        CHILD_TABLE((byte)4),
+        /**
+         * Link for an excluded (dropped) column
+         */
+        EXCLUDED_COLUMN((byte)5),
+        /**
+         * Link from an index on a view to its parent table
+         */
+        VIEW_INDEX_PARENT_TABLE((byte)6);
 
         private final byte[] byteValue;
         private final byte serializedValue;
+        private final byte[] serializedByteArrayValue;
 
         LinkType(byte serializedValue) {
             this.serializedValue = serializedValue;
             this.byteValue = Bytes.toBytes(this.name());
+            this.serializedByteArrayValue = new byte[] { serializedValue };
         }
 
         public byte[] getBytes() {
@@ -167,6 +179,10 @@ public interface PTable extends PMetaDataEntity {
 
         public byte getSerializedValue() {
             return this.serializedValue;
+        }
+
+        public byte[] getSerializedValueAsByteArray() {
+            return serializedByteArrayValue;
         }
 
         public static LinkType fromSerializedValue(byte serializedValue) {
@@ -190,14 +206,14 @@ public interface PTable extends PMetaDataEntity {
             }
         },
         // stores a single cell per column family that contains all serialized column values
-        SINGLE_CELL_ARRAY_WITH_OFFSETS((byte)2) {
+        SINGLE_CELL_ARRAY_WITH_OFFSETS((byte)2, PArrayDataType.IMMUTABLE_SERIALIZATION_V2) {
             @Override
             public ColumnValueEncoder getEncoder(int numElements) {
                 PDataType type = PVarbinary.INSTANCE;
                 int estimatedSize = PArrayDataType.estimateSize(numElements, type);
                 TrustedByteArrayOutputStream byteStream = new TrustedByteArrayOutputStream(estimatedSize);
                 DataOutputStream oStream = new DataOutputStream(byteStream);
-                return new PArrayDataTypeEncoder(byteStream, oStream, numElements, type, SortOrder.ASC, false, PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION);
+                return new PArrayDataTypeEncoder(byteStream, oStream, numElements, type, SortOrder.ASC, false, getSerializationVersion());
             }
             
             @Override
@@ -207,13 +223,28 @@ public interface PTable extends PMetaDataEntity {
         };
 
         private final byte serializedValue;
-        
+        private byte serializationVersion;
+
         private ImmutableStorageScheme(byte serializedValue) {
             this.serializedValue = serializedValue;
         }
 
+        private ImmutableStorageScheme(byte serializedValue, byte serializationVersion) {
+            this.serializedValue = serializedValue;
+            this.serializationVersion = serializationVersion;
+        }
+
         public byte getSerializedMetadataValue() {
             return this.serializedValue;
+        }
+
+        public byte getSerializationVersion() {
+            return this.serializationVersion;
+        }
+
+        @VisibleForTesting
+        void setSerializationVersion(byte serializationVersion) {
+            this.serializationVersion = serializationVersion;
         }
 
         public static ImmutableStorageScheme fromSerializedValue(byte serializedValue) {
@@ -665,6 +696,7 @@ public interface PTable extends PMetaDataEntity {
     boolean isMultiTenant();
     boolean getStoreNulls();
     boolean isTransactional();
+    TransactionFactory.Provider getTransactionProvider();
 
     ViewType getViewType();
     String getViewStatement();
@@ -705,7 +737,7 @@ public interface PTable extends PMetaDataEntity {
     ImmutableStorageScheme getImmutableStorageScheme();
     QualifierEncodingScheme getEncodingScheme();
     EncodedCQCounter getEncodedCQCounter();
-    boolean useStatsForParallelization();
+    Boolean useStatsForParallelization();
     
     /**
      * Class to help track encoded column qualifier counters per column family.

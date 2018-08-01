@@ -17,7 +17,16 @@
  */
 package org.apache.phoenix.hive.ql.index;
 
-import com.google.common.collect.Lists;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
@@ -53,15 +62,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFToUtcTimestamp;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFToVarchar;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Stack;
+import com.google.common.collect.Lists;
 
 /**
  * Clone of org.apache.hadoop.hive.ql.index.IndexPredicateAnalyzer with modifying
@@ -345,17 +346,14 @@ public class IndexPredicateAnalyzer {
 
         if (FunctionRegistry.isOpAnd(expr)) {
             assert (nodeOutputs.length == 2);
-            ExprNodeDesc residual1 = (ExprNodeDesc) nodeOutputs[0];
-            ExprNodeDesc residual2 = (ExprNodeDesc) nodeOutputs[1];
-            if (residual1 == null) {
-                return residual2;
-            }
-            if (residual2 == null) {
-                return residual1;
-            }
+            ExprNodeDesc residual1 = (ExprNodeDesc)nodeOutputs[0];
+            ExprNodeDesc residual2 = (ExprNodeDesc)nodeOutputs[1];
+            if (residual1 == null) { return residual2; }
+            if (residual2 == null) { return residual1; }
             List<ExprNodeDesc> residuals = new ArrayList<ExprNodeDesc>();
             residuals.add(residual1);
             residuals.add(residual2);
+
             return new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry
                     .getGenericUDFForAnd(), residuals);
         }

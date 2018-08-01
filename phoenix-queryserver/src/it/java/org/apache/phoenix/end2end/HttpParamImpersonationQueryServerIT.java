@@ -81,6 +81,7 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class HttpParamImpersonationQueryServerIT {
     private static final Log LOG = LogFactory.getLog(HttpParamImpersonationQueryServerIT.class);
+
     private static final List<TableName> SYSTEM_TABLE_NAMES = Arrays.asList(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME,
         PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME,
         PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME,
@@ -93,6 +94,7 @@ public class HttpParamImpersonationQueryServerIT {
     private static final List<File> USER_KEYTAB_FILES = new ArrayList<>();
 
     private static final String SPNEGO_PRINCIPAL = "HTTP/localhost";
+    private static final String PQS_PRINCIPAL = "phoenixqs/localhost";
     private static final String SERVICE_PRINCIPAL = "securecluster/localhost";
     private static File KEYTAB;
 
@@ -195,7 +197,7 @@ public class HttpParamImpersonationQueryServerIT {
         //     use separate identies for HBase and HDFS results in a GSS initiate error. The quick
         //     solution is to just use a single "service" principal instead of "hbase" and "hdfs"
         //     (or "dn" and "nn") per usual.
-        KDC.createPrincipal(KEYTAB, SPNEGO_PRINCIPAL, SERVICE_PRINCIPAL);
+        KDC.createPrincipal(KEYTAB, SPNEGO_PRINCIPAL, PQS_PRINCIPAL, SERVICE_PRINCIPAL);
         // Start ZK by hand
         UTIL.startMiniZKCluster();
 
@@ -216,13 +218,15 @@ public class HttpParamImpersonationQueryServerIT {
         conf.setStrings(CoprocessorHost.REGION_COPROCESSOR_CONF_KEY, AccessController.class.getName(), TokenProvider.class.getName());
 
         // Secure Phoenix setup
-        conf.set("phoenix.queryserver.kerberos.principal", SPNEGO_PRINCIPAL);
+        conf.set("phoenix.queryserver.kerberos.http.principal", SPNEGO_PRINCIPAL + "@" + KDC.getRealm());
+        conf.set("phoenix.queryserver.http.keytab.file", KEYTAB.getAbsolutePath());
+        conf.set("phoenix.queryserver.kerberos.principal", PQS_PRINCIPAL + "@" + KDC.getRealm());
         conf.set("phoenix.queryserver.keytab.file", KEYTAB.getAbsolutePath());
         conf.setBoolean(QueryServices.QUERY_SERVER_DISABLE_KERBEROS_LOGIN, true);
         conf.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
         // Required so that PQS can impersonate the end-users to HBase
-        conf.set("hadoop.proxyuser.HTTP.groups", "*");
-        conf.set("hadoop.proxyuser.HTTP.hosts", "*");
+        conf.set("hadoop.proxyuser.phoenixqs.groups", "*");
+        conf.set("hadoop.proxyuser.phoenixqs.hosts", "*");
         // user1 is allowed to impersonate others, user2 is not
         conf.set("hadoop.proxyuser.user1.groups", "*");
         conf.set("hadoop.proxyuser.user1.hosts", "*");
@@ -261,8 +265,8 @@ public class HttpParamImpersonationQueryServerIT {
 
     private static void startQueryServer() throws Exception {
         PQS = new QueryServer(new String[0], UTIL.getConfiguration());
-        // Get the SPNEGO ident for PQS to use
-        final UserGroupInformation ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(SPNEGO_PRINCIPAL, KEYTAB.getAbsolutePath());
+        // Get the PQS ident for PQS to use
+        final UserGroupInformation ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(PQS_PRINCIPAL, KEYTAB.getAbsolutePath());
         PQS_EXECUTOR = Executors.newSingleThreadExecutor();
         // Launch PQS, doing in the Kerberos login instead of letting PQS do it itself (which would
         // break the HBase/HDFS logins also running in the same test case).

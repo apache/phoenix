@@ -29,13 +29,13 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
@@ -50,15 +50,15 @@ public class StatisticsScanner implements InternalScanner {
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
     private final Configuration config;
-    private final RegionServerServices regionServerServices;
+    private final RegionCoprocessorEnvironment env;
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.statsWriter = stats;
         this.delegate = delegate;
-        this.regionServerServices = env.getRegionServerServices();
         this.region = env.getRegion();
+        this.env = env;
         this.family = family;
         this.config = env.getConfiguration();
         StatisticsCollectionRunTracker.getInstance(config).addCompactingRegion(region.getRegionInfo());
@@ -94,7 +94,7 @@ public class StatisticsScanner implements InternalScanner {
         boolean async = getConfig().getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
         StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
         StatisticsScannerCallable callable = createCallable();
-        if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
+        if (isConnectionClosed()) {
             LOG.debug("Not updating table statistics because the server is stopping/stopped");
             return;
         }
@@ -118,12 +118,12 @@ public class StatisticsScanner implements InternalScanner {
         return statsWriter;
     }
 
-    RegionServerServices getRegionServerServices() {
-        return regionServerServices;
-    }
-
     Region getRegion() {
         return region;
+    }
+    
+    Connection getConnection() {
+        return env.getConnection();
     }
 
     StatisticsScannerCallable createCallable() {
@@ -143,7 +143,7 @@ public class StatisticsScanner implements InternalScanner {
         public Void call() throws IOException {
             IOException toThrow = null;
             StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
-            final HRegionInfo regionInfo = getRegion().getRegionInfo();
+            final RegionInfo regionInfo = getRegion().getRegionInfo();
             try {
                 // update the statistics table
                 // Just verify if this if fine
@@ -165,7 +165,7 @@ public class StatisticsScanner implements InternalScanner {
                 }
                 getStatisticsWriter().commitStats(mutations, tracker);
             } catch (IOException e) {
-                if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
+                if (isConnectionClosed()) {
                     LOG.debug("Ignoring error updating statistics because region is closing/closed");
                 } else {
                     LOG.error("Failed to update statistics table!", e);
@@ -193,6 +193,10 @@ public class StatisticsScanner implements InternalScanner {
             }
             return null;
         }
+    }
+
+    private boolean isConnectionClosed() {
+        return getConnection() == null || getConnection().isClosed() || getConnection().isAborted();
     }
 
 }

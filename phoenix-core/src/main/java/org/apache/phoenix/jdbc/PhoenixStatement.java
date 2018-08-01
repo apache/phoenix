@@ -86,17 +86,24 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.log.QueryLogInfo;
+import org.apache.phoenix.log.QueryStatus;
+import org.apache.phoenix.log.QueryLogger;
+import org.apache.phoenix.log.QueryLoggerUtil;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
+import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
@@ -171,7 +178,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -212,8 +219,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         QUERY("queried", false),
         DELETE("deleted", true),
         UPSERT("upserted", true),
-        UPGRADE("upgrade", true);
-        
+        UPGRADE("upgrade", true),
+        ADMIN("admin", true);
+
         private final String toString;
         private final boolean isMutation;
         Operation(String toString, boolean isMutation) {
@@ -265,26 +273,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         return new PhoenixResultSet(iterator, projector, context);
     }
     
-    protected boolean execute(final CompilableStatement stmt) throws SQLException {
-        if (stmt.getOperation().isMutation()) {
-            executeMutation(stmt);
-            return false;
-        }
-        executeQuery(stmt);
-        return true;
-    }
-    
     protected QueryPlan optimizeQuery(CompilableStatement stmt) throws SQLException {
         QueryPlan plan = stmt.compilePlan(this, Sequence.ValueOp.VALIDATE_SEQUENCE);
         return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
     
-    protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
-      return executeQuery(stmt,true);
+    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
+            throws SQLException {
+        return executeQuery(stmt, true, queryLogger);
     }
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-        final boolean doRetryOnMetaNotFoundError) throws SQLException {
+        final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
+        
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
@@ -293,6 +294,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     final long startTime = System.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
+                        
                         if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                 && stmt.getOperation() != Operation.UPGRADE) {
                             throw new UpgradeRequiredException();
@@ -313,6 +315,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
                         }
                         StatementContext context = plan.getContext();
+                        context.setQueryLogger(queryLogger);
+                        if(queryLogger.isDebugEnabled()){
+                            queryLogger.log(QueryLogInfo.EXPLAIN_PLAN_I, QueryUtil.getExplainPlan(resultIterator));
+                            queryLogger.log(QueryLogInfo.GLOBAL_SCAN_DETAILS_I, context.getScan()!=null?context.getScan().toString():null);
+                        }
                         context.getOverallQueryMetrics().startQuery();
                         PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
                         resultSets.add(rs);
@@ -334,11 +341,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 logger.debug("Reloading table "+ e.getTableName()+" data from server");
                             if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                 e.getSchemaName(), e.getTableName(), true).wasUpdated()){
-                                return executeQuery(stmt, false);
+                                //TODO we can log retry count and error for debugging in LOG table
+                                return executeQuery(stmt, false, queryLogger);
                             }
                         }
                         throw e;
                     }catch (RuntimeException e) {
+                        
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.
                         if (e.getCause() instanceof SQLException) {
@@ -354,6 +363,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 }
                 }, PhoenixContextExecutor.inContext());
         }catch (Exception e) {
+            if (queryLogger.isDebugEnabled()) {
+                queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
+                queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
+                queryLogger.sync(null, null);
+            }
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
@@ -386,7 +400,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 MutationState state = connection.getMutationState();
                                 MutationPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null && plan.getTargetRef().getTable().isTransactional()) {
-                                    state.startTransaction();
+                                    state.startTransaction(plan.getTargetRef().getTable().getTransactionProvider());
                                 }
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 state.sendUncommitted(tableRefs);
@@ -473,7 +487,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 select = StatementNormalizer.normalize(transformedSelect, resolver);
             }
 
-            QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true).compile();
+            QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true, false, null).compile();
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
         }
@@ -487,7 +501,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private static final PDatum EXPLAIN_PLAN_DATUM = new PDatum() {
         @Override
         public boolean isNullable() {
-            return false;
+            return true;
         }
         @Override
         public PDataType getDataType() {
@@ -512,9 +526,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public static final String EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS = "EST_BYTES_READ";
     private static final PColumnImpl EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_BYTES_ESTIMATE),
-                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 1,
+                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 1,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
-                    EXPLAIN_PLAN_BYTES_ESTIMATE);
+                    EXPLAIN_PLAN_BYTES_ESTIMATE, 0, false);
 
     private static final String EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME = "RowsEstimate";
     private static final byte[] EXPLAIN_PLAN_ROWS_ESTIMATE =
@@ -522,9 +536,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public static final String EXPLAIN_PLAN_ROWS_COLUMN_ALIAS = "EST_ROWS_READ";
     private static final PColumnImpl EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ROWS_ESTIMATE),
-                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 2,
+                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 2,
                     SortOrder.getDefault(), 0, null, false, null, false, false,
-                    EXPLAIN_PLAN_ROWS_ESTIMATE);
+                    EXPLAIN_PLAN_ROWS_ESTIMATE, 0, false);
 
     private static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_NAME = "EstimateInfoTS";
     private static final byte[] EXPLAIN_PLAN_ESTIMATE_INFO_TS =
@@ -532,9 +546,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public static final String EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS = "EST_INFO_TS";
     private static final PColumnImpl EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN =
             new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ESTIMATE_INFO_TS),
-                PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 3,
+                PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, true, 3,
                 SortOrder.getDefault(), 0, null, false, null, false, false,
-                EXPLAIN_PLAN_ESTIMATE_INFO_TS);
+                EXPLAIN_PLAN_ESTIMATE_INFO_TS, 0, false);
 
     private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR_WITH_BYTE_ROW_ESTIMATES =
             new RowProjector(Arrays
@@ -578,7 +592,14 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             CompilableStatement compilableStmt = getStatement();
-            final StatementPlan plan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            StatementPlan compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            // For a QueryPlan, we need to get its optimized plan; for a MutationPlan, its enclosed QueryPlan
+            // has already been optimized during compilation.
+            if (compilePlan instanceof QueryPlan) {
+                QueryPlan dataPlan = (QueryPlan) compilePlan;
+                compilePlan = stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
+            }
+            final StatementPlan plan = compilePlan;
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
@@ -587,20 +608,20 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             for (String planStep : planSteps) {
                 byte[] row = PVarchar.INSTANCE.toBytes(planStep);
                 List<Cell> cells = Lists.newArrayListWithCapacity(3);
-                cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 if (estimatedBytesToScan != null) {
-                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
+                    cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimatedBytesToScan)));
                 }
                 if (estimatedRowsToScan != null) {
-                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
+                    cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimatedRowsToScan)));
                 }
                 if (estimateInfoTimestamp != null) {
-                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
+                    cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
                 }
@@ -642,6 +663,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 @Override
                 public long getEstimatedSize() {
                     return 0;
+                }
+
+                @Override
+                public Cost getCost() {
+                    return Cost.ZERO;
                 }
 
                 @Override
@@ -716,6 +742,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 @Override
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
+                }
+
+                @Override
+                public <T> T accept(QueryPlanVisitor<T> visitor) {
+                    return visitor.defaultReturn(this);
                 }
 
                 @Override
@@ -1078,7 +1109,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private static class ExecutableDropTableStatement extends DropTableStatement implements CompilableStatement {
 
         ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
-            super(tableName, tableType, ifExists, cascade);
+            super(tableName, tableType, ifExists, cascade, false);
         }
 
         @SuppressWarnings("unchecked")
@@ -1153,6 +1184,33 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableChangePermsStatement extends ChangePermsStatement implements CompilableStatement {
+
+        public ExecutableChangePermsStatement (String permsString, boolean isSchemaName, TableName tableName,
+                                               String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
+            super(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("GRANT PERMISSION"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.changePermissions(ExecutableChangePermsStatement.this);
+                }
+            };
+        }
+    }
+
     private static class ExecutableDropIndexStatement extends DropIndexStatement implements CompilableStatement {
 
         public ExecutableDropIndexStatement(NamedNode indexName, TableName tableName, boolean ifExists) {
@@ -1181,8 +1239,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableAlterIndexStatement extends AlterIndexStatement implements CompilableStatement {
 
-        public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async) {
-            super(indexTableNode, dataTableName, ifExists, state, async);
+        public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async, ListMultimap<String,Pair<String,Object>> props) {
+            super(indexTableNode, dataTableName, ifExists, state, async, props);
         }
 
         @SuppressWarnings("unchecked")
@@ -1313,11 +1371,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 public ExplainPlan getExplainPlan() throws SQLException {
                     return new ExplainPlan(Collections.singletonList("EXECUTE UPGRADE"));
                 }
-                
+
                 @Override
-                public StatementContext getContext() {
-                    return new StatementContext(stmt);
-                }
+                public QueryPlan getQueryPlan() { return null; }
+
+                @Override
+                public StatementContext getContext() { return new StatementContext(stmt); }
                 
                 @Override
                 public TableRef getTargetRef() {
@@ -1527,10 +1586,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {
             return new ExecutableDropIndexStatement(indexName, tableName, ifExists);
         }
-        
+
         @Override
-        public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async) {
-            return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state, async);
+        public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async, ListMultimap<String,Pair<String,Object>> props) {
+            return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state, async, props);
         }
 
         @Override
@@ -1557,6 +1616,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public ExecuteUpgradeStatement executeUpgrade() {
             return new ExecutableExecuteUpgradeStatement();
         }
+
+        @Override
+        public ExecutableChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName,
+                                                         String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
+            return new ExecutableChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup,isGrantStatement);
+        }
+
     }
     
     static class PhoenixStatementParser extends SQLParser {
@@ -1694,16 +1760,37 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         return compileMutation(stmt, sql);
     }
 
+    public QueryLogger createQueryLogger(CompilableStatement stmt, String sql) throws SQLException {
+        boolean isSystemTable=false;
+        if(stmt instanceof ExecutableSelectStatement){
+            TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
+            if(from instanceof NamedTableNode){
+                String schemaName = ((NamedTableNode)from).getName().getSchemaName();
+                if(schemaName==null){
+                    schemaName=connection.getSchema();
+                }
+                if(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName)){
+                    isSystemTable=true;
+                }
+            }
+        }
+        QueryLogger queryLogger = QueryLogger.getInstance(connection,isSystemTable);
+        QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
+                connection.getQueryServices(), sql, getParameters());
+        return queryLogger;
+    }
+    
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Execute query: " + sql, connection));
         }
+        
         CompilableStatement stmt = parseStatement(sql);
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);
         }
-        return executeQuery(stmt);
+        return executeQuery(stmt,createQueryLogger(stmt,sql));
     }
 
     @Override
@@ -1739,7 +1826,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             flushIfNecessary();
             return false;
         }
-        executeQuery(stmt);
+        
+        executeQuery(stmt,createQueryLogger(stmt,sql));
         return true;
     }
 

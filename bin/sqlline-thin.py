@@ -25,7 +25,14 @@ import sys
 import phoenix_utils
 import atexit
 import urlparse
-import argparse
+
+# import argparse
+try:
+    import argparse
+except ImportError:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.append(os.path.join(current_dir, 'argparse-1.4.0'))
+    import argparse
 
 global childProc
 childProc = None

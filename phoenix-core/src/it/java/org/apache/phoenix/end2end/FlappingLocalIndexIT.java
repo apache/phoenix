@@ -29,18 +29,16 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.index.BaseLocalIndexIT;
 import org.apache.phoenix.query.QueryConstants;
@@ -151,7 +149,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
             assertTrue(rs.next());
             
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getTableRegions(physicalTableName).size();
             
             String query = "SELECT * FROM " + tableName +" where v1 like 'a%'";
@@ -285,9 +283,10 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration(),Bytes.toBytes(indexPhysicalTableName));
-        Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
+        Table indexTable = hbaseConn.getTable(TableName.valueOf(indexPhysicalTableName));
+        Pair<byte[][], byte[][]> startEndKeys = hbaseConn.getRegionLocator(TableName.valueOf(indexPhysicalTableName)).getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
         for (int i = 0; i < startKeys.length; i++) {
@@ -329,12 +328,12 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
         conn1.commit();
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTableDescriptor tableDescriptor = admin.getTableDescriptor(physicalTableName);
-        tableDescriptor.addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
-            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null);
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        TableDescriptor tableDescriptor = admin.getDescriptor(physicalTableName);
+        tableDescriptor=TableDescriptorBuilder.newBuilder(tableDescriptor).addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
+            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null).build();
         admin.disableTable(physicalTableName);
-        admin.modifyTable(physicalTableName, tableDescriptor);
+        admin.modifyTable(tableDescriptor);
         admin.enableTable(physicalTableName);
         DeleyOpenRegionObserver.DELAY_OPEN = true;
         conn1.createStatement().execute(
@@ -346,14 +345,13 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         assertEquals(4, rs.getInt(1));
     }
 
-    public static class DeleyOpenRegionObserver extends BaseRegionObserver {
+    public static class DeleyOpenRegionObserver implements RegionObserver {
         public static volatile boolean DELAY_OPEN = false;
         private int retryCount = 0;
         private CountDownLatch latch = new CountDownLatch(1);
         @Override
-        public void
-                preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
-                        throws IOException {
+        public void preClose(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+                boolean abortRequested) throws IOException {
             if(DELAY_OPEN) {
                 try {
                     latch.await();
@@ -361,17 +359,15 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                     throw new DoNotRetryIOException(e1);
                 }
             }
-            super.preClose(c, abortRequested);
         }
 
         @Override
-        public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e,
-                Scan scan, RegionScanner s) throws IOException {
-            if(DELAY_OPEN && retryCount == 1) {
+        public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+                Scan scan) throws IOException {
+            if (DELAY_OPEN && retryCount == 1) {
                 latch.countDown();
             }
             retryCount++;
-            return super.preScannerOpen(e, scan, s);
         }
     }
 }

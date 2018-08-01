@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -39,6 +40,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -544,6 +546,116 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testAggregateOrderBy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, VAL1 VARCHAR, VAL2 INTEGER)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABC','aa123', 11)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABD','ba124', 1)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABE','cf125', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABF','dan126', 4)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABG','elf127', 15)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABH','fan128', 6)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAA','get211', 100)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAB','hat212', 7)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAC','aap12', 2)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAD','ball12', 3)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAE','inn2110', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAF','key2112', 40)");
+        conn.commit();
+
+        ResultSet rs;
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        rs = stmt.executeQuery("select distinct ID, VAL1, VAL2 from " + tableName + " where ID in ('ABC','ABD','ABE','ABF','ABG','ABH','AAA', 'AAB', 'AAC','AAD','AAE','AAF') order by VAL1");
+        assertFalse(stmt.getQueryPlan().getOrderBy().getOrderByExpressions().isEmpty());
+        assertTrue(rs.next());
+        assertEquals("ABC", rs.getString(1));
+        assertEquals("aa123", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("aap12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ba124", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ball12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("cf125", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("dan126", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("elf127", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("fan128", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("get211", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("hat212", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("inn2110", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("AAF", rs.getString(1));
+        assertEquals("key2112", rs.getString(2));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testAggregateOptimizedOutOrderBy() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + " (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, VAL1 VARCHAR, VAL2 INTEGER, CONSTRAINT pk PRIMARY KEY(K1,K2))";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABC','ABC','aa123', 11)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABD','ABC','ba124', 1)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABE','ABC','cf125', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABF','ABC','dan126', 4)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABG','ABC','elf127', 15)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ABH','ABC','fan128', 6)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAA','ABC','get211', 100)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAB','ABC','hat212', 7)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAC','ABC','aap12', 2)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAD','ABC','ball12', 3)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAE','ABC','inn2110', 13)");
+        conn.createStatement().execute("upsert into " + tableName + " values ('AAF','ABC','key2112', 40)");
+        conn.commit();
+
+        ResultSet rs;
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        rs = stmt.executeQuery("select distinct K2, VAL1, VAL2 from " + tableName + " where K2 = 'ABC' order by VAL1");
+        assertTrue(stmt.getQueryPlan().getOrderBy().getOrderByExpressions().isEmpty());
+        assertTrue(rs.next());
+        assertEquals("ABC", rs.getString(1));
+        assertEquals("aa123", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("aap12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ba124", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ball12", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("cf125", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("dan126", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("elf127", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("fan128", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("get211", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("hat212", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("inn2110", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ABC", rs.getString(1));
+        assertEquals("key2112", rs.getString(2));
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void testNullsLastWithDesc() throws Exception {
         Connection conn=null;
         try {
@@ -551,7 +663,6 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             conn = DriverManager.getConnection(getUrl(), props);
 
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                 "ORGANIZATION_ID VARCHAR,"+
                 "CONTAINER_ID VARCHAR,"+
@@ -759,26 +870,25 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testOrderByReverseOptimizationBug3491() throws Exception {
+    public void testOrderByReverseOptimization() throws Exception {
         for(boolean salted: new boolean[]{true,false}) {
-            doTestOrderByReverseOptimizationBug3491(salted,true,true,true);
-            doTestOrderByReverseOptimizationBug3491(salted,true,true,false);
-            doTestOrderByReverseOptimizationBug3491(salted,true,false,true);
-            doTestOrderByReverseOptimizationBug3491(salted,true,false,false);
-            doTestOrderByReverseOptimizationBug3491(salted,false,true,true);
-            doTestOrderByReverseOptimizationBug3491(salted,false,true,false);
-            doTestOrderByReverseOptimizationBug3491(salted,false,false,true);
-            doTestOrderByReverseOptimizationBug3491(salted,false,false,false);
+            doTestOrderByReverseOptimization(salted,true,true,true);
+            doTestOrderByReverseOptimization(salted,true,true,false);
+            doTestOrderByReverseOptimization(salted,true,false,true);
+            doTestOrderByReverseOptimization(salted,true,false,false);
+            doTestOrderByReverseOptimization(salted,false,true,true);
+            doTestOrderByReverseOptimization(salted,false,true,false);
+            doTestOrderByReverseOptimization(salted,false,false,true);
+            doTestOrderByReverseOptimization(salted,false,false,false);
         }
     }
 
-    private void doTestOrderByReverseOptimizationBug3491(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
+    private void doTestOrderByReverseOptimization(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
         Connection conn = null;
         try {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                     "ORGANIZATION_ID INTEGER NOT NULL,"+
                     "CONTAINER_ID INTEGER NOT NULL,"+
@@ -853,26 +963,25 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testOrderByReverseOptimizationWithNUllsLastBug3491() throws Exception{
+    public void testOrderByReverseOptimizationWithNullsLast() throws Exception{
         for(boolean salted: new boolean[]{true,false}) {
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,true,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,true,false);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,false,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,true,false,false);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,true,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,true,false);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,false,true);
-            doTestOrderByReverseOptimizationWithNUllsLastBug3491(salted,false,false,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,true,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,true,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,false,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,true,false,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,true,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,true,false);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,false,true);
+            doTestOrderByReverseOptimizationWithNullsLast(salted,false,false,false);
         }
     }
 
-    private void doTestOrderByReverseOptimizationWithNUllsLastBug3491(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
+    private void doTestOrderByReverseOptimizationWithNullsLast(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
         Connection conn = null;
         try {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                     "ORGANIZATION_ID VARCHAR,"+
                     "CONTAINER_ID VARCHAR,"+
@@ -1067,23 +1176,6 @@ public class OrderByIT extends ParallelStatsDisabledIT {
                 conn.close();
             }
         }
-    }
-
-    private void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
-        for(int rowIndex=0;rowIndex<rows.length;rowIndex++) {
-            assertTrue(rs.next());
-            for(int columnIndex=1;columnIndex<= rows[rowIndex].length;columnIndex++) {
-                Object realValue=rs.getObject(columnIndex);
-                Object expectedValue=rows[rowIndex][columnIndex-1];
-                if(realValue==null) {
-                    assertTrue(expectedValue==null);
-                }
-                else {
-                    assertTrue(realValue.equals(expectedValue));
-                }
-            }
-        }
-        assertTrue(!rs.next());
     }
 
 }

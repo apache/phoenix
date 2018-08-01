@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.StoreFile;
@@ -29,8 +29,8 @@ public class RepairUtil {
         byte[] endKey = environment.getRegion().getRegionInfo().getEndKey();
         byte[] indexKeyEmbedded = startKey.length == 0 ? new byte[endKey.length] : startKey;
         for (StoreFile file : store.getStorefiles()) {
-            if (file.getReader() != null && file.getReader().getFirstKey() != null) {
-                byte[] fileFirstRowKey = KeyValue.createKeyValueFromKey(file.getReader().getFirstKey()).getRow();
+            if (file.getFirstKey().isPresent() && file.getFirstKey().get() != null) {
+                byte[] fileFirstRowKey = CellUtil.cloneRow(file.getFirstKey().get());
                 if ((fileFirstRowKey != null && Bytes.compareTo(fileFirstRowKey, 0,
                         indexKeyEmbedded.length, indexKeyEmbedded, 0, indexKeyEmbedded.length) != 0)) {
                     return false; }

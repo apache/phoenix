@@ -37,9 +37,9 @@ import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.SnapshotDescription;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -195,12 +195,12 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     upsertData(tableName);
 
     Connection conn = DriverManager.getConnection(getUrl());
-    HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+    Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
     admin.snapshot(SNAPSHOT_NAME, TableName.valueOf(tableName));
     // call flush to create new files in the region
-    admin.flush(tableName);
+    admin.flush(TableName.valueOf(tableName));
 
-    List<HBaseProtos.SnapshotDescription> snapshots = admin.listSnapshots();
+    List<SnapshotDescription> snapshots = admin.listSnapshots();
     Assert.assertEquals(tableName, snapshots.get(0).getTable());
 
     // upsert data after snapshot
@@ -211,7 +211,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
     public void deleteSnapshot(String tableName) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
-                HBaseAdmin admin =
+                Admin admin =
                         conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             admin.deleteSnapshot(SNAPSHOT_NAME);
         }

@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
@@ -44,17 +45,21 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -66,6 +71,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -82,7 +88,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                         + "    a.col1 integer,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
                         + "    b.col4 decimal(5),\n" + "    b.col5 decimal(6,3))\n" + "    a."
                         + HConstants.VERSIONS + "=" + 1 + "," + "a."
-                        + HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
+                        + ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
                         + "'";
         if (extraProps != null && extraProps.length() > 0) {
             ddl += "," + extraProps;
@@ -105,6 +111,32 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testMetadataTenantSpecific() throws SQLException {
+    	// create multi-tenant table
+    	String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        	String baseTableDdl = "CREATE TABLE %s (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, V VARCHAR CONSTRAINT PK PRIMARY KEY(K1, K2)) MULTI_TENANT=true";
+        	conn.createStatement().execute(String.format(baseTableDdl, tableName));
+        }
+    	
+        // create tenant specific view and execute metdata data call with tenant specific connection
+        String tenantId = generateUniqueName();
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+        	String viewName = generateUniqueName();
+        	String viewDdl = "CREATE VIEW %s AS SELECT * FROM %s";
+        	tenantConn.createStatement().execute(String.format(viewDdl, viewName, tableName));
+        	DatabaseMetaData dbmd = tenantConn.getMetaData();
+        	ResultSet rs = dbmd.getTables(tenantId, "", viewName, null);
+            assertTrue(rs.next());
+            assertEquals(rs.getString("TABLE_NAME"), viewName);
+            assertEquals(PTableType.VIEW.toString(), rs.getString("TABLE_TYPE"));
+            assertFalse(rs.next());
+        }
+    }
+    
     @Test
     public void testTableMetadataScan() throws SQLException {
         String tableAName = generateUniqueName() + "TABLE";
@@ -134,7 +166,15 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
             assertTrue(rs.next());
             assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(SYSTEM_CHILD_LINK_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
             assertEquals(SYSTEM_FUNCTION_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
             assertTrue(rs.next());
             assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
@@ -310,7 +350,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
     @Test
     public void testSchemaMetadataScan() throws SQLException {
         String table1 = generateUniqueName();
-        String schema1 = generateUniqueName();
+        String schema1 = "Z_" + generateUniqueName();
         String fullTable1 = schema1 + "." + table1;
         ensureTableCreated(getUrl(), fullTable1, CUSTOM_ENTITY_DATA_FULL_NAME, null);
         String fullTable2 = generateUniqueName();
@@ -707,40 +747,38 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             byte[] cfC = Bytes.toBytes("c");
             byte[][] familyNames = new byte[][] { cfB, cfC };
             byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-            HBaseAdmin admin = pconn.getQueryServices().getAdmin();
+            Admin admin = pconn.getQueryServices().getAdmin();
             try {
-                admin.disableTable(htableName);
-                admin.deleteTable(htableName);
-                admin.enableTable(htableName);
+                admin.disableTable(TableName.valueOf(htableName));
+                admin.deleteTable(TableName.valueOf(htableName));
+                admin.enableTable(TableName.valueOf(htableName));
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
 
-            @SuppressWarnings("deprecation")
-            HTableDescriptor descriptor = new HTableDescriptor(htableName);
+            TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
             for (byte[] familyName : familyNames) {
-                HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-                descriptor.addFamily(columnDescriptor);
+                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
             }
-            admin.createTable(descriptor);
+            admin.createTable(builder.build());
             createMDTestTable(pconn, tableName,
-                "a." + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
+                "a." + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=" + Boolean.TRUE);
 
-            descriptor = admin.getTableDescriptor(htableName);
+            TableDescriptor descriptor = admin.getDescriptor(TableName.valueOf(htableName));
             assertEquals(3, descriptor.getColumnFamilies().length);
-            HColumnDescriptor cdA = descriptor.getFamily(cfA);
-            assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+            ColumnFamilyDescriptor cdA = descriptor.getColumnFamily(cfA);
+            assertNotEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
             assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using
                                                                               // WITH
             assertEquals(1, cdA.getMaxVersions());// Overriden using WITH
-            HColumnDescriptor cdB = descriptor.getFamily(cfB);
+            ColumnFamilyDescriptor cdB = descriptor.getColumnFamily(cfB);
             // Allow KEEP_DELETED_CELLS to be false for VIEW
-            assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
             assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the
                                                                               // original value.
             // CF c should stay the same since it's not a Phoenix cf.
-            HColumnDescriptor cdC = descriptor.getFamily(cfC);
+            ColumnFamilyDescriptor cdC = descriptor.getColumnFamily(cfC);
             assertNotNull("Column family not found", cdC);
-            assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
             assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
             assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
             assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
@@ -786,19 +824,18 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             byte[] cfC = Bytes.toBytes("c");
             byte[][] familyNames = new byte[][] { cfB, cfC };
             byte[] htableName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-            try (HBaseAdmin admin = pconn.getQueryServices().getAdmin()) {
+            try (Admin admin = pconn.getQueryServices().getAdmin()) {
                 try {
-                    admin.disableTable(htableName);
-                    admin.deleteTable(htableName);
+                    admin.disableTable(TableName.valueOf(htableName));
+                    admin.deleteTable(TableName.valueOf(htableName));
                 } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 }
 
-                HTableDescriptor descriptor = new HTableDescriptor(htableName);
+                TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
                 for (byte[] familyName : familyNames) {
-                    HColumnDescriptor columnDescriptor = new HColumnDescriptor(familyName);
-                    descriptor.addFamily(columnDescriptor);
+                    builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
                 }
-                admin.createTable(descriptor);
+                admin.createTable(builder.build());
             }
             String createStmt =
                     "create view " + generateUniqueName() + "  (id char(1) not null primary key,\n"
@@ -863,12 +900,12 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                 // expected to fail b/c table is read-only
             }
 
-            HTableInterface htable =
+            Table htable =
                     pconn.getQueryServices()
                             .getTable(SchemaUtil.getTableNameAsBytes(schemaName, tableName));
             Put put = new Put(Bytes.toBytes("0"));
-            put.add(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
-            put.add(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
+            put.addColumn(cfB, Bytes.toBytes("COL1"), PInteger.INSTANCE.toBytes(1));
+            put.addColumn(cfC, Bytes.toBytes("COL2"), PLong.INSTANCE.toBytes(2));
             htable.put(put);
 
             // Should be ok b/c we've marked the view with IMMUTABLE_ROWS=true
@@ -934,8 +971,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                     "ALTER TABLE " + tableName + " ADD z_string varchar not null primary key");
                 fail();
             } catch (SQLException e) {
-                assertTrue(e.getMessage(), e.getMessage().contains(
-                    "ERROR 1006 (42J04): Only nullable columns may be added to a multi-part row key."));
+                assertEquals(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
             }
             conn1.createStatement().executeUpdate(
                 "ALTER TABLE " + tableName + " ADD z_string varchar primary key");
@@ -1064,7 +1100,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         // Retrieve the database metadata
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs = dbmd.getColumns(null, null, null, null);
-        rs.next();
+        assertTrue(rs.next());
 
         // Lookup column by name, this should return null but not throw an exception
         String remarks = rs.getString("REMARKS");

@@ -75,7 +75,12 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     // array serialization format where bytes can be used as part of the row key
     public static final byte SORTABLE_SERIALIZATION_VERSION = 1;
     // array serialization format where bytes are immutable (does not support prepend/append or sorting)
+    @Deprecated
     public static final byte IMMUTABLE_SERIALIZATION_VERSION = 2;
+    // array serialization format where bytes are immutable (does not support prepend/append or sorting)
+    // differs from V1 in that nulls are not serialized
+    // we rely only on offsets to determine the presence of nulls
+    public static final byte IMMUTABLE_SERIALIZATION_V2 = 3;
     
     protected PArrayDataType(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec, int ordinal) {
         super(sqlTypeName, sqlType, clazz, codec, ordinal);
@@ -217,7 +222,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     }
     
     public static boolean useShortForOffsetArray(int maxoffset, byte serializationVersion) {
-    	if (serializationVersion == IMMUTABLE_SERIALIZATION_VERSION) {
+    if (serializationVersion == IMMUTABLE_SERIALIZATION_VERSION || serializationVersion == IMMUTABLE_SERIALIZATION_V2) {
     		 return (maxoffset <= Short.MAX_VALUE && maxoffset >= Short.MIN_VALUE );
     	}
     	// If the max offset is less than Short.MAX_VALUE then offset array can use short
@@ -383,7 +388,10 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 		int offset;
         if (useShort) {
             offset = indexOffset + (Bytes.SIZEOF_SHORT * arrayIndex);
-            return Bytes.toShort(bytes, offset, Bytes.SIZEOF_SHORT) + (serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION ? 0 : Short.MAX_VALUE);
+            return Bytes.toShort(bytes, offset, Bytes.SIZEOF_SHORT)
+                    + (serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION
+                            || serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_V2 ? 0
+                                    : Short.MAX_VALUE);
         } else {
             offset = indexOffset + (Bytes.SIZEOF_INT * arrayIndex);
             return Bytes.toInt(bytes, offset, Bytes.SIZEOF_INT);
@@ -964,7 +972,11 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             }
         } else {
             for (int pos : offsetPos) {
-                short val = serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION ? (short)pos : (short)(pos - Short.MAX_VALUE);
+                short val =
+                        serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_VERSION
+                                || serializationVersion == PArrayDataType.IMMUTABLE_SERIALIZATION_V2
+                                        ? (short) pos
+                                        : (short) (pos - Short.MAX_VALUE);
 				Bytes.putShort(offsetArr, off, val);
                 off += Bytes.SIZEOF_SHORT;
             }

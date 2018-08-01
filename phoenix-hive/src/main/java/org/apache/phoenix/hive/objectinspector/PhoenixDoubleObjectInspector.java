@@ -19,7 +19,7 @@ package org.apache.phoenix.hive.objectinspector;
 
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.DoubleObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
-import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 
 /**
  * ObjectInspector for double type

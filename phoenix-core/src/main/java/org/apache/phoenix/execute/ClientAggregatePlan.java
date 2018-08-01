@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -35,6 +34,10 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
+import org.apache.phoenix.execute.visitor.ByteCountVisitor;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
+import org.apache.phoenix.execute.visitor.RowCountVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregators;
@@ -56,12 +59,14 @@ import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.UngroupedAggregatingResultIterator;
+import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 import com.google.common.collect.Lists;
@@ -83,7 +88,38 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // aggregators. We use the Configuration directly here to avoid the expense of creating
         // another one.
         this.serverAggregators = ServerAggregators.deserialize(context.getScan()
-                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration());
+                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration(), null);
+    }
+
+    @Override
+    public Cost getCost() {
+        Double outputBytes = this.accept(new ByteCountVisitor());
+        Double inputRows = this.getDelegate().accept(new RowCountVisitor());
+        Double rowWidth = this.accept(new AvgRowWidthVisitor());
+        if (inputRows == null || outputBytes == null || rowWidth == null) {
+            return Cost.UNKNOWN;
+        }
+        double inputBytes = inputRows * rowWidth;
+        double rowsBeforeHaving = RowCountVisitor.aggregate(
+                RowCountVisitor.filter(
+                        inputRows.doubleValue(),
+                        RowCountVisitor.stripSkipScanFilter(
+                                context.getScan().getFilter())),
+                groupBy);
+        double rowsAfterHaving = RowCountVisitor.filter(rowsBeforeHaving, having);
+        double bytesBeforeHaving = rowWidth * rowsBeforeHaving;
+        double bytesAfterHaving = rowWidth * rowsAfterHaving;
+
+        int parallelLevel = CostUtil.estimateParallelLevel(
+                false, context.getConnection().getQueryServices());
+        Cost cost = CostUtil.estimateAggregateCost(
+                inputBytes, bytesBeforeHaving, groupBy, parallelLevel);
+        if (!orderBy.getOrderByExpressions().isEmpty()) {
+            Cost orderByCost = CostUtil.estimateOrderByCost(
+                    bytesAfterHaving, outputBytes, parallelLevel);
+            cost = cost.plus(orderByCost);
+        }
+        return super.getCost().plus(cost);
     }
 
     @Override
@@ -182,7 +218,16 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     public GroupBy getGroupBy() {
         return groupBy;
     }
-    
+
+    @Override
+    public <T> T accept(QueryPlanVisitor<T> visitor) {
+        return visitor.visit(this);
+    }
+
+    public Expression getHaving() {
+        return having;
+    }
+
     private static class ClientGroupedAggregatingResultIterator extends BaseGroupedAggregatingResultIterator {
         private final List<Expression> groupByExpressions;
 
@@ -204,7 +249,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         }
 
         @Override
-        protected Tuple wrapKeyValueAsResult(KeyValue keyValue) {
+        protected Tuple wrapKeyValueAsResult(Cell keyValue) {
             return new MultiKeyValueTuple(Collections.<Cell> singletonList(keyValue));
         }
 
@@ -230,7 +275,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         }
 
         @Override
-        protected Tuple wrapKeyValueAsResult(KeyValue keyValue)
+        protected Tuple wrapKeyValueAsResult(Cell keyValue)
                 throws SQLException {
             return new MultiKeyValueTuple(Collections.<Cell> singletonList(keyValue));
         }

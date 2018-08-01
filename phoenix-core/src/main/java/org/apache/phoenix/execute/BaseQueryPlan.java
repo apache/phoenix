@@ -47,6 +47,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -63,6 +64,8 @@ import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -112,17 +115,18 @@ public abstract class BaseQueryPlan implements QueryPlan {
      * immediately before creating the ResultIterator.
      */
     protected final Expression dynamicFilter;
+    protected final QueryPlan dataPlan;
     protected Long estimatedRows;
     protected Long estimatedSize;
     protected Long estimateInfoTimestamp;
-    private boolean explainPlanCalled;
+    private boolean getEstimatesCalled;
     
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
-            Expression dynamicFilter) {
+            Expression dynamicFilter, QueryPlan dataPlan) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
@@ -135,6 +139,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
         this.dynamicFilter = dynamicFilter;
+        this.dataPlan = dataPlan;
     }
 
 	@Override
@@ -233,12 +238,14 @@ public abstract class BaseQueryPlan implements QueryPlan {
              scan = context.getScan();
          }
          
+         ScanRanges scanRanges = context.getScanRanges();
+
 		/*
 		 * For aggregate queries, we still need to let the AggregationPlan to
 		 * proceed so that we can give proper aggregates even if there are no
 		 * row to be scanned.
 		 */
-        if (context.getScanRanges() == ScanRanges.NOTHING && !getStatement().isAggregate()) {
+        if (scanRanges == ScanRanges.NOTHING && !getStatement().isAggregate()) {
         return getWrappedIterator(caches, ResultIterator.EMPTY_ITERATOR);
         }
         
@@ -246,13 +253,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
             return newIterator(scanGrouper, scan, caches);
         }
         
+        ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
+        
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
         
         if (dynamicFilter != null) {
-            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), false, null);            
+            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), null);
         }
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
@@ -265,11 +274,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
         }
         
-        if (statement.getHint().hasHint(Hint.SMALL)) {
+
+        PhoenixConnection connection = context.getConnection();
+        final int smallScanThreshold = connection.getQueryServices().getProps().getInt(QueryServices.SMALL_SCAN_THRESHOLD_ATTRIB,
+          QueryServicesOptions.DEFAULT_SMALL_SCAN_THRESHOLD);
+
+        if (statement.getHint().hasHint(Hint.SMALL) || (scanRanges.isPointLookup() && scanRanges.getPointLookupCount() < smallScanThreshold)) {
             scan.setSmall(true);
         }
         
-        PhoenixConnection connection = context.getConnection();
 
         // set read consistency
         if (table.getType() != PTableType.SYSTEM) {
@@ -278,7 +291,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // TODO fix this in PHOENIX-2415 Support ROW_TIMESTAMP with transactional tables
         if (!table.isTransactional()) {
 	                // Get the time range of row_timestamp column
-	        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+	        TimeRange rowTimestampRange = scanRanges.getRowTimestampRange();
 	        // Get the already existing time range on the scan.
 	        TimeRange scanTimeRange = scan.getTimeRange();
 	        Long scn = connection.getSCN();
@@ -496,21 +509,17 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        explainPlanCalled = true;
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return new ExplainPlan(Collections.singletonList("DEGENERATE SCAN OVER " + getTableRef().getTable().getName().getString()));
         }
-        
-        // Optimize here when getting explain plan, as queries don't get optimized until after compilation
-        QueryPlan plan = context.getConnection().getQueryServices().getOptimizer().optimize(context.getStatement(), this);
-        ExplainPlan exp = plan instanceof BaseQueryPlan ? new ExplainPlan(getPlanSteps(plan.iterator())) : plan.getExplainPlan();
-        this.estimatedRows = plan.getEstimatedRowsToScan();
-        this.estimatedSize = plan.getEstimatedBytesToScan();
-        this.estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
-        return exp;
+
+        ResultIterator iterator = iterator();
+        ExplainPlan explainPlan = new ExplainPlan(getPlanSteps(iterator));
+        iterator.close();
+        return explainPlan;
     }
 
-    private List<String> getPlanSteps(ResultIterator iterator){
+    private List<String> getPlanSteps(ResultIterator iterator) {
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);
         return planSteps;
@@ -523,26 +532,32 @@ public abstract class BaseQueryPlan implements QueryPlan {
     
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedRows;
     }
 
     @Override
     public Long getEstimatedBytesToScan() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimatedSize;
     }
 
     @Override
     public Long getEstimateInfoTimestamp() throws SQLException {
-        if (!explainPlanCalled) {
-            getExplainPlan();
+        if (!getEstimatesCalled) {
+            getEstimates();
         }
         return estimateInfoTimestamp;
     }
 
+    private void getEstimates() throws SQLException {
+        getEstimatesCalled = true;
+        // Initialize a dummy iterator to get the estimates based on stats.
+        ResultIterator iterator = iterator();
+        iterator.close();
+    }
 }

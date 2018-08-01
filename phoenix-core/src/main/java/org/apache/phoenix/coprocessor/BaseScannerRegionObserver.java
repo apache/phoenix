@@ -21,13 +21,12 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -42,15 +41,13 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
-import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
-import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 
-abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
+abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -102,6 +99,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public final static String QUALIFIER_ENCODING_SCHEME = "_QualifierEncodingScheme";
     public final static String IMMUTABLE_STORAGE_ENCODING_SCHEME = "_ImmutableStorageEncodingScheme";
     public final static String USE_ENCODED_COLUMN_QUALIFIER_LIST = "_UseEncodedColumnQualifierList";
+    public static final String CLIENT_VERSION = "_ClientVersion";
     
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
@@ -132,13 +130,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
-    protected QualifierEncodingScheme encodingScheme;
-    protected boolean useNewValueColumnQualifier;
-
-    @Override
-    public void start(CoprocessorEnvironment e) throws IOException {
-        super.start(e);
-    }
 
     /**
      * Used by logger to identify coprocessor
@@ -172,7 +163,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
         if(isLocalIndex) {
-            ScanUtil.setupLocalIndexScan(scan, lowerInclusiveRegionKey, upperExclusiveRegionKey);
+            ScanUtil.setupLocalIndexScan(scan);
         }
     }
 
@@ -185,8 +176,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     }
 
     @Override
-    public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-        final Scan scan, final RegionScanner s) throws IOException {
+    public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+            Scan scan) throws IOException {
         byte[] txnScn = scan.getAttribute(TX_SCN);
         if (txnScn!=null) {
             TimeRange timeRange = scan.getTimeRange();
@@ -204,9 +195,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
         }
-        this.encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-        this.useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
-        return s;
     }
 
     private class RegionScannerHolder extends DelegateRegionScanner {
@@ -343,8 +331,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex) {
 
-        RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment(),
-            useNewValueColumnQualifier, encodingScheme);
+        RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment());
 
         return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);

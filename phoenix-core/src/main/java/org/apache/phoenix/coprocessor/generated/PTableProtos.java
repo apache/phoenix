@@ -140,17 +140,17 @@ public final class PTableProtos {
      */
     com.google.protobuf.ByteString getFamilyNameBytes();
 
-    // required string dataType = 3;
+    // optional string dataType = 3;
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     boolean hasDataType();
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     java.lang.String getDataType();
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     com.google.protobuf.ByteString
         getDataTypeBytes();
@@ -195,13 +195,13 @@ public final class PTableProtos {
      */
     int getPosition();
 
-    // required int32 sortOrder = 8;
+    // optional int32 sortOrder = 8;
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     boolean hasSortOrder();
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     int getSortOrder();
 
@@ -279,6 +279,26 @@ public final class PTableProtos {
      * <code>optional bytes columnQualifierBytes = 15;</code>
      */
     com.google.protobuf.ByteString getColumnQualifierBytes();
+
+    // optional int64 timestamp = 16;
+    /**
+     * <code>optional int64 timestamp = 16;</code>
+     */
+    boolean hasTimestamp();
+    /**
+     * <code>optional int64 timestamp = 16;</code>
+     */
+    long getTimestamp();
+
+    // optional bool derived = 17 [default = false];
+    /**
+     * <code>optional bool derived = 17 [default = false];</code>
+     */
+    boolean hasDerived();
+    /**
+     * <code>optional bool derived = 17 [default = false];</code>
+     */
+    boolean getDerived();
   }
   /**
    * Protobuf type {@code PColumn}
@@ -406,6 +426,16 @@ public final class PTableProtos {
               columnQualifierBytes_ = input.readBytes();
               break;
             }
+            case 128: {
+              bitField0_ |= 0x00008000;
+              timestamp_ = input.readInt64();
+              break;
+            }
+            case 136: {
+              bitField0_ |= 0x00010000;
+              derived_ = input.readBool();
+              break;
+            }
           }
         }
       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -478,17 +508,17 @@ public final class PTableProtos {
       return familyNameBytes_;
     }
 
-    // required string dataType = 3;
+    // optional string dataType = 3;
     public static final int DATATYPE_FIELD_NUMBER = 3;
     private java.lang.Object dataType_;
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     public boolean hasDataType() {
       return ((bitField0_ & 0x00000004) == 0x00000004);
     }
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     public java.lang.String getDataType() {
       java.lang.Object ref = dataType_;
@@ -505,7 +535,7 @@ public final class PTableProtos {
       }
     }
     /**
-     * <code>required string dataType = 3;</code>
+     * <code>optional string dataType = 3;</code>
      */
     public com.google.protobuf.ByteString
         getDataTypeBytes() {
@@ -585,17 +615,17 @@ public final class PTableProtos {
       return position_;
     }
 
-    // required int32 sortOrder = 8;
+    // optional int32 sortOrder = 8;
     public static final int SORTORDER_FIELD_NUMBER = 8;
     private int sortOrder_;
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     public boolean hasSortOrder() {
       return ((bitField0_ & 0x00000080) == 0x00000080);
     }
     /**
-     * <code>required int32 sortOrder = 8;</code>
+     * <code>optional int32 sortOrder = 8;</code>
      */
     public int getSortOrder() {
       return sortOrder_;
@@ -740,6 +770,38 @@ public final class PTableProtos {
       return columnQualifierBytes_;
     }
 
+    // optional int64 timestamp = 16;
+    public static final int TIMESTAMP_FIELD_NUMBER = 16;
+    private long timestamp_;
+    /**
+     * <code>optional int64 timestamp = 16;</code>
+     */
+    public boolean hasTimestamp() {
+      return ((bitField0_ & 0x00008000) == 0x00008000);
+    }
+    /**
+     * <code>optional int64 timestamp = 16;</code>
+     */
+    public long getTimestamp() {
+      return timestamp_;
+    }
+
+    // optional bool derived = 17 [default = false];
+    public static final int DERIVED_FIELD_NUMBER = 17;
+    private boolean derived_;
+    /**
+     * <code>optional bool derived = 17 [default = false];</code>
+     */
+    public boolean hasDerived() {
+      return ((bitField0_ & 0x00010000) == 0x00010000);
+    }
+    /**
+     * <code>optional bool derived = 17 [default = false];</code>
+     */
+    public boolean getDerived() {
+      return derived_;
+    }
+
     private void initFields() {
       columnNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       familyNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -756,6 +818,8 @@ public final class PTableProtos {
       isRowTimestamp_ = false;
       isDynamic_ = false;
       columnQualifierBytes_ = com.google.protobuf.ByteString.EMPTY;
+      timestamp_ = 0L;
+      derived_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -766,19 +830,11 @@ public final class PTableProtos {
         memoizedIsInitialized = 0;
         return false;
       }
-      if (!hasDataType()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
       if (!hasNullable()) {
         memoizedIsInitialized = 0;
         return false;
       }
       if (!hasPosition()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
-      if (!hasSortOrder()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -833,6 +889,12 @@ public final class PTableProtos {
       }
       if (((bitField0_ & 0x00004000) == 0x00004000)) {
         output.writeBytes(15, columnQualifierBytes_);
+      }
+      if (((bitField0_ & 0x00008000) == 0x00008000)) {
+        output.writeInt64(16, timestamp_);
+      }
+      if (((bitField0_ & 0x00010000) == 0x00010000)) {
+        output.writeBool(17, derived_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -902,6 +964,14 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00004000) == 0x00004000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(15, columnQualifierBytes_);
+      }
+      if (((bitField0_ & 0x00008000) == 0x00008000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(16, timestamp_);
+      }
+      if (((bitField0_ & 0x00010000) == 0x00010000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(17, derived_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -1001,6 +1071,16 @@ public final class PTableProtos {
         result = result && getColumnQualifierBytes()
             .equals(other.getColumnQualifierBytes());
       }
+      result = result && (hasTimestamp() == other.hasTimestamp());
+      if (hasTimestamp()) {
+        result = result && (getTimestamp()
+            == other.getTimestamp());
+      }
+      result = result && (hasDerived() == other.hasDerived());
+      if (hasDerived()) {
+        result = result && (getDerived()
+            == other.getDerived());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -1073,6 +1153,14 @@ public final class PTableProtos {
       if (hasColumnQualifierBytes()) {
         hash = (37 * hash) + COLUMNQUALIFIERBYTES_FIELD_NUMBER;
         hash = (53 * hash) + getColumnQualifierBytes().hashCode();
+      }
+      if (hasTimestamp()) {
+        hash = (37 * hash) + TIMESTAMP_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getTimestamp());
+      }
+      if (hasDerived()) {
+        hash = (37 * hash) + DERIVED_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getDerived());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -1213,6 +1301,10 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x00002000);
         columnQualifierBytes_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00004000);
+        timestamp_ = 0L;
+        bitField0_ = (bitField0_ & ~0x00008000);
+        derived_ = false;
+        bitField0_ = (bitField0_ & ~0x00010000);
         return this;
       }
 
@@ -1301,6 +1393,14 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00004000;
         }
         result.columnQualifierBytes_ = columnQualifierBytes_;
+        if (((from_bitField0_ & 0x00008000) == 0x00008000)) {
+          to_bitField0_ |= 0x00008000;
+        }
+        result.timestamp_ = timestamp_;
+        if (((from_bitField0_ & 0x00010000) == 0x00010000)) {
+          to_bitField0_ |= 0x00010000;
+        }
+        result.derived_ = derived_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -1366,6 +1466,12 @@ public final class PTableProtos {
         if (other.hasColumnQualifierBytes()) {
           setColumnQualifierBytes(other.getColumnQualifierBytes());
         }
+        if (other.hasTimestamp()) {
+          setTimestamp(other.getTimestamp());
+        }
+        if (other.hasDerived()) {
+          setDerived(other.getDerived());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -1375,19 +1481,11 @@ public final class PTableProtos {
           
           return false;
         }
-        if (!hasDataType()) {
-          
-          return false;
-        }
         if (!hasNullable()) {
           
           return false;
         }
         if (!hasPosition()) {
-          
-          return false;
-        }
-        if (!hasSortOrder()) {
           
           return false;
         }
@@ -1485,16 +1583,16 @@ public final class PTableProtos {
         return this;
       }
 
-      // required string dataType = 3;
+      // optional string dataType = 3;
       private java.lang.Object dataType_ = "";
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public boolean hasDataType() {
         return ((bitField0_ & 0x00000004) == 0x00000004);
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public java.lang.String getDataType() {
         java.lang.Object ref = dataType_;
@@ -1508,7 +1606,7 @@ public final class PTableProtos {
         }
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public com.google.protobuf.ByteString
           getDataTypeBytes() {
@@ -1524,7 +1622,7 @@ public final class PTableProtos {
         }
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public Builder setDataType(
           java.lang.String value) {
@@ -1537,7 +1635,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public Builder clearDataType() {
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -1546,7 +1644,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required string dataType = 3;</code>
+       * <code>optional string dataType = 3;</code>
        */
       public Builder setDataTypeBytes(
           com.google.protobuf.ByteString value) {
@@ -1691,22 +1789,22 @@ public final class PTableProtos {
         return this;
       }
 
-      // required int32 sortOrder = 8;
+      // optional int32 sortOrder = 8;
       private int sortOrder_ ;
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public boolean hasSortOrder() {
         return ((bitField0_ & 0x00000080) == 0x00000080);
       }
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public int getSortOrder() {
         return sortOrder_;
       }
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public Builder setSortOrder(int value) {
         bitField0_ |= 0x00000080;
@@ -1715,7 +1813,7 @@ public final class PTableProtos {
         return this;
       }
       /**
-       * <code>required int32 sortOrder = 8;</code>
+       * <code>optional int32 sortOrder = 8;</code>
        */
       public Builder clearSortOrder() {
         bitField0_ = (bitField0_ & ~0x00000080);
@@ -1998,6 +2096,72 @@ public final class PTableProtos {
       public Builder clearColumnQualifierBytes() {
         bitField0_ = (bitField0_ & ~0x00004000);
         columnQualifierBytes_ = getDefaultInstance().getColumnQualifierBytes();
+        onChanged();
+        return this;
+      }
+
+      // optional int64 timestamp = 16;
+      private long timestamp_ ;
+      /**
+       * <code>optional int64 timestamp = 16;</code>
+       */
+      public boolean hasTimestamp() {
+        return ((bitField0_ & 0x00008000) == 0x00008000);
+      }
+      /**
+       * <code>optional int64 timestamp = 16;</code>
+       */
+      public long getTimestamp() {
+        return timestamp_;
+      }
+      /**
+       * <code>optional int64 timestamp = 16;</code>
+       */
+      public Builder setTimestamp(long value) {
+        bitField0_ |= 0x00008000;
+        timestamp_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int64 timestamp = 16;</code>
+       */
+      public Builder clearTimestamp() {
+        bitField0_ = (bitField0_ & ~0x00008000);
+        timestamp_ = 0L;
+        onChanged();
+        return this;
+      }
+
+      // optional bool derived = 17 [default = false];
+      private boolean derived_ ;
+      /**
+       * <code>optional bool derived = 17 [default = false];</code>
+       */
+      public boolean hasDerived() {
+        return ((bitField0_ & 0x00010000) == 0x00010000);
+      }
+      /**
+       * <code>optional bool derived = 17 [default = false];</code>
+       */
+      public boolean getDerived() {
+        return derived_;
+      }
+      /**
+       * <code>optional bool derived = 17 [default = false];</code>
+       */
+      public Builder setDerived(boolean value) {
+        bitField0_ |= 0x00010000;
+        derived_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool derived = 17 [default = false];</code>
+       */
+      public Builder clearDerived() {
+        bitField0_ = (bitField0_ & ~0x00010000);
+        derived_ = false;
         onChanged();
         return this;
       }
@@ -3520,6 +3684,16 @@ public final class PTableProtos {
      * <code>optional bool useStatsForParallelization = 37;</code>
      */
     boolean getUseStatsForParallelization();
+
+    // optional int32 transactionProvider = 38;
+    /**
+     * <code>optional int32 transactionProvider = 38;</code>
+     */
+    boolean hasTransactionProvider();
+    /**
+     * <code>optional int32 transactionProvider = 38;</code>
+     */
+    int getTransactionProvider();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3771,6 +3945,11 @@ public final class PTableProtos {
               useStatsForParallelization_ = input.readBool();
               break;
             }
+            case 304: {
+              bitField1_ |= 0x00000001;
+              transactionProvider_ = input.readInt32();
+              break;
+            }
           }
         }
       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -3823,6 +4002,7 @@ public final class PTableProtos {
     }
 
     private int bitField0_;
+    private int bitField1_;
     // required bytes schemaNameBytes = 1;
     public static final int SCHEMANAMEBYTES_FIELD_NUMBER = 1;
     private com.google.protobuf.ByteString schemaNameBytes_;
@@ -4534,6 +4714,22 @@ public final class PTableProtos {
       return useStatsForParallelization_;
     }
 
+    // optional int32 transactionProvider = 38;
+    public static final int TRANSACTIONPROVIDER_FIELD_NUMBER = 38;
+    private int transactionProvider_;
+    /**
+     * <code>optional int32 transactionProvider = 38;</code>
+     */
+    public boolean hasTransactionProvider() {
+      return ((bitField1_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>optional int32 transactionProvider = 38;</code>
+     */
+    public int getTransactionProvider() {
+      return transactionProvider_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4571,6 +4767,7 @@ public final class PTableProtos {
       encodingScheme_ = com.google.protobuf.ByteString.EMPTY;
       encodedCQCounters_ = java.util.Collections.emptyList();
       useStatsForParallelization_ = false;
+      transactionProvider_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4746,6 +4943,9 @@ public final class PTableProtos {
       if (((bitField0_ & 0x80000000) == 0x80000000)) {
         output.writeBool(37, useStatsForParallelization_);
       }
+      if (((bitField1_ & 0x00000001) == 0x00000001)) {
+        output.writeInt32(38, transactionProvider_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4903,6 +5103,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x80000000) == 0x80000000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(37, useStatsForParallelization_);
+      }
+      if (((bitField1_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(38, transactionProvider_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -5095,6 +5299,11 @@ public final class PTableProtos {
         result = result && (getUseStatsForParallelization()
             == other.getUseStatsForParallelization());
       }
+      result = result && (hasTransactionProvider() == other.hasTransactionProvider());
+      if (hasTransactionProvider()) {
+        result = result && (getTransactionProvider()
+            == other.getTransactionProvider());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -5251,6 +5460,10 @@ public final class PTableProtos {
       if (hasUseStatsForParallelization()) {
         hash = (37 * hash) + USESTATSFORPARALLELIZATION_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getUseStatsForParallelization());
+      }
+      if (hasTransactionProvider()) {
+        hash = (37 * hash) + TRANSACTIONPROVIDER_FIELD_NUMBER;
+        hash = (53 * hash) + getTransactionProvider();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -5448,6 +5661,8 @@ public final class PTableProtos {
         }
         useStatsForParallelization_ = false;
         bitField1_ = (bitField1_ & ~0x00000008);
+        transactionProvider_ = 0;
+        bitField1_ = (bitField1_ & ~0x00000010);
         return this;
       }
 
@@ -5477,6 +5692,7 @@ public final class PTableProtos {
         int from_bitField0_ = bitField0_;
         int from_bitField1_ = bitField1_;
         int to_bitField0_ = 0;
+        int to_bitField1_ = 0;
         if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
           to_bitField0_ |= 0x00000001;
         }
@@ -5637,7 +5853,12 @@ public final class PTableProtos {
           to_bitField0_ |= 0x80000000;
         }
         result.useStatsForParallelization_ = useStatsForParallelization_;
+        if (((from_bitField1_ & 0x00000010) == 0x00000010)) {
+          to_bitField1_ |= 0x00000001;
+        }
+        result.transactionProvider_ = transactionProvider_;
         result.bitField0_ = to_bitField0_;
+        result.bitField1_ = to_bitField1_;
         onBuilt();
         return result;
       }
@@ -5840,6 +6061,9 @@ public final class PTableProtos {
         }
         if (other.hasUseStatsForParallelization()) {
           setUseStatsForParallelization(other.getUseStatsForParallelization());
+        }
+        if (other.hasTransactionProvider()) {
+          setTransactionProvider(other.getTransactionProvider());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -7920,6 +8144,39 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional int32 transactionProvider = 38;
+      private int transactionProvider_ ;
+      /**
+       * <code>optional int32 transactionProvider = 38;</code>
+       */
+      public boolean hasTransactionProvider() {
+        return ((bitField1_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional int32 transactionProvider = 38;</code>
+       */
+      public int getTransactionProvider() {
+        return transactionProvider_;
+      }
+      /**
+       * <code>optional int32 transactionProvider = 38;</code>
+       */
+      public Builder setTransactionProvider(int value) {
+        bitField1_ |= 0x00000010;
+        transactionProvider_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 transactionProvider = 38;</code>
+       */
+      public Builder clearTransactionProvider() {
+        bitField1_ = (bitField1_ & ~0x00000010);
+        transactionProvider_ = 0;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -8575,47 +8832,49 @@ public final class PTableProtos {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\014PTable.proto\032\021PGuidePosts.proto\"\304\002\n\007PC" +
+      "\n\014PTable.proto\032\021PGuidePosts.proto\"\357\002\n\007PC" +
       "olumn\022\027\n\017columnNameBytes\030\001 \002(\014\022\027\n\017family" +
-      "NameBytes\030\002 \001(\014\022\020\n\010dataType\030\003 \002(\t\022\021\n\tmax" +
+      "NameBytes\030\002 \001(\014\022\020\n\010dataType\030\003 \001(\t\022\021\n\tmax" +
       "Length\030\004 \001(\005\022\r\n\005scale\030\005 \001(\005\022\020\n\010nullable\030" +
-      "\006 \002(\010\022\020\n\010position\030\007 \002(\005\022\021\n\tsortOrder\030\010 \002" +
+      "\006 \002(\010\022\020\n\010position\030\007 \002(\005\022\021\n\tsortOrder\030\010 \001" +
       "(\005\022\021\n\tarraySize\030\t \001(\005\022\024\n\014viewConstant\030\n " +
       "\001(\014\022\026\n\016viewReferenced\030\013 \001(\010\022\022\n\nexpressio" +
       "n\030\014 \001(\t\022\026\n\016isRowTimestamp\030\r \001(\010\022\021\n\tisDyn" +
       "amic\030\016 \001(\010\022\034\n\024columnQualifierBytes\030\017 \001(\014" +
-      "\"\232\001\n\013PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030",
-      "\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n\rke" +
-      "yBytesCount\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001" +
-      "(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\"\220\007" +
-      "\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tab" +
-      "leNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.P" +
-      "TableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenc" +
-      "eNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013pkNa" +
-      "meBytes\030\007 \001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007colu" +
-      "mns\030\t \003(\0132\010.PColumn\022\030\n\007indexes\030\n \003(\0132\007.P" +
-      "Table\022\027\n\017isImmutableRows\030\013 \002(\010\022\032\n\022dataTa",
-      "bleNameBytes\030\r \001(\014\022\031\n\021defaultFamilyName\030" +
-      "\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013multiTenant" +
-      "\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rviewStatemen" +
-      "t\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010tenant" +
-      "Id\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\tindexTy" +
-      "pe\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\nstor" +
-      "eNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030\031 \001(\005\022\036\n" +
-      "\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n\rtransac" +
-      "tional\030\033 \001(\010\022\034\n\024updateCacheFrequency\030\034 \001" +
-      "(\003\022\035\n\025indexDisableTimestamp\030\035 \001(\003\022\031\n\021isN",
-      "amespaceMapped\030\036 \001(\010\022\034\n\024autoParititonSeq" +
-      "Name\030\037 \001(\t\022\032\n\022isAppendOnlySchema\030  \001(\010\022\027" +
-      "\n\017parentNameBytes\030! \001(\014\022\025\n\rstorageScheme" +
-      "\030\" \001(\014\022\026\n\016encodingScheme\030# \001(\014\022,\n\021encode" +
-      "dCQCounters\030$ \003(\0132\021.EncodedCQCounter\022\"\n\032" +
-      "useStatsForParallelization\030% \001(\010\"6\n\020Enco" +
-      "dedCQCounter\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007count" +
-      "er\030\002 \002(\005*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004US" +
-      "ER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(o" +
-      "rg.apache.phoenix.coprocessor.generatedB",
-      "\014PTableProtosH\001\210\001\001\240\001\001"
+      "\022\021\n\ttimestamp\030\020 \001(\003\022\026\n\007derived\030\021 \001(\010:\005fa",
+      "lse\"\232\001\n\013PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006valu" +
+      "es\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n" +
+      "\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePostsCount\030" +
+      "\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts" +
+      "\"\255\007\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
+      "tableNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162" +
+      "\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequ" +
+      "enceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013p" +
+      "kNameBytes\030\007 \001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007c" +
+      "olumns\030\t \003(\0132\010.PColumn\022\030\n\007indexes\030\n \003(\0132",
+      "\007.PTable\022\027\n\017isImmutableRows\030\013 \002(\010\022\032\n\022dat" +
+      "aTableNameBytes\030\r \001(\014\022\031\n\021defaultFamilyNa" +
+      "me\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013multiTen" +
+      "ant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rviewState" +
+      "ment\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010ten" +
+      "antId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\tinde" +
+      "xType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\ns" +
+      "toreNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030\031 \001(\005" +
+      "\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n\rtran" +
+      "sactional\030\033 \001(\010\022\034\n\024updateCacheFrequency\030",
+      "\034 \001(\003\022\035\n\025indexDisableTimestamp\030\035 \001(\003\022\031\n\021" +
+      "isNamespaceMapped\030\036 \001(\010\022\034\n\024autoParititon" +
+      "SeqName\030\037 \001(\t\022\032\n\022isAppendOnlySchema\030  \001(" +
+      "\010\022\027\n\017parentNameBytes\030! \001(\014\022\025\n\rstorageSch" +
+      "eme\030\" \001(\014\022\026\n\016encodingScheme\030# \001(\014\022,\n\021enc" +
+      "odedCQCounters\030$ \003(\0132\021.EncodedCQCounter\022" +
+      "\"\n\032useStatsForParallelization\030% \001(\010\022\033\n\023t" +
+      "ransactionProvider\030& \001(\005\"6\n\020EncodedCQCou" +
+      "nter\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007counter\030\002 \002(\005" +
+      "*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004",
+      "VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apach" +
+      "e.phoenix.coprocessor.generatedB\014PTableP" +
+      "rotosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8627,7 +8886,7 @@ public final class PTableProtos {
           internal_static_PColumn_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PColumn_descriptor,
-              new java.lang.String[] { "ColumnNameBytes", "FamilyNameBytes", "DataType", "MaxLength", "Scale", "Nullable", "Position", "SortOrder", "ArraySize", "ViewConstant", "ViewReferenced", "Expression", "IsRowTimestamp", "IsDynamic", "ColumnQualifierBytes", });
+              new java.lang.String[] { "ColumnNameBytes", "FamilyNameBytes", "DataType", "MaxLength", "Scale", "Nullable", "Position", "SortOrder", "ArraySize", "ViewConstant", "ViewReferenced", "Expression", "IsRowTimestamp", "IsDynamic", "ColumnQualifierBytes", "Timestamp", "Derived", });
           internal_static_PTableStats_descriptor =
             getDescriptor().getMessageTypes().get(1);
           internal_static_PTableStats_fieldAccessorTable = new
@@ -8639,7 +8898,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", });
           internal_static_EncodedCQCounter_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_EncodedCQCounter_fieldAccessorTable = new

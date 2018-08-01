@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
@@ -43,7 +44,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 import com.google.common.base.Preconditions;
@@ -201,8 +202,8 @@ public class SpillManager implements Closeable {
             input.skip(keyLength);
             int valueLength = WritableUtils.readVInt(input);
             int vIntValLength = WritableUtils.getVIntSize(keyLength);
-            KeyValue keyValue =
-                    KeyValueUtil.newKeyValue(ptr.get(), ptr.getOffset(), ptr.getLength(),
+            Cell keyValue =
+                    PhoenixKeyValueUtil.newKeyValue(ptr.get(), ptr.getOffset(), ptr.getLength(),
                         QueryConstants.SINGLE_COLUMN_FAMILY, QueryConstants.SINGLE_COLUMN,
                         QueryConstants.AGG_TIMESTAMP, data, vIntKeyLength + keyLength + vIntValLength, valueLength);
             Tuple result = new SingleKeyValueTuple(keyValue);

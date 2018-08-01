@@ -45,14 +45,14 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
     }
 
     @Override
-    public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk, boolean useProtoForIndexMaintainer) throws SQLException {
+    public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk, boolean useProtoForIndexMaintainer, final int clientVersion) throws SQLException {
         // just use the standard keyvalue builder - this doesn't really need to be fast
         
         final List<IndexMaintainer> maintainers = 
                 IndexMaintainer.deserialize(cachePtr, GenericKeyValueBuilder.INSTANCE, useProtoForIndexMaintainer);
         final PhoenixTransactionContext txnContext;
         try {
-            txnContext = txState.length != 0 ? TransactionFactory.getTransactionFactory().getTransactionContext(txState) : null;
+            txnContext = TransactionFactory.getTransactionContext(txState, clientVersion);
         } catch (IOException e) {
             throw new SQLException(e);
         }
@@ -71,6 +71,11 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
             @Override
             public PhoenixTransactionContext getTransactionContext() {
                 return txnContext;
+            }
+
+            @Override
+            public int getClientVersion() {
+                return clientVersion;
             }
         };
     }

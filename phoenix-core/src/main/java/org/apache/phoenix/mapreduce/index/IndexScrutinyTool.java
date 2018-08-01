@@ -26,11 +26,11 @@ import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -38,7 +38,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.Text;
@@ -157,7 +157,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
 
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -285,7 +285,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
                     selectQuery);
             } else { // TODO check if using a snapshot works
-                HBaseAdmin admin = null;
+                Admin admin = null;
                 String snapshotName;
                 try {
                     final PhoenixConnection pConnection =
@@ -302,7 +302,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
                 FSUtils.setRootDir(configuration, rootDir);
-                Path restoreDir = new Path(FSUtils.getRootDir(configuration), "restore-dir");
 
                 // set input for map reduce job using hbase snapshots
                 //PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,

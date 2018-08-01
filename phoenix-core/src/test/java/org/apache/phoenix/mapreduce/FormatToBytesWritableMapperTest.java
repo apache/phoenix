@@ -20,6 +20,7 @@ package org.apache.phoenix.mapreduce;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.types.PInteger;
@@ -95,7 +96,7 @@ public class FormatToBytesWritableMapperTest {
 
     static class MockUpsertProcessor implements ImportPreUpsertKeyValueProcessor {
         @Override
-        public List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues) {
+        public List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues) {
             throw new UnsupportedOperationException("Not yet implemented");
         }
     }

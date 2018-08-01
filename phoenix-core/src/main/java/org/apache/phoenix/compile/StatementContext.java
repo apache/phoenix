@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.parse.SelectStatement;
@@ -83,6 +84,8 @@ public class StatementContext {
     private Map<SelectStatement, Object> subqueryResults;
     private final ReadMetricQueue readMetricsQueue;
     private final OverAllQueryMetrics overAllQueryMetrics;
+    private QueryLogger queryLogger;
+    private boolean isClientSideUpsertSelect;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -96,7 +99,7 @@ public class StatementContext {
     }
 
     public StatementContext(PhoenixStatement statement, Scan scan) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, scan, new SequenceManager(statement));
     }
 
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver) {
@@ -117,14 +120,15 @@ public class StatementContext {
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
         ReadOnlyProps props = connection.getQueryServices().getProps();
+        String timeZoneID = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                DateUtil.DEFAULT_TIME_ZONE_ID);
         this.dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
+        this.dateFormatter = DateUtil.getDateFormatter(dateFormat, timeZoneID);
         this.timeFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
-        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat);
+        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat, timeZoneID);
         this.timestampFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
-        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat);
-        this.dateFormatTimeZone = DateUtil.getTimeZone(props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
-                DateUtil.DEFAULT_TIME_ZONE_ID));
+        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat, timeZoneID);
+        this.dateFormatTimeZone = DateUtil.getTimeZone(timeZoneID);
         this.numberFormat = props.get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
@@ -132,8 +136,8 @@ public class StatementContext {
         this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer> emptyMap() : Maps
                 .<PColumn, Integer> newLinkedHashMap();
         this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
-        this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled);
-        this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled);
+        this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
+        this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
     }
 
     /**
@@ -305,6 +309,22 @@ public class StatementContext {
     
     public OverAllQueryMetrics getOverallQueryMetrics() {
         return overAllQueryMetrics;
+    }
+
+    public void setQueryLogger(QueryLogger queryLogger) {
+       this.queryLogger=queryLogger;
+    }
+
+    public QueryLogger getQueryLogger() {
+        return queryLogger;
+    }
+
+    public boolean isClientSideUpsertSelect() {
+        return isClientSideUpsertSelect;
+    }
+
+    public void setClientSideUpsertSelect(boolean isClientSideUpsertSelect) {
+        this.isClientSideUpsertSelect = isClientSideUpsertSelect;
     }
     
 }

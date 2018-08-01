@@ -25,7 +25,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.CreateTableCompiler.ViewWhereExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -54,12 +53,19 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
     private String arrayColDisplayName;
     private KeyValueColumnExpression keyValueColumnExpression;
     private QualifierEncodingScheme encodingScheme;
-    
+    private ImmutableStorageScheme immutableStorageScheme;
+
     public SingleCellColumnExpression() {
     }
-    
-    public SingleCellColumnExpression(PDatum column, byte[] cf, byte[] cq, QualifierEncodingScheme encodingScheme) {
+
+    public SingleCellColumnExpression(ImmutableStorageScheme immutableStorageScheme) {
+        this.immutableStorageScheme = immutableStorageScheme;
+    }
+
+    public SingleCellColumnExpression(PDatum column, byte[] cf, byte[] cq,
+            QualifierEncodingScheme encodingScheme, ImmutableStorageScheme immutableStorageScheme) {
         super(column, cf, SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
+        this.immutableStorageScheme = immutableStorageScheme;
         Preconditions.checkNotNull(encodingScheme);
         Preconditions.checkArgument(encodingScheme != NON_ENCODED_QUALIFIERS);
         this.decodedColumnQualifier = encodingScheme.decode(cq);
@@ -67,8 +73,9 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
         setKeyValueExpression();
     }
     
-    public SingleCellColumnExpression(PColumn column, String displayName, QualifierEncodingScheme encodingScheme) {
+    public SingleCellColumnExpression(PColumn column, String displayName, QualifierEncodingScheme encodingScheme, ImmutableStorageScheme immutableStorageScheme) {
         super(column, column.getFamilyName().getBytes(), SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
+        this.immutableStorageScheme = immutableStorageScheme;
         Preconditions.checkNotNull(encodingScheme);
         Preconditions.checkArgument(encodingScheme != NON_ENCODED_QUALIFIERS);
         this.arrayColDisplayName = displayName;
@@ -86,8 +93,6 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
         }
     	// the first position is reserved and we offset maxEncodedColumnQualifier by ENCODED_CQ_COUNTER_INITIAL_VALUE (which is the minimum encoded column qualifier)
     	int index = decodedColumnQualifier-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-    	byte serializedImmutableStorageScheme = ptr.get()[ptr.getOffset() + ptr.getLength() - Bytes.SIZEOF_BYTE];
-    	ImmutableStorageScheme immutableStorageScheme = ImmutableStorageScheme.fromSerializedValue(serializedImmutableStorageScheme);
         // Given a ptr to the entire array, set ptr to point to a particular element within that array
     	ColumnValueDecoder encoderDecoder = immutableStorageScheme.getDecoder();
     	return encoderDecoder.decode(ptr, index);
@@ -97,7 +102,18 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         this.decodedColumnQualifier = WritableUtils.readVInt(input);
-        this.encodingScheme = QualifierEncodingScheme.values()[WritableUtils.readVInt(input)];
+        int serializedEncodingScheme = WritableUtils.readVInt(input);
+        // prior to PHOENIX-4432 we weren't writing out the immutableStorageScheme in write(),
+        // so we use the decodedColumnQualifier sign to determine whether it's there
+        if (Integer.signum(serializedEncodingScheme) == -1) {
+            this.immutableStorageScheme =
+                    ImmutableStorageScheme
+                            .fromSerializedValue((byte) WritableUtils.readVInt(input));
+            serializedEncodingScheme = -serializedEncodingScheme;
+        } else {
+            this.immutableStorageScheme = ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+        }
+        this.encodingScheme = QualifierEncodingScheme.values()[serializedEncodingScheme];
         setKeyValueExpression();
     }
 
@@ -105,7 +121,8 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         WritableUtils.writeVInt(output, decodedColumnQualifier);
-        WritableUtils.writeVInt(output, encodingScheme.ordinal());
+        WritableUtils.writeVInt(output, -encodingScheme.ordinal()); //negative since PHOENIX-4432
+        WritableUtils.writeVInt(output, immutableStorageScheme.getSerializedMetadataValue());
     }
     
     public KeyValueColumnExpression getKeyValueExpression() {

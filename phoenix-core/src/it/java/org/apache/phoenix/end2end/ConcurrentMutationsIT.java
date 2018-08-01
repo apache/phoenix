@@ -65,6 +65,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 
     private static class MyClock extends EnvironmentEdge {
         public volatile long time;
+        boolean shouldAdvance = true;
 
         public MyClock (long time) {
             this.time = time;
@@ -72,7 +73,14 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 
         @Override
         public long currentTime() {
-            return time;
+            if (shouldAdvance) {
+                return time++;
+            } else {
+                return time;
+            }
+        }
+        public void setAdvance(boolean val) {
+            shouldAdvance = val;
         }
     }
 
@@ -421,21 +429,15 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-            long ts = 1000;
-            clock.time = ts;
-            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
             conn.close();
 
-            ts = 1010;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
             conn.close();
 
-            ts = 1020;
-            clock.time = ts;
-            conn = DriverManager.getConnection(getUrl(), props);        
+            conn = DriverManager.getConnection(getUrl(), props);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
             stmt.setTimestamp(1, new Timestamp(1000L));
             stmt.executeUpdate();
@@ -443,8 +445,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            ts = 1040;
-            clock.time = ts;
+            clock.setAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
             expectedTimestamp = null;
@@ -454,10 +455,9 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             stmt.setTimestamp(1, new Timestamp(3000L));
             stmt.executeUpdate();
             conn.commit();
+            clock.setAdvance(true);
             conn.close();
 
-            ts = 1050;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
 
             IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);        
@@ -488,21 +488,15 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-            long ts = 1000;
-            clock.time = ts;
-            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn.close();
 
-            ts = 1010;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
             conn.close();
 
-            ts = 1020;
-            clock.time = ts;
-            conn = DriverManager.getConnection(getUrl(), props);        
+            conn = DriverManager.getConnection(getUrl(), props);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
             stmt.setTimestamp(1, new Timestamp(1000L));
             stmt.executeUpdate();
@@ -510,8 +504,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            ts = 1040;
-            clock.time = ts;
+            clock.setAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
             expectedTimestamp = null;
@@ -521,11 +514,10 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             expectedTimestamp = new Timestamp(3000L);
             stmt.setTimestamp(1, expectedTimestamp);
             stmt.executeUpdate();
+            clock.setAdvance(true);
             conn.commit();
             conn.close();
 
-            ts = 1050;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
 
             IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);        
@@ -629,16 +621,10 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             Connection conn = DriverManager.getConnection(getUrl(), props);     
             conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, A.V VARCHAR, B.V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn.close();
-
-            ts = 1010;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
             conn.close();
-
-            ts = 1020;
-            clock.time = ts;
-            conn = DriverManager.getConnection(getUrl(), props);        
+            conn = DriverManager.getConnection(getUrl(), props);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0','1')");
             stmt.setTimestamp(1, new Timestamp(1000L));
             stmt.executeUpdate();
@@ -646,21 +632,19 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            ts = 1040;
-            clock.time = ts;
+            clock.setAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
             stmt.executeUpdate();
             conn.commit();
-            expectedTimestamp = new Timestamp(3000L);
+            expectedTimestamp = new Timestamp(6000L);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null,'3')");
             stmt.setTimestamp(1, expectedTimestamp);
             stmt.executeUpdate();
             conn.commit();
+            clock.setAdvance(true);
             conn.close();
 
-            ts = 1050;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
 
             long rowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
@@ -680,21 +664,15 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-            long ts = 1000;
-            clock.time = ts;
-            Connection conn = DriverManager.getConnection(getUrl(), props);     
+            Connection conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 CHAR(2) NOT NULL, k2 CHAR(2) NOT NULL, ts TIMESTAMP, V VARCHAR, V2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0, STORE_NULLS=true");
             conn.close();
 
-            ts = 1010;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(k2,k1,ts) INCLUDE (V, v2)");
             conn.close();
 
-            ts = 1020;
-            clock.time = ts;
-            conn = DriverManager.getConnection(getUrl(), props);        
+            conn = DriverManager.getConnection(getUrl(), props);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, '0')");
             stmt.setTimestamp(1, new Timestamp(1000L));
             stmt.executeUpdate();
@@ -702,8 +680,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             conn.close();
 
             Timestamp expectedTimestamp;
-            ts = 1040;
-            clock.time = ts;
+            clock.setAdvance(false);
             conn = DriverManager.getConnection(getUrl(), props);
             expectedTimestamp = new Timestamp(3000L);
             stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
@@ -713,10 +690,8 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE (K1,K2) = ('aa','aa')");
             stmt.executeUpdate();
             conn.commit();
+            clock.setAdvance(true);
             conn.close();
-
-            ts = 1050;
-            clock.time = ts;
             conn = DriverManager.getConnection(getUrl(), props);
 
             long rowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);

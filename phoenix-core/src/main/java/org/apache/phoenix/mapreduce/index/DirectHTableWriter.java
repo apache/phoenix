@@ -22,8 +22,11 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +39,7 @@ public class DirectHTableWriter {
 
     private Configuration conf = null;
 
-    private HTable table;
+    private Table table;
 
     public DirectHTableWriter(Configuration otherConf) {
         setConf(otherConf);
@@ -51,8 +54,8 @@ public class DirectHTableWriter {
         }
 
         try {
-            this.table = new HTable(this.conf, tableName);
-            this.table.setAutoFlush(false, true);
+            Connection conn = ConnectionFactory.createConnection(this.conf);
+            this.table = conn.getTable(TableName.valueOf(tableName));
             LOG.info("Created table instance for " + tableName);
         } catch (IOException e) {
             LOG.error("IOException : ", e);
@@ -69,7 +72,7 @@ public class DirectHTableWriter {
         return conf;
     }
 
-    protected HTable getTable() {
+    protected Table getTable() {
         return table;
     }
 

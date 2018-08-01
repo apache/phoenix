@@ -36,13 +36,16 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Sets;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
@@ -56,6 +59,7 @@ import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -63,13 +67,15 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import com.google.common.collect.Sets;
 
 /**
  * Tests for the {@link IndexScrutinyTool}
@@ -102,12 +108,15 @@ public class IndexScrutinyToolIT extends BaseTest {
     private PreparedStatement indexTableUpsertStmt;
 
     private long testTime;
+    private Properties props;
 
     @Parameterized.Parameters
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
             { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)", "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" },
-            { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2", "CREATE INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" } });
+            { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2", "CREATE INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" },
+            { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2", "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" }
+            });
     }
 
     public IndexScrutinyToolIT(String dataTableDdl, String indexTableDdl) {
@@ -117,8 +126,11 @@ public class IndexScrutinyToolIT extends BaseTest {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        Map<String, String> serverProps = Maps.newHashMap();
+        //disable major compactions
+        serverProps.put(HConstants.MAJOR_COMPACTION_PERIOD, "0");
+        Map<String, String> clientProps = Maps.newHashMap();
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
     /**
@@ -130,14 +142,15 @@ public class IndexScrutinyToolIT extends BaseTest {
         createTestTable(getUrl(), String.format(dataTableDdl, dataTableFullName));
         createTestTable(getUrl(),
             String.format(indexTableDdl, indexTableName, dataTableFullName));
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
         String dataTableUpsert = String.format(UPSERT_SQL, dataTableFullName);
         dataTableUpsertStmt = conn.prepareStatement(dataTableUpsert);
         String indexTableUpsert = String.format(INDEX_UPSERT_SQL, indexTableFullName);
         indexTableUpsertStmt = conn.prepareStatement(indexTableUpsert);
         conn.setAutoCommit(false);
-        testTime = System.currentTimeMillis();
+        testTime = EnvironmentEdgeManager.currentTimeMillis() - 1000;
+
     }
 
     @After
@@ -171,6 +184,78 @@ public class IndexScrutinyToolIT extends BaseTest {
         // make sure row counts weren't modified by scrutiny
         assertEquals(numDataRows, countRows(dataTableFullName));
         assertEquals(numIndexRows, countRows(indexTableFullName));
+    }
+
+    /**
+     * Tests running a scrutiny while updates and deletes are happening.
+     * Since CURRENT_SCN is set, the scrutiny shouldn't report any issue.
+     */
+    @Test
+    @Ignore("PHOENIX-4378 Unable to set KEEP_DELETED_CELLS to true on RS scanner")
+    public void testScrutinyWhileTakingWrites() throws Exception {
+        int id = 0;
+        while (id < 1000) {
+            int index = 1;
+            dataTableUpsertStmt.setInt(index++, id);
+            dataTableUpsertStmt.setString(index++, "name-" + id);
+            dataTableUpsertStmt.setInt(index++, id);
+            dataTableUpsertStmt.setTimestamp(index++, new Timestamp(testTime));
+            dataTableUpsertStmt.executeUpdate();
+            id++;
+        }
+        conn.commit();
+
+        //CURRENT_SCN for scrutiny
+        long scrutinyTS = EnvironmentEdgeManager.currentTimeMillis();
+
+        // launch background upserts and deletes
+        final Random random = new Random(0);
+        Runnable backgroundUpserts = new Runnable() {
+            @Override
+            public void run() {
+                int idToUpsert = random.nextInt(1000);
+                try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                    PreparedStatement dataPS =
+                            conn.prepareStatement(String.format(UPSERT_SQL, dataTableFullName));
+                    upsertRow(dataPS, idToUpsert, "modified-" + idToUpsert, idToUpsert + 1000);
+                    conn.commit();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+        Runnable backgroundDeletes = new Runnable() {
+            @Override
+            public void run() {
+                int idToDelete = random.nextInt(1000);
+                try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                    String deleteSql =
+                            String.format(DELETE_SQL, indexTableFullName) + "WHERE \":ID\"="
+                                    + idToDelete;
+                    conn.createStatement().executeUpdate(deleteSql);
+                    conn.commit();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+        ScheduledExecutorService scheduledThreadPool = Executors.newScheduledThreadPool(2);
+        scheduledThreadPool.scheduleWithFixedDelay(backgroundUpserts, 200, 200,
+            TimeUnit.MILLISECONDS);
+        scheduledThreadPool.scheduleWithFixedDelay(backgroundDeletes, 200, 200,
+            TimeUnit.MILLISECONDS);
+
+        // scrutiny should report everything as ok
+        List<Job> completedJobs =
+                runScrutinyCurrentSCN(schemaName, dataTableName, indexTableName,
+                    scrutinyTS);
+        Job job = completedJobs.get(0);
+        assertTrue(job.isSuccessful());
+        Counters counters = job.getCounters();
+        assertEquals(1000, getCounterValue(counters, VALID_ROW_COUNT));
+        assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
+        scheduledThreadPool.shutdown();
+        scheduledThreadPool.awaitTermination(10000, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -257,8 +342,7 @@ public class IndexScrutinyToolIT extends BaseTest {
 
         // run scrutiny with batch size of 10
         List<Job> completedJobs =
-                runScrutiny(schemaName, dataTableName, indexTableName, System.currentTimeMillis(),
-                    10L);
+                runScrutiny(schemaName, dataTableName, indexTableName, 10L);
         Job job = completedJobs.get(0);
         assertTrue(job.isSuccessful());
         Counters counters = job.getCounters();
@@ -305,8 +389,8 @@ public class IndexScrutinyToolIT extends BaseTest {
         conn.commit();
 
         List<Job> completedJobs =
-                runScrutiny(schemaName, dataTableName, indexTableName, System.currentTimeMillis(),
-                    10L, SourceTable.INDEX_TABLE_SOURCE);
+                runScrutiny(schemaName, dataTableName, indexTableName, 10L,
+                    SourceTable.INDEX_TABLE_SOURCE);
         Job job = completedJobs.get(0);
         assertTrue(job.isSuccessful());
         Counters counters = job.getCounters();
@@ -334,8 +418,8 @@ public class IndexScrutinyToolIT extends BaseTest {
         conn.commit();
 
         List<Job> completedJobs =
-                runScrutiny(schemaName, dataTableName, indexTableName, System.currentTimeMillis(),
-                    10L, SourceTable.BOTH);
+                runScrutiny(schemaName, dataTableName, indexTableName, 10L,
+                    SourceTable.BOTH);
         assertEquals(2, completedJobs.size());
         for (Job job : completedJobs) {
             assertTrue(job.isSuccessful());
@@ -353,8 +437,8 @@ public class IndexScrutinyToolIT extends BaseTest {
         insertOneValid_OneBadVal_OneMissingTarget();
 
         String[] argValues =
-                getArgValues(schemaName, dataTableName, indexTableName, System.currentTimeMillis(),
-                    10L, SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.FILE, null);
+                getArgValues(schemaName, dataTableName, indexTableName, 10L,
+                    SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.FILE, null);
         runScrutiny(argValues);
 
         // check the output files
@@ -404,8 +488,8 @@ public class IndexScrutinyToolIT extends BaseTest {
     public void testOutputInvalidRowsToTable() throws Exception {
         insertOneValid_OneBadVal_OneMissingTarget();
         String[] argValues =
-                getArgValues(schemaName, dataTableName, indexTableName, System.currentTimeMillis(),
-                    10L, SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.TABLE, null);
+                getArgValues(schemaName, dataTableName, indexTableName, 10L,
+                    SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.TABLE, null);
         List<Job> completedJobs = runScrutiny(argValues);
 
         // check that the output table contains the invalid rows
@@ -448,8 +532,8 @@ public class IndexScrutinyToolIT extends BaseTest {
         insertOneValid_OneBadVal_OneMissingTarget();
         // set max to 1.  There are two bad rows, but only 1 should get written to output table
         String[] argValues =
-                getArgValues(schemaName, dataTableName, indexTableName, System.currentTimeMillis(),
-                    10L, SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.TABLE, new Long(1));
+                getArgValues(schemaName, dataTableName, indexTableName, 10L,
+                    SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.TABLE, new Long(1));
         List<Job> completedJobs = runScrutiny(argValues);
         long scrutinyTimeMillis =
                 PhoenixConfigurationUtil
@@ -565,9 +649,16 @@ public class IndexScrutinyToolIT extends BaseTest {
         return counters.findCounter(counter).getValue();
     }
 
-    private String[] getArgValues(String schemaName, String dataTable, String indxTable, long ts,
-            Long batchSize, SourceTable sourceTable, boolean outputInvalidRows,
-            OutputFormat outputFormat, Long maxOutputRows) {
+    private String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
+            SourceTable sourceTable, boolean outputInvalidRows, OutputFormat outputFormat,
+            Long maxOutputRows) {
+        return getArgValues(schemaName, dataTable, indxTable, batchSize, sourceTable,
+            outputInvalidRows, outputFormat, maxOutputRows, Long.MAX_VALUE);
+    }
+
+    private String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
+            SourceTable sourceTable, boolean outputInvalidRows, OutputFormat outputFormat,
+            Long maxOutputRows, Long scrutinyTs) {
         final List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("-s");
@@ -589,7 +680,7 @@ public class IndexScrutinyToolIT extends BaseTest {
             args.add(outputDir);
         }
         args.add("-t");
-        args.add(String.valueOf(ts));
+        args.add(String.valueOf(scrutinyTs));
         args.add("-run-foreground");
         if (batchSize != null) {
             args.add("-b");
@@ -617,26 +708,24 @@ public class IndexScrutinyToolIT extends BaseTest {
         return args.toArray(new String[0]);
     }
 
-    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName)
-            throws Exception {
-        return runScrutiny(schemaName, dataTableName, indexTableName, System.currentTimeMillis());
+    private List<Job> runScrutinyCurrentSCN(String schemaName, String dataTableName, String indexTableName, Long scrutinyTS) throws Exception {
+        return runScrutiny(getArgValues(schemaName, dataTableName, indexTableName, null, SourceTable.BOTH, false, null, null, scrutinyTS));
+    }
+
+    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName) throws Exception {
+        return runScrutiny(schemaName, dataTableName, indexTableName, null, null);
     }
 
     private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
-            long ts) throws Exception {
-        return runScrutiny(schemaName, dataTableName, indexTableName, ts, null, null);
+            Long batchSize) throws Exception {
+        return runScrutiny(schemaName, dataTableName, indexTableName, batchSize, null);
     }
 
     private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
-            long ts, Long batchSize) throws Exception {
-        return runScrutiny(schemaName, dataTableName, indexTableName, ts, batchSize, null);
-    }
-
-    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
-            long ts, Long batchSize, SourceTable sourceTable) throws Exception {
+            Long batchSize, SourceTable sourceTable) throws Exception {
         final String[] cmdArgs =
-                getArgValues(schemaName, dataTableName, indexTableName, ts, batchSize, sourceTable,
-                    false, null, null);
+                getArgValues(schemaName, dataTableName, indexTableName, batchSize, sourceTable, false,
+                    null, null, Long.MAX_VALUE);
         return runScrutiny(cmdArgs);
     }
 
@@ -646,6 +735,9 @@ public class IndexScrutinyToolIT extends BaseTest {
         scrutiny.setConf(conf);
         int status = scrutiny.run(cmdArgs);
         assertEquals(0, status);
+        for (Job job : scrutiny.getJobs()) {
+            assertTrue(job.waitForCompletion(true));
+        }
         return scrutiny.getJobs();
     }
 

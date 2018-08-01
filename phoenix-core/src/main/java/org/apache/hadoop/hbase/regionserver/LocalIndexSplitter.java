@@ -17,8 +17,8 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
-public class LocalIndexSplitter extends BaseRegionObserver {
+public class LocalIndexSplitter implements RegionObserver {
     
 }

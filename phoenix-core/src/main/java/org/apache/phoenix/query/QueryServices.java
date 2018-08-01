@@ -103,6 +103,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String GROUPBY_SPILL_FILES_ATTRIB = "phoenix.groupby.spillFiles";
     public static final String GROUPBY_MAX_CACHE_SIZE_ATTRIB = "phoenix.groupby.maxCacheSize";
     public static final String GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB = "phoenix.groupby.estimatedDistinctValues";
+    public static final String AGGREGATE_CHUNK_SIZE_INCREASE_ATTRIB = "phoenix.aggregate.chunk_size_increase";
 
     public static final String CALL_QUEUE_PRODUCER_ATTRIB_NAME = "CALL_QUEUE_PRODUCER";
 
@@ -144,6 +145,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE = "phoenix.index.rebuild.batch.perTable";
     // If index disable timestamp is older than this threshold, then index rebuild task won't attempt to rebuild it
     public static final String INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD = "phoenix.index.rebuild.disabletimestamp.threshold";
+    // threshold number of ms an index has been in PENDING_DISABLE, beyond which we consider it disabled
+    public static final String INDEX_PENDING_DISABLE_THRESHOLD = "phoenix.index.pending.disable.threshold";
 
     // Block writes to data table when index write fails
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
@@ -194,6 +197,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";
     // Maximum size in bytes taken up by cached table stats in the client
     public static final String STATS_MAX_CACHE_SIZE = "phoenix.stats.cache.maxSize";
+    public static final String LOG_SALT_BUCKETS_ATTRIB = "phoenix.log.saltBuckets";
 
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
     public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";
@@ -202,9 +206,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = "hbase.online.schema.update.enable";
     public static final String NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.retries";
     public static final String DELAY_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.delay";
-    public static final String DEFAULT_KEEP_DELETED_CELLS_ATTRIB = "phoenix.table.default.keep.deleted.cells";
     public static final String DEFAULT_STORE_NULLS_ATTRIB = "phoenix.table.default.store.nulls";
     public static final String DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB = "phoenix.table.istransactional.default";
+    public static final String DEFAULT_TRANSACTION_PROVIDER_ATTRIB = "phoenix.table.transaction.provider.default";
     public static final String GLOBAL_METRICS_ENABLED = "phoenix.query.global.metrics.enabled";
     
     // Transaction related configs
@@ -233,7 +237,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUERY_SERVER_ENV_LOGGING_ATTRIB = "phoenix.queryserver.envvars.logging.disabled";
     public static final String QUERY_SERVER_ENV_LOGGING_SKIPWORDS_ATTRIB = "phoenix.queryserver.envvars.logging.skipwords";
     public static final String QUERY_SERVER_KEYTAB_FILENAME_ATTRIB = "phoenix.queryserver.keytab.file";
+    public static final String QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB = "phoenix.queryserver.http.keytab.file";
     public static final String QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB = "phoenix.queryserver.kerberos.principal";
+    public static final String QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB_LEGACY = "phoenix.queryserver.kerberos.http.principal";
+    public static final String QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB = "phoenix.queryserver.http.kerberos.principal";
     public static final String QUERY_SERVER_DNS_NAMESERVER_ATTRIB = "phoenix.queryserver.dns.nameserver";
     public static final String QUERY_SERVER_DNS_INTERFACE_ATTRIB = "phoenix.queryserver.dns.interface";
     public static final String QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB = "hbase.security.authentication";
@@ -245,6 +252,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR_ATTRIB = "phoenix.queryserver.withRemoteUserExtractor";
     public static final String QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "phoenix.queryserver.remoteUserExtractor.param";
     public static final String QUERY_SERVER_DISABLE_KERBEROS_LOGIN = "phoenix.queryserver.disable.kerberos.login";
+
+    // metadata configs
+    public static final String DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB = "phoenix.system.default.keep.deleted.cells";
+    public static final String DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB = "phoenix.system.default.max.versions";
 
     public static final String RENEW_LEASE_ENABLED = "phoenix.scanner.lease.renew.enabled";
     public static final String RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS = "phoenix.scanner.lease.renew.interval";
@@ -260,6 +271,8 @@ public interface QueryServices extends SQLCloseable {
     
     //currently BASE64 and ASCII is supported
     public static final String UPLOAD_BINARY_DATA_TYPE_ENCODING = "phoenix.upload.binaryDataType.encoding";
+    // Toggle for server-written updates to SYSTEM.CATALOG
+    public static final String PHOENIX_ACLS_ENABLED = "phoenix.acls.enabled";
 
     public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
 
@@ -291,6 +304,16 @@ public interface QueryServices extends SQLCloseable {
 
     //Update Cache Frequency default config attribute
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";
+
+    // Whether to enable cost-based-decision in the query optimizer
+    public static final String COST_BASED_OPTIMIZER_ENABLED = "phoenix.costbased.optimizer.enabled";
+    public static final String SMALL_SCAN_THRESHOLD_ATTRIB = "phoenix.query.smallScanThreshold";
+    public static final String LOG_LEVEL = "phoenix.log.level";
+    public static final String LOG_BUFFER_SIZE = "phoenix.log.buffer.size";
+    public static final String LOG_BUFFER_WAIT_STRATEGY = "phoenix.log.wait.strategy";
+    public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
+
+	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
 
     /**
      * Get executor service used for parallel scans

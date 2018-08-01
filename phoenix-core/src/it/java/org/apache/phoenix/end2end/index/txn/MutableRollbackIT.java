@@ -33,7 +33,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -508,9 +508,9 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void dropTable(HBaseAdmin admin, Connection conn, String tableName) throws SQLException, IOException {
+    private void dropTable(Admin admin, Connection conn, String tableName) throws SQLException, IOException {
         conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
-        if(admin.tableExists(tableName)) {
+        if(admin.tableExists(TableName.valueOf(tableName))) {
             admin.disableTable(TableName.valueOf(tableName));
             admin.deleteTable(TableName.valueOf(tableName));
         } 

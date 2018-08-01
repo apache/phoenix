@@ -27,12 +27,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -165,14 +166,14 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         admin.createNamespace(NamespaceDescriptor.create(schema).build());
-        admin.createTable(new HTableDescriptor(fullTablename)
-                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
+        admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(fullTablename)).
+                addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
         Put put = new Put(PVarchar.INSTANCE.toBytes(fullTablename));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-        HTable phoenixSchematable = new HTable(admin.getConfiguration(), fullTablename);
+        Table phoenixSchematable = admin.getConnection().getTable(TableName.valueOf(fullTablename));
         phoenixSchematable.put(put);
         phoenixSchematable.close();
         conn.createStatement().execute("CREATE VIEW " + tableName + " (tablename VARCHAR PRIMARY KEY)");

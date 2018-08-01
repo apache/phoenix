@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.covered;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
 
 /**
@@ -25,9 +25,9 @@ import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
  */
 public interface KeyValueStore {
 
-  public void add(KeyValue kv, boolean overwrite);
+  public void add(Cell kv, boolean overwrite);
 
   public ReseekableScanner getScanner();
 
-  public void rollback(KeyValue kv);
+  public void rollback(Cell kv);
 }

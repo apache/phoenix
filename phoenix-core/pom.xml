@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.13.0-SNAPSHOT</version>
+    <version>5.1.0-HBase-2.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-core</artifactId>
   <name>Phoenix Core</name>
@@ -170,34 +170,6 @@
         </configuration>
       </plugin>
       <plugin>
-        <!--Make it so assembly:single does nothing in here -->
-        <artifactId>maven-assembly-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>core</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <attach>false</attach>
-              <finalName>phoenix</finalName>
-              <archive>
-                <index>true</index>
-                <manifest>
-                  <addClasspath>true</addClasspath>
-                  <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                  <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                </manifest>
-              </archive>
-              <descriptors>
-                <descriptor>src/build/phoenix-core.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
-        </executions>      
-      </plugin>
-      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
@@ -249,7 +221,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-1.3</artifactId>
+      <artifactId>tephra-hbase-compat-2.0</artifactId>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->
@@ -345,14 +317,12 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.lmax</groupId>
-      <artifactId>disruptor</artifactId>
-      <version>3.2.0</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.apache.htrace</groupId>
       <artifactId>htrace-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-cli</groupId>
+      <artifactId>commons-cli</artifactId>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
@@ -388,6 +358,10 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-mapreduce</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-common</artifactId>
     </dependency>
     <dependency>
@@ -413,6 +387,27 @@
           <artifactId>xom</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <!-- TODO remove after HBASE-19256 -->
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-http</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-webapp</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -471,5 +466,14 @@
       <artifactId>stream</artifactId>
       <version>${stream.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.salesforce.i18n</groupId>
+      <artifactId>i18n-util</artifactId>
+      <version>${i18n-util.version}</version>
+    </dependency>
+       <dependency>
+        <groupId>com.lmax</groupId>
+        <artifactId>disruptor</artifactId>
+      </dependency>
   </dependencies>
 </project>

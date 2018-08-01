@@ -18,9 +18,13 @@
 package org.apache.phoenix.exception;
 
 
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+
 public class UpgradeInProgressException extends RetriableUpgradeException {
     public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {
-        super("Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo
+        super((upgradeFrom.equals(MetaDataProtocol.MIGRATION_IN_PROGRESS) ?
+                "System Tables are concurrently being migrated to system namespace" :
+                "Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo)
                 + ". Please retry establishing connection.", SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS
                 .getSQLState(), SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS.getErrorCode());
     }

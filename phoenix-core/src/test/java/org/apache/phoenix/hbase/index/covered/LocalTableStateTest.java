@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -39,6 +40,8 @@ import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -57,22 +60,27 @@ public class LocalTableStateTest {
   private static final IndexMetaData indexMetaData = new IndexMetaData() {
 
     @Override
-    public boolean isImmutableRows() {
-        return false;
-    }
-
-    @Override
     public ReplayWrite getReplayWrite() {
         return null;
     }
+
+    @Override
+    public boolean requiresPriorRowState(Mutation m) {
+        return true;
+    }
       
+    @Override
+    public int getClientVersion() {
+        return ScanUtil.UNKNOWN_CLIENT_VERSION;
+    }
+
   };
 
   @SuppressWarnings("unchecked")
   @Test
   public void testCorrectOrderingWithLazyLoadingColumns() throws Exception {
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     Configuration conf = new Configuration(false);
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -96,9 +104,9 @@ public class LocalTableStateTest {
 
 
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -120,18 +128,23 @@ public class LocalTableStateTest {
       IndexMetaData indexMetaData = new IndexMetaData() {
 
           @Override
-          public boolean isImmutableRows() {
-              return false;
-          }
-
-          @Override
           public ReplayWrite getReplayWrite() {
               return null;
           }
+
+        @Override
+        public boolean requiresPriorRowState(Mutation m) {
+            return true;
+        }
             
-        };
+        @Override
+        public int getClientVersion() {
+            return ScanUtil.UNKNOWN_CLIENT_VERSION;
+        }
+
+    };
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     Configuration conf = new Configuration(false);
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -142,9 +155,9 @@ public class LocalTableStateTest {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
 
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -157,18 +170,23 @@ public class LocalTableStateTest {
       IndexMetaData indexMetaData = new IndexMetaData() {
 
           @Override
-          public boolean isImmutableRows() {
-              return true;
-          }
-
-          @Override
           public ReplayWrite getReplayWrite() {
               return null;
           }
+
+        @Override
+        public boolean requiresPriorRowState(Mutation m) {
+            return false;
+        }
             
-        };
+        @Override
+        public int getClientVersion() {
+            return ScanUtil.UNKNOWN_CLIENT_VERSION;
+        }
+
+    };
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     Configuration conf = new Configuration(false);
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -179,9 +197,9 @@ public class LocalTableStateTest {
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
 
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     //add the kvs from the mutation
-    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+    table.addPendingUpdates(m.get(fam, qual));
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -200,7 +218,7 @@ public class LocalTableStateTest {
   @SuppressWarnings("unchecked")
   public void testCorrectRollback() throws Exception {
     Put m = new Put(row);
-    m.add(fam, qual, ts, val);
+    m.addColumn(fam, qual, ts, val);
     // setup mocks
     RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
 
@@ -221,9 +239,9 @@ public class LocalTableStateTest {
       }
     });
     LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(env, state, m);
+    LocalTableState table = new LocalTableState(state, m);
     // add the kvs from the mutation
-    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
+    KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(m.get(fam, qual).get(0));
     kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 
@@ -268,8 +286,8 @@ public class LocalTableStateTest {
     });
     LocalHBaseState state = new LocalTable(env);
     Put pendingUpdate = new Put(row);
-    pendingUpdate.add(fam, qual, ts, val);
-    LocalTableState table = new LocalTableState(env, state, pendingUpdate);
+    pendingUpdate.addColumn(fam, qual, ts, val);
+    LocalTableState table = new LocalTableState(state, pendingUpdate);
 
     // do the lookup for the given column
     ColumnReference col = new ColumnReference(fam, qual);

@@ -28,6 +28,8 @@ public interface CombinableMetric extends Metric {
     String getPublishString();
 
     CombinableMetric combine(CombinableMetric metric);
+    
+    CombinableMetric clone();
 
     public class NoOpRequestMetric implements CombinableMetric {
 
@@ -70,7 +72,14 @@ public interface CombinableMetric extends Metric {
 
         @Override
         public void decrement() {}
+        
+        @Override
+        public CombinableMetric clone(){
+            return INSTANCE;
+        }
 
     }
+
+    
 
 }
