@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.14.0-cdh5.13.2</version>
+    <version>4.14.1-cdh5.13.2</version>
   </parent>
   <artifactId>phoenix-parcel</artifactId>
   <name>Phoenix Parcels for CDH</name>
@@ -38,7 +38,7 @@
     <source.skip>true</source.skip>
     <top.dir>${project.basedir}/..</top.dir>
     <maven.test.skip>true</maven.test.skip>
-    <parcel.patch.count>3</parcel.patch.count>
+    <parcel.patch.count>0</parcel.patch.count>
     <parcel.release>0.${parcel.patch.count}</parcel.release>
     <parcel.folder>APACHE_PHOENIX-${phoenix.version}-${cdh.version}.p${parcel.release}</parcel.folder>
     <parcel.file>${parcel.folder}.parcel</parcel.file>
