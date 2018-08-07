@@ -352,6 +352,11 @@ public class TestUtil {
         return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
     }
 
+    public static Expression substr2(Expression e, Object offset) {
+
+        return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(null)));
+    }
+
     public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
         return  new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
     }
