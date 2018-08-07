@@ -21,12 +21,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class LoggingPhoenixResultSet extends DelegateResultSet {
     
-    private static final Logger logger = LoggerFactory.getLogger(LoggingPhoenixResultSet.class);
     private PhoenixMetricsLog phoenixMetricsLog;
     
     public LoggingPhoenixResultSet(ResultSet rs, PhoenixMetricsLog phoenixMetricsLog) {
@@ -36,8 +33,8 @@ public class LoggingPhoenixResultSet extends DelegateResultSet {
     
     @Override
     public void close() throws SQLException {
-        phoenixMetricsLog.logOverAllReadRequestMetrics(logger, PhoenixRuntime.getOverAllReadRequestMetricInfo(rs));
-        phoenixMetricsLog.logRequestReadMetrics(logger, PhoenixRuntime.getRequestReadMetricInfo(rs));
+        phoenixMetricsLog.logOverAllReadRequestMetrics(PhoenixRuntime.getOverAllReadRequestMetricInfo(rs));
+        phoenixMetricsLog.logRequestReadMetrics(PhoenixRuntime.getRequestReadMetricInfo(rs));
         PhoenixRuntime.resetMetrics(rs);
         super.close();
     }
