@@ -76,7 +76,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
-import org.slf4j.Logger;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -1046,25 +1045,25 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         LoggingPhoenixConnection protectedConn =
                 new LoggingPhoenixConnection(conn, new PhoenixMetricsLog() {
                     @Override
-                    public void logOverAllReadRequestMetrics(Logger logger,
+                    public void logOverAllReadRequestMetrics(
                             Map<MetricType, Long> overAllQueryMetrics) {
                         overAllQueryMetricsMap.putAll(overAllQueryMetrics);
                     }
 
                     @Override
-                    public void logRequestReadMetrics(Logger logger,
+                    public void logRequestReadMetrics(
                             Map<String, Map<MetricType, Long>> requestReadMetrics) {
                         requestReadMetricsMap.putAll(requestReadMetrics);
                     }
 
                     @Override
-                    public void logWriteMetricsfoForMutations(Logger logger,
+                    public void logWriteMetricsfoForMutations(
                             Map<String, Map<MetricType, Long>> mutationWriteMetrics) {
                         mutationWriteMetricsMap.putAll(mutationWriteMetrics);
                     }
 
                     @Override
-                    public void logReadMetricInfoForMutationsSinceLastReset(Logger logger,
+                    public void logReadMetricInfoForMutationsSinceLastReset(
                             Map<String, Map<MetricType, Long>> mutationReadMetrics) {
                         mutationReadMetricsMap.putAll(mutationReadMetrics);
                     }
