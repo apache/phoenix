@@ -29,6 +29,7 @@ import static org.apache.phoenix.util.TestUtil.like;
 import static org.apache.phoenix.util.TestUtil.not;
 import static org.apache.phoenix.util.TestUtil.rowKeyFilter;
 import static org.apache.phoenix.util.TestUtil.substr;
+import static org.apache.phoenix.util.TestUtil.substr2;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -62,6 +63,7 @@ import org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.SingleKeyS
 import org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.SlotsIterator;
 import org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.TrailingRangeIterator;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
@@ -587,6 +589,16 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(startRow), scan.getStopRow());
+    }
+
+    @Test
+    public void testSubstrExpressionWithoutLengthVariable() {
+        assertEquals("SUBSTR(ENTITY_ID, 1)",((SubstrFunction)substr2(ENTITY_ID,1)).toString());
+    }
+
+    @Test
+    public void testSubstrExpressionWithLengthVariable() {
+        assertEquals("SUBSTR(ENTITY_ID, 1, 10)",((SubstrFunction)substr(ENTITY_ID,1, 10)).toString());
     }
 
     @Test
