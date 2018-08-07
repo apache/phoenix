@@ -23,18 +23,19 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class LoggingPhoenixConnection extends DelegateConnection {
 
-    private static final Logger logger = LoggerFactory.getLogger(LoggingPhoenixResultSet.class);
     private PhoenixMetricsLog phoenixMetricsLog;
 
     public LoggingPhoenixConnection(Connection conn,
             PhoenixMetricsLog phoenixMetricsLog) {
         super(conn);
         this.phoenixMetricsLog = phoenixMetricsLog;
+    }
+
+    public PhoenixMetricsLog getPhoenixMetricsLog() {
+        return phoenixMetricsLog;
     }
 
     @Override
@@ -101,8 +102,8 @@ public class LoggingPhoenixConnection extends DelegateConnection {
     @Override
     public void commit() throws SQLException {
         super.commit();
-        phoenixMetricsLog.logWriteMetricsfoForMutations(logger, PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn));
-        phoenixMetricsLog.logReadMetricInfoForMutationsSinceLastReset(logger, PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn));
+        phoenixMetricsLog.logWriteMetricsfoForMutations(PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn));
+        phoenixMetricsLog.logReadMetricInfoForMutationsSinceLastReset(PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn));
         PhoenixRuntime.resetMetrics(conn);
     }
 
