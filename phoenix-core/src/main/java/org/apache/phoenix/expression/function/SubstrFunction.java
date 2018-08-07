@@ -211,5 +211,25 @@ public class SubstrFunction extends PrefixFunction {
     public String getName() {
         return NAME;
     }
+
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder(getName() + "(");
+        if (children.size()==0)
+            return buf.append(")").toString();
+        if (hasLengthExpression) {
+            buf.append(getStrExpression());
+            buf.append(", ");
+            buf.append(getOffsetExpression());
+            buf.append(", ");
+            buf.append(getLengthExpression());
+         } else {
+            buf.append(getStrExpression());
+            buf.append(", ");
+            buf.append(getOffsetExpression());
+        }
+        buf.append(")");
+        return buf.toString();
+    }
     
 }
