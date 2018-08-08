@@ -395,7 +395,10 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                         .getReader().getHFileReader().hasMVCCInfo(), readPt));
             }
         }
-        keyValueScanners.addAll(((HStore) store).memstore.getScanners(readPt));
+        List<KeyValueScanner> memstoreScanners = ((HStore) store).memstore.getScanners(readPt);
+        if(memstoreScanners != null) {
+            keyValueScanners.addAll(memstoreScanners);
+        }
         return keyValueScanners;
     }
 }
