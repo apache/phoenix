@@ -273,10 +273,15 @@ public class InListExpression extends BaseSingleExpression {
         PDataType type = firstChild.getDataType();
         StringBuilder buf = new StringBuilder(firstChild + " IN (");
         for (ImmutableBytesPtr value : values) {
-            if (firstChild.getSortOrder() != null) {
-                type.coerceBytes(value, type, firstChild.getSortOrder(), SortOrder.getDefault());
+            ImmutableBytesWritable currValue = value;
+            if (firstChild.getSortOrder() != null && !firstChild.getSortOrder().equals(SortOrder.getDefault())) {
+                // if we have to invert the bytes create a new ImmutableBytesWritable so that the
+                // original value is not changed
+                currValue = new ImmutableBytesWritable(value);
+                type.coerceBytes(currValue, type, firstChild.getSortOrder(),
+                    SortOrder.getDefault());
             }
-            buf.append(type.toStringLiteral(value, null));
+            buf.append(type.toStringLiteral(currValue, null));
             buf.append(',');
             if (buf.length() >= maxToStringLen) {
                 buf.append("... ");
