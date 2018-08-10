@@ -273,10 +273,11 @@ public class InListExpression extends BaseSingleExpression {
         PDataType type = firstChild.getDataType();
         StringBuilder buf = new StringBuilder(firstChild + " IN (");
         for (ImmutableBytesPtr value : values) {
+            ImmutableBytesPtr valueCopy = new ImmutableBytesPtr(value.copyBytes());
             if (firstChild.getSortOrder() != null) {
-                type.coerceBytes(value, type, firstChild.getSortOrder(), SortOrder.getDefault());
+                type.coerceBytes(valueCopy, type, firstChild.getSortOrder(), SortOrder.getDefault());
             }
-            buf.append(type.toStringLiteral(value, null));
+            buf.append(type.toStringLiteral(valueCopy, null));
             buf.append(',');
             if (buf.length() >= maxToStringLen) {
                 buf.append("... ");
