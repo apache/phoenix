@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static java.util.Collections.singletonList;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -27,6 +28,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -46,6 +48,8 @@ import com.google.common.collect.Lists;
 
 
 public class InListIT extends ParallelStatsDisabledIT {
+    
+    private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1";
 
     @Test
     public void testLeadingPKWithTrailingRVC() throws Exception {
@@ -480,6 +484,74 @@ public class InListIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         
         conn.close();
+    }
+    
+    @Test
+    public void testInListExpressionWithDesc() throws Exception {
+        String fullTableName = generateUniqueName();
+        String fullViewName = generateUniqueName();
+        String tenantView = generateUniqueName();
+        // create base table and global view using global connection
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
+                    "    TENANT_ID CHAR(15) NOT NULL,\n" + 
+                    "    KEY_PREFIX CHAR(3) NOT NULL,\n" + 
+                    "    CREATED_DATE DATE,\n" + 
+                    "    CREATED_BY CHAR(15),\n" + 
+                    "    SYSTEM_MODSTAMP DATE\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "       TENANT_ID," + 
+                    "       KEY_PREFIX" + 
+                    ")) MULTI_TENANT=TRUE");
+            
+            stmt.execute("CREATE VIEW " + fullViewName + "(\n" + 
+                    "    MODEL VARCHAR NOT NULL,\n" + 
+                    "    MILEAGE  BIGINT NOT NULL,\n" +  
+                    "    MILES_DRIVEN BIGINT NOT NULL,\n" + 
+                    "    MAKE VARCHAR,\n" + 
+                    "    CONSTRAINT PKVIEW PRIMARY KEY\n" + 
+                    "    (\n" + 
+                    "    MODEL, MILEAGE DESC, MILES_DRIVEN\n" + 
+                    ")) AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
+            
+        }
+        
+        // create and use a tenant specific view to write data
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) { 
+            Statement stmt = viewConn.createStatement();
+            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName );
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(CREATED_BY, CREATED_DATE, SYSTEM_MODSTAMP, MODEL, MILEAGE, MILES_DRIVEN, MAKE) VALUES ('005xx000001Sv6o', 1532458254819, 1532458254819, 'a5', 23, 10000, 'AUDI')");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(CREATED_BY, CREATED_DATE, SYSTEM_MODSTAMP, MODEL, MILEAGE, MILES_DRIVEN, MAKE) VALUES ('005xx000001Sv6o', 1532458254819, 1532458254819, 'a4', 27, 30000, 'AUDI')");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(CREATED_BY, CREATED_DATE, SYSTEM_MODSTAMP, MODEL, MILEAGE, MILES_DRIVEN, MAKE) VALUES ('005xx000001Sv6o', 1532458254819, 1532458254819, '328i', 32, 40000, 'BMW')");
+            viewConn.commit();
+            
+            ResultSet rs = stmt.executeQuery("SELECT Make, Model FROM " + tenantView + " WHERE MILEAGE IN (32, 27)");
+            assertTrue(rs.next());
+            assertEquals("BMW", rs.getString(1));
+            assertEquals("328i", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("AUDI", rs.getString(1));
+            assertEquals("a4", rs.getString(2));
+            assertFalse(rs.next());
+            
+            rs = stmt.executeQuery("SELECT Make, Model FROM " + tenantView + " WHERE MILES_DRIVEN IN (30000, 40000)");
+            assertTrue(rs.next());
+            assertEquals("BMW", rs.getString(1));
+            assertEquals("328i", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("AUDI", rs.getString(1));
+            assertEquals("a4", rs.getString(2));
+            assertFalse(rs.next());
+            
+            viewConn.createStatement().execute("DELETE FROM  " + tenantView + " WHERE MILEAGE IN (27, 32)");
+            viewConn.commit();
+            rs = stmt.executeQuery("SELECT Make, Model FROM " + tenantView);
+            assertTrue(rs.next());
+            assertEquals("AUDI", rs.getString(1));
+            assertEquals("a5", rs.getString(2));
+            assertFalse(rs.next());
+        }
     }
 
 }
