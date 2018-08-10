@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.REVERSE_SCAN;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
@@ -53,6 +54,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -246,8 +248,12 @@ public class TableResultIterator implements ResultIterator {
             ResultIterator delegate = this.scanIterator;
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
-                    this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder);
+                    if (scan.getAttribute(REVERSE_SCAN) != null
+                        && (boolean)(PBoolean.INSTANCE.toObject(scan.getAttribute(REVERSE_SCAN)))) {
+                        ScanUtil.prepareStopRowForReverseScan(scan);
+                    }
+                    this.scanIterator = new ScanningResultIterator(htable.getScanner(scan), scan,
+                        scanMetricsHolder);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);

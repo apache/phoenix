@@ -656,6 +656,52 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testOrderByDescOnPkWithSubQuery() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + " (id bigint not null primary key, a bigint)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("upsert into " + tableName + " values (1, 11)");
+        conn.createStatement().execute("upsert into " + tableName + " values (2, 22)");
+        conn.createStatement().execute("upsert into " + tableName + " values (3, 33)");
+        conn.createStatement().execute("upsert into " + tableName + " values (4,44)");
+
+        conn.commit();
+
+        ResultSet rs;
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        rs = stmt.executeQuery("select id from " + tableName + " where id in (select id from "
+            + tableName + ") order by id desc");
+        assertTrue(rs.next());
+        assertEquals("4", rs.getString(1));
+    }
+
+    @Test
+    public void testOrderByAscOnPkWithSubQuery() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + " (id bigint not null primary key, a bigint)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("upsert into " + tableName + " values (1, 11)");
+        conn.createStatement().execute("upsert into " + tableName + " values (2, 22)");
+        conn.createStatement().execute("upsert into " + tableName + " values (3, 33)");
+        conn.createStatement().execute("upsert into " + tableName + " values (4,44)");
+
+        conn.commit();
+
+        ResultSet rs;
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        rs = stmt.executeQuery("select id from " + tableName + " where id in (select id from "
+            + tableName + ") order by id");
+        assertTrue(rs.next());
+        assertEquals("1", rs.getString(1));
+    }
+
+    @Test
     public void testNullsLastWithDesc() throws Exception {
         Connection conn=null;
         try {
