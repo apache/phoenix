@@ -656,25 +656,6 @@ public class ScanUtil {
     }
 
     /**
-     * HBase scan stopRow is exclusive.So we have to append trailing 0 to achieve inclusiveness.
-     * for reverse scan, need to append trailing F to stopRow.
-     * @param scan
-     */
-    public static void prepareStopRowForReverseScan(Scan scan) {
-        byte[] stopRow = scan.getStopRow();
-        if (stopRow == null) {
-            return;
-        }
-        byte[] newStopRow = new byte[stopRow.length + 1];
-        int i = 0;
-        for (byte nsr : stopRow) {
-            newStopRow[i++] = nsr;
-        }
-        newStopRow[i] = QueryConstants.DESC_SEPARATOR_BYTE;
-        scan.setStopRow(newStopRow);
-    }
-
-    /**
      * Start key and stop key of the original scan from client are regions start and end keys so
      * prefix scan start/stop key to the start row/stop row suffix and set them as scan boundaries.
      * @param scan
