@@ -1827,7 +1827,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] viewTable = viewInfo.getViewName();
             byte[] tableKey = SchemaUtil.getTableKey(viewtenantId, viewSchema, viewTable);
             ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
-            PTable view = loadTable(env, tableKey, cacheKey, clientTimeStamp, clientTimeStamp, clientVersion);
+            PTable view = null;
+            try {
+                view = loadTable(env, tableKey, cacheKey, clientTimeStamp, clientTimeStamp, clientVersion);
+            }
+            catch (Throwable t) {
+                logger.error("Loading tenant view failed", t);
+            }
+
             if (view == null) {
                 logger.warn("Found orphan tenant view row in SYSTEM.CATALOG with tenantId:"
                         + Bytes.toString(tenantId) + ", schema:"
@@ -2557,7 +2564,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             
             // lock the rows corresponding to views so that no other thread can modify the view meta-data
             RowLock viewRowLock = acquireLock(region, viewKey, locks);
-            PTable view = doGetTable(viewKey, clientTimeStamp, viewRowLock, clientVersion);
+            PTable view = null;
+            try {
+                view = doGetTable(viewKey, clientTimeStamp, viewRowLock, clientVersion);
+            }
+            catch (Throwable t) {
+                logger.warn("Loading tenant view failed", t);
+            }
             if (view == null) {
                 logger.warn("Found orphan tenant view row in SYSTEM.CATALOG with tenantId:"
                     + Bytes.toString(tenantId) + ", schema:"
@@ -3189,7 +3202,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         for (Mutation m : tableMetaData) {
             byte[] key = m.getRow();
             int pkCount = getVarChars(key, rowKeyMetaData);
-            if (pkCount >= COLUMN_NAME_INDEX
+            if (pkCount > COLUMN_NAME_INDEX
                     && Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
                     && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
                 return true;
