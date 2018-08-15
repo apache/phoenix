@@ -36,6 +36,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
@@ -49,6 +50,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -100,7 +102,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testAddNewColumnsToBaseTableWithViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             String tableName = generateUniqueName();
             String viewOfTable = tableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
@@ -111,17 +113,64 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
-            
+
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            
+
             // adding a new pk column and a new regular column
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
             assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 7, 5, "ID", "COL1", "COL2", "COL3", "COL4", "VIEW_COL1", "VIEW_COL2");
-        } 
+        }
     }
-    
+
+    @Test
+    public void testAddNewColumnsToBaseTableWithVCorruptedViews() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
+            String tableName = generateUniqueName();
+            String viewOfTable = tableName + "_VIEW";
+            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                    + " %s ID char(1) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
+                    + " ) %s";
+            conn.createStatement().execute(generateDDL(ddlFormat));
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+
+            viewConn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+
+            // corrupt the table view
+            byte[] rowKey =
+                    SchemaUtil.getTableKey(tenantId == null ? new byte[0] : Bytes.toBytes(tenantId.toString()),
+                            Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(viewOfTable)),
+                            Bytes.toBytes(viewOfTable));
+            try (HTableInterface htable =
+                         phoenixConn.getQueryServices().getTable(
+                                 Bytes.toBytes(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))) {
+                Delete del = new Delete(rowKey);
+                del.deleteColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
+                htable.delete(del);
+            }
+            // adding a new pk column and a new regular column; the corrupted view will be ignored as
+            // any Throwable exception thrown by loadTable() will be caught while loading views
+            conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
+            // since the view is corrupted, loading the view should result in an exception
+            try {
+                viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
+                fail("An exception was not raised! the corrupted view is loaded successfully");
+            }
+            catch (Throwable t) {
+                // as expected a Throwable exception happened
+            }
+        }
+    }
+
     @Test
     public void testAlterPropertiesOfParentTable() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
@@ -193,7 +242,74 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTrue(rs.wasNull());
         } 
     }
-    
+
+    @Test
+    public void testAlterPropertiesOfParentTableWithCorruptedViews() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
+            String tableName = generateUniqueName();
+            String viewOfTable = tableName + "_VIEW";
+            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                    + " %s ID char(1) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
+                    + " ) %s ";
+            conn.createStatement().execute(generateDDL("UPDATE_CACHE_FREQUENCY=2", ddlFormat));
+            viewConn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
+
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phoenixConn.getTable(new PTableKey(null, tableName));
+            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+
+            assertFalse(table.isImmutableRows());
+            assertEquals(2, table.getUpdateCacheFrequency());
+            PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            assertFalse(viewTable1.isImmutableRows());
+            assertEquals(2, viewTable1.getUpdateCacheFrequency());
+
+            // corrupt the table view
+            byte[] rowKey =
+                    SchemaUtil.getTableKey(tenantId == null ? new byte[0] : Bytes.toBytes(tenantId.toString()),
+                            Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(viewOfTable)),
+                            Bytes.toBytes(viewOfTable));
+            try (HTableInterface htable =
+                         phoenixConn.getQueryServices().getTable(
+                                 Bytes.toBytes(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))) {
+
+                Delete del = new Delete(rowKey);
+                del.deleteColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES);
+                htable.delete(del);
+            }
+            // alter the properties of the base table; the corrupted view will be ignored as
+            // any Throwable exception thrown by loadTable() will be caught while loading views
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET IMMUTABLE_ROWS=true, UPDATE_CACHE_FREQUENCY=3");
+
+            phoenixConn = conn.unwrap(PhoenixConnection.class);
+            table = phoenixConn.getTable(new PTableKey(null, tableName));
+            assertTrue(table.isImmutableRows());
+            assertEquals(3, table.getUpdateCacheFrequency());
+
+            long gpw = 1000000;
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POSTS_WIDTH=" + gpw);
+
+            ResultSet rs;
+            DatabaseMetaData md = conn.getMetaData();
+            rs = md.getTables("", "", StringUtil.escapeLike(tableName), null);
+            assertTrue(rs.next());
+            assertEquals(gpw, rs.getLong(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH));
+
+            // since the view is corrupted, loading the view should result in an exception
+            try {
+                viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
+                fail("An exception was not raised! the corrupted view is loaded successfully");
+            }
+            catch (Throwable t) {
+                // as expected a Throwable exception happened
+            }
+        }
+    }
+
     @Test
     public void testDropColumnsFromBaseTableWithView() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
