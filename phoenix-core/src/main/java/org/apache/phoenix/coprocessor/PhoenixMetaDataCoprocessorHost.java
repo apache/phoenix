@@ -132,7 +132,7 @@ public class PhoenixMetaDataCoprocessorHost
     /**
      * Encapsulation of the environment of each coprocessor
      */
-    static class PhoenixMetaDataControllerEnvironment extends BaseEnvironment<PhoenixCoprocessor>
+    public static class PhoenixMetaDataControllerEnvironment extends BaseEnvironment<PhoenixCoprocessor>
             implements CoprocessorEnvironment<PhoenixCoprocessor> {
 
         private RegionCoprocessorEnvironment env;

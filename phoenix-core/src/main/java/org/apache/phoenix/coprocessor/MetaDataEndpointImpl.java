@@ -2226,8 +2226,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 MetaDataResponse response =
                         processRemoteRegionMutations(
                             PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                            childLinkMutations, fullTableName,
-                            MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
+                            childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
                 if (response != null) {
                     done.run(response);
                     return;
@@ -2247,8 +2246,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         response =
                                 processRemoteRegionMutations(
                                     PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                                    remoteMutations, fullTableName,
-                                    MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
+                                    remoteMutations, MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
+                        clearParentTableFromCache(clientTimeStamp,
+                            parentTable.getSchemaName() != null
+                                    ? parentTable.getSchemaName().getBytes()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY,
+                            parentTable.getName().getBytes());
                         if (response != null) {
                             done.run(response);
                             return;
@@ -2503,8 +2506,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 MetaDataResponse response =
                         processRemoteRegionMutations(
                             PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                            childLinkMutations, SchemaUtil.getTableName(schemaName, tableName),
-                            MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
+                            childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
                 if (response!=null) {
                     done.run(response);
                     return;
@@ -2535,8 +2537,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private MetaDataResponse processRemoteRegionMutations(byte[] systemTableName,
-            List<Mutation> remoteMutations, String tableName,
-            MetaDataProtos.MutationCode mutationCode) throws IOException {
+            List<Mutation> remoteMutations, MetaDataProtos.MutationCode mutationCode) throws IOException {
         MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
         try (Table hTable =
                 ServerUtil.getHTableForCoprocessorScan(env,
@@ -2795,7 +2796,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             .getEncodingScheme() != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
                         processRemoteRegionMutations(
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, remoteMutations,
-                            fullTableName, MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
+                            MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
+                        clearParentTableFromCache(clientTimeStamp,
+                            table.getParentSchemaName() != null
+                                    ? table.getParentSchemaName().getBytes()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY,
+                            table.getParentTableName().getBytes());
                     }
                     else {
                         String msg = "Found unexpected mutations while adding or dropping column to "+fullTableName;
@@ -2828,6 +2834,25 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         } catch (Throwable t) {
             ServerUtil.throwIOException(fullTableName, t);
             return null; // impossible
+        }
+    }
+
+    /**
+     * Removes the table from the server side cache
+     */
+    private void clearParentTableFromCache(long clientTimeStamp, byte[] schemaName, byte[] tableName) throws SQLException {
+        // remove the parent table from the metadata cache as we just mutated the table
+        Properties props = new Properties();
+        if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
+            props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
+        }
+        try (PhoenixConnection connection =
+                QueryUtil.getConnectionOnServer(props, env.getConfiguration())
+                        .unwrap(PhoenixConnection.class)) {
+            ConnectionQueryServices queryServices = connection.getQueryServices();
+            queryServices.clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, schemaName, tableName,
+                clientTimeStamp);
+        } catch (ClassNotFoundException e) {
         }
     }
     
@@ -3220,28 +3245,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             } 
                         }
                     } 
-                    if (type == PTableType.VIEW
-                            && EncodedColumnsUtil.usesEncodedColumnNames(table)) {
-                        /*
-                         * When adding a column to a view that uses encoded column name scheme, we
-                         * need to modify the CQ counters stored in the view's physical table. So to
-                         * make sure clients get the latest PTable, we need to invalidate the cache
-                         * entry.
-                         */
-                        invalidateList.add(new ImmutableBytesPtr(MetaDataUtil
-                                .getPhysicalTableRowForView(table)));
-
-
-
-                    }
+                    boolean addingCol = false;
                     for (Mutation m : tableMetaData) {
                         byte[] key = m.getRow();
                         boolean addingPKColumn = false;
                         int pkCount = getVarChars(key, rowKeyMetaData);
+                        // this means we have are adding a column 
                         if (pkCount > COLUMN_NAME_INDEX
                                 && Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
                                 && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
                             try {
+                                addingCol = true;
                                 if (pkCount > FAMILY_NAME_INDEX
                                         && rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX].length > 0) {
                                     PColumnFamily family =
@@ -3306,6 +3320,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         }
                     }
                     tableMetaData.addAll(additionalTableMetadataMutations);
+                    if (type == PTableType.VIEW
+                                && EncodedColumnsUtil.usesEncodedColumnNames(table) && addingCol
+                                && !table.isAppendOnlySchema()) {
+                                // When adding a column to a view that uses encoded column name
+                                // scheme, we need to modify the CQ counters stored in the view's
+                                // physical table. So to make sure clients get the latest PTable, we
+                                // need to invalidate the cache entry.
+                                // If the table uses APPEND_ONLY_SCHEMA we use the position of the
+                                // column as the encoded column qualifier and so we don't need to
+                                // update the CQ counter in the view physical table (see
+                                // PHOENIX-4737)
+                                invalidateList.add(new ImmutableBytesPtr(
+                                        MetaDataUtil.getPhysicalTableRowForView(table)));
+                    }
                     return null;
                 }
             }, request.getClientVersion());

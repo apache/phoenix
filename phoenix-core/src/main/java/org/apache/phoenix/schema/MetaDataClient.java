@@ -3317,6 +3317,7 @@ public class MetaDataClient {
         String physicalTableName =
                 SchemaUtil.getTableNameFromFullName(physicalName.getString());
         Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
+        boolean acquiredMutex = false;
         try {
             connection.setAutoCommit(false);
 
@@ -3594,17 +3595,26 @@ public class MetaDataClient {
                     }
                 }
 
-                boolean acquiredMutex = true;
-                for (PColumn pColumn : columns) {
-                    // acquire the mutex using the global physical table name to
-                    // prevent creating the same column on a table or view with
-                    // a conflicting type etc
-                    acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
-                        pColumn.getName().getString());
+                if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+                    // for tables that use column encoding acquire a mutex on the base table as we
+                    // need to update the encoded column qualifier counter on the base table
+                    acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName, null);
                     if (!acquiredMutex) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
-                    acquiredColumnMutexSet.add(pColumn.getName().getString());
+                }
+                else {
+                    for (PColumn pColumn : columns) {
+                        // acquire the mutex using the global physical table name to
+                        // prevent creating the same column on a table or view with
+                        // a conflicting type etc
+                        acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
+                            pColumn.getName().getString());
+                        if (!acquiredMutex) {
+                            throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                        }
+                        acquiredColumnMutexSet.add(pColumn.getName().getString());
+                    }
                 }
                 MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded, columns);
                 try {
@@ -3676,7 +3686,12 @@ public class MetaDataClient {
             }
         } finally {
             connection.setAutoCommit(wasAutoCommit);
-            if (!acquiredColumnMutexSet.isEmpty()) {
+            if (EncodedColumnsUtil.usesEncodedColumnNames(table) && acquiredMutex) {
+                // release the mutex on the physical table (used to prevent concurrent conflicting
+                // add column changes)
+                deleteCell(null, physicalSchemaName, physicalTableName, null);
+            }
+            else if (!acquiredColumnMutexSet.isEmpty()) {
                 for (String columnName : acquiredColumnMutexSet) {
                     // release the mutex (used to prevent concurrent conflicting add column changes)
                     deleteCell(null, physicalSchemaName, physicalTableName, columnName);
