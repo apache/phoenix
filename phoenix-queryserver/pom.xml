@@ -36,6 +36,7 @@
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
+    <argparse4j.version>0.8.1</argparse4j.version>
   </properties>
 
   <build>
@@ -151,6 +152,11 @@
       <groupId>javax.servlet</groupId>
       <artifactId>javax.servlet-api</artifactId>
     </dependency>
+    <dependency>
+      <groupId>net.sourceforge.argparse4j</groupId>
+      <artifactId>argparse4j</artifactId>
+      <version>${argparse4j.version}</version>
+    </dependency>    
     <!-- for tests -->
     <dependency>
       <groupId>org.mockito</groupId>
