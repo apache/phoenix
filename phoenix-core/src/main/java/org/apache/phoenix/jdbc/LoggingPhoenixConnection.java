@@ -98,7 +98,7 @@ public class LoggingPhoenixConnection extends DelegateConnection {
         return new LoggingPhoenixPreparedStatement(super.prepareStatement(sql, columnNames),
                 phoenixMetricsLog);
     }
-    
+
     @Override
     public void commit() throws SQLException {
         super.commit();
@@ -107,4 +107,14 @@ public class LoggingPhoenixConnection extends DelegateConnection {
         PhoenixRuntime.resetMetrics(conn);
     }
 
+    @Override
+    public void close() throws SQLException {
+        try {
+            phoenixMetricsLog.logWriteMetricsfoForMutations(PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn));
+            phoenixMetricsLog.logReadMetricInfoForMutationsSinceLastReset(PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn));
+            PhoenixRuntime.resetMetrics(conn);
+        } finally {
+            super.close();
+        }
+    }
 }
