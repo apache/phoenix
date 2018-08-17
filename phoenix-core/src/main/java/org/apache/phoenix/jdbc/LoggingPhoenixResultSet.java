@@ -25,16 +25,18 @@ import org.apache.phoenix.util.PhoenixRuntime;
 public class LoggingPhoenixResultSet extends DelegateResultSet {
     
     private PhoenixMetricsLog phoenixMetricsLog;
-    
-    public LoggingPhoenixResultSet(ResultSet rs, PhoenixMetricsLog phoenixMetricsLog) {
+    private String sql;
+
+    public LoggingPhoenixResultSet(ResultSet rs, PhoenixMetricsLog phoenixMetricsLog, String sql) {
         super(rs);
         this.phoenixMetricsLog = phoenixMetricsLog;
+        this.sql = sql;
     }
     
     @Override
     public void close() throws SQLException {
-        phoenixMetricsLog.logOverAllReadRequestMetrics(PhoenixRuntime.getOverAllReadRequestMetricInfo(rs));
-        phoenixMetricsLog.logRequestReadMetrics(PhoenixRuntime.getRequestReadMetricInfo(rs));
+        phoenixMetricsLog.logOverAllReadRequestMetrics(PhoenixRuntime.getOverAllReadRequestMetricInfo(rs), sql);
+        phoenixMetricsLog.logRequestReadMetrics(PhoenixRuntime.getRequestReadMetricInfo(rs), sql);
         PhoenixRuntime.resetMetrics(rs);
         super.close();
     }
