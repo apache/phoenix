@@ -20,34 +20,37 @@ package org.apache.phoenix.jdbc;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 
 public class LoggingPhoenixPreparedStatement extends DelegatePreparedStatement {
     
     private PhoenixMetricsLog phoenixMetricsLog;
+    private String sql;
     
-    public LoggingPhoenixPreparedStatement(PreparedStatement stmt, PhoenixMetricsLog phoenixMetricsLog) {
+    public LoggingPhoenixPreparedStatement(PreparedStatement stmt, PhoenixMetricsLog phoenixMetricsLog, String sql) {
         super(stmt);
         this.phoenixMetricsLog = phoenixMetricsLog;
+        this.sql = sql;
     }
     
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        return new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog);
+        throw new SQLFeatureNotSupportedException();
     }
 
     @Override
     public ResultSet executeQuery() throws SQLException {
-        return new LoggingPhoenixResultSet(super.executeQuery(), phoenixMetricsLog);
+        return new LoggingPhoenixResultSet(super.executeQuery(), phoenixMetricsLog, sql);
     }
 
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getResultSet(), phoenixMetricsLog);
+        return new LoggingPhoenixResultSet(super.getResultSet(), phoenixMetricsLog, sql);
     }
     
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog);
+        return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog, sql);
     }
     
 }
