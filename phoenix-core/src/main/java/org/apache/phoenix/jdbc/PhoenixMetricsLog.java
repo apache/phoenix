@@ -23,11 +23,11 @@ import org.apache.phoenix.monitoring.MetricType;
 
 public interface PhoenixMetricsLog {
 
-    void logOverAllReadRequestMetrics(Map<MetricType, Long> overAllQueryMetrics);
+    void logOverAllReadRequestMetrics(Map<MetricType, Long> overAllQueryMetrics, String sql);
 
-    void logRequestReadMetrics(Map<String, Map<MetricType, Long>> requestReadMetrics);
+    void logRequestReadMetrics(Map<String, Map<MetricType, Long>> requestReadMetrics, String sql);
 
-    void logWriteMetricsfoForMutations(Map<String, Map<MetricType, Long>> mutationWriteMetrics);
+    void logWriteMetricsfoForMutationsSinceLastReset(Map<String, Map<MetricType, Long>> mutationWriteMetrics);
 
     void logReadMetricInfoForMutationsSinceLastReset(Map<String, Map<MetricType, Long>> mutationReadMetrics);
 
