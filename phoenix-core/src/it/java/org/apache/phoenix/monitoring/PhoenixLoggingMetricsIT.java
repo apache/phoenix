@@ -43,6 +43,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
     private String tableName1;
     private String tableName2;
     private LoggingPhoenixConnection loggedConn;
+    private String loggedSql;
 
     @Before
     public void beforeTest() throws Exception {
@@ -75,7 +76,10 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         rs.close();
         assertTrue("Read metrics for not found for " + tableName1,
                 requestReadMetricsMap.get(tableName1).size() > 0);
+        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
+
         assertTrue("Overall read metrics for not found ", overAllQueryMetricsMap.size() > 0);
+        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
 
         // run UPSERT SELECT to verify mutation metrics are logged
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
@@ -120,7 +124,10 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         rs.close();
         assertTrue("Read metrics for not found for " + tableName1,
                 requestReadMetricsMap.get(tableName1).size() > 0);
+        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
+
         assertTrue("Overall read metrics for not found ", overAllQueryMetricsMap.size() > 0);
+        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
 
         // run UPSERT SELECT to verify mutation metrics are logged
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
@@ -155,18 +162,20 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         return new LoggingPhoenixConnection(conn, new PhoenixMetricsLog() {
             @Override
             public void logOverAllReadRequestMetrics(
-                    Map<MetricType, Long> overAllQueryMetrics) {
+                    Map<MetricType, Long> overAllQueryMetrics, String sql) {
                 overAllQueryMetricsMap.putAll(overAllQueryMetrics);
+                loggedSql = sql;
             }
 
             @Override
             public void logRequestReadMetrics(
-                    Map<String, Map<MetricType, Long>> requestReadMetrics) {
+                    Map<String, Map<MetricType, Long>> requestReadMetrics, String sql) {
                 requestReadMetricsMap.putAll(requestReadMetrics);
+                loggedSql = sql;
             }
 
             @Override
-            public void logWriteMetricsfoForMutations(
+            public void logWriteMetricsfoForMutationsSinceLastReset(
                     Map<String, Map<MetricType, Long>> mutationWriteMetrics) {
                 mutationWriteMetricsMap.putAll(mutationWriteMetrics);
             }
