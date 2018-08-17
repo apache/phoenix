@@ -24,6 +24,7 @@ import java.sql.Statement;
 public class LoggingPhoenixStatement extends DelegateStatement {
 
     private PhoenixMetricsLog phoenixMetricsLog;
+    private String sql;
     
     public LoggingPhoenixStatement(Statement stmt, PhoenixMetricsLog phoenixMetricsLog) {
         super(stmt);
@@ -31,18 +32,31 @@ public class LoggingPhoenixStatement extends DelegateStatement {
     }
 
     @Override
-    public ResultSet executeQuery(String sql) throws SQLException {
-        return new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog);
+    public boolean execute(String sql) throws SQLException {
+        this.sql = sql;
+        return super.execute(sql);
     }
-    
+
+    @Override
+    public ResultSet executeQuery(String sql) throws SQLException {
+        this.sql = sql;
+        return new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog, this.sql);
+    }
+
+    @Override
+    public int executeUpdate(String sql) throws SQLException {
+        this.sql = sql;
+        return super.executeUpdate(sql);
+    }
+
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getResultSet(), phoenixMetricsLog);
+        return new LoggingPhoenixResultSet(super.getResultSet(), phoenixMetricsLog, this.sql);
     }
     
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog);
+        return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog, this.sql);
     }
-    
+
 }
