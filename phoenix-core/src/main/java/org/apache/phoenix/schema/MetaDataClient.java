@@ -198,8 +198,6 @@ import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
@@ -2456,7 +2454,7 @@ public class MetaDataClient {
                             .build().buildException();
                     }
                     if (tableType == PTableType.VIEW && viewType != ViewType.MAPPED) {
-                        throwIfLastPKOfParentIsFixedLength(parent, schemaName, tableName, colDef);
+                        throwIfLastPKOfParentIsVariableLength(parent, schemaName, tableName, colDef);
                     }
                     if (!pkColumns.add(column)) {
                         throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
@@ -3391,7 +3389,7 @@ public class MetaDataClient {
                                 }
                             }
                             if (colDef != null && colDef.isPK() && table.getType() == VIEW && table.getViewType() != MAPPED) {
-                                throwIfLastPKOfParentIsFixedLength(getParentOfView(table), schemaName, tableName, colDef);
+                                throwIfLastPKOfParentIsVariableLength(getParentOfView(table), schemaName, tableName, colDef);
                             }
                             if (colDef != null && colDef.isRowTimestamp()) {
                                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
@@ -3898,11 +3896,21 @@ public class MetaDataClient {
                         Map<String, List<TableRef>> tenantIdTableRefMap = Maps.newHashMap();
                         if (result.getSharedTablesToDelete() != null) {
                             for (SharedTableState sharedTableState : result.getSharedTablesToDelete()) {
-                                PTableImpl viewIndexTable = new PTableImpl(sharedTableState.getTenantId(),
-                                        sharedTableState.getSchemaName(), sharedTableState.getTableName(), ts,
-                                        table.getColumnFamilies(), sharedTableState.getColumns(),
-                                        sharedTableState.getPhysicalNames(), sharedTableState.getViewIndexType(), sharedTableState.getViewIndexId(),
-                                        table.isMultiTenant(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+                                PTableImpl viewIndexTable =
+                                        new PTableImpl(sharedTableState.getTenantId(),
+                                                sharedTableState.getSchemaName(),
+                                                sharedTableState.getTableName(), ts,
+                                                table.getColumnFamilies(),
+                                                sharedTableState.getColumns(),
+                                                sharedTableState.getPhysicalNames(),
+                                                sharedTableState.getViewIndexType(),
+                                                sharedTableState.getViewIndexId(),
+                                                table.isMultiTenant(), table.isNamespaceMapped(),
+                                                table.getImmutableStorageScheme(),
+                                                table.getEncodingScheme(),
+                                                table.getEncodedCQCounter(),
+                                                table.useStatsForParallelization(),
+                                                table.getBucketNum());
                                 TableRef indexTableRef = new TableRef(viewIndexTable);
                                 PName indexTableTenantId = sharedTableState.getTenantId();
                                 if (indexTableTenantId==null) {
@@ -4119,7 +4127,11 @@ public class MetaDataClient {
         connection.addSchema(result.getSchema());
     }
 
-    private void throwIfLastPKOfParentIsFixedLength(PTable parent, String viewSchemaName, String viewName, ColumnDef col) throws SQLException {
+    private void throwIfLastPKOfParentIsVariableLength(PTable parent, String viewSchemaName, String viewName, ColumnDef col) throws SQLException {
+        // if the last pk column is variable length then we read all the
+        // bytes of the rowkey without looking for a separator byte see
+        // https://issues.apache.org/jira/browse/PHOENIX-978?focusedCommentId=14617847&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-14617847
+        // so we cannot add a pk column to a view if the last pk column of the parent is variable length
         if (isLastPKVariableLength(parent)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MODIFY_VIEW_PK)
             .setSchemaName(viewSchemaName)
@@ -4134,10 +4146,8 @@ public class MetaDataClient {
     }
 
     private PTable getParentOfView(PTable view) throws SQLException {
-        //TODO just use view.getParentName().getString() after implementing https://issues.apache.org/jira/browse/PHOENIX-2114
-        SelectStatement select = new SQLParser(view.getViewStatement()).parseQuery();
-        String parentName = SchemaUtil.normalizeFullTableName(select.getFrom().toString().trim());
-        return connection.getTable(new PTableKey(view.getTenantId(), parentName));
+        return connection
+                .getTable(new PTableKey(view.getTenantId(), view.getParentName().getString()));
     }
 
     public MutationState createSchema(CreateSchemaStatement create) throws SQLException {
