@@ -28,7 +28,32 @@ UPSERT INTO TABLE1 (ID, COL1) VALUES (1, 'test_row_1');
 UPSERT INTO TABLE1 (ID, COL1) VALUES (2, 'test_row_2');
 ```
 
-### Load as a DataFrame using the Data Source API
+### Load as a DataFrame using the Data Source API (Spark 2.0+)
+```scala
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
+import org.apache.phoenix.spark._
+
+val sparkSession = SparkSession.builder()
+      .setAppName("phoenix-test")
+      .setMaster("local")
+      .getOrCreate()
+
+val df = sparkSession.sqlContext.read
+      .format("org.apache.phoenix.spark")
+      .option("zkUrl", "phoenix-server:2181")
+      .option("table", "TABLE1").load()
+
+df
+  .filter(df("COL1") === "test_row_1" && df("ID") === 1L)
+  .select(df("ID"))
+  .show
+```
+
+### Load as a DataFrame using the Data Source API (Spark 1.6 and below)
+
+Note: `SQLContext` was deprecated in Spark 2.0. Use the example above if you run Spark 2.0+.
+
 ```scala
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
