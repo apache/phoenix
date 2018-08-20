@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.calcite.avatica.server.AvaticaServerConfiguration;
 import org.apache.calcite.avatica.server.ServerCustomizer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
@@ -66,7 +67,8 @@ public class ServerCustomizersIT extends BaseHBaseManagedTimeIT {
         InstanceResolver.clearSingletons();
         InstanceResolver.getSingleton(ServerCustomizersFactory.class, new ServerCustomizersFactory() {
             @Override
-            public List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf) {
+            public List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf,
+                                                                          AvaticaServerConfiguration avaticaServerConfiguration) {
                 return Collections.<ServerCustomizer<Server>>singletonList(new TestServerCustomizer());
             }
         });

@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.calcite.avatica.server.HttpServer;
+import org.apache.calcite.avatica.server.AvaticaServerConfiguration;
 import org.apache.calcite.avatica.server.ServerCustomizer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
@@ -45,14 +46,16 @@ public class ServerCustomizersTest {
     @Test
     public void testDefaultFactory() {
         QueryServer queryServer = new QueryServer();
+        AvaticaServerConfiguration avaticaServerConfiguration = null;
         // the default factory creates an empty list of server customizers
         List<ServerCustomizer<Server>> customizers =
-            queryServer.createServerCustomizers(new Configuration());
+                queryServer.createServerCustomizers(new Configuration(), avaticaServerConfiguration);
         Assert.assertEquals(0, customizers.size());
     }
 
     @Test
     public void testUseProvidedCustomizers() {
+        AvaticaServerConfiguration avaticaServerConfiguration = null;
         final List<ServerCustomizer<Server>> expected =
             Collections.<ServerCustomizer<Server>> singletonList(new ServerCustomizer<Server>() {
               @Override
@@ -63,25 +66,27 @@ public class ServerCustomizersTest {
         // Register the server customizer list
         InstanceResolver.getSingleton(ServerCustomizersFactory.class, new ServerCustomizersFactory() {
             @Override
-            public List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf) {
+            public List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf,
+                                                                          AvaticaServerConfiguration avaticaServerConfiguration) {
                 return expected;
             }
         });
         Configuration conf = new Configuration(false);
         conf.set(QueryServices.QUERY_SERVER_CUSTOMIZERS_ENABLED, "true");
         QueryServer queryServer = new QueryServer();
-        List<ServerCustomizer<Server>> actual = queryServer.createServerCustomizers(conf);
+        List<ServerCustomizer<Server>> actual = queryServer.createServerCustomizers(conf, avaticaServerConfiguration);
         Assert.assertEquals("Customizers are different", expected, actual);
     }
 
     @Test
     @SuppressWarnings("unchecked")
     public void testEnableCustomizers() {
+        AvaticaServerConfiguration avaticaServerConfiguration = null;
         HttpServer.Builder builder = mock(HttpServer.Builder.class);
         Configuration conf = new Configuration(false);
         conf.set(QueryServices.QUERY_SERVER_CUSTOMIZERS_ENABLED, "true");
         QueryServer queryServer = new QueryServer();
-        queryServer.enableServerCustomizersIfNecessary(builder, conf);
+        queryServer.enableServerCustomizersIfNecessary(builder, conf, avaticaServerConfiguration);
         verify(builder).withServerCustomizers(anyList(), any(Class.class));
     }
 }
