@@ -301,6 +301,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY = 10;
     public static final boolean DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED = false;
     public static final boolean DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR = false;
+    public static final boolean DEFAULT_QUERY_SERVER_CUSTOM_AUTH_ENABLED = false;
     public static final String DEFAULT_QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "doAs";
     public static final boolean DEFAULT_QUERY_SERVER_DISABLE_KERBEROS_LOGIN = false;
     public static final boolean DEFAULT_QUERY_SERVER_CUSTOMIZERS_ENABLED = false;
