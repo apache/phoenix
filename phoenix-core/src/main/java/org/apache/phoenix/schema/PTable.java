@@ -549,6 +549,12 @@ public interface PTable extends PMetaDataEntity {
      * @return a list of all columns
      */
     List<PColumn> getColumns();
+    
+    /**
+     * Get all excluded columns 
+     * @return a list of excluded columns
+     */
+    List<PColumn> getExcludedColumns();
 
     /**
      * @return A list of the column families of this table
