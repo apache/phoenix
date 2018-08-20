@@ -20,6 +20,7 @@ package org.apache.phoenix.queryserver.server;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.calcite.avatica.server.AvaticaServerConfiguration;
 import org.apache.calcite.avatica.server.ServerCustomizer;
 import org.apache.hadoop.conf.Configuration;
 import org.eclipse.jetty.server.Server;
@@ -32,9 +33,10 @@ public interface ServerCustomizersFactory {
     /**
      * Creates a list of customizers that will customize the server.
      * @param conf Configuration to use
+     * @param avaticaServerConfiguration to use in case custom-auth is enabled
      * @return List of server suctomizers
      */
-    List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf);
+    List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf, AvaticaServerConfiguration avaticaServerConfiguration);
 
     /**
      * Factory that creates an empty list of customizers.
@@ -42,7 +44,8 @@ public interface ServerCustomizersFactory {
     class ServerCustomizersFactoryImpl implements ServerCustomizersFactory {
         private static final List<ServerCustomizer<Server>> EMPTY_LIST = Collections.emptyList();
         @Override
-        public List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf) {
+        public List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf,
+                                                                      AvaticaServerConfiguration avaticaServerConfiguration) {
             return EMPTY_LIST;
         }
     }
