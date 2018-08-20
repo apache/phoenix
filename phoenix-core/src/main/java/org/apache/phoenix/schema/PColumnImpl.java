@@ -90,7 +90,8 @@ public class PColumnImpl implements PColumn {
         }
     }
 
-    // a derived column has null type
+    // a excluded column (a column that was derived from a parent but that has been deleted) is
+    // denoted by a column that has a null type
     public static PColumnImpl createExcludedColumn(PName familyName, PName columnName, Long timestamp) {
         return new PColumnImpl(familyName, columnName, timestamp);
     }
