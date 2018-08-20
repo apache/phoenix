@@ -26,6 +26,7 @@ import org.junit.Test;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
@@ -44,6 +45,8 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
     private String tableName2;
     private LoggingPhoenixConnection loggedConn;
     private String loggedSql;
+    private int logOverAllReadRequestMetricsFuncCallCount;
+    private int logRequestReadMetricsFuncCallCount;
 
     @Before
     public void beforeTest() throws Exception {
@@ -69,17 +72,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
     public void testPhoenixMetricsLoggedOnCommit() throws Exception {
         // run SELECT to verify read metrics are logged
         String query = "SELECT * FROM " + tableName1;
-        Statement stmt = loggedConn.createStatement();
-        ResultSet rs = stmt.executeQuery(query);
-        while (rs.next()) {
-        }
-        rs.close();
-        assertTrue("Read metrics for not found for " + tableName1,
-                requestReadMetricsMap.get(tableName1).size() > 0);
-        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
-
-        assertTrue("Overall read metrics for not found ", overAllQueryMetricsMap.size() > 0);
-        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
+        verifyQueryLevelMetricsLogging(query);
 
         // run UPSERT SELECT to verify mutation metrics are logged
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
@@ -117,17 +110,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
     public void testPhoenixMetricsLoggedOnClose() throws Exception {
         // run SELECT to verify read metrics are logged
         String query = "SELECT * FROM " + tableName1;
-        Statement stmt = loggedConn.createStatement();
-        ResultSet rs = stmt.executeQuery(query);
-        while (rs.next()) {
-        }
-        rs.close();
-        assertTrue("Read metrics for not found for " + tableName1,
-                requestReadMetricsMap.get(tableName1).size() > 0);
-        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
-
-        assertTrue("Overall read metrics for not found ", overAllQueryMetricsMap.size() > 0);
-        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
+        verifyQueryLevelMetricsLogging(query);
 
         // run UPSERT SELECT to verify mutation metrics are logged
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
@@ -151,6 +134,26 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
                 mutationReadMetricsMap.size() == 0);
     }
 
+    private void verifyQueryLevelMetricsLogging(String query) throws SQLException {
+        Statement stmt = loggedConn.createStatement();
+        ResultSet rs = stmt.executeQuery(query);
+        while (rs.next()) {
+        }
+        rs.close();
+        assertTrue("Read metrics for not found for " + tableName1,
+                requestReadMetricsMap.get(tableName1).size() > 0);
+        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
+        assertTrue(logOverAllReadRequestMetricsFuncCallCount == 1);
+        assertTrue(logRequestReadMetricsFuncCallCount == 1);
+
+        assertTrue("Overall read metrics for not found ", overAllQueryMetricsMap.size() > 0);
+        assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
+
+        rs.close();
+        assertTrue(logOverAllReadRequestMetricsFuncCallCount == 1);
+        assertTrue(logRequestReadMetricsFuncCallCount == 1);
+    }
+
     void clearAllTestMetricMaps() {
         overAllQueryMetricsMap.clear();
         requestReadMetricsMap.clear();
@@ -165,6 +168,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
                     Map<MetricType, Long> overAllQueryMetrics, String sql) {
                 overAllQueryMetricsMap.putAll(overAllQueryMetrics);
                 loggedSql = sql;
+                logOverAllReadRequestMetricsFuncCallCount++;
             }
 
             @Override
@@ -172,6 +176,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
                     Map<String, Map<MetricType, Long>> requestReadMetrics, String sql) {
                 requestReadMetricsMap.putAll(requestReadMetrics);
                 loggedSql = sql;
+                logRequestReadMetricsFuncCallCount++;
             }
 
             @Override
