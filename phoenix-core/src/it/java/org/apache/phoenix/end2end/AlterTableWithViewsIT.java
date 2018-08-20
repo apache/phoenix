@@ -73,19 +73,22 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     private final boolean isMultiTenant;
     private final boolean columnEncoded;
+    private final boolean salted;
     private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT1;
     private final String TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT2;
     
-    public AlterTableWithViewsIT(boolean isMultiTenant, boolean columnEncoded) {
-        this.isMultiTenant = isMultiTenant;
+    public AlterTableWithViewsIT(boolean columnEncoded, boolean isMultiTenant, boolean salted) {
         this.columnEncoded = columnEncoded;
+        this.isMultiTenant = isMultiTenant;
+        this.salted = salted;
     }
     
-    @Parameters(name="AlterTableWithViewsIT_multiTenant={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
+    // name is used by failsafe as file name in reports
+    @Parameters(name = "AlterTableWithViewsIT_columnEncoded={0}, multiTenant={1}, salted={2}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { 
-                { false, false }, { false, true },
-                { true, false }, { true, true } });
+        return Arrays.asList(new Boolean[][] { { false, false, false }, { false, false, true },
+                { false, true, false }, { false, true, true }, { true, false, false },
+                { true, false, true }, { true, true, false }, { true, true, true } });
     }
     
     // transform PColumn to String
@@ -112,6 +115,11 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                 optionsBuilder.append(",");
             optionsBuilder.append("MULTI_TENANT=true");
         }
+        if (salted) {
+            if (optionsBuilder.length()!=0)
+                optionsBuilder.append(",");
+            optionsBuilder.append("SALT_BUCKETS=4");
+        }
         return String.format(format, isMultiTenant ? "TENANT_ID VARCHAR NOT NULL, " : "",
             isMultiTenant ? "TENANT_ID, " : "", optionsBuilder.toString());
     }
@@ -130,16 +138,17 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // adding a new pk column and a new regular column
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
-            // add/drop column to a base table are no longer propagated to child views
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, false, "ID", "COL1", "COL2", "COL3", "COL4");
+            // TODO PHOENIX-4766 add/drop column to a base table are no longer propagated to child views
+            // assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "COL3", "COL4", "VIEW_COL1", "VIEW_COL2");
         } 
     }
     
@@ -234,22 +243,21 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)" + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 6,
-                QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4",
-                "COL5");
+                QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2", "COL3",
+                "COL4", "COL5");
 
             viewConn.createStatement()
                     .execute(
                         "CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
-                "ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
+                true, "ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
 
             // drop two columns from the base table
             conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN COL3, COL5");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 4,
-                QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL4");
-            // the columns will still exist in the view metadata , but are excluded while combining parent table columns
+                QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, false, "ID", "COL1", "COL2", "COL4");
             assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
-                "ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
+                true, "ID", "COL1", "COL2", "COL4", "VIEW_COL1", "VIEW_COL2");
         }
     }
     
@@ -270,10 +278,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 4, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 4, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2", "COL3");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256), VIEW_COL3 VARCHAR, VIEW_COL4 DECIMAL, VIEW_COL5 DECIMAL(10,2), VIEW_COL6 VARCHAR, CONSTRAINT pk PRIMARY KEY (VIEW_COL5, VIEW_COL6) ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn,viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
+            assertTableDefinition(viewConn,viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, true, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?, ?, ?, ?, ?, ?)";
@@ -328,8 +336,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             }
             
             // validate that there were no columns added to the table or view, if its table is column encoded the sequence number changes when we increment the cq counter
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 1 : 0, 4, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3");
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 1 : 0, 4, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2", "COL3");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, true, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
             
             if (columnEncoded) {
                 try {
@@ -343,9 +351,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             else {
                 // should succeed 
                 conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL4 DECIMAL, VIEW_COL2 VARCHAR(256)");
-                assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 6, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2");
+                assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 6, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, false, "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2");
                 // even though we added columns to the base table, the view metadata remains the same as the base table metadata changes are no longer propagated to the chid view
-                assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
+                assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, true, "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
                 
                 // query table
                 ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
@@ -376,7 +384,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                 // the base column count and ordinal positions of columns is updated in the ptable (at read time) 
                 PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
                 PTable view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
-                assertEquals(isMultiTenant ? 5: 4, view.getBaseColumnCount());
+                assertBaseColumnCount(4, view.getBaseColumnCount());
                 assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
             }
         } 
@@ -398,14 +406,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
-            PTable table = PhoenixRuntime.getTableNoCache(conn, tableName.toUpperCase());
-            assertColumnsMatch(table.getColumns(), "ID", "COL1", "COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable.toUpperCase());
-            assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?)";
@@ -474,9 +478,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             // add the pk column of the view to the base table
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, false, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             // even though we added columns to the base table, the sequence number and base column count is not updated in the view metadata (in SYSTEM.CATALOG)
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0,  5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // query table
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
@@ -500,8 +504,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             // the base column count is updated in the ptable
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
+            PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable.toUpperCase());
             view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
-            assertEquals(isMultiTenant ? 4 : 3, view.getBaseColumnCount());
+            assertBaseColumnCount(3, view.getBaseColumnCount());
         } 
     }
     
@@ -520,16 +525,16 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL3 VARCHAR(256), VIEW_COL4 DECIMAL(10,2) CONSTRAINT pk PRIMARY KEY (VIEW_COL3, VIEW_COL4)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL3", "VIEW_COL4");
+            assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL3", "VIEW_COL4");
             
             try {
-                // should fail because there are two view with different pk columns
+                // should fail because there are two views with different pk columns
                 conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
                 fail();
             }
@@ -585,13 +590,13 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                     + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                     + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             viewConn2.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(viewConn2, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3,  "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn2, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3,  true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
 
             // upsert single row into both view
             String dml = "UPSERT INTO " + viewOfTable1 + " VALUES(?,?,?,?,?)";
@@ -641,10 +646,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             }
             
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, false, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             // even though we added columns to the base table, the sequence number and base column count is not updated in the view metadata (in SYSTEM.CATALOG)
-            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // query table
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
@@ -674,17 +679,20 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             assertEquals("view5", rs.getString("VIEW_COL2"));
             assertFalse(rs.next());
             
-            // the base column count is updated in the ptable
-            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-            PTable view1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
-            PTable view2 = viewConn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
-            assertEquals(isMultiTenant ? 4 : 3, view1.getBaseColumnCount());
-            assertEquals(isMultiTenant ? 4 : 3, view2.getBaseColumnCount());
+            // the column count is updated in the base table
+            PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
+            assertColumnsMatch(table.getColumns(), "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
         }
     }
     
-    public void assertTableDefinition(Connection conn, String fullTableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, String... columnNames) throws Exception {
-        int delta = isMultiTenant ? 1 : 0;
+    public void assertTableDefinition(Connection conn, String fullTableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, boolean offsetCountsForSaltedTables, String... columnNames) throws Exception {
+        int delta= 0;
+        delta += isMultiTenant ? 1 : 0;
+        // when we create a salted table we include the salt num in the column count, but after we
+        // add or drop a column we don't include the salted table in the column count, so if a table
+        // is salted take this into account for the column count but no the base column count
+        if (offsetCountsForSaltedTables)
+            delta += salted ? 1 : 0;
         String[] cols;
         if (isMultiTenant && tableType!=PTableType.VIEW) {
             cols = (String[])ArrayUtils.addAll(new String[]{"TENANT_ID"}, columnNames);
@@ -696,10 +704,19 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             baseColumnCount==QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT ? baseColumnCount : baseColumnCount +delta, cols);
     }
     
-    public void assertColumnsMatch(List<PColumn> actual, String... expected) {
+    private void assertBaseColumnCount(int expected, int actual) {
+        if (salted) ++expected;
+        if (isMultiTenant) ++expected;
+        assertEquals("Base column count does not match", expected, actual);
+    }
+    
+    private void assertColumnsMatch(List<PColumn> actual, String... expected) {
         List<String> expectedCols = Lists.newArrayList(expected);
         if (isMultiTenant) {
             expectedCols.add(0, "TENANT_ID");
+        }
+        if (salted) {
+            expectedCols.add(0, "_SALT");
         }
         assertEquals(expectedCols, Lists.transform(actual, function));
     }
@@ -810,59 +827,82 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             PTable table = PhoenixRuntime.getTableNoCache(viewConn, view1);
             assertEquals(QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT, table.getBaseColumnCount());
             
+            try {
+                viewConn.createStatement().execute("SELECT V2 FROM " + view1);
+                fail("V2 should have been droppped");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+            
             // Add a new regular column and pk column  to the base table
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD V3 VARCHAR, PK2 VARCHAR PRIMARY KEY";
             conn.createStatement().execute(alterBaseTable);
             
             // Column V3 shouldn't have propagated to the diverged view.
-            String sql = "SELECT V3 FROM " + view1;
             try {
-                viewConn.createStatement().execute(sql);
+                viewConn.createStatement().execute("SELECT V3 FROM " + view1);
+                fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
             
             // However, column V3 should have propagated to the non-diverged view.
-            sql = "SELECT V3 FROM " + view2;
-            viewConn2.createStatement().execute(sql);
+            viewConn2.createStatement().execute("SELECT V3 FROM " + view2);
             
             // PK2 should be in both views
-            sql = "SELECT PK2 FROM " + view1;
-            viewConn.createStatement().execute(sql);
-            sql = "SELECT PK2 FROM " + view2;
-            viewConn2.createStatement().execute(sql);
+            viewConn.createStatement().execute("SELECT PK2 FROM " + view1);
+            viewConn2.createStatement().execute("SELECT PK2 FROM " + view2);
             
             // Drop a column from the base table
             alterBaseTable = "ALTER TABLE " + baseTable + " DROP COLUMN V1";
             conn.createStatement().execute(alterBaseTable);
-            
-            // V1 should be dropped from both diverged and non-diverged views
-            sql = "SELECT V1 FROM " + view1;
+
+            // V1 should be dropped from the base table
             try {
-                viewConn.createStatement().execute(sql);
+                conn.createStatement().execute("SELECT V1 FROM " + baseTable);
+                fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
-            sql = "SELECT V1 FROM " + view2;
+            
+            // V1 should be dropped from both diverged and non-diverged views
             try {
-                viewConn2.createStatement().execute(sql);
+                viewConn2.createStatement().execute("SELECT V1 FROM " + view2);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+            try {
+                viewConn.createStatement().execute("SELECT V1 FROM " + view1);
+//              TODO since the view is diverged we can't filter out the parent table column metadata
+//              while building the view. After the client stops sending parent table column metadata (see PHOENIX-4766)
+//              while creating a view dropping a parent table column will also be reflected in a diverged view
+//              fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
             
             // V0 should be still exist in both diverged and non-diverged views
-            sql = "SELECT V0 FROM " + view1;
-            viewConn.createStatement().execute(sql);
-            sql = "SELECT V0 FROM " + view2;
-            viewConn2.createStatement().execute(sql);
+            viewConn.createStatement().execute("SELECT V0 FROM " + view1);
+            viewConn2.createStatement().execute("SELECT V0 FROM " + view2);
 
-			// add the column that was dropped back to the view
-			String addColumn = "ALTER VIEW " + view1 + " ADD V2 VARCHAR";
-			viewConn.createStatement().execute(addColumn);
+            // we currently cannot add a column that was dropped back to the view because the excluded column
+            // doesn't contain data type information see PHOENIX-4868
+            try {
+    			viewConn.createStatement().execute("ALTER VIEW " + view1 + " ADD V2 VARCHAR");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+			
 			// V2 should not exist in the view
-			sql = "SELECT V0 FROM " + view1;
-			viewConn.createStatement().execute(sql);
-        } 
+            try {
+    			viewConn.createStatement().execute("SELECT V2 FROM " + view1);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            } 
+        }
     }
     
     @Test
@@ -879,10 +919,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, baseTableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            assertTableDefinition(conn, baseTableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, true, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "+baseTableName);
-            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, true, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
@@ -1037,6 +1077,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                     .getString());
             assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(1).getName()
                 .getString());
+            assertEquals("Unexpected salt buckets", view.getBucketNum(),
+                view.getIndexes().get(0).getBucketNum());
+            assertEquals("Unexpected salt buckets", view.getBucketNum(),
+                view.getIndexes().get(1).getBucketNum());
             
             // drop two columns
             conn.createStatement().execute("ALTER TABLE " + tableWithView + " DROP COLUMN v2, v3 ");
