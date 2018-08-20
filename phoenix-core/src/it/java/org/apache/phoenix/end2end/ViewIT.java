@@ -734,7 +734,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
-        assertPKs(rs, new String[] {"K3"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3"});
         
         // sanity check upserts into base table and view
         conn.createStatement().executeUpdate("upsert into " + fullTableName + " (k1, k2, v1) values (1, 1, 1)");
@@ -763,12 +763,14 @@ public class ViewIT extends SplitSystemCatalogIT {
         ddl = "CREATE VIEW " + fullViewName + "(v2 VARCHAR, k3 VARCHAR, k4 INTEGER NOT NULL, CONSTRAINT PKVEW PRIMARY KEY (k3, k4)) AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
         conn.createStatement().execute(ddl);
         
+        PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+        
         // assert PK metadata
         ResultSet rs =
                 conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
-        assertPKs(rs, new String[] {"K3", "K4"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
     }
     
     @Test
@@ -788,7 +790,7 @@ public class ViewIT extends SplitSystemCatalogIT {
 
         // assert PK metadata
         ResultSet rs = conn.getMetaData().getPrimaryKeys(null, SCHEMA2, viewName);
-        assertPKs(rs, new String[] {"K3", "K4"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
     }
     
     @Test
@@ -1019,8 +1021,8 @@ public class ViewIT extends SplitSystemCatalogIT {
                         + tableName + " WHERE KEY_PREFIX = 'ab4' ");
 
                 // upsert rows
-                upsertRows(viewName1, tenantConn);
-                upsertRows(viewName2, tenantConn);
+                upsertRows(tableName, viewName1, tenantConn);
+                upsertRows(tableName, viewName2, tenantConn);
 
                 // run queries
                 String[] whereClauses =
@@ -1137,7 +1139,7 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
-    private void upsertRows(String viewName1, Connection tenantConn) throws SQLException {
+    private void upsertRows(String tableName, String viewName1, Connection tenantConn) throws SQLException, IOException {
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1
                 + " (pk1, pk2, col1, col3) VALUES ('testa', 'testb', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1

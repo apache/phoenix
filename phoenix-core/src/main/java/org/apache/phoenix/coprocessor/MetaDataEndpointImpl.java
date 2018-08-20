@@ -250,7 +250,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.ByteString;
@@ -418,6 +417,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final KeyValue COLUMN_DEF_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_DEF_BYTES);
     private static final KeyValue IS_ROW_TIMESTAMP_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_ROW_TIMESTAMP_BYTES);
     private static final KeyValue COLUMN_QUALIFIER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_QUALIFIER_BYTES);
+    // this key value is used to represent a column derived from a parent that was deleted (by
+    // storing a value of LinkType.EXCLUDED_COLUMN)
+    private static final KeyValue LINK_TYPE_KV =
+            createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
 
     private static final List<KeyValue> COLUMN_KV_COLUMNS = Arrays.<KeyValue>asList(
             DECIMAL_DIGITS_KV,
@@ -432,7 +435,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             IS_VIEW_REFERENCED_KV,
             COLUMN_DEF_KV,
             IS_ROW_TIMESTAMP_KV,
-            COLUMN_QUALIFIER_KV
+            COLUMN_QUALIFIER_KV,
+            LINK_TYPE_KV
             );
     static {
         Collections.sort(COLUMN_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -450,7 +454,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final int COLUMN_DEF_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_DEF_KV);
     private static final int IS_ROW_TIMESTAMP_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_ROW_TIMESTAMP_KV);
     private static final int COLUMN_QUALIFIER_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_QUALIFIER_KV);
+    // the index of the key value is used to represent a column derived from a parent that was
+    // deleted (by storing a value of LinkType.EXCLUDED_COLUMN)
+    private static final int EXCLUDED_COLUMN_LINK_TYPE_KV_INDEX =
+            COLUMN_KV_COLUMNS.indexOf(LINK_TYPE_KV);
 
+    // index for link type key value that is used to store linking rows
     private static final int LINK_TYPE_INDEX = 0;
 
     private static final Cell CLASS_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, CLASS_NAME_BYTES);
@@ -497,6 +506,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final int DEFAULT_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(DEFAULT_VALUE_KV);
     private static final int MIN_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(MIN_VALUE_KV);
     private static final int MAX_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(MAX_VALUE_KV);
+    
+    private static PName newPName(byte[] buffer) {
+        return buffer==null ? null : newPName(buffer, 0, buffer.length);
+    }
 
     private static PName newPName(byte[] keyBuffer, int keyOffset, int keyLength) {
         if (keyLength <= 0) {
@@ -726,9 +739,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         List<PColumn> excludedColumns = Lists.newArrayList();
         // add my own columns first in reverse order
         List<PColumn> myColumns = table.getColumns();
-        // skip salted column as it will be added from the base table columns
-        int startIndex = table.getBucketNum() != null ? 1 : 0;
-        for (int i = myColumns.size() - 1; i >= startIndex; i--) {
+        // skip salted column as it will be created automatically
+        myColumns = myColumns.subList(isSalted ? 1 : 0, myColumns.size());
+        for (int i = myColumns.size() - 1; i >= 0; i--) {
             PColumn pColumn = myColumns.get(i);
             if (pColumn.isExcluded()) {
                 excludedColumns.add(pColumn);
@@ -805,17 +818,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 if (hasIndexId) {
                     // add all pk columns of parent tables to indexes
                     // skip salted column as it will be added from the base table columns
-                    startIndex = pTable.getBucketNum() != null ? 1 : 0;
+                    int startIndex = pTable.getBucketNum() != null ? 1 : 0;
                     for (int index=startIndex; index<pTable.getPKColumns().size(); index++) {
-                        PColumn column = pTable.getPKColumns().get(index);
+                        PColumn pkColumn = pTable.getPKColumns().get(index);
                         // don't add the salt column of ancestor tables for view indexes
-                        if (column.equals(SaltingUtil.SALTING_COLUMN) || column.isExcluded()) {
+                        if (pkColumn.equals(SaltingUtil.SALTING_COLUMN) || pkColumn.isExcluded()) {
                             continue;
                         }
-                        column = IndexUtil.getIndexPKColumn(++numPKCols, column);
-                        int existingColumnIndex = allColumns.indexOf(column);
+                        pkColumn = IndexUtil.getIndexPKColumn(++numPKCols, pkColumn);
+                        int existingColumnIndex = allColumns.indexOf(pkColumn);
                         if (existingColumnIndex == -1) {
-                            allColumns.add(0, column);
+                            allColumns.add(0, pkColumn);
                         }
                     }
                     for (int j = 0; j < pTable.getColumns().size(); j++) {
@@ -833,6 +846,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 } else {
                     List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(pTable);
                     if (currAncestorTableCols != null) {
+                        // add the ancestor columns in reverse order so that the final column list
+                        // contains ancestor columns and then the view columns in the right order
                         for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
                             PColumn column = currAncestorTableCols.get(j);
                             // for diverged views we always include pk columns of the base table. We
@@ -862,10 +877,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             } else {
                                 int existingColumnIndex = allColumns.indexOf(column);
                                 if (existingColumnIndex != -1) {
-                                    // if the same column exists in a parent and child, we keep the
-                                    // latest column
+                                    // for diverged views if the view was created before
+                                    // PHOENIX-3534 the parent table columns will be present in the
+                                    // view PTable (since the base column count is
+                                    // QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT we can't
+                                    // filter them out) so we always pick the parent column  
+                                    // for non diverged views if the same column exists in a parent
+                                    // and child, we keep the latest column
                                     PColumn existingColumn = allColumns.get(existingColumnIndex);
-                                    if (column.getTimestamp() > existingColumn.getTimestamp()) {
+                                    if (isDiverged || column.getTimestamp() > existingColumn.getTimestamp()) {
                                         allColumns.remove(existingColumnIndex);
                                         allColumns.add(column);
                                     }
@@ -893,8 +913,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
             }
         }
-        // lets remove the excluded columns first if the timestamp is newer than
-        // the added column
+        // remove the excluded columns if the timestamp is newer than the added column
         for (PColumn excludedColumn : excludedColumns) {
             int index = allColumns.indexOf(excludedColumn);
             if (index != -1) {
@@ -905,27 +924,26 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
         List<PColumn> columnsToAdd = Lists.newArrayList();
         int position = isSalted ? 1 : 0;
+        // allColumns contains the columns in the reverse order
         for (int i = allColumns.size() - 1; i >= 0; i--) {
             PColumn column = allColumns.get(i);
             if (table.getColumns().contains(column)) {
                 // for views this column is not derived from an ancestor
-                columnsToAdd.add(new PColumnImpl(column, position));
+                columnsToAdd.add(new PColumnImpl(column, position++));
             } else {
-                columnsToAdd.add(new PColumnImpl(column, true, position));
+                columnsToAdd.add(new PColumnImpl(column, true, position++));
             }
-            position++;
         }
-        // need to have the columns in the PTable to use the WhereCompiler
-        // unfortunately so this needs to be done
-        // twice....
-        // TODO set the view properties correctly instead of just setting them
-        // same as the base table
+        // we need to include the salt column when setting the base table column count in order to
+        // maintain b/w compatibility
         int baseTableColumnCount =
                 isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
-                        : columnsToAdd.size() - myColumns.size();
+                        : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+        // TODO Implement PHOENIX-4763 to set the view properties correctly instead of just
+        // setting them same as the base table
         PTableImpl pTable =
                 PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTableTimestamp,
-                    baseTableColumnCount);
+                    baseTableColumnCount, excludedColumns);
         return WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
     }
 
@@ -1058,7 +1076,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private void addColumnToTable(List<Cell> results, PName colName, PName famName,
-        Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) {
+            Cell[] colKeyValues, List<PColumn> columns, boolean isSalted, int baseColumnCount,
+            boolean isRegularView) {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < COLUMN_KV_COLUMNS.size()) {
@@ -1083,7 +1102,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             throw new IllegalStateException("Didn't find all required key values in '"
                     + colName.getString() + "' column metadata row");
         }
-
+        
         Cell columnSizeKv = colKeyValues[COLUMN_SIZE_INDEX];
         Integer maxLength =
                 columnSizeKv == null ? null : PInteger.INSTANCE.getCodec().decodeInt(
@@ -1095,7 +1114,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         Cell ordinalPositionKv = colKeyValues[ORDINAL_POSITION_INDEX];
         int position =
             PInteger.INSTANCE.getCodec().decodeInt(ordinalPositionKv.getValueArray(),
-                    ordinalPositionKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);
+                    ordinalPositionKv.getValueOffset(), SortOrder.getDefault()) + (isSalted ? 1 : 0);;
+
+        // Prior to PHOENIX-4766 we were sending the parent table column metadata while creating a
+        // child view, now that we combine columns by resolving the parent table hierarchy we
+        // don't need to include the parent table column while loading the PTable of the view
+        if (isRegularView && position <= baseColumnCount) {
+            return;
+        }
+        
+        // if this column was inherited from a parent and was dropped that we create an excluded
+        // column, this check is only needed to handle view metadata that was created before
+        // PHOENIX-4766 where we were sending the parent table column metadata when creating a
+        // childview
+        Cell excludedColumnKv = colKeyValues[EXCLUDED_COLUMN_LINK_TYPE_KV_INDEX];
+        if (excludedColumnKv != null && colKeyValues[DATA_TYPE_INDEX]
+                .getTimestamp() <= excludedColumnKv.getTimestamp()) {
+            LinkType linkType =
+                    LinkType.fromSerializedValue(
+                        excludedColumnKv.getValueArray()[excludedColumnKv.getValueOffset()]);
+            if (linkType == LinkType.EXCLUDED_COLUMN) {
+                addExcludedColumnToTable(columns, colName, famName, excludedColumnKv.getTimestamp());
+            } else {
+                // if we have a column metadata row that has a link type keyvalue it should
+                // represent an excluded column by containing the LinkType.EXCLUDED_COLUMN
+                throw new IllegalStateException(
+                        "Link type should be EXCLUDED_COLUMN but found an unxpected link type for key value "
+                                + excludedColumnKv);
+            }
+            return;
+        }
+        
         Cell nullableKv = colKeyValues[NULLABLE_INDEX];
         boolean isNullable =
             PInteger.INSTANCE.getCodec().decodeInt(nullableKv.getValueArray(),
@@ -1140,8 +1189,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 Arrays.copyOfRange(columnQualifierKV.getValueArray(),
                     columnQualifierKV.getValueOffset(), columnQualifierKV.getValueOffset()
                             + columnQualifierKV.getValueLength()) : (isPkColumn ? null : colName.getBytes());
-        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp, false, columnQualifierBytes,
-            results.get(0).getTimestamp());
+        PColumn column =
+                new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable,
+                        position - 1, sortOrder, arraySize, viewConstant, isViewReferenced,
+                        expressionStr, isRowTimestamp, false, columnQualifierBytes,
+                        results.get(0).getTimestamp());
         columns.add(column);
     }
 
@@ -1431,7 +1483,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                   addExcludedColumnToTable(columns, colName, famName, colKv.getTimestamp());
               }
           } else {
-              addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
+              boolean isRegularView = (tableType == PTableType.VIEW && viewType!=ViewType.MAPPED);
+              addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null, baseColumnCount, isRegularView);
           }
         }
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
@@ -1915,42 +1968,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 dropChildMetadata(schemaName, tableName, tenantIdBytes);
             }
             
-            // Here we are passed the parent's columns to add to a view, PHOENIX-3534 allows for a splittable
-            // System.Catalog thus we only store the columns that are new to the view, not the parents columns,
-            // thus here we remove everything that is ORDINAL.POSITION <= baseColumnCount and update the
-            // ORDINAL.POSITIONS to be shifted accordingly.
-            // TODO PHOENIX-4767 remove the following code that removes the base table column metadata in the next release 
-            if (PTableType.VIEW.equals(tableType) && !ViewType.MAPPED.equals(viewType)) {
-                boolean isSalted = MetaDataUtil.getSaltBuckets(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable()) > 0;
-                int baseColumnCount = MetaDataUtil.getBaseColumnCount(tableMetadata) - (isSalted ? 1 : 0);
-                if (baseColumnCount > 0) {
-                    Iterator<Mutation> mutationIterator = tableMetadata.iterator();
-                    while (mutationIterator.hasNext()) {
-                        Mutation mutation = mutationIterator.next();
-                        // if not null and ordinal position < base column count remove this mutation
-                        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                        MetaDataUtil.getMutationValue(mutation, PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES,
-                            GenericKeyValueBuilder.INSTANCE, ptr);
-                        if (MetaDataUtil.getMutationValue(mutation, PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES,
-                            GenericKeyValueBuilder.INSTANCE, ptr)) {
-                            int ordinalValue = PInteger.INSTANCE.getCodec().decodeInt(ptr, SortOrder.ASC);
-                            if (ordinalValue <= baseColumnCount) {
-                                mutationIterator.remove();
-                            } else {
-                                if (mutation instanceof Put) {
-                                    byte[] ordinalPositionBytes = new byte[PInteger.INSTANCE.getByteSize()];
-                                    int newOrdinalValue = ordinalValue - baseColumnCount;
-                                    PInteger.INSTANCE.getCodec()
-                                        .encodeInt(newOrdinalValue, ordinalPositionBytes, 0);
-                                    byte[] family = Iterables.getOnlyElement(mutation.getFamilyCellMap().keySet());
-                                    MetaDataUtil.mutatePutValue((Put) mutation, family, PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, ordinalPositionBytes);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             byte[] parentTableKey = null;
             Mutation viewPhysicalTableRow = null;
             Set<TableName> indexes = new HashSet<TableName>();;
@@ -2946,6 +2963,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
         List<Put> columnPutsForBaseTable =
                 Lists.newArrayListWithExpectedSize(tableMetadata.size());
+        boolean salted = basePhysicalTable.getBucketNum()!=null;
         // Isolate the puts relevant to adding columns 
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
@@ -2985,9 +3003,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
             }
             
-            //add the new columns to the child view
+            // add the new columns to the child view
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());
-            boolean addingExistingPkCol = false;
+            // remove salted column
+            if (salted) {
+                viewPkCols.remove(0);
+            }
+            // remove pk columns that are present in the parent
+            viewPkCols.removeAll(basePhysicalTable.getPKColumns());
+            boolean addedPkColumn = false;
             for (Put columnToBeAdded : columnPutsForBaseTable) {
                 PColumn existingViewColumn = null;
                 byte[][] rkmd = new byte[5][];
@@ -3008,7 +3032,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     // ignore since it means the column is not present in the view
                 }
 
-                boolean isColumnToBeAddPkCol = columnFamily == null;
+                boolean isCurrColumnToBeAddPkCol = columnFamily == null;
+                addedPkColumn |= isCurrColumnToBeAddPkCol;
                 if (existingViewColumn != null) {
                     if (EncodedColumnsUtil.usesEncodedColumnNames(basePhysicalTable)
                             && !SchemaUtil.isPKColumn(existingViewColumn)) {
@@ -3072,7 +3097,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
                     // if the column to be added to the base table is a pk column, then we need to
                     // validate that the key slot position is the same
-                    if (isColumnToBeAddPkCol) {
+                    if (isCurrColumnToBeAddPkCol) {
                         List<Cell> keySeqCells =
                                 columnToBeAdded.get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                     PhoenixDatabaseMetaData.KEY_SEQ_BYTES);
@@ -3081,10 +3106,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             int keySeq =
                                     PSmallint.INSTANCE.getCodec().decodeInt(cell.getValueArray(),
                                         cell.getValueOffset(), SortOrder.getDefault());
+                            // we need to take into account the columns inherited from the base table
+                            // if the table is salted we don't include the salted column (which is
+                            // present in getPKColumns())
                             int pkPosition =
                                     basePhysicalTable.getPKColumns().size()
-                                            + SchemaUtil.getPKPosition(view, existingViewColumn)
-                                            + 1;
+                                            + SchemaUtil.getPKPosition(view, existingViewColumn) + 1
+                                            - (salted ? 2 : 0); 
                             if (pkPosition != keySeq) {
                                 return new MetaDataMutationResult(
                                         MutationCode.UNALLOWED_TABLE_MUTATION,
@@ -3094,9 +3122,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         }
                     }
                 }
-                if (isColumnToBeAddPkCol) {
+                if (existingViewColumn!=null && isCurrColumnToBeAddPkCol) {
                     viewPkCols.remove(existingViewColumn);
-                    addingExistingPkCol = true;
                 }
             }
             /*
@@ -3104,7 +3131,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
              * the same as the base table pk columns 2. if we are adding all the existing view pk
              * columns to the base table
              */
-            if (addingExistingPkCol && !viewPkCols.isEmpty()) {
+            if (addedPkColumn && !viewPkCols.isEmpty()) {
                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                         EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
             }
@@ -3283,16 +3310,27 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                 && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
                             try {
                                 addingCol = true;
-                                if (pkCount > FAMILY_NAME_INDEX
-                                        && rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX].length > 0) {
+                                byte[] familyName = null;
+                                byte[] colName = null;
+                                if (pkCount > FAMILY_NAME_INDEX) {
+                                    familyName = rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX];
+                                }
+                                if (pkCount > COLUMN_NAME_INDEX) {
+                                    colName = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+                                }
+                                if (table.getExcludedColumns().contains(
+                                    PColumnImpl.createExcludedColumn(newPName(familyName), newPName(colName), 0l))) {
+                                    // if this column was previously dropped in a view do not allow adding the column back
+                                    return new MetaDataMutationResult(
+                                            MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), null);
+                                }
+                                if (familyName!=null && familyName.length > 0) {
                                     PColumnFamily family =
-                                            table.getColumnFamily(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-                                    family.getPColumnForColumnNameBytes(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]);
-                                } else if (pkCount > COLUMN_NAME_INDEX
-                                        && rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length > 0) {
+                                            table.getColumnFamily(familyName);
+                                            family.getPColumnForColumnNameBytes(colName);
+                                } else if (colName!=null && colName.length > 0) {
                                     addingPKColumn = true;
-                                    table.getPKColumn(new String(
-                                            rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
+                                    table.getPKColumn(new String(colName));
                                 } else {
                                     continue;
                                 }

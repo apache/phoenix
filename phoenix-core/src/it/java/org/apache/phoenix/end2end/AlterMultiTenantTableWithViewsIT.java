@@ -499,20 +499,24 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
         String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection tenant1Conn = getTenantConnection(tenant)) {
-            String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
+            String baseTableDDL =
+                    "CREATE TABLE " + baseTable
+                            + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, "
+                            + "V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1))"
+                            + " MULTI_TENANT = true, SALT_BUCKETS = 4";
             conn.createStatement().execute(baseTableDDL);
 
             String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
             tenant1Conn.createStatement().execute(view1DDL);
 
-            assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 1, 5, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3");
-            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5,  "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 1, 6, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 8, 6,  "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
 
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD KV VARCHAR, PK2 VARCHAR PRIMARY KEY";
             conn.createStatement().execute(alterBaseTable);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 2, 7, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3", "KV", "PK2");
-            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5,  "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 8, 6,  "PK1", "V1", "V2", "V3", "KV", "PK2", "VIEW_COL1", "VIEW_COL2");
 
             // verify that the both columns were added to view1
             tenant1Conn.createStatement().execute("SELECT KV from " + view1);
@@ -527,21 +531,24 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
         String tenant = TENANT1;
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection tenant1Conn = getTenantConnection(tenant)) {
-            String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
+            String baseTableDDL =
+                    "CREATE TABLE " + baseTable
+                            + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR,"
+                            + " V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) "
+                            + "MULTI_TENANT = true , SALT_BUCKETS = 4";
             conn.createStatement().execute(baseTableDDL);
 
             String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
             tenant1Conn.createStatement().execute(view1DDL);
 
-            assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 1, 5, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3");
-            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 1, 6, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 8, 6, "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
 
             String alterBaseTable = "ALTER TABLE " + baseTable + " DROP COLUMN V2";
             conn.createStatement().execute(alterBaseTable);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 2, 4, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V3");
-            // column adds and drops are no longer propagated to child views, when the parent view is resolved the dropped column is excluded
-            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1",  "V2", "V3", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 8, 6, "PK1", "V1",  "V3", "VIEW_COL1", "VIEW_COL2");
 
             // verify that the dropped columns aren't visible
             try {
