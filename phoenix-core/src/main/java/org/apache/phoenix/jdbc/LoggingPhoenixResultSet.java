@@ -26,19 +26,26 @@ public class LoggingPhoenixResultSet extends DelegateResultSet {
     
     private PhoenixMetricsLog phoenixMetricsLog;
     private String sql;
+    private boolean areMetricsLogged;
 
     public LoggingPhoenixResultSet(ResultSet rs, PhoenixMetricsLog phoenixMetricsLog, String sql) {
         super(rs);
         this.phoenixMetricsLog = phoenixMetricsLog;
         this.sql = sql;
+        this.areMetricsLogged = false;
     }
     
     @Override
     public void close() throws SQLException {
-        phoenixMetricsLog.logOverAllReadRequestMetrics(PhoenixRuntime.getOverAllReadRequestMetricInfo(rs), sql);
-        phoenixMetricsLog.logRequestReadMetrics(PhoenixRuntime.getRequestReadMetricInfo(rs), sql);
-        PhoenixRuntime.resetMetrics(rs);
-        super.close();
+        if (!rs.isClosed()) {
+            super.close();
+        }
+        if (!this.areMetricsLogged) {
+            phoenixMetricsLog.logOverAllReadRequestMetrics(PhoenixRuntime.getOverAllReadRequestMetricInfo(rs), sql);
+            phoenixMetricsLog.logRequestReadMetrics(PhoenixRuntime.getRequestReadMetricInfo(rs), sql);
+            PhoenixRuntime.resetMetrics(rs);
+            this.areMetricsLogged = true;
+        }
     }
 
 }
