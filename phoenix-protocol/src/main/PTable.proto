@@ -85,7 +85,7 @@ message PTable {
   optional bytes viewStatement = 18;
   repeated bytes physicalNames = 19;
   optional bytes tenantId = 20;
-  optional int32 viewIndexId = 21;
+  optional int64 viewIndexId = 21;
   optional bytes indexType = 22;
   optional int64 statsTimeStamp = 23;
   optional bool storeNulls = 24;
@@ -103,6 +103,7 @@ message PTable {
   repeated EncodedCQCounter encodedCQCounters = 36;
   optional bool useStatsForParallelization = 37;
   optional int32 transactionProvider = 38;
+  optional int32 viewIndexType = 39 [default = 5];
 }
 
 message EncodedCQCounter {

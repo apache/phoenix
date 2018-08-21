@@ -700,7 +700,8 @@ public interface PTable extends PMetaDataEntity {
 
     ViewType getViewType();
     String getViewStatement();
-    Short getViewIndexId();
+    Long getViewIndexId();
+    PDataType getViewIndexType();
     PTableKey getKey();
 
     IndexType getIndexType();
