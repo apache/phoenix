@@ -287,7 +287,7 @@ public abstract class RegionScannerFactory {
             QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,
             QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
             KeyValue.Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
-        return result.size() - 1;
+        return getArrayCellPosition(result);
       }
 
       @Override
@@ -301,4 +301,8 @@ public abstract class RegionScannerFactory {
       }
     };
   }
+
+    public static int getArrayCellPosition(List<Cell> result) {
+        return result.size() - 1;
+    }
 }
