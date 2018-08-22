@@ -18,10 +18,12 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -37,12 +39,15 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.iterate.RegionScannerFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -66,9 +71,27 @@ public class HashJoinRegionScanner implements RegionScanner {
     private ValueBitSet[] tempSrcBitSet;
     private final boolean useQualifierAsListIndex;
     private final boolean useNewValueColumnQualifier;
-    
+    private final boolean addArrayCell;
+
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env, boolean useQualifierAsIndex, boolean useNewValueColumnQualifier) throws IOException {
+    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector,
+                                 HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
+                                 RegionCoprocessorEnvironment env, boolean useQualifierAsIndex,
+                                 boolean useNewValueColumnQualifier)
+        throws IOException {
+
+        this(env, scanner, null, null, projector, joinInfo,
+             tenantId, useQualifierAsIndex, useNewValueColumnQualifier);
+    }
+
+    @SuppressWarnings("unchecked")
+    public HashJoinRegionScanner(RegionCoprocessorEnvironment env, RegionScanner scanner,
+                                 final Set<KeyValueColumnExpression> arrayKVRefs,
+                                 final Expression[] arrayFuncRefs, TupleProjector projector,
+                                 HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
+                                 boolean useQualifierAsIndex, boolean useNewValueColumnQualifier)
+        throws IOException {
+
         this.env = env;
         this.scanner = scanner;
         this.projector = projector;
@@ -103,7 +126,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                         Bytes.toLong(ByteUtil.copyKeyBytesIfNecessary(joinId)));
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
             }
-                
+
             hashCaches[i] = hashCache;
             tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
         }
@@ -113,16 +136,21 @@ public class HashJoinRegionScanner implements RegionScanner {
         }
         this.useQualifierAsListIndex = useQualifierAsIndex;
         this.useNewValueColumnQualifier = useNewValueColumnQualifier;
+        this.addArrayCell = (arrayFuncRefs != null && arrayFuncRefs.length > 0 &&
+                             arrayKVRefs != null && arrayKVRefs.size() > 0);
     }
 
     private void processResults(List<Cell> result, boolean hasBatchLimit) throws IOException {
         if (result.isEmpty())
             return;
         Tuple tuple = useQualifierAsListIndex ? new PositionBasedResultTuple(result) : new ResultTuple(Result.create(result));
+        boolean projected = false;
+
         // For backward compatibility. In new versions, HashJoinInfo.forceProjection()
         // always returns true.
         if (joinInfo.forceProjection()) {
             tuple = projector.projectResults(tuple, useNewValueColumnQualifier);
+            projected = true;
         }
 
         // TODO: fix below Scanner.next() and Scanner.nextRaw() methods as well.
@@ -150,14 +178,15 @@ public class HashJoinRegionScanner implements RegionScanner {
                     dup *= (tempTuples[i] == null ? 1 : tempTuples[i].size());
                 }
                 for (int i = 0; i < dup; i++) {
-                    resultQueue.offer(tuple);
+                    offerResult(tuple, projected, result);
                 }
             } else {
                 KeyValueSchema schema = joinInfo.getJoinedSchema();
                 if (!joinInfo.forceProjection()) { // backward compatibility
                     tuple = projector.projectResults(tuple, useNewValueColumnQualifier);
+                    projected = true;
                 }
-                resultQueue.offer(tuple);
+                offerResult(tuple, projected, result);
                 for (int i = 0; i < count; i++) {
                     boolean earlyEvaluation = joinInfo.earlyEvaluation()[i];
                     JoinType type = joinInfo.getJoinTypes()[i];
@@ -173,7 +202,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                                 if (type == JoinType.Inner || type == JoinType.Semi) {
                                     continue;
                                 } else if (type == JoinType.Anti) {
-                                    resultQueue.offer(lhs);
+                                    offerResult(lhs, projected, result);
                                     continue;
                                 }
                             }
@@ -182,18 +211,18 @@ public class HashJoinRegionScanner implements RegionScanner {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
                                     lhs : TupleProjector.mergeProjectedValue(
                                             (ProjectedValueTuple) lhs, schema, tempDestBitSet,
-                                            null, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
+                                            null, joinInfo.getSchemas()[i], tempSrcBitSet[i],
                                             joinInfo.getFieldPositions()[i], useNewValueColumnQualifier);
-                            resultQueue.offer(joined);
+                            offerResult(joined, projected, result);
                             continue;
                         }
                         for (Tuple t : tempTuples[i]) {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
                                     lhs : TupleProjector.mergeProjectedValue(
                                             (ProjectedValueTuple) lhs, schema, tempDestBitSet,
-                                            t, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
+                                            t, joinInfo.getSchemas()[i], tempSrcBitSet[i],
                                             joinInfo.getFieldPositions()[i], useNewValueColumnQualifier);
-                            resultQueue.offer(joined);
+                            offerResult(joined, projected, result);
                         }
                     }
                 }
@@ -265,7 +294,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                 processResults(result, false);
                 result.clear();
             }
-            
+
             return nextInQueue(result);
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
@@ -309,5 +338,21 @@ public class HashJoinRegionScanner implements RegionScanner {
         return this.scanner.getBatch();
     }
 
-}
+    // PHOENIX-4791 Propagate array element cell through hash join
+    private void offerResult(Tuple tuple, boolean projected, List<Cell> result) {
+        if (!projected || !addArrayCell) {
+            resultQueue.offer(tuple);
+            return;
+        }
 
+        Cell projectedCell = tuple.getValue(0);
+        int arrayCellPosition = RegionScannerFactory.getArrayCellPosition(result);
+        Cell arrayCell = result.get(arrayCellPosition);
+
+        List<Cell> cells = new ArrayList<Cell>(2);
+        cells.add(projectedCell);
+        cells.add(arrayCell);
+        MultiKeyValueTuple multi = new MultiKeyValueTuple(cells);
+        resultQueue.offer(multi);
+    }
+}
