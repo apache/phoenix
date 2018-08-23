@@ -15,4 +15,5 @@ if __name__ == '__main__':
     cursor.execute("UPSERT INTO users VALUES (?, ?)", (1, 'admin'))
     cursor.execute("UPSERT INTO users VALUES (?, ?)", (2, 'user'))
     cursor.execute("SELECT * FROM users")
+    print "RESULTS"
     print cursor.fetchall()

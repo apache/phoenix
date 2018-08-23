@@ -39,7 +39,8 @@ popd
 
 set -u
 echo "INSTALLING COMPONENTS"
-pip install -e file:///${LOCAL_PY}/requests-kerberos
+#pip install -e file:///${LOCAL_PY}/requests-kerberos
+pip install requests-gssapi
 pip install -e file:///${LOCAL_PY}/phoenixdb-module
 
 export KRB5_CONFIG=$KRB5_CFG_FILE
@@ -55,5 +56,5 @@ unset https_proxy
 
 echo "Working Directory is ${PWD}"
 
-echo "RUN PYTHON TEST"
+echo "RUN PYTHON TEST on port $PQS_PORT"
 python $PYTHON_SCRIPT $PQS_PORT
