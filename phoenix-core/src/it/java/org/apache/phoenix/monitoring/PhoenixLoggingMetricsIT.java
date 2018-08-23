@@ -20,6 +20,7 @@ package org.apache.phoenix.monitoring;
 import com.google.common.collect.Maps;
 import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixMetricsLog;
+import org.apache.phoenix.jdbc.LoggingPhoenixResultSet;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -66,6 +67,35 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
 
         Connection testConn = DriverManager.getConnection(getUrl());
         loggedConn = getLoggingPhoenixConnection(testConn);
+    }
+
+    @Test
+    public void testResultSetTypeForQueries() throws Exception {
+        String tableName3 = generateUniqueName();
+
+        String create = "CREATE TABLE " + tableName3 + " (K INTEGER PRIMARY KEY)";
+        assertTrue(executeAndGetResultSet(create) == null);
+
+        String upsert = "UPSERT INTO " + tableName3 + " VALUES (42)";
+        assertTrue(executeAndGetResultSet(upsert) == null);
+
+        String select = "SELECT * FROM " + tableName3;
+        assertTrue(executeAndGetResultSet(select) instanceof LoggingPhoenixResultSet);
+
+        String createView = "CREATE VIEW TEST_VIEW (K INTEGER) AS SELECT * FROM " + tableName3;
+        assertTrue(executeAndGetResultSet(createView) == null);
+
+        String createIndex = "CREATE INDEX TEST_INDEX ON " + tableName3 + " (K)";
+        assertTrue(executeAndGetResultSet(createIndex) == null);
+
+        String dropIndex = "DROP INDEX TEST_INDEX ON " + tableName3;
+        assertTrue(executeAndGetResultSet(dropIndex) == null);
+
+        String dropView = "DROP VIEW TEST_VIEW";
+        assertTrue(executeAndGetResultSet(dropView) == null);
+
+        String dropTable = "DROP TABLE " + tableName3;
+        assertTrue(executeAndGetResultSet(dropTable) == null);
     }
 
     @Test
@@ -134,12 +164,22 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
                 mutationReadMetricsMap.size() == 0);
     }
 
+    private ResultSet executeAndGetResultSet(String query) throws Exception {
+        Statement stmt = loggedConn.createStatement();
+        stmt.execute(query);
+        return stmt.getResultSet();
+    }
+
     private void verifyQueryLevelMetricsLogging(String query) throws SQLException {
         Statement stmt = loggedConn.createStatement();
         ResultSet rs = stmt.executeQuery(query);
+        assertTrue(rs instanceof LoggingPhoenixResultSet);
+        int rowsRetrievedCounter = 0;
         while (rs.next()) {
+            rowsRetrievedCounter++;
         }
         rs.close();
+        assertTrue(rowsRetrievedCounter == NUM_ROWS);
         assertTrue("Read metrics for not found for " + tableName1,
                 requestReadMetricsMap.get(tableName1).size() > 0);
         assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
