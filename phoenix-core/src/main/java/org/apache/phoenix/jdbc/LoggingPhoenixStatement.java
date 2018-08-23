@@ -51,7 +51,10 @@ public class LoggingPhoenixStatement extends DelegateStatement {
 
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getResultSet(), phoenixMetricsLog, this.sql);
+        // Re-use the cached ResultSet value since call to getResultSet() is not idempotent
+        ResultSet resultSet = super.getResultSet();
+        return (resultSet == null) ? null : new LoggingPhoenixResultSet(resultSet,
+                phoenixMetricsLog, sql);
     }
     
     @Override
