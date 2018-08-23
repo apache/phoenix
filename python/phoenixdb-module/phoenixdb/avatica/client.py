@@ -24,9 +24,7 @@ from phoenixdb import errors
 from phoenixdb.avatica.proto import requests_pb2, common_pb2, responses_pb2
 
 import requests
-from requests_kerberos import HTTPKerberosAuth, OPTIONAL
-import kerberos
-
+from requests_gssapi import HTTPSPNEGOAuth, OPTIONAL
 
 try:
     import urlparse
@@ -164,7 +162,7 @@ class AvaticaClient(object):
             logger.debug("POST %s %r %r", self.url.geturl(), body, headers)
             try:
                 if self.auth == "SPNEGO":
-                    response = requests.request('post', self.url.geturl(), data=body, stream=True, headers=headers, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL, mech_oid=kerberos.GSS_MECH_OID_SPNEGO))
+                    response = requests.request('post', self.url.geturl(), data=body, stream=True, headers=headers, auth=HTTPSPNEGOAuth(mutual_authentication=OPTIONAL))
                 else:
                     response = requests.request('post', self.url.geturl(), data=body, stream=True, headers=headers)
 
