@@ -302,6 +302,7 @@ public abstract class RegionScannerFactory {
     };
   }
 
+    // PHOENIX-4791 Share position of array element cell
     public static int getArrayCellPosition(List<Cell> result) {
         return result.size() - 1;
     }

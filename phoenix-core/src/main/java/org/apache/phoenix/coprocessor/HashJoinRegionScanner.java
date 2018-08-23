@@ -72,7 +72,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     private final boolean useQualifierAsListIndex;
     private final boolean useNewValueColumnQualifier;
     private final boolean addArrayCell;
-    
+
     @SuppressWarnings("unchecked")
     public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo,
                                  ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env,
@@ -119,7 +119,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                         Bytes.toLong(ByteUtil.copyKeyBytesIfNecessary(joinId)));
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
             }
-                
+
             hashCaches[i] = hashCache;
             tempSrcBitSet[i] = ValueBitSet.newInstance(joinInfo.getSchemas()[i]);
         }
@@ -204,7 +204,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
                                     lhs : TupleProjector.mergeProjectedValue(
                                             (ProjectedValueTuple) lhs, schema, tempDestBitSet,
-                                            null, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
+                                            null, joinInfo.getSchemas()[i], tempSrcBitSet[i],
                                             joinInfo.getFieldPositions()[i], useNewValueColumnQualifier);
                             offerResult(joined, projected, result);
                             continue;
@@ -213,7 +213,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
                                     lhs : TupleProjector.mergeProjectedValue(
                                             (ProjectedValueTuple) lhs, schema, tempDestBitSet,
-                                            t, joinInfo.getSchemas()[i], tempSrcBitSet[i], 
+                                            t, joinInfo.getSchemas()[i], tempSrcBitSet[i],
                                             joinInfo.getFieldPositions()[i], useNewValueColumnQualifier);
                             offerResult(joined, projected, result);
                         }
@@ -287,7 +287,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                 processResults(result, false);
                 result.clear();
             }
-            
+
             return nextInQueue(result);
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
@@ -331,6 +331,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         return this.scanner.getBatch();
     }
 
+    // PHOENIX-4791 Propagate array element cell through hash join
     private void offerResult(Tuple tuple, boolean projected, List<Cell> result) {
         if (!projected || !addArrayCell) {
             resultQueue.offer(tuple);
