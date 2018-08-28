@@ -4,4 +4,4 @@ protobuf>=3.0.0
 sphinx
 flake8
 requests
-requests-kerberos
+requests-gssapi
