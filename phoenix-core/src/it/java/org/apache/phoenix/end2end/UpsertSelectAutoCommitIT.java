@@ -151,8 +151,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         stmt.executeUpdate();
         conn.commit();
     }
-    
-    
+
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -199,6 +198,34 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
             }
         }
         connection.close();
+    }
+
+    @Test
+    public void testRowCountWithNoAutoCommitOnUpsertSelect() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String tableName = generateUniqueName();
+
+        conn.createStatement().execute("CREATE SEQUENCE "+ tableName);
+        conn.createStatement().execute(
+                "CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, val INTEGER)");
+
+        conn.createStatement().execute(
+                "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR keys,1)");
+        conn.commit();
+        for (int i=0; i<6; i++) {
+            Statement stmt = conn.createStatement();
+            int upsertCount = stmt.executeUpdate(
+                    "UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR keys, val FROM "
+                            + tableName);
+            conn.commit();
+            assertEquals((int)Math.pow(2, i), upsertCount);
+        }
+        conn.close();
     }
 
 }
