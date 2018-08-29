@@ -42,7 +42,7 @@ For example::
 """
 
 
-def connect(url, max_retries=None, **kwargs):
+def connect(url, max_retries=None, auth=None, **kwargs):
     """Connects to a Phoenix query server.
 
     :param url:
@@ -60,9 +60,13 @@ def connect(url, max_retries=None, **kwargs):
     :param cursor_factory:
         If specified, the connection's :attr:`~phoenixdb.connection.Connection.cursor_factory` is set to it.
 
+    :param auth
+        If specified a specific auth type will be used, otherwise connection will be unauthenticated
+        Currently only SPNEGO is supported
+
     :returns:
         :class:`~phoenixdb.connection.Connection` object.
     """
-    client = AvaticaClient(url, max_retries=max_retries)
+    client = AvaticaClient(url, max_retries=max_retries, auth=auth)
     client.connect()
     return Connection(client, **kwargs)
