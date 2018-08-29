@@ -21,3 +21,5 @@ The file bin/daemon.py is based on the file of the same name in python-daemon 2.
 # Copyright © 2001 Jürgen Hermann
 
 The file bin/argparse-1.4.0/argparse.py is (c) 2006-2009 Steven J. Bethard <steven.bethard@gmail.com>.
+
+python/requests-kerberos contains the Requests-Kerberos project which carries "Copyright (c) 2012 Kenneth Reitz"
