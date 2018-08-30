@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -576,6 +577,10 @@ public class MetaDataUtil {
     }
 
     public static PDataType getViewIndexIdDataType() {
+       return PLong.INSTANCE;
+    }
+
+    public static PDataType getLegacyViewIndexIdDataType() {
         return PSmallint.INSTANCE;
     }
 
