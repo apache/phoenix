@@ -74,8 +74,6 @@ public class ProjectArrayElemAfterHashJoinIT extends ParallelStatsDisabledIT {
         verifyResults(conn, table, false, true);
         verifyResults(conn, table, true, false);
         verifyResults(conn, table, true, true);
-
-        dropTable(conn, table);
     }
 
     private String createSalted(Connection conn) throws Exception {
