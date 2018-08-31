@@ -162,6 +162,13 @@
                   <shadedPattern>${shaded.package}.com.jamesmurty</shadedPattern>
                 </relocation>
                 <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>${shaded.package}.com.google</shadedPattern>
+                  <excludes>
+                    <exclude>com.google.protobuf.**</exclude>
+                  </excludes>
+                </relocation>
+                <relocation>
                   <pattern>com.jcraft</pattern>
                   <shadedPattern>${shaded.package}.com.jcraft</shadedPattern>
                 </relocation>
