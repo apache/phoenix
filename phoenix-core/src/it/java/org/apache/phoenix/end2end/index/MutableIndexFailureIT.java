@@ -591,9 +591,9 @@ public class MutableIndexFailureIT extends BaseTest {
                         if (Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                             int regionStartKeyLen = c.getEnvironment().getRegionInfo().getStartKey().length;
                             Cell firstCell = entry.getValue().get(0);
-                            short indexId = MetaDataUtil.getViewIndexIdDataType().getCodec().decodeShort(firstCell.getRowArray(), firstCell.getRowOffset() + regionStartKeyLen, SortOrder.getDefault());
+                            long indexId = MetaDataUtil.getViewIndexIdDataType().getCodec().decodeLong(firstCell.getRowArray(), firstCell.getRowOffset() + regionStartKeyLen, SortOrder.getDefault());
                             // Only throw for first local index as the test may have multiple local indexes
-                            if (indexId == Short.MIN_VALUE) {
+                            if (indexId == Long.MIN_VALUE) {
                                 throwException = true;
                                 break;
                             }
