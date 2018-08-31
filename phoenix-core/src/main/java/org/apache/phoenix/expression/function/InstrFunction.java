@@ -30,7 +30,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.ByteUtil;
 
 @BuiltInFunction(name=InstrFunction.NAME, args={
         @Argument(allowedTypes={ PVarchar.class }),
@@ -38,8 +37,9 @@ import org.apache.phoenix.util.ByteUtil;
 public class InstrFunction extends ScalarFunction{
     
     public static final String NAME = "INSTR";
-    
-    private String strToSearch = null;
+
+    private String literalSourceStr = null;
+    private String literalSearchStr = null;
     
     public InstrFunction() { }
     
@@ -49,40 +49,62 @@ public class InstrFunction extends ScalarFunction{
     }
     
     private void init() {
-        Expression strToSearchExpression = getChildren().get(1);
-        if (strToSearchExpression instanceof LiteralExpression) {
-            Object strToSearchValue = ((LiteralExpression) strToSearchExpression).getValue();
-            if (strToSearchValue != null) {
-                this.strToSearch = strToSearchValue.toString();
-            }
+        literalSourceStr = maybeExtractLiteralString(getChildren().get(0));
+        literalSearchStr = maybeExtractLiteralString(getChildren().get(1));
+    }
+
+    /**
+     * Extracts the string-representation of {@code expr} only if {@code expr} is a
+     * non-null {@link LiteralExpression}.
+     *
+     * @param expr An Expression.
+     * @return The string value for the expression or null
+     */
+    private String maybeExtractLiteralString(Expression expr) {
+        if (expr instanceof LiteralExpression) {
+            // Whether the value is null or non-null, we can give it back right away
+            return (String) ((LiteralExpression) expr).getValue();
         }
+        return null;
     }
         
     
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression child = getChildren().get(0);
-        
-        if (!child.evaluate(tuple, ptr)) {
-            return false;
-        }
-        
-        if (ptr.getLength() == 0) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return true;
-        }
-        
-        int position;
-        //Logic for Empty string search
-        if (strToSearch == null){
-            position = 0;
-            ptr.set(PInteger.INSTANCE.toBytes(position));
-            return true;
-        }
-        
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(0).getSortOrder());
+        String sourceStr = literalSourceStr;
+        if (sourceStr == null) {
+            Expression child = getChildren().get(0);
 
-        position = sourceStr.indexOf(strToSearch) + 1;
+            if (!child.evaluate(tuple, ptr)) {
+                return false;
+            }
+
+            // We need something non-empty to search against
+            if (ptr.getLength() == 0) {
+              return true;
+            }
+
+            sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, child.getSortOrder());
+        }
+
+        String searchStr = literalSearchStr;
+        // A literal was not provided, try to evaluate the expression to a literal
+        if (searchStr == null){
+            Expression child = getChildren().get(1);
+
+            if (!child.evaluate(tuple, ptr)) {
+              return false;
+            }
+
+            // A null (or zero-length) search string
+            if (ptr.getLength() == 0) {
+              return true;
+            }
+            
+            searchStr = (String) PVarchar.INSTANCE.toObject(ptr, child.getSortOrder());
+        }
+
+        int position = sourceStr.indexOf(searchStr) + 1;
         ptr.set(PInteger.INSTANCE.toBytes(position));
         return true;
     }
