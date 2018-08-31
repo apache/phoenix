@@ -344,7 +344,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
                     "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "    SERVER FILTER BY V1 = 'a'\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName + " \\[-32768,1\\] - \\[-32768,2\\]\n" +
+                    "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName + " \\[-9223372036854775808,1\\] - \\[-9223372036854775808,2\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY AND \"K2\" IN \\(3,4\\)\n" +
                     "    DYNAMIC SERVER FILTER BY \\(\"" + viewName + ".T_ID\", \"" + viewName + ".K1\", \"" + viewName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
