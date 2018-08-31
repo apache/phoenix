@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
 
 public class DelegateTable implements PTable {
@@ -207,8 +208,13 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public Short getViewIndexId() {
+    public Long getViewIndexId() {
         return delegate.getViewIndexId();
+    }
+
+    @Override
+    public PDataType getViewIndexType() {
+        return delegate.getViewIndexType();
     }
 
     @Override
