@@ -297,7 +297,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         if (!allocateIndexId) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
         } else {
-            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null, Short.MIN_VALUE);
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null, Long.MIN_VALUE, MetaDataUtil.getViewIndexIdDataType());
         }
     }
 
