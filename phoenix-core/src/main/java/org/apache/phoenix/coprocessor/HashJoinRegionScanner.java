@@ -74,17 +74,24 @@ public class HashJoinRegionScanner implements RegionScanner {
     private final boolean addArrayCell;
 
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo,
-                                 ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env,
-                                 boolean useQualifierAsIndex, boolean useNewValueColumnQualifier) throws IOException {
-        this(env, scanner, null, null, projector, joinInfo, tenantId, useQualifierAsIndex, useNewValueColumnQualifier);
+    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector,
+                                 HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
+                                 RegionCoprocessorEnvironment env, boolean useQualifierAsIndex,
+                                 boolean useNewValueColumnQualifier)
+        throws IOException {
+
+        this(env, scanner, null, null, projector, joinInfo,
+             tenantId, useQualifierAsIndex, useNewValueColumnQualifier);
     }
 
     @SuppressWarnings("unchecked")
     public HashJoinRegionScanner(RegionCoprocessorEnvironment env, RegionScanner scanner,
-                                 final Set<KeyValueColumnExpression> arrayKVRefs, final Expression[] arrayFuncRefs,
-                                 TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
-                                 boolean useQualifierAsIndex, boolean useNewValueColumnQualifier) throws IOException {
+                                 final Set<KeyValueColumnExpression> arrayKVRefs,
+                                 final Expression[] arrayFuncRefs, TupleProjector projector,
+                                 HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
+                                 boolean useQualifierAsIndex, boolean useNewValueColumnQualifier)
+        throws IOException {
+
         this.env = env;
         this.scanner = scanner;
         this.projector = projector;
