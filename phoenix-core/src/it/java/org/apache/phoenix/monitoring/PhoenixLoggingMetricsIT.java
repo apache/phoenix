@@ -102,7 +102,8 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
     public void testPhoenixMetricsLoggedOnCommit() throws Exception {
         // run SELECT to verify read metrics are logged
         String query = "SELECT * FROM " + tableName1;
-        verifyQueryLevelMetricsLogging(query);
+        ResultSet rs = upsertRows(query);
+        verifyQueryLevelMetricsLogging(query, rs);
 
         // run UPSERT SELECT to verify mutation metrics are logged
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
@@ -140,7 +141,9 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
     public void testPhoenixMetricsLoggedOnClose() throws Exception {
         // run SELECT to verify read metrics are logged
         String query = "SELECT * FROM " + tableName1;
-        verifyQueryLevelMetricsLogging(query);
+
+        ResultSet rs = upsertRows(query);
+        verifyQueryLevelMetricsLogging(query, rs);
 
         // run UPSERT SELECT to verify mutation metrics are logged
         String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
@@ -164,13 +167,61 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
                 mutationReadMetricsMap.size() == 0);
     }
 
+    /**
+     * This test is added to verify if metrics are being logged in case
+     * auto commit is set to true.
+     */
+    @Test
+    public void testPhoenixMetricsLoggedOnAutoCommitTrue() throws Exception {
+        loggedConn.setAutoCommit(true);
+
+        String query = "SELECT * FROM " + tableName1;
+        ResultSet rs = upsertRows(query);
+        verifyQueryLevelMetricsLogging(query, rs);
+
+        // run UPSERT SELECT to verify mutation metrics are logged
+        String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName1;
+        loggedConn.createStatement().executeUpdate(upsertSelect);
+
+        assertTrue("Mutation write metrics are not logged for " + tableName2,
+                mutationWriteMetricsMap.get(tableName2).size()  > 0);
+        assertTrue("Mutation read metrics are not found for " + tableName1,
+                mutationReadMetricsMap.get(tableName1).size() > 0);
+
+        clearAllTestMetricMaps();
+
+        loggedConn.createStatement().execute(query);
+        assertTrue("Read metrics found for " + tableName1,
+                mutationReadMetricsMap.size() == 0);
+        loggedConn.createStatement().execute(upsertSelect);
+
+        assertTrue("Mutation write metrics are not logged for " + tableName2
+                + " in createStatement",mutationWriteMetricsMap.get(tableName2).size()  > 0);
+        assertTrue("Mutation read metrics are not found for " + tableName1
+                + " in createStatement",mutationReadMetricsMap.get(tableName1).size() > 0);
+
+        clearAllTestMetricMaps();
+
+        loggedConn.prepareStatement(query).executeQuery();
+        assertTrue("Read metrics found for " + tableName1,
+                mutationReadMetricsMap.size() == 0);
+
+        loggedConn.prepareStatement(upsertSelect).executeUpdate();
+        assertTrue("Mutation write metrics are not logged for " + tableName2
+                + " in prepareStatement",mutationWriteMetricsMap.get(tableName2).size()  > 0);
+        assertTrue("Mutation read metrics are not found for " + tableName1
+                + " in prepareStatement",mutationReadMetricsMap.get(tableName1).size() > 0);
+
+
+    }
+
     private ResultSet executeAndGetResultSet(String query) throws Exception {
         Statement stmt = loggedConn.createStatement();
         stmt.execute(query);
         return stmt.getResultSet();
     }
 
-    private void verifyQueryLevelMetricsLogging(String query) throws SQLException {
+    private ResultSet upsertRows(String query) throws SQLException {
         Statement stmt = loggedConn.createStatement();
         ResultSet rs = stmt.executeQuery(query);
         assertTrue(rs instanceof LoggingPhoenixResultSet);
@@ -180,6 +231,10 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         }
         rs.close();
         assertTrue(rowsRetrievedCounter == NUM_ROWS);
+        return rs;
+    }
+
+    private void verifyQueryLevelMetricsLogging(String query , ResultSet rs) throws SQLException {
         assertTrue("Read metrics for not found for " + tableName1,
                 requestReadMetricsMap.get(tableName1).size() > 0);
         assertTrue("Logged query doesn't match actual query", loggedSql.equals(query));
