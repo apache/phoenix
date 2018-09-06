@@ -246,6 +246,11 @@ public class FromCompiler {
         return visitor;
     }
 
+    public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection, boolean updateCacheImmediately) throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, updateCacheImmediately);
+        return visitor;
+    }
+
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         SingleTableColumnResolver visitor =
                 new SingleTableColumnResolver(connection, tableNode, true, 0, udfParseNodes);

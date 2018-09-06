@@ -37,7 +37,7 @@ public class LocalIndexDataColumnRef extends ColumnRef {
         super(FromCompiler.getResolver(
             FACTORY.namedTable(null, TableName.create(context.getCurrentTable().getTable()
                     .getSchemaName().getString(), context.getCurrentTable().getTable()
-                    .getParentTableName().getString())), context.getConnection()).resolveTable(
+                    .getParentTableName().getString())), context.getConnection(), false).resolveTable(
             context.getCurrentTable().getTable().getSchemaName().getString(),
             context.getCurrentTable().getTable().getParentTableName().getString()), IndexUtil
                 .getDataColumnFamilyName(indexColumnName), IndexUtil
