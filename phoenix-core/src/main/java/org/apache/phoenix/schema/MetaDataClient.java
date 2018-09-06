@@ -358,7 +358,7 @@ public class MetaDataClient {
                     TABLE_SEQ_NUM + "," +
                     COLUMN_COUNT +
                     ") VALUES (?, ?, ?, ?, ?, ?)";
-    private static final String UPDATE_INDEX_STATE =
+    public static final String UPDATE_INDEX_STATE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
