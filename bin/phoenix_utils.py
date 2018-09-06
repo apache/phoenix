@@ -71,6 +71,7 @@ def setPath():
     PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
     PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
     PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-*-queryserver.jar"
+    PHOENIX_LOADBALANCER_JAR_PATTERN = "phoenix-load-balancer-*[!t][!e][!s][!t][!s].jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*-minimal*.jar"
@@ -162,6 +163,13 @@ def setPath():
     if phoenix_queryserver_jar == "":
         phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, ".."))
 
+    global phoenix_loadbalancer_jar
+    phoenix_loadbalancer_jar = find(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-loadbalancer", "target", "*"))
+    if phoenix_loadbalancer_jar == "":
+        phoenix_loadbalancer_jar = findFileInPathWithoutRecursion(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+    if phoenix_loadbalancer_jar == "":
+        phoenix_loadbalancer_jar = findFileInPathWithoutRecursion(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, ".."))
+
     global phoenix_traceserver_jar
     phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target", "*"))
     if phoenix_traceserver_jar == "":
@@ -218,5 +226,6 @@ if __name__ == "__main__":
     print "hadoop_hdfs_jar:", hadoop_hdfs_jar
     print "testjar:", testjar
     print "phoenix_queryserver_jar:", phoenix_queryserver_jar
+    print "phoenix_loadbalancer_jar:", phoenix_loadbalancer_jar
     print "phoenix_thin_client_jar:", phoenix_thin_client_jar
     print "hadoop_classpath:", hadoop_classpath 
