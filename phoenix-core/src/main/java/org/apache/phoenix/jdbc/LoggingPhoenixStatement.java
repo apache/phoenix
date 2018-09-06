@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -25,28 +27,38 @@ public class LoggingPhoenixStatement extends DelegateStatement {
 
     private PhoenixMetricsLog phoenixMetricsLog;
     private String sql;
-    
-    public LoggingPhoenixStatement(Statement stmt, PhoenixMetricsLog phoenixMetricsLog) {
+    private Connection conn;
+
+    public LoggingPhoenixStatement(Statement stmt, PhoenixMetricsLog phoenixMetricsLog, Connection conn) {
         super(stmt);
         this.phoenixMetricsLog = phoenixMetricsLog;
+        this.conn = conn;
     }
 
     @Override
     public boolean execute(String sql) throws SQLException {
+        boolean result;
         this.sql = sql;
-        return super.execute(sql);
+        result = super.execute(sql);
+        this.loggingAutoCommitHelper();
+        return result;
     }
 
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
         this.sql = sql;
-        return new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog, this.sql);
+        ResultSet rs = new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog, this.sql);
+        this.loggingAutoCommitHelper();
+        return rs;
     }
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
+        int result;
         this.sql = sql;
-        return super.executeUpdate(sql);
+        result = super.executeUpdate(sql);
+        this.loggingAutoCommitHelper();
+        return result;
     }
 
     @Override
@@ -60,6 +72,12 @@ public class LoggingPhoenixStatement extends DelegateStatement {
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
         return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog, this.sql);
+    }
+
+    private void loggingAutoCommitHelper() throws SQLException {
+        if(conn.getAutoCommit() && (conn instanceof LoggingPhoenixConnection)) {
+            ((LoggingPhoenixConnection)conn).loggingMetricsHelper();
+        }
     }
 
 }
