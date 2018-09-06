@@ -21,16 +21,21 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Connection;
+
 
 public class LoggingPhoenixPreparedStatement extends DelegatePreparedStatement {
     
     private PhoenixMetricsLog phoenixMetricsLog;
     private String sql;
+    private Connection conn;
     
-    public LoggingPhoenixPreparedStatement(PreparedStatement stmt, PhoenixMetricsLog phoenixMetricsLog, String sql) {
+    public LoggingPhoenixPreparedStatement(PreparedStatement stmt,
+                                           PhoenixMetricsLog phoenixMetricsLog, String sql, Connection conn) {
         super(stmt);
         this.phoenixMetricsLog = phoenixMetricsLog;
         this.sql = sql;
+        this.conn = conn;
     }
     
     @Override
@@ -40,7 +45,9 @@ public class LoggingPhoenixPreparedStatement extends DelegatePreparedStatement {
 
     @Override
     public ResultSet executeQuery() throws SQLException {
-        return new LoggingPhoenixResultSet(super.executeQuery(), phoenixMetricsLog, sql);
+        ResultSet rs = new LoggingPhoenixResultSet(super.executeQuery(), phoenixMetricsLog, sql);
+        this.loggingAutoCommitHelper();
+        return rs;
     }
 
     @Override
@@ -50,10 +57,22 @@ public class LoggingPhoenixPreparedStatement extends DelegatePreparedStatement {
         return (resultSet == null) ? null : new LoggingPhoenixResultSet(resultSet,
                 phoenixMetricsLog, sql);
     }
+
+    @Override
+    public int executeUpdate() throws SQLException {
+        int res = super.executeUpdate();
+        this.loggingAutoCommitHelper();
+        return res;
+    }
     
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
         return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog, sql);
     }
-    
+
+    private void loggingAutoCommitHelper() throws SQLException {
+        if(conn.getAutoCommit() && (conn instanceof LoggingPhoenixConnection)) {
+            ((LoggingPhoenixConnection)conn).loggingMetricsHelper();
+        }
+    }
 }
