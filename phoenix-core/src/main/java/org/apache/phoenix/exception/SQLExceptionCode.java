@@ -260,7 +260,9 @@ public enum SQLExceptionCode {
     TOO_MANY_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
     NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS(1048,"43A05","Local indexes aren't allowed on tables with immutable rows."),
     COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY(1049, "43A06", "Column family not allowed for table properties."),
-    COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL(1050, "43A07", "Setting TTL for a column family not supported. You can only have TTL for the entire table."),
+    COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY(1050, "43A07", "Setting  or altering any of the following properties: "
+            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.toString()
+            + " for a column family is not supported since they must be kept in sync. You can only set these properties for the entire table."),
     CANNOT_ALTER_PROPERTY(1051, "43A08", "Property can be specified or changed only when creating a table."),
     CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED(1052, "43A09", "Property cannot be specified for a column family that is not being added or modified."),
     CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN(1053, "43A10", "Table level property cannot be set when adding a column."),
@@ -298,6 +300,8 @@ public enum SQLExceptionCode {
     CANNOT_START_TXN_IF_TXN_DISABLED(1091, "44A22", "Cannot start transaction if transactions are disabled."),
     CANNOT_MIX_TXN_PROVIDERS(1092, "44A23", "Cannot mix transaction providers: "),
     CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL(1093, "44A24", "Cannot alter table from non transactional to transactional for "),
+    CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX(1094, "44A25", "Cannot set or alter the following properties on an index: "
+            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.toString()),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

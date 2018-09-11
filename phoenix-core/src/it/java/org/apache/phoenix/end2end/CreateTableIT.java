@@ -275,9 +275,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
     /**
      * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
-     * both default and explicit column family names 3) Replication scope specifier has the explicit
-     * column family name. Then: 1)REPLICATION_SCOPE is set. 2)The default column family has
-     * DEFAULT_REPLICATION_SCOPE. 3)The explicit column family has the REPLICATION_SCOPE specified
+     * both default and explicit column family names 3) Block size specifier has the explicit
+     * column family name. Then: 1)BLOCKSIZE is set. 2)The default column family has
+     * DEFAULT_BLOCKSIZE. 3)The explicit column family has the BLOCK_SIZE specified
      * in DDL.
      */
     @Test
@@ -287,7 +287,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
                         + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-                        + " ) b.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
+                        + " ) b.BLOCKSIZE=50000, SALT_BUCKETS = 4";
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
@@ -296,16 +296,16 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("0", columnFamilies[0].getNameAsString());
-        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_REPLICATION_SCOPE, columnFamilies[0].getScope());
+        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_BLOCKSIZE, columnFamilies[0].getBlocksize());
         assertEquals("B", columnFamilies[1].getNameAsString());
-        assertEquals(1, columnFamilies[1].getScope());
+        assertEquals(50000, columnFamilies[1].getBlocksize());
     }
 
     /**
      * Tests that when: 1) DDL has both pk as well as key value columns 2) Key value columns have
-     * explicit column family names 3) Different REPLICATION_SCOPE specifiers for different column
-     * family names. Then: 1)REPLICATION_SCOPE is set. 2)Each explicit column family has the
-     * REPLICATION_SCOPE as specified in DDL.
+     * explicit column family names 3) Different BLOCKSIZE specifiers for different column
+     * family names. Then: 1)BLOCKSIZE is set. 2)Each explicit column family has the
+     * BLOCKSIZE as specified in DDL.
      */
     @Test
     public void testCreateTableColumnFamilyHBaseAttribs5() throws Exception {
@@ -314,7 +314,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
                         + " col1 integer NOT NULL," + " b.col2 bigint," + " c.col3 bigint, "
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
-                        + " ) b.REPLICATION_SCOPE=0, c.REPLICATION_SCOPE=1, SALT_BUCKETS = 4";
+                        + " ) b.BLOCKSIZE=50000, c.BLOCKSIZE=60000, SALT_BUCKETS = 4";
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
@@ -323,9 +323,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(2, columnFamilies.length);
         assertEquals("B", columnFamilies[0].getNameAsString());
-        assertEquals(0, columnFamilies[0].getScope());
+        assertEquals(50000, columnFamilies[0].getBlocksize());
         assertEquals("C", columnFamilies[1].getNameAsString());
-        assertEquals(1, columnFamilies[1].getScope());
+        assertEquals(60000, columnFamilies[1].getBlocksize());
     }
 
     /**
@@ -449,7 +449,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try {
             conn.createStatement().execute(ddl);
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),
+            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY.getErrorCode(),
                 sqle.getErrorCode());
         }
     }
