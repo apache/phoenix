@@ -1901,7 +1901,6 @@ public class MetaDataClient {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
-        boolean acquiredMutex = false;
         try {
             connection.setAutoCommit(false);
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(statement.getColumnDefs().size() + 3);
@@ -1931,21 +1930,6 @@ public class MetaDataClient {
             boolean isLocalIndex = indexType == IndexType.LOCAL;
             QualifierEncodingScheme encodingScheme = NON_ENCODED_QUALIFIERS;
             ImmutableStorageScheme immutableStorageScheme = ONE_CELL_PER_COLUMN;
-            
-            if (tableType == PTableType.VIEW) {
-                PName physicalName = parent.getPhysicalName();
-                String physicalSchemaName =
-                        SchemaUtil.getSchemaNameFromFullName(physicalName.getString());
-                String physicalTableName =
-                        SchemaUtil.getTableNameFromFullName(physicalName.getString());
-                // acquire the mutex using the global physical table name to
-                // prevent creating views while concurrently dropping the base
-                // table
-                acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName, null);
-                if (!acquiredMutex) {
-                    throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
-                }
-            }
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 storeNulls = parent.getStoreNulls();
@@ -2867,16 +2851,6 @@ public class MetaDataClient {
             }
         } finally {
             connection.setAutoCommit(wasAutoCommit);
-            if (acquiredMutex && tableType == PTableType.VIEW) {
-                PName physicalName = parent.getPhysicalName();
-                String physicalSchemaName =
-                        SchemaUtil.getSchemaNameFromFullName(physicalName.getString());
-                String physicalTableName =
-                        SchemaUtil.getTableNameFromFullName(physicalName.getString());
-                // releasing mutex on the table (required to prevent creating views while concurrently
-                // dropping the base table)
-                deleteCell(null, physicalSchemaName, physicalTableName, null);
-            }
         }
     }
 
@@ -2988,8 +2962,6 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         PName tenantId = connection.getTenantId();
         String tenantIdStr = tenantId == null ? null : tenantId.getString();
-        boolean acquiredMutex = false;
-        String physicalTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
             byte[] key = SchemaUtil.getTableKey(tenantIdStr, schemaName, tableName);
             Long scn = connection.getSCN();
@@ -3002,14 +2974,6 @@ public class MetaDataClient {
                 byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
-            }
-            if (tableType == PTableType.TABLE) {
-                // acquire a mutex on the table to prevent creating views while concurrently
-                // dropping the base table
-                acquiredMutex = writeCell(null, schemaName, tableName, null);
-                if (!acquiredMutex) {
-                    throw new ConcurrentTableMutationException(schemaName, schemaName);
-                }
             }
             MetaDataMutationResult result = connection.getQueryServices().dropTable(tableMetaData, tableType, cascade, skipAddingParentColumns);
             MutationCode code = result.getMutationCode();
@@ -3088,11 +3052,6 @@ public class MetaDataClient {
             return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
-            // releasing mutex on the table (required to prevent creating views while concurrently
-            // dropping the base table)
-            if (acquiredMutex && tableType == PTableType.TABLE) {
-                deleteCell(null, schemaName, tableName, null);
-            }
         }
     }
 
