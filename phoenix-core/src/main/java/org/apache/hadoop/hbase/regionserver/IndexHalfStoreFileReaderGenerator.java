@@ -165,7 +165,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 byte[][] viewConstants = getViewConstants(dataTable);
                 return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
                         .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
-                        childRegion, regionStartKeyInHFile, splitKey);
+                        childRegion, regionStartKeyInHFile, splitKey, region.getRegionInfo());
             } catch (ClassNotFoundException e) {
                 throw new IOException(e);
             } catch (SQLException e) {
@@ -184,12 +184,14 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     }
 
     @Override
-    public InternalScanner preCompactScannerOpen(
-            org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            java.util.List<? extends KeyValueScanner> scanners, ScanType scanType, long earliestPutTs,
-            InternalScanner s, CompactionRequest request) throws IOException {
+    public InternalScanner preCompact(
+            ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            InternalScanner s, ScanType scanType,
+            CompactionRequest request) throws IOException {
 
-        if (!IndexUtil.isLocalIndexStore(store)) { return s; }
+        if (!IndexUtil.isLocalIndexStore(store)) {
+            return s;
+        }
         if (!store.hasReferences()) {
             InternalScanner repairScanner = null;
             if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
@@ -202,7 +204,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
             }
             if (repairScanner != null) {
-                if (s!=null) {
+                if (s != null) {
                     s.close();
                 }
                 return repairScanner;
@@ -247,10 +249,6 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     /**
      * @param env
      * @param store Local Index store 
-     * @param scan
-     * @param scanType
-     * @param earliestPutTs
-     * @param request
      * @return StoreScanner for new Local Index data for a passed store and Null if repair is not possible
      * @throws IOException
      */
