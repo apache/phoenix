@@ -486,6 +486,37 @@ public class ServerCacheClient {
             throws Exception {
         byte[] keyInRegion = getKeyInRegion(key);
         final Map<byte[], AddServerCacheResponse> results;
+
+        AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
+        final byte[] tenantIdBytes;
+        if (cacheUsingTable.isMultiTenant()) {
+            try {
+                tenantIdBytes = connection.getTenantId() == null ? null
+                        : ScanUtil.getTenantIdBytes(cacheUsingTable.getRowKeySchema(),
+                        cacheUsingTable.getBucketNum() != null, connection.getTenantId(),
+                        cacheUsingTable.getViewIndexId() != null);
+            } catch (SQLException e) {
+                throw new IOException(e);
+            }
+        } else {
+            tenantIdBytes = connection.getTenantId() == null ? null
+                    : connection.getTenantId().getBytes();
+        }
+        if (tenantIdBytes != null) {
+            builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+        }
+        builder.setCacheId(ByteStringer.wrap(cacheId));
+        builder.setUsePersistentCache(usePersistentCache);
+        builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
+        builder.setHasProtoBufIndexMaintainer(true);
+        ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory
+                .newBuilder();
+        svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
+        builder.setCacheFactory(svrCacheFactoryBuider.build());
+        builder.setTxState(ByteStringer.wrap(txState));
+        builder.setClientVersion(MetaDataProtocol.PHOENIX_VERSION);
+        final AddServerCacheRequest request = builder.build();
+
         try {
             results = htable.coprocessorService(ServerCachingService.class, keyInRegion, keyInRegion,
                     new Batch.Call<ServerCachingService, AddServerCacheResponse>() {
@@ -493,35 +524,7 @@ public class ServerCacheClient {
                         public AddServerCacheResponse call(ServerCachingService instance) throws IOException {
                             ServerRpcController controller = new ServerRpcController();
                             BlockingRpcCallback<AddServerCacheResponse> rpcCallback = new BlockingRpcCallback<AddServerCacheResponse>();
-                            AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
-                            final byte[] tenantIdBytes;
-                            if (cacheUsingTable.isMultiTenant()) {
-                                try {
-                                    tenantIdBytes = connection.getTenantId() == null ? null
-                                            : ScanUtil.getTenantIdBytes(cacheUsingTable.getRowKeySchema(),
-                                                    cacheUsingTable.getBucketNum() != null, connection.getTenantId(),
-                                                    cacheUsingTable.getViewIndexId() != null);
-                                } catch (SQLException e) {
-                                    throw new IOException(e);
-                                }
-                            } else {
-                                tenantIdBytes = connection.getTenantId() == null ? null
-                                        : connection.getTenantId().getBytes();
-                            }
-                            if (tenantIdBytes != null) {
-                                builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
-                            }
-                            builder.setCacheId(ByteStringer.wrap(cacheId));
-                            builder.setUsePersistentCache(usePersistentCache);
-                            builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
-                            builder.setHasProtoBufIndexMaintainer(true);
-                            ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory
-                                    .newBuilder();
-                            svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
-                            builder.setCacheFactory(svrCacheFactoryBuider.build());
-                            builder.setTxState(ByteStringer.wrap(txState));
-                            builder.setClientVersion(MetaDataProtocol.PHOENIX_VERSION);
-                            instance.addServerCache(controller, builder.build(), rpcCallback);
+                            instance.addServerCache(controller, request, rpcCallback);
                             if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                             return rpcCallback.get();
                         }
