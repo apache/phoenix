@@ -166,6 +166,8 @@ def setPath():
     global phoenix_loadbalancer_jar
     phoenix_loadbalancer_jar = find(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-loadbalancer", "target", "*"))
     if phoenix_loadbalancer_jar == "":
+        phoenix_loadbalancer_jar = findFileInPathWithoutRecursion(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+    if phoenix_loadbalancer_jar == "":
         phoenix_loadbalancer_jar = findFileInPathWithoutRecursion(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, ".."))
 
     global phoenix_traceserver_jar
