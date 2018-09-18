@@ -76,6 +76,7 @@
         <configuration>
           <excludes>
             <exclude>src/main/resources/META-INF/services/org.apache.phoenix.loadbalancer.service.LoadBalanceZookeeperConf</exclude>
+            <exclude>src/main/resources/META-INF/services/org.apache.phoenix.queryserver.register.Registry</exclude>
           </excludes>
         </configuration>
       </plugin>
