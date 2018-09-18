@@ -189,7 +189,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB = "phoenix.stats.guidepost.width";
     public static final String STATS_GUIDEPOST_PER_REGION_ATTRIB = "phoenix.stats.guidepost.per.region";
     public static final String STATS_USE_CURRENT_TIME_ATTRIB = "phoenix.stats.useCurrentTime";
-    
+    public static final String STATS_COLLECTION_ENABLED = "phoenix.stats.collection.enabled";
+    public static final String USE_STATS_FOR_PARALLELIZATION = "phoenix.use.stats.parallelization";
+
     @Deprecated // use STATS_COLLECTION_ENABLED config instead
     public static final String STATS_ENABLED_ATTRIB = "phoenix.stats.enabled";
 
@@ -198,8 +200,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";
     // Maximum size in bytes taken up by cached table stats in the client
     public static final String STATS_MAX_CACHE_SIZE = "phoenix.stats.cache.maxSize";
-    public static final String LOG_SALT_BUCKETS_ATTRIB = "phoenix.log.saltBuckets";
+    public static final String STATS_GUIDEPOST_MOVING_WINDOW_SIZE = "phoenix.stats.guidepost.movingWindowSize";
 
+    public static final String LOG_SALT_BUCKETS_ATTRIB = "phoenix.log.saltBuckets";
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
     public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";
     public static final String EXPLAIN_CHUNK_COUNT_ATTRIB = "phoenix.explain.displayChunkCount";
@@ -302,8 +305,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_QUERY_SERVER_SERVICE_NAME = "phoenix.queryserver.service.name";
     public static final String PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME = "phoenix.queryserver.zookeeper.acl.username";
     public static final String PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD = "phoenix.queryserver.zookeeper.acl.password";
-    public static final String STATS_COLLECTION_ENABLED = "phoenix.stats.collection.enabled";
-    public static final String USE_STATS_FOR_PARALLELIZATION = "phoenix.use.stats.parallelization";
 
     // whether to enable server side RS -> RS calls for upsert select statements
     public static final String ENABLE_SERVER_UPSERT_SELECT ="phoenix.client.enable.server.upsert.select";
