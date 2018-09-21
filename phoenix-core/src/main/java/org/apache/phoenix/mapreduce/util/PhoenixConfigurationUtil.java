@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import static org.apache.commons.lang.StringUtils.isNotEmpty;
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 

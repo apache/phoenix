@@ -25,7 +25,7 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.SchemaUtil;

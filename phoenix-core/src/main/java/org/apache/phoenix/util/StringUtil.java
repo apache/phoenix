@@ -19,7 +19,6 @@ package org.apache.phoenix.util;
 
 import java.util.Arrays;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.UndecodableByteException;
 import org.apache.phoenix.schema.SortOrder;
@@ -384,7 +383,14 @@ public class StringUtil {
     }
 
     public static String escapeStringConstant(String pattern) {
-        return StringEscapeUtils.escapeSql(pattern); // Need to escape double quotes
+        // commons-lang3 dropped StringEscapeUtils.escapeSql because it was
+        // extremely naive in its implementation. Copying that implementation
+        // here as a stop-gap.
+        // https://stackoverflow.com/questions/32096614/migrating-stringescapeutils-escapesql-from-commons-lang
+        if (pattern == null) {
+            return null;
+        }
+        return org.apache.commons.lang3.StringUtils.replace(pattern, "'", "''");
     }   
     
     public static String escapeBackslash(String input) {

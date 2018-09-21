@@ -164,8 +164,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 for (PTable index : indexes) {
                     if (index.getIndexType() == IndexType.LOCAL) {
                         IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, conn);
-                        indexMaintainers.put(new ImmutableBytesWritable(MetaDataUtil
-                                .getViewIndexIdDataType().toBytes(index.getViewIndexId())),
+                        indexMaintainers.put(new ImmutableBytesWritable(index.getViewIndexType().toBytes(index.getViewIndexId())),
                             indexMaintainer);
                     }
                 }

@@ -90,6 +90,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
     public static final String MUTATE_BATCH_SIZE_BYTES_ATTRIB = "phoenix.mutate.batchSizeBytes";
     public static final String MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxServerCacheTimeToLiveMs";
+    public static final String MAX_SERVER_CACHE_PERSISTENCE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxServerCachePersistenceTimeToLiveMs";
     
     @Deprecated // Use FORCE_ROW_KEY_ORDER instead.
     public static final String ROW_KEY_ORDER_SALTED_TABLE_ATTRIB  = "phoenix.query.rowKeyOrderSaltedTable";
@@ -210,6 +211,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB = "phoenix.table.istransactional.default";
     public static final String DEFAULT_TRANSACTION_PROVIDER_ATTRIB = "phoenix.table.transaction.provider.default";
     public static final String GLOBAL_METRICS_ENABLED = "phoenix.query.global.metrics.enabled";
+
+    // Tag Name to determine the Phoenix Client Type
+    public static final String CLIENT_METRICS_TAG = "phoenix.client.metrics.tag";
     
     // Transaction related configs
     public static final String TRANSACTIONS_ENABLED = "phoenix.transactions.enabled";
@@ -250,6 +254,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUERY_SERVER_KERBEROS_ALLOWED_REALMS = "phoenix.queryserver.kerberos.allowed.realms";
     public static final String QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB = "phoenix.queryserver.spnego.auth.disabled";
     public static final String QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR_ATTRIB = "phoenix.queryserver.withRemoteUserExtractor";
+    public static final String QUERY_SERVER_CUSTOMIZERS_ENABLED = "phoenix.queryserver.customizers.enabled";
+    public static final String QUERY_SERVER_CUSTOM_AUTH_ENABLED = "phoenix.queryserver.custom.auth.enabled";
     public static final String QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "phoenix.queryserver.remoteUserExtractor.param";
     public static final String QUERY_SERVER_DISABLE_KERBEROS_LOGIN = "phoenix.queryserver.disable.kerberos.login";
 

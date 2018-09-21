@@ -11,6 +11,9 @@ package org.apache.phoenix.monitoring;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Default implementation used when GlobalMetrics are enabled
+ */
 public class GlobalMetricImpl implements GlobalMetric {
 
     private AtomicLong numberOfSamples = new AtomicLong(0);

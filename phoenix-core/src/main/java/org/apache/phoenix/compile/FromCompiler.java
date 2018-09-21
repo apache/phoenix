@@ -249,6 +249,11 @@ public class FromCompiler {
         return visitor;
     }
 
+    public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection, boolean updateCacheImmediately) throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, updateCacheImmediately);
+        return visitor;
+    }
+
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         SingleTableColumnResolver visitor =
                 new SingleTableColumnResolver(connection, tableNode, true, 0, udfParseNodes);
@@ -828,7 +833,7 @@ public class FromCompiler {
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, PTableType.SUBQUERY, null,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, null, null, columns, null, null,
                     Collections.<PTable> emptyList(), false, Collections.<PName> emptyList(), null, null, false, false,
-                    false, null, null, null, false, null, 0, 0L, SchemaUtil
+                    false, null, null, null, null, false, null, 0, 0L, SchemaUtil
                             .isNamespaceMappingEnabled(PTableType.SUBQUERY, connection.getQueryServices().getProps()), null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
 
             String alias = subselectNode.getAlias();

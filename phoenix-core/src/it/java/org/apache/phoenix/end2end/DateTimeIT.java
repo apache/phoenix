@@ -56,7 +56,7 @@ import java.util.GregorianCalendar;
 import java.util.Properties;
 import java.util.TimeZone;
 
-import org.apache.commons.lang.time.FastDateFormat;
+import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;

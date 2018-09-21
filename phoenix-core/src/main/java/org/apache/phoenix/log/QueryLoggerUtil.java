@@ -21,7 +21,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PName;
 

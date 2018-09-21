@@ -23,6 +23,7 @@ import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE
 import static org.apache.phoenix.query.QueryServices.AUTO_UPGRADE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CLIENT_METRICS_TAG;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.COST_BASED_OPTIMIZER_ENABLED;
@@ -117,7 +118,7 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-
+import org.apache.tephra.TxConstants;
 
 
 /**
@@ -158,6 +159,7 @@ public class QueryServicesOptions {
     public final static long DEFAULT_MUTATE_BATCH_SIZE_BYTES = 2097152;
 	// The only downside of it being out-of-sync is that the parallelization of the scan won't be as balanced as it could be.
     public static final int DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS = 30000; // 30 sec (with no activity)
+    public static final int DEFAULT_MAX_SERVER_CACHE_PERSISTENCE_TIME_TO_LIVE_MS = 30 * 60000; // 30 minutes
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
     public static final int DEFAULT_MAX_INTRA_REGION_PARALLELIZATION = DEFAULT_MAX_QUERY_CONCURRENCY;
     public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
@@ -269,6 +271,7 @@ public class QueryServicesOptions {
     public static final String DEFAULT_TRANSACTION_PROVIDER = TransactionFactory.Provider.getDefault().name();
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
+    public static final String DEFAULT_CLIENT_METRICS_TAG = "FAT_CLIENT";
 
     public static final boolean DEFAULT_TRANSACTIONAL = false;
     public static final boolean DEFAULT_AUTO_FLUSH = false;
@@ -298,8 +301,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY = 10;
     public static final boolean DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED = false;
     public static final boolean DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR = false;
+    public static final boolean DEFAULT_QUERY_SERVER_CUSTOM_AUTH_ENABLED = false;
     public static final String DEFAULT_QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "doAs";
     public static final boolean DEFAULT_QUERY_SERVER_DISABLE_KERBEROS_LOGIN = false;
+    public static final boolean DEFAULT_QUERY_SERVER_CUSTOMIZERS_ENABLED = false;
 
     public static final boolean DEFAULT_RENEW_LEASE_ENABLED = true;
     public static final int DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS =
@@ -443,7 +448,10 @@ public class QueryServicesOptions {
             .setIfUnset(COST_BASED_OPTIMIZER_ENABLED, DEFAULT_COST_BASED_OPTIMIZER_ENABLED)
             .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED)
             .setIfUnset(LOG_LEVEL,  DEFAULT_LOGGING_LEVEL)
-            .setIfUnset(LOG_SAMPLE_RATE,  DEFAULT_LOG_SAMPLE_RATE);
+            .setIfUnset(LOG_SAMPLE_RATE,  DEFAULT_LOG_SAMPLE_RATE)
+            .setIfUnset(TxConstants.TX_PRE_014_CHANGESET_KEY, Boolean.FALSE.toString())
+            .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
+            ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -605,6 +613,10 @@ public class QueryServicesOptions {
     @Deprecated
     public int getMutateBatchSize() {
         return config.getInt(MUTATE_BATCH_SIZE_ATTRIB, DEFAULT_MUTATE_BATCH_SIZE);
+    }
+
+    public String getClientMetricTag() {
+        return config.get(QueryServices.CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG);
     }
 
     public boolean isUseIndexes() {

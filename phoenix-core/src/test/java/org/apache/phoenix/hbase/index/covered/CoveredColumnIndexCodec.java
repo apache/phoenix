@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map.Entry;
 
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;

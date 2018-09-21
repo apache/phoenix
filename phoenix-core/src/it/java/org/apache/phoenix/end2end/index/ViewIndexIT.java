@@ -124,10 +124,10 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), isNamespaceMapped);
         String seqName = getViewIndexSequenceName(PNameFactory.newName(fullTableName), null, !isNamespaceMapped);
         String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), !isNamespaceMapped);
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -9223372036854775807L);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -9223372036854775807L);
         conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + fullViewName + " (v1)");
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32766);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -9223372036854775806L);
         // Check other format of sequence is not there as Sequences format is different for views/indexes created on
         // table which are namespace mapped and which are not.
         verifySequenceNotExists(null, seqName, seqSchemaName);

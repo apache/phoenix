@@ -170,4 +170,18 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public QueryLoggerDisruptor getQueryDisruptor();
     
     public PhoenixTransactionClient initTransactionClient(TransactionFactory.Provider provider);
+    
+    /**
+     * Writes a cell to SYSTEM.MUTEX using checkAndPut to ensure only a single client can execute a
+     * particular task. The params are used to generate the rowkey.
+     * @return true if this client was able to successfully acquire the mutex
+     */
+    public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException;
+
+    /**
+     * Deletes a cell that was written to SYSTEM.MUTEX. The params are used to generate the rowkey.
+     */
+    public void deleteMutexCell(String tenantId, String schemaName, String tableName,
+            String columnName, String familyName) throws SQLException;
 }

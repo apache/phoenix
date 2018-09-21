@@ -20,11 +20,13 @@ package org.apache.phoenix.end2end;
 import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -42,31 +44,39 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseMetaDataEndpointObserver;
+import org.apache.phoenix.coprocessor.MetaDataEndpointObserver;
+import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost;
+import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
+import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -74,6 +84,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -87,25 +98,39 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
-
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
 
     protected String tableDDLOptions;
     protected boolean transactional;
+    protected boolean columnEncoded;
+    
+    private static final String FAILED_VIEWNAME = SchemaUtil.getTableName(SCHEMA2, "FAILED_VIEW");
+    private static final String SLOW_VIEWNAME_PREFIX = SchemaUtil.getTableName(SCHEMA2, "SLOW_VIEW");
 
-    public ViewIT(boolean transactional) {
+    private static volatile CountDownLatch latch1 = null;
+    private static volatile CountDownLatch latch2 = null;
+
+    public ViewIT(boolean transactional, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder();
         this.transactional = transactional;
+        this.columnEncoded = columnEncoded;
         if (transactional) {
             optionBuilder.append(" TRANSACTIONAL=true ");
+        }
+        if (!columnEncoded) {
+            if (optionBuilder.length()!=0)
+                optionBuilder.append(",");
+            optionBuilder.append("COLUMN_ENCODED_BYTES=0");
         }
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameters(name = "transactional = {0}")
-    public static Collection<Boolean> data() {
-        return Arrays.asList(new Boolean[] { false, true });
+    @Parameters(name="ViewIT_transactional={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
+    public static Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] { 
+            { true, false }, { true, true },
+            { false, false }, { false, true }});
     }
     
     @BeforeClass
@@ -114,13 +139,72 @@ public class ViewIT extends SplitSystemCatalogIT {
         Map<String, String> props = Collections.emptyMap();
         boolean splitSystemCatalog = (driver == null);
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
-        serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
+        serverProps.put(QueryServices.PHOENIX_ACLS_ENABLED, "true");
+        serverProps.put(PhoenixMetaDataCoprocessorHost.PHOENIX_META_DATA_COPROCESSOR_CONF_KEY,
+            TestMetaDataRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             splitSystemCatalog();
         }
+    }
+    
+    public static class TestMetaDataRegionObserver extends BaseMetaDataEndpointObserver {
+        
+        @Override
+        public Optional<MetaDataEndpointObserver> getPhoenixObserver() {
+            return Optional.of(this);
+        }
+        
+        @Override
+        public void preAlterTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+                String tenantId, String tableName, TableName physicalTableName,
+                TableName parentPhysicalTableName, PTableType type) throws IOException {
+            processTable(tableName);
+        }
+        
+        @Override
+        public void preCreateTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+                String tenantId, String tableName, TableName physicalTableName,
+                TableName parentPhysicalTableName, PTableType tableType, Set<byte[]> familySet,
+                Set<TableName> indexes) throws IOException {
+            processTable(tableName);
+        }
+
+        @Override
+        public void preDropTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+                String tenantId, String tableName, TableName physicalTableName,
+                TableName parentPhysicalTableName, PTableType tableType, List<PTable> indexes)
+                throws IOException {
+            processTable(tableName);
+        }
+
+        private void processTable(String tableName) throws DoNotRetryIOException {
+            if (tableName.equals(FAILED_VIEWNAME)) {
+                // throwing anything other than instances of IOException result
+                // in this coprocessor being unloaded
+                // DoNotRetryIOException tells HBase not to retry this mutation
+                // multiple times
+                throw new DoNotRetryIOException();
+            } else if (tableName.startsWith(SLOW_VIEWNAME_PREFIX)) {
+                // simulate a slow write to SYSTEM.CATALOG
+                if (latch1 != null) {
+                    latch1.countDown();
+                }
+                if (latch2 != null) {
+                    try {
+                        // wait till the second task is complete before completing the first task
+                        boolean result = latch2.await(2, TimeUnit.MINUTES);
+                        if (!result) {
+                            throw new RuntimeException("Second task took took long to complete");
+                        }
+                    } catch (InterruptedException e) {
+                    }
+                }
+            }
+        }
+        
     }
     
     @Test
@@ -533,9 +617,6 @@ public class ViewIT extends SplitSystemCatalogIT {
     public void testViewAndTableAndDropCascadeWithIndexes() throws Exception {
         // Setup - Tables and Views with Indexes
         Connection conn = DriverManager.getConnection(getUrl());
-        if (tableDDLOptions.length()!=0)
-            tableDDLOptions+=",";
-        tableDDLOptions+="IMMUTABLE_ROWS=true";
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String ddl = "CREATE TABLE " + fullTableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
         conn.createStatement().execute(ddl);
@@ -1191,9 +1272,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                     queryPlan);
         } else {
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [" + Short.MIN_VALUE + ",51]"
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [" + Long.MIN_VALUE + ",51]"
                     : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0,"
-                            + Short.MIN_VALUE + ",51] - [" + (saltBuckets.intValue() - 1) + "," + Short.MIN_VALUE
+                            + Long.MIN_VALUE + ",51] - [" + (saltBuckets.intValue() - 1) + "," + Long.MIN_VALUE
                             + ",51]\nCLIENT MERGE SORT",
                     queryPlan);
         }
@@ -1235,10 +1316,10 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertEquals(
                     saltBuckets == null
                             ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " ["
-                                    + (Short.MIN_VALUE + 1) + ",'foo']\n" + "    SERVER FILTER BY FIRST KEY ONLY"
+                                    + (Long.MIN_VALUE + 1) + ",'foo']\n" + "    SERVER FILTER BY FIRST KEY ONLY"
                             : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName
-                                    + " [0," + (Short.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets.intValue() - 1)
-                                    + "," + (Short.MIN_VALUE + 1) + ",'foo']\n"
+                                    + " [0," + (Long.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets.intValue() - 1)
+                                    + "," + (Long.MIN_VALUE + 1) + ",'foo']\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
         }
@@ -1250,7 +1331,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     public void testChildViewCreationFails() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, FAILED_VIEWNAME);
+        String fullViewName1 = FAILED_VIEWNAME;
         String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
         
         String tableDdl = "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
@@ -1278,28 +1359,234 @@ public class ViewIT extends SplitSystemCatalogIT {
         PhoenixRuntime.getTableNoCache(conn, fullViewName2);
     }
     
-    private static final String FAILED_VIEWNAME = "FAILED_VIEW";
-    private static final byte[] ROWKEY_TO_FAIL_BYTES = SchemaUtil.getTableKey(null, Bytes.toBytes(SCHEMA2),
-            Bytes.toBytes(FAILED_VIEWNAME));
-    
-    public static class FailingRegionObserver extends SimpleRegionObserver {
-        @Override
-        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-                MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-            if (shouldFail(c, miniBatchOp.getOperation(0))) {
-                // throwing anything other than instances of IOException result
-                // in this coprocessor being unloaded
-                // DoNotRetryIOException tells HBase not to retry this mutation
-                // multiple times
-                throw new DoNotRetryIOException();
+    @Test
+    public void testConcurrentViewCreationAndTableDrop() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
+            String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+            latch1 = new CountDownLatch(1);
+            latch2 = new CountDownLatch(1);
+            String tableDdl =
+                    "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)"
+                            + tableDDLOptions;
+            conn.createStatement().execute(tableDdl);
+
+            ExecutorService executorService = Executors.newFixedThreadPool(1, new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = Executors.defaultThreadFactory().newThread(r);
+                    t.setDaemon(true);
+                    t.setPriority(Thread.MIN_PRIORITY);
+                    return t;
+                }
+            });
+
+            // create the view in a separate thread (which will take some time
+            // to complete)
+            Future<Exception> future =
+                    executorService.submit(new CreateViewRunnable(fullTableName, fullViewName1));
+            // wait till the thread makes the rpc to create the view
+            latch1.await();
+            tableDdl = "DROP TABLE " + fullTableName;
+            try {
+                // drop table should fail as we are concurrently adding a view
+                conn.createStatement().execute(tableDdl);
+                fail("Creating a view while concurrently dropping the base table should fail");
+            } catch (ConcurrentTableMutationException e) {
             }
+            latch2.countDown();
+
+            Exception e = future.get();
+            assertNull(e);
+
+            // create another view to ensure that the cell used to prevent
+            // concurrent modifications was removed
+            String ddl =
+                    "CREATE VIEW " + fullViewName2 + " (v2 VARCHAR) AS SELECT * FROM "
+                            + fullTableName + " WHERE k = 6";
+            conn.createStatement().execute(ddl);
+        }
+    }
+
+    @Test
+    public void testConcurrentAddSameColumnDifferentType() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            latch1 = null;
+            latch2 = null;
+            String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
+            String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+            // create base table
+            String tableDdl =
+                    "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)"
+                            + tableDDLOptions;
+            conn.createStatement().execute(tableDdl);
+            // create a view
+            String ddl =
+                    "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM "
+                            + fullTableName + " WHERE k = 6";
+            conn.createStatement().execute(ddl);
+
+            latch1 = new CountDownLatch(1);
+            latch2 = new CountDownLatch(1);
+            ExecutorService executorService = Executors.newFixedThreadPool(1, new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = Executors.defaultThreadFactory().newThread(r);
+                    t.setDaemon(true);
+                    t.setPriority(Thread.MIN_PRIORITY);
+                    return t;
+                }
+            });
+
+            // add a column with the same name and different type to the view in a separate thread
+            // (which will take some time to complete)
+            Future<Exception> future = executorService.submit(new AddColumnRunnable(fullViewName1));
+            // wait till the thread makes the rpc to add the column
+            boolean result = latch1.await(2, TimeUnit.MINUTES);
+            if (!result) {
+                fail("The create view rpc look too long");
+            }
+            tableDdl = "ALTER TABLE " + fullTableName + " ADD v3 INTEGER";
+            try {
+                // add the same column to the base table with a different type
+                conn.createStatement().execute(tableDdl);
+                fail("Creating a view while concurrently dropping the base table should fail");
+            } catch (ConcurrentTableMutationException e) {
+            }
+            latch2.countDown();
+
+            Exception e = future.get();
+            assertNull(e);
+
+            // add a the same column to the another view  to ensure that the cell used
+            // to prevent concurrent modifications was removed
+            ddl = "CREATE VIEW " + fullViewName2 + " (v2 VARCHAR) AS SELECT * FROM " 
+                    + fullTableName + " WHERE k = 6";
+            conn.createStatement().execute(ddl);
+            tableDdl = "ALTER VIEW " + fullViewName2 + " ADD v3 INTEGER";
+            conn.createStatement().execute(tableDdl);
+        }
+    }
+    
+    @Test
+    public void testConcurrentAddDifferentColumn() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            latch1 = null;
+            latch2 = null;
+            String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
+            String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+            String fullViewName3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+            // create base table
+            String tableDdl =
+                    "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)"
+                            + tableDDLOptions;
+            conn.createStatement().execute(tableDdl);
+            // create a two views
+            String ddl =
+                    "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM "
+                            + fullTableName + " WHERE k = 6";
+            conn.createStatement().execute(ddl);
+            ddl =
+                    "CREATE VIEW " + fullViewName3 + " (v2 VARCHAR) AS SELECT * FROM "
+                            + fullTableName + " WHERE k = 7";
+            conn.createStatement().execute(ddl);
+
+            latch1 = new CountDownLatch(1);
+            latch2 = new CountDownLatch(1);
+            ExecutorService executorService = Executors.newFixedThreadPool(1, new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = Executors.defaultThreadFactory().newThread(r);
+                    t.setDaemon(true);
+                    t.setPriority(Thread.MIN_PRIORITY);
+                    return t;
+                }
+            });
+
+            // add a column to a view in a separate thread (we slow this operation down)
+            Future<Exception> future = executorService.submit(new AddColumnRunnable(fullViewName1));
+            // wait till the thread makes the rpc to add the column
+            boolean result = latch1.await(2, TimeUnit.MINUTES);
+            if (!result) {
+                fail("The alter view rpc look too long");
+            }
+            tableDdl = "ALTER VIEW " + fullViewName3 + " ADD v4 INTEGER";
+            try {
+                // add a column to another view 
+                conn.createStatement().execute(tableDdl);
+                if (columnEncoded) {
+                    // this should fail as the previous add column is still not complete
+                    fail(
+                        "Adding columns to two different views concurrently where the base table uses encoded column should fail");
+                }
+            } catch (ConcurrentTableMutationException e) {
+                if (!columnEncoded) {
+                    // this should not fail as we don't need to update the parent table for non
+                    // column encoded tables
+                    fail(
+                        "Adding columns to two different views concurrently where the base table does not use encoded columns should succeed");
+                }
+            }
+            latch2.countDown();
+
+            Exception e = future.get();
+            // if the base table uses column encoding then the add column operation for fullViewName1 fails
+            assertNull(e);
+
+            // add a the same column to the another view  to ensure that the cell used
+            // to prevent concurrent modifications was removed
+            ddl = "CREATE VIEW " + fullViewName2 + " (v2 VARCHAR) AS SELECT * FROM " 
+                    + fullTableName + " WHERE k = 6";
+            conn.createStatement().execute(ddl);
+            tableDdl = "ALTER VIEW " + fullViewName2 + " ADD v3 INTEGER";
+            conn.createStatement().execute(tableDdl);
+        }
+    }
+
+    private class CreateViewRunnable implements Callable<Exception> {
+        private final String fullTableName;
+        private final String fullViewName;
+
+        public CreateViewRunnable(String fullTableName, String fullViewName) {
+            this.fullTableName = fullTableName;
+            this.fullViewName = fullViewName;
         }
 
-        private boolean shouldFail(ObserverContext<RegionCoprocessorEnvironment> c, Mutation m) {
-            TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
-            return tableName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)
-                    && (Bytes.equals(ROWKEY_TO_FAIL_BYTES, m.getRow()));
+        @Override
+        public Exception call() throws Exception {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                String ddl =
+                        "CREATE VIEW " + fullViewName + " (v2 VARCHAR) AS SELECT * FROM "
+                                + fullTableName + " WHERE k = 5";
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                return e;
+            }
+            return null;
+        }
+    }
+
+    private class AddColumnRunnable implements Callable<Exception> {
+        private final String fullViewName;
+
+        public AddColumnRunnable(String fullViewName) {
+            this.fullViewName = fullViewName;
         }
 
+        @Override
+        public Exception call() throws Exception {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                String ddl = "ALTER VIEW " + fullViewName + " ADD v3 CHAR(15)";
+                conn.createStatement().execute(ddl);
+            } catch (SQLException e) {
+                return e;
+            }
+            return null;
+        }
     }
 }

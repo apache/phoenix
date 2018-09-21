@@ -20,11 +20,11 @@ package org.apache.phoenix.pherf.rules;
 
 import com.google.common.base.Preconditions;
 
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.math3.random.RandomDataGenerator;
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.pherf.configuration.*;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;

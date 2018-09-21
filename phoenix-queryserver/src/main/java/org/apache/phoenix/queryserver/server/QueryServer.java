@@ -27,12 +27,14 @@ import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.LocalService;
 import org.apache.calcite.avatica.remote.Service;
+import org.apache.calcite.avatica.server.AvaticaServerConfiguration;
 import org.apache.calcite.avatica.server.DoAsRemoteUserCallback;
 import org.apache.calcite.avatica.server.HttpServer;
 import org.apache.calcite.avatica.server.RemoteUserExtractor;
 import org.apache.calcite.avatica.server.RemoteUserExtractionException;
 import org.apache.calcite.avatica.server.HttpRequestRemoteUserExtractor;
 import org.apache.calcite.avatica.server.HttpQueryStringParameterRemoteUserExtractor;
+import org.apache.calcite.avatica.server.ServerCustomizer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -52,6 +54,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.loadbalancer.service.LoadBalanceZookeeperConf;
 import org.apache.phoenix.queryserver.register.Registry;
 import org.apache.phoenix.util.InstanceResolver;
+import org.eclipse.jetty.server.Server;
 
 import java.io.File;
 import java.io.IOException;
@@ -61,6 +64,7 @@ import java.net.InetAddress;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -72,6 +76,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.http.HttpServletRequest;
+
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_QUERY_SERVER_CUSTOM_AUTH_ENABLED;
 
 /**
  * A query server for Phoenix over Calcite's Avatica.
@@ -216,26 +222,38 @@ public final class QueryServer extends Configured implements Tool, Runnable {
         LOG.info(" Kerberos is off and hostname is : "+hostname);
       }
 
-      Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
-          QueryServices.QUERY_SERVER_META_FACTORY_ATTRIB, PhoenixMetaFactoryImpl.class,
-          PhoenixMetaFactory.class);
       int port = getConf().getInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB,
           QueryServicesOptions.DEFAULT_QUERY_SERVER_HTTP_PORT);
       LOG.debug("Listening on port " + port);
-      PhoenixMetaFactory factory =
-          factoryClass.getDeclaredConstructor(Configuration.class).newInstance(getConf());
-      Meta meta = factory.create(Arrays.asList(args));
-      Service service = new LocalService(meta);
+
+      // Update proxyuser configuration for impersonation
+      ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
 
       // Start building the Avatica HttpServer
-      final HttpServer.Builder builder = new HttpServer.Builder().withPort(port)
-          .withHandler(service, getSerialization(getConf()));
+      final HttpServer.Builder<Server>
+              builder =
+              HttpServer.Builder.<Server>newBuilder().withPort(port);
 
-      // Enable client auth when using Kerberos auth for HBase
-      if (isKerberos) {
-        configureClientAuthentication(builder, disableSpnego);
+      UserGroupInformation ugi = getUserGroupInformation();
+
+      AvaticaServerConfiguration avaticaServerConfiguration = null;
+
+      // RemoteUserCallbacks and RemoteUserExtractor are part of AvaticaServerConfiguration
+      // Hence they should be customizable when using QUERY_SERVER_CUSTOM_AUTH_ENABLED
+      // Handlers should be customized via ServerCustomizers
+      if (getConf().getBoolean(QueryServices.QUERY_SERVER_CUSTOM_AUTH_ENABLED,
+              DEFAULT_QUERY_SERVER_CUSTOM_AUTH_ENABLED)) {
+        avaticaServerConfiguration = enableCustomAuth(builder, getConf(), ugi);
+      } else {
+        if (isKerberos) {
+          // Enable client auth when using Kerberos auth for HBase
+          configureClientAuthentication(builder, disableSpnego, ugi);
+        }
+        setRemoteUserExtractorIfNecessary(builder, getConf());
+        setHandler(args, builder);
       }
-      setRemoteUserExtractorIfNecessary(builder, getConf());
+
+      enableServerCustomizersIfNecessary(builder, getConf(), avaticaServerConfiguration);
 
       // Build and start the HttpServer
       server = builder.build();
@@ -258,48 +276,71 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   }
 
   @VisibleForTesting
-  void configureClientAuthentication(final HttpServer.Builder builder, boolean disableSpnego) throws IOException {
+  void configureClientAuthentication(final HttpServer.Builder builder, boolean disableSpnego, UserGroupInformation ugi) throws IOException {
+
+    // Enable SPNEGO for client authentication unless it's explicitly disabled
+    if (!disableSpnego) {
+      configureSpnegoAuthentication(builder, ugi);
+    }
+    configureCallBack(builder, ugi);
+  }
+
+  @VisibleForTesting
+  void configureSpnegoAuthentication(HttpServer.Builder builder, UserGroupInformation ugi) {
+    String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
+    File keytab = new File(keytabPath);
+    String httpKeytabPath =
+            getConf().get(QueryServices.QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB, null);
+    String httpPrincipal =
+            getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB, null);
+    // Backwards compat for a configuration key change
+    if (httpPrincipal == null) {
+      httpPrincipal =
+              getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB_LEGACY, null);
+    }
+    File httpKeytab = null;
+    if (null != httpKeytabPath) {
+        httpKeytab = new File(httpKeytabPath);
+    }
+
+    String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
+    String[] additionalAllowedRealms = null;
+    if (null != realmsString) {
+      additionalAllowedRealms = StringUtils.split(realmsString, ',');
+    }
+    if (null != httpKeytabPath && null != httpPrincipal) {
+      builder.withSpnego(httpPrincipal, additionalAllowedRealms).withAutomaticLogin(httpKeytab);
+    } else {
+      builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
+              .withAutomaticLogin(keytab);
+    }
+  }
+
+  @VisibleForTesting
+  UserGroupInformation getUserGroupInformation() throws IOException {
     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
     LOG.debug("Current user is " + ugi);
     if (!ugi.hasKerberosCredentials()) {
       ugi = UserGroupInformation.getLoginUser();
       LOG.debug("Current user does not have Kerberos credentials, using instead " + ugi);
     }
+    return ugi;
+  }
 
-    // Make sure the proxyuser configuration is up to date
-    ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
-
-    // Always enable impersonation for the proxy user (through standard Hadoop configuration means)
+  @VisibleForTesting
+  void configureCallBack(HttpServer.Builder<Server> builder, UserGroupInformation ugi) {
     builder.withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+  }
 
-    // Enable SPNEGO for client authentication unless it's explicitly disabled
-    if (!disableSpnego) {
-      String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
-      File keytab = new File(keytabPath);
-      String httpKeytabPath =
-          getConf().get(QueryServices.QUERY_SERVER_HTTP_KEYTAB_FILENAME_ATTRIB, null);
-      String httpPrincipal =
-          getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB, null);
-      // Backwards compat for a configuration key change
-      if (httpPrincipal == null) {
-        httpPrincipal =
-            getConf().get(QueryServices.QUERY_SERVER_KERBEROS_HTTP_PRINCIPAL_ATTRIB_LEGACY, null);
-      }
-      File httpKeytab = null;
-      if (null != httpKeytabPath) httpKeytab = new File(httpKeytabPath);
-
-      String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
-      String[] additionalAllowedRealms = null;
-      if (null != realmsString) {
-        additionalAllowedRealms = StringUtils.split(realmsString, ',');
-      }
-      if ((null != httpKeytabPath) && (null != httpPrincipal)) {
-        builder.withSpnego(httpPrincipal, additionalAllowedRealms).withAutomaticLogin(httpKeytab);
-      } else {
-        builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
-            .withAutomaticLogin(keytab);
-      }
-    }
+  private void setHandler(String[] args, HttpServer.Builder<Server> builder) throws Exception {
+    Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
+            QueryServices.QUERY_SERVER_META_FACTORY_ATTRIB, PhoenixMetaFactoryImpl.class,
+            PhoenixMetaFactory.class);
+    PhoenixMetaFactory factory =
+            factoryClass.getDeclaredConstructor(Configuration.class).newInstance(getConf());
+    Meta meta = factory.create(Arrays.asList(args));
+    Service service = new LocalService(meta);
+    builder.withHandler(service, getSerialization(getConf()));
   }
 
   public synchronized void stop() {
@@ -401,8 +442,31 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     }
   }
 
+  @VisibleForTesting
+  public void enableServerCustomizersIfNecessary(HttpServer.Builder<Server> builder,
+                                                 Configuration conf, AvaticaServerConfiguration avaticaServerConfiguration) {
+    if (conf.getBoolean(QueryServices.QUERY_SERVER_CUSTOMIZERS_ENABLED,
+            QueryServicesOptions.DEFAULT_QUERY_SERVER_CUSTOMIZERS_ENABLED)) {
+      builder.withServerCustomizers(createServerCustomizers(conf, avaticaServerConfiguration), Server.class);
+    }
+  }
+
+  @VisibleForTesting
+  public AvaticaServerConfiguration enableCustomAuth(HttpServer.Builder<Server> builder,
+                                                     Configuration conf, UserGroupInformation ugi) {
+    AvaticaServerConfiguration avaticaServerConfiguration = createAvaticaServerConfig(conf, ugi);
+    builder.withCustomAuthentication(avaticaServerConfiguration);
+    return avaticaServerConfiguration;
+  }
+
   private static final RemoteUserExtractorFactory DEFAULT_USER_EXTRACTOR =
     new RemoteUserExtractorFactory.RemoteUserExtractorFactoryImpl();
+
+  private static final ServerCustomizersFactory DEFAULT_SERVER_CUSTOMIZERS =
+    new ServerCustomizersFactory.ServerCustomizersFactoryImpl();
+
+  private static final AvaticaServerConfigurationFactory DEFAULT_SERVER_CONFIG =
+    new AvaticaServerConfigurationFactory.AvaticaServerConfigurationFactoryImpl();
 
   @VisibleForTesting
   RemoteUserExtractor createRemoteUserExtractor(Configuration conf) {
@@ -411,10 +475,23 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     return factory.createRemoteUserExtractor(conf);
   }
 
+  @VisibleForTesting
+  List<ServerCustomizer<Server>> createServerCustomizers(Configuration conf, AvaticaServerConfiguration avaticaServerConfiguration) {
+    ServerCustomizersFactory factory =
+      InstanceResolver.getSingleton(ServerCustomizersFactory.class, DEFAULT_SERVER_CUSTOMIZERS);
+    return factory.createServerCustomizers(conf, avaticaServerConfiguration);
+  }
+
+  @VisibleForTesting
+  AvaticaServerConfiguration createAvaticaServerConfig(Configuration conf, UserGroupInformation ugi) {
+    AvaticaServerConfigurationFactory factory =
+            InstanceResolver.getSingleton(AvaticaServerConfigurationFactory.class, DEFAULT_SERVER_CONFIG);
+    return factory.getAvaticaServerConfiguration(conf, ugi);
+  }
+
   /**
    * Use the correctly way to extract end user.
    */
-
   static class PhoenixRemoteUserExtractor implements RemoteUserExtractor{
     private final HttpQueryStringParameterRemoteUserExtractor paramRemoteUserExtractor;
     private final HttpRequestRemoteUserExtractor requestRemoteUserExtractor;
@@ -455,7 +532,7 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   /**
    * Callback to run the Avatica server action as the remote (proxy) user instead of the server.
    */
-  static class PhoenixDoAsCallback implements DoAsRemoteUserCallback {
+  public static class PhoenixDoAsCallback implements DoAsRemoteUserCallback {
     private final UserGroupInformation serverUgi;
     private final LoadingCache<String,UserGroupInformation> ugiCache;
 

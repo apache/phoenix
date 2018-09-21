@@ -192,7 +192,8 @@ public interface QueryConstants {
             DISABLE_WAL + " BOOLEAN,\n" +
             MULTI_TENANT + " BOOLEAN,\n" +
             VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
-            VIEW_INDEX_ID + " SMALLINT,\n" +
+            VIEW_INDEX_ID + " BIGINT,\n" +
+            VIEW_INDEX_ID_DATA_TYPE + " INTEGER,\n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +
@@ -355,5 +356,19 @@ public interface QueryConstants {
 			+ "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" + HConstants.VERSIONS + "=%s,\n"
 			+ ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "="
 			+ Boolean.FALSE;
+	
+	 public static final String CREATE_MUTEX_METADTA =
+	            "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_MUTEX_TABLE_NAME + "\"(\n" +
+	            // Pk columns
+	            TENANT_ID + " VARCHAR NULL," +
+	            TABLE_SCHEM + " VARCHAR NULL," +
+	            TABLE_NAME + " VARCHAR NOT NULL," +
+	            COLUMN_NAME + " VARCHAR NULL," + // null for table row
+	            COLUMN_FAMILY + " VARCHAR NULL " + // using for CF to uniqueness for columns
+	            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
+	            + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
+	            HConstants.VERSIONS + "=%s,\n" +
+	            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+	            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
     
 }

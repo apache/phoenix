@@ -80,7 +80,7 @@
     <slf4j.version>1.6.4</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <commons-io.version>2.1</commons-io.version>
-    <commons-lang.version>2.5</commons-lang.version>
+    <commons-lang.version>3.8</commons-lang.version>
     <commons-logging.version>1.2</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.2.0</sqlline.version>
@@ -97,7 +97,7 @@
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <avatica.version>1.11.0</avatica.version>
+    <avatica.version>1.12.0</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.14.0-incubating</tephra.version>
     <spark.version>2.3.0</spark.version>
@@ -360,7 +360,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>2.4.3</version>
+          <version>3.1.1</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
@@ -952,6 +952,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-csv</artifactId>
         <version>${commons-csv.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-lang3</artifactId>
+        <version>${commons-lang.version}</version>
       </dependency>
       <dependency>
         <groupId>joda-time</groupId>
