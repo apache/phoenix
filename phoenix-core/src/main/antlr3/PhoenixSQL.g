@@ -66,6 +66,7 @@ tokens
     DELETE='delete';
     CREATE='create';
     DROP='drop';
+    MODIFY='modify';
     PRIMARY='primary';
     KEY='key';
     ALTER='alter';
@@ -655,9 +656,17 @@ alter_session_node returns [AlterSessionStatement ret]
 
 // Parse an alter table statement.
 alter_table_node returns [AlterTableStatement ret]
-    :   ALTER (TABLE | v=VIEW) t=from_table_name
-        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=fam_properties)?) | (SET (p=fam_properties)) )
-        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
+@init { PTableType tt = null;}
+    :   ALTER (TABLE | v=VIEW) t=from_table_name { tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW;}
+            (
+                DROP COLUMN (IF ex=EXISTS)? c=column_names { ret = factory.dropColumn(factory.namedTable(null, t), tt, c, ex!=null);}
+                |
+                    (
+                        ADD (IF NOT ex=EXISTS)? cds=column_defs (p=fam_properties)?
+                        | SET p=fam_properties
+                     ) { ret = factory.addColumn(factory.namedTable(null, t), tt, cds, ex!=null, p);}
+                | MODIFY (IF NOT ex=EXISTS)? cd=column_def { ret = factory.modifyColumn(factory.namedTable(null, t), tt, cd, ex!=null);}
+            )
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]

@@ -52,6 +52,7 @@ enum MutationCode {
   TOO_MANY_INDEXES = 22;
   UNABLE_TO_CREATE_CHILD_LINK = 23;
   UNABLE_TO_UPDATE_PARENT_TABLE = 24;
+  OK = 25;
 };
 
 message SharedTableState {
@@ -151,6 +152,11 @@ message DropColumnRequest {
   optional int32 clientVersion = 2;
 }
 
+message ModifyColumnRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
+}
+
 message DropFunctionRequest {
   repeated bytes tableMetadataMutations = 1;
   optional bool ifExists = 2;
@@ -223,7 +229,10 @@ service MetaDataService {
     
    rpc dropColumn(DropColumnRequest)
     returns (MetaDataResponse);
-    
+
+  rpc modifyColumn(ModifyColumnRequest)
+    returns (MetaDataResponse);
+
    rpc updateIndexState(UpdateIndexStateRequest)
     returns (MetaDataResponse); 
     

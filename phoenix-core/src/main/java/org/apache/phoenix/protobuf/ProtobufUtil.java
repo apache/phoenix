@@ -17,10 +17,8 @@
  */
 package org.apache.phoenix.protobuf;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
+import com.google.protobuf.ByteString;
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -35,8 +33,9 @@ import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.schema.PTableType;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.RpcController;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ProtobufUtil {
 
@@ -94,6 +93,11 @@ public class ProtobufUtil {
     }
 
     public static List<Mutation> getMutations(MetaDataProtos.DropColumnRequest request)
+            throws IOException {
+        return getMutations(request.getTableMetadataMutationsList());
+    }
+
+    public static List<Mutation> getMutations(MetaDataProtos.ModifyColumnRequest request)
             throws IOException {
         return getMutations(request.getTableMetadataMutationsList());
     }

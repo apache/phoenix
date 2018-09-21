@@ -17,35 +17,18 @@
  */
 package org.apache.phoenix.exception;
 
-import java.sql.SQLException;
-import java.sql.SQLTimeoutException;
-import java.util.Map;
-
+import com.google.common.collect.Maps;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.AmbiguousColumnException;
-import org.apache.phoenix.schema.AmbiguousTableException;
-import org.apache.phoenix.schema.ColumnAlreadyExistsException;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.ConcurrentTableMutationException;
-import org.apache.phoenix.schema.FunctionAlreadyExistsException;
-import org.apache.phoenix.schema.FunctionNotFoundException;
-import org.apache.phoenix.schema.ReadOnlyTableException;
-import org.apache.phoenix.schema.SchemaAlreadyExistsException;
-import org.apache.phoenix.schema.SchemaNotFoundException;
-import org.apache.phoenix.schema.SequenceAlreadyExistsException;
-import org.apache.phoenix.schema.SequenceNotFoundException;
-import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.MetaDataUtil;
 
-import com.google.common.collect.Maps;
+import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
+import java.util.Map;
 
 
 /**
@@ -384,6 +367,11 @@ public enum SQLExceptionCode {
     INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES(1137, "XCL37", "If IMMUTABLE_STORAGE_SCHEME property is not set to ONE_CELL_PER_COLUMN COLUMN_ENCODED_BYTES cannot be 0"),
     INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE(1138, "XCL38", "IMMUTABLE_STORAGE_SCHEME property cannot be changed from/to ONE_CELL_PER_COLUMN "),
     CANNOT_SET_GUIDE_POST_WIDTH(1139, "XCL39", "Guide post width can only be set on base data tables"),
+
+    INVALID_DATA_TYPE_CAST(1141, "XCL41", "Invalid data type cast "),
+    DISALLOW_MODIFY_TABLE_TYPE(1142, "XCL42", "Only common table or view can be modified!"),
+    DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN(1143, "XCL43", "Timestamp column or PK column can not be modified!"),
+    
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */

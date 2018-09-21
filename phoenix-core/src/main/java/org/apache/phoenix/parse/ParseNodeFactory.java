@@ -17,27 +17,12 @@
  */
 package org.apache.phoenix.parse;
 
-import java.lang.reflect.Constructor;
-import java.math.BigDecimal;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.*;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
-import org.apache.phoenix.expression.function.AvgAggregateFunction;
-import org.apache.phoenix.expression.function.CountAggregateFunction;
-import org.apache.phoenix.expression.function.CurrentDateFunction;
-import org.apache.phoenix.expression.function.CurrentTimeFunction;
-import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
-import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.*;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -53,10 +38,11 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
+import java.lang.reflect.Constructor;
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 
@@ -363,6 +349,10 @@ public class ParseNodeFactory {
 
     public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {
         return new DropColumnStatement(table, tableType, columnNodes, ifExists);
+    }
+
+    public ModifyColumnStatement modifyColumn(NamedTableNode table,  PTableType tableType, ColumnDef columnDef, boolean ifNotExists) {
+        return new ModifyColumnStatement(table, tableType, columnDef, ifNotExists);
     }
 
     public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {

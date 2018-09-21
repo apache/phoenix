@@ -17,29 +17,11 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
-
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Set;
-
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.hadoop.hbase.client.RegionInfoBuilder;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Addressing;
@@ -60,43 +42,19 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.FunctionNotFoundException;
-import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PMetaData;
-import org.apache.phoenix.schema.PMetaDataImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SchemaNotFoundException;
-import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.SequenceAllocation;
-import org.apache.phoenix.schema.SequenceAlreadyExistsException;
-import org.apache.phoenix.schema.SequenceInfo;
-import org.apache.phoenix.schema.SequenceKey;
-import org.apache.phoenix.schema.SequenceNotFoundException;
-import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.JDBCUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SequenceUtil;
+import org.apache.phoenix.util.*;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.Map.Entry;
+
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 
 /**
  *
@@ -237,7 +195,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
     }
 
-    
+    @Override
+    public MetaDataMutationResult modifyColumn(List<Mutation> tableMetaData, PTable table)
+            throws SQLException {
+        return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
+    }
+
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
         return new PhoenixConnection(this, url, info, metaData.clone());
