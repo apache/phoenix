@@ -17,143 +17,20 @@
  */
 package org.apache.phoenix.schema;
 
-import static com.google.common.collect.Sets.newLinkedHashSet;
-import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
-import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_CREATED_DATE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
-import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
-import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
-import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
-import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
-import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
-import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
-import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
-import static org.apache.phoenix.schema.PTableType.TABLE;
-import static org.apache.phoenix.schema.PTableType.VIEW;
-import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-
-import java.io.IOException;
-import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.sql.Types;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Properties;
-import java.util.Set;
-
+import com.google.common.base.Strings;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.common.primitives.Ints;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ClusterConnection;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ColumnResolver;
-import org.apache.phoenix.compile.FromCompiler;
-import org.apache.phoenix.compile.IndexExpressionCompiler;
-import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.compile.PostDDLCompiler;
-import org.apache.phoenix.compile.PostIndexDDLCompiler;
-import org.apache.phoenix.compile.PostLocalIndexDDLCompiler;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.StatementNormalizer;
+import org.apache.phoenix.compile.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -170,89 +47,51 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.AddColumnStatement;
-import org.apache.phoenix.parse.AlterIndexStatement;
-import org.apache.phoenix.parse.ChangePermsStatement;
-import org.apache.phoenix.parse.CloseStatement;
-import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.ColumnDefInPkConstraint;
-import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.CreateFunctionStatement;
-import org.apache.phoenix.parse.CreateIndexStatement;
-import org.apache.phoenix.parse.CreateSchemaStatement;
-import org.apache.phoenix.parse.CreateSequenceStatement;
-import org.apache.phoenix.parse.CreateTableStatement;
-import org.apache.phoenix.parse.DeclareCursorStatement;
-import org.apache.phoenix.parse.DropColumnStatement;
-import org.apache.phoenix.parse.DropFunctionStatement;
-import org.apache.phoenix.parse.DropIndexStatement;
-import org.apache.phoenix.parse.DropSchemaStatement;
-import org.apache.phoenix.parse.DropSequenceStatement;
-import org.apache.phoenix.parse.DropTableStatement;
-import org.apache.phoenix.parse.IndexKeyConstraint;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.OpenStatement;
-import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
-import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.PrimaryKeyConstraint;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PTable.EncodedCQCounter;
-import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
-import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTable.LinkType;
-import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
+import org.apache.phoenix.schema.PTable.*;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme.QualifierOutOfRangeException;
-import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CursorUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TransactionUtil;
-import org.apache.phoenix.util.UpgradeUtil;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.primitives.Ints;
+import java.io.IOException;
+import java.sql.Date;
+import java.sql.*;
+import java.util.*;
+import java.util.BitSet;
+import java.util.Map.Entry;
+
+import static com.google.common.collect.Sets.newLinkedHashSet;
+import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
+import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
+import static org.apache.phoenix.query.QueryConstants.*;
+import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
+import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
+import static org.apache.phoenix.schema.PTableType.TABLE;
+import static org.apache.phoenix.schema.PTableType.VIEW;
+import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -449,6 +288,18 @@ public class MetaDataClient {
                     COLUMN_DEF + "," +
                     COLUMN_QUALIFIER +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    private static final String MODIFY_COLUMN_ALTER_TABLE =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    COLUMN_NAME + "," +
+                    COLUMN_FAMILY + "," +
+                    DATA_TYPE + "," +
+                    COLUMN_SIZE + "," +
+                    DECIMAL_DIGITS +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
@@ -3296,6 +3147,134 @@ public class MetaDataClient {
             tableBoolUpsert.setString(3, tableName);
             tableBoolUpsert.setString(4, propertyValue);
             tableBoolUpsert.execute();
+        }
+    }
+
+    public MutationState modifyColumn(ModifyColumnStatement statement) throws SQLException {
+        PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
+        ColumnDef columnDef = statement.getColumnDef();
+        ColumnName columnName =columnDef.getColumnDefName();
+
+        // we can not modify index table/system table and project table.
+        if (table.getType() != PTableType.TABLE && table.getType() != PTableType.VIEW) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_MODIFY_TABLE_TYPE).build().buildException();
+        }
+
+        PColumn oldColumn = null;
+        for (PColumn column : table.getColumns()) {
+            if (column.getFamilyName() == null) {
+                if (column.getName().getString().equals(columnName.getColumnName())) {
+                    oldColumn = column;
+                }
+            } else {
+                if (column.getName().getString().equals(columnName.getColumnName()) &&
+                        ((columnName.getFamilyName() != null && column.getFamilyName().getString().equals(columnName.getFamilyName())) ||
+                                (columnName.getFamilyName() == null && column.getFamilyName().getString().equals(QueryConstants.DEFAULT_COLUMN_FAMILY)))) {
+                    oldColumn = column;
+                    break;
+                }
+            }
+        }
+
+        if (oldColumn == null) {
+            throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(),
+                    columnName.getFamilyName(), columnName.getColumnName());
+        }
+
+        // Comparision of row keys were affected when we changed max length of pk columns to pad more placeholder,
+        // so we can not modify length of the PK column.
+        if (oldColumn.isRowTimestamp() || SchemaUtil.isPKColumn(oldColumn)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN).build().buildException();
+        }
+
+        if (oldColumn.getDataType().getSqlType() == columnDef.getDataType().getSqlType() &&
+                ((oldColumn.getMaxLength() > 0 && oldColumn.getMaxLength() == columnDef.getMaxLength()) ||
+                        (oldColumn.getScale() != null && oldColumn.getScale() == columnDef.getScale()))) {
+            // do nothing
+            logger.info("Column's properties will not be changed, because new properties are same with old properties! ");
+            return new MutationState(0, 0, connection);
+        }
+
+        // Checking whether new type is castable
+        if (!oldColumn.getDataType().isCastableTo(columnDef.getDataType())) {
+            throw new DataTypeCastException(columnDef.getDataType().getSqlTypeName(), oldColumn.getDataType().getSqlTypeName());
+        }
+
+        List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(1);
+
+        Long timestamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional(),
+                table.isTransactional() ? table.getTransactionProvider() :
+                        (Provider) TableProperty.TRANSACTION_PROVIDER.getValue(
+                                connection.getQueryServices().getProps().get(QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB,
+                                QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER)));
+
+        // Start to get mutation
+        connection.rollback();
+        boolean wasAutoCommit = connection.getAutoCommit();
+        try {
+            connection.setAutoCommit(false);
+
+            PreparedStatement colUpsert = connection.prepareStatement(MODIFY_COLUMN_ALTER_TABLE);
+            String tenantIdStr = connection.getTenantId() == null ?
+                    table.getTenantId() == null ? null : table.getTenantId().getString() : connection.getTenantId().getString();
+            try {
+                colUpsert.setString(1, tenantIdStr);
+                colUpsert.setString(2, table.getSchemaName().getString());
+                colUpsert.setString(3, table.getTableName().getString());
+                colUpsert.setString(4, columnName.getColumnName());
+                if (!SchemaUtil.isPKColumn(oldColumn) && oldColumn.getFamilyName() != null) {
+                    colUpsert.setString(5, oldColumn.getFamilyName().getString());
+                } else {
+                    colUpsert.setString(5, null);
+                }
+                colUpsert.setInt(6, columnDef.getDataType().getSqlType());
+                if (columnDef.getMaxLength() == null) {
+                    colUpsert.setNull(7, Types.INTEGER);
+                } else {
+                    colUpsert.setInt(7, columnDef.getMaxLength());
+                }
+                if (columnDef.getScale() == null) {
+                    colUpsert.setNull(8, Types.INTEGER);
+                } else {
+                    colUpsert.setInt(8, columnDef.getScale());
+                }
+                colUpsert.execute();
+            } finally {
+                colUpsert.close();
+            }
+
+            tableMetaData.addAll(connection.getMutationState().toMutations(null).next().getSecond());
+            connection.rollback();
+
+            // set sequence number of data table and table type
+            final long seqNum = table.getSequenceNumber() + 1;
+            int totalColumnCount = table.getColumns().size() + (table.getBucketNum() == null ? 0 : -1);
+            PreparedStatement tableUpsert = connection.prepareStatement(MUTATE_TABLE);
+            try {
+                tableUpsert.setString(1, tenantIdStr);
+                tableUpsert.setString(2, table.getSchemaName().getString());
+                tableUpsert.setString(3, table.getTableName().getString());
+                tableUpsert.setString(4, table.getType().getSerializedValue());
+                tableUpsert.setLong(5, seqNum);
+                tableUpsert.setInt(6, totalColumnCount);
+                tableUpsert.execute();
+            } finally {
+                tableUpsert.close();
+            }
+
+            tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+            connection.rollback();
+
+            Collections.reverse(tableMetaData);
+            MetaDataMutationResult result = connection.getQueryServices().modifyColumn(tableMetaData, table);
+
+            if (result.getMutationCode() == MutationCode.OK) {
+                logger.info(oldColumn.getName().getString() + " has been modified!");
+                addTableToCache(result);
+            }
+            return new MutationState(0, 0, connection);
+        } finally {
+            connection.setAutoCommit(wasAutoCommit);
         }
     }
 

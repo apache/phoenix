@@ -17,13 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NavigableMap;
-import java.util.TreeMap;
-
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
@@ -32,19 +28,12 @@ import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-import com.google.protobuf.ByteString;
 import org.apache.phoenix.util.MetaDataUtil;
+
+import java.util.*;
 
 /**
  *
@@ -168,7 +157,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         AUTO_PARTITION_SEQUENCE_NOT_FOUND,
         CANNOT_COERCE_AUTO_PARTITION_ID,
         TOO_MANY_INDEXES,
-        NO_OP
+        NO_OP,
+        OK
     };
 
   public static class SharedTableState {
