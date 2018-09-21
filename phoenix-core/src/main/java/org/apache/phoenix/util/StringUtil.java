@@ -264,7 +264,14 @@ public class StringUtil {
     }
 
     public static int getUnpaddedCharLength(byte[] b, int offset, int length, SortOrder sortOrder) {
-        return getFirstNonBlankCharIdxFromEnd(b, offset, length, sortOrder) - offset + 1;
+        int i = offset + length - 1;
+        byte space = sortOrder == SortOrder.ASC ? SPACE_UTF8 : INVERTED_SPACE_UTF8;
+        for ( ; i >= offset; i--) {
+            if (b[i] == space) {
+                return i - offset + 1;
+            }
+        }
+        return length;
     }
 
     public static byte[] padChar(byte[] value, Integer byteSize) {

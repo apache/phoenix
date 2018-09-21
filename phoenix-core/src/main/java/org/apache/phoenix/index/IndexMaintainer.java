@@ -1205,6 +1205,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return coveredColumnsMap.keySet();
     }
 
+    public ColumnReference getCoveredColumnsOfIndexTable(ColumnReference key) {
+        return coveredColumnsMap.get(key);
+    }
+
     public Set<ColumnReference> getAllColumns() {
         return allColumns;
     }

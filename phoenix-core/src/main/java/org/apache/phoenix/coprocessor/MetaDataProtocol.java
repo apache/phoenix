@@ -17,13 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NavigableMap;
-import java.util.TreeMap;
-
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
@@ -32,19 +28,12 @@ import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-import com.google.protobuf.ByteString;
 import org.apache.phoenix.util.MetaDataUtil;
+
+import java.util.*;
 
 /**
  *
@@ -168,6 +157,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         AUTO_PARTITION_SEQUENCE_NOT_FOUND,
         CANNOT_COERCE_AUTO_PARTITION_ID,
         TOO_MANY_INDEXES,
+        COLUMN_MODIFIED,
         NO_OP
     };
 
@@ -248,7 +238,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private MutationCode returnCode;
         private long mutationTime;
         private PTable table;
-        private List<byte[]> tableNamesToDelete;
+        private List<byte[]> mutatedTableNames;
         private List<SharedTableState> sharedTablesToDelete;
         private byte[] columnName;
         private byte[] familyName;
@@ -293,11 +283,11 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.wasUpdated = wasUpdated;
          }
         
-        public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete) {
+        public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> mutatedTableNames) {
             this.returnCode = returnCode;
             this.mutationTime = currentTime;
             this.table = table;
-            this.tableNamesToDelete = tableNamesToDelete;
+            this.mutatedTableNames = mutatedTableNames;
         }
         
         public MetaDataMutationResult(MutationCode returnCode, int currentTime, PTable table, long viewIndexId, PDataType viewIndexType ) {
@@ -335,8 +325,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.functions.add(function);
         }
 
-        public List<byte[]> getTableNamesToDelete() {
-            return tableNamesToDelete;
+        public List<byte[]> getMutatedTableNames() {
+            return mutatedTableNames;
         }
 
         public byte[] getColumnName() {
@@ -381,10 +371,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
               result.functions.add(PFunction.createFromProto(function));
           }
           if (proto.getTablesToDeleteCount() > 0) {
-            result.tableNamesToDelete =
+            result.mutatedTableNames =
                 Lists.newArrayListWithExpectedSize(proto.getTablesToDeleteCount());
             for (ByteString tableName : proto.getTablesToDeleteList()) {
-              result.tableNamesToDelete.add(tableName.toByteArray());
+              result.mutatedTableNames.add(tableName.toByteArray());
             }
           }
           result.columnName = ByteUtil.EMPTY_BYTE_ARRAY;
@@ -428,8 +418,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
             if (result.table != null) {
               builder.setTable(PTableImpl.toProto(result.table));
             }
-            if (result.getTableNamesToDelete() != null) {
-              for (byte[] tableName : result.tableNamesToDelete) {
+            if (result.getMutatedTableNames() != null) {
+              for (byte[] tableName : result.mutatedTableNames) {
                 builder.addTablesToDelete(ByteStringer.wrap(tableName));
               }
             }

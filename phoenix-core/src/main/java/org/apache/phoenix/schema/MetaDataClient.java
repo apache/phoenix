@@ -170,39 +170,8 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.AddColumnStatement;
-import org.apache.phoenix.parse.AlterIndexStatement;
-import org.apache.phoenix.parse.ChangePermsStatement;
-import org.apache.phoenix.parse.CloseStatement;
-import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.ColumnDefInPkConstraint;
-import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.CreateFunctionStatement;
-import org.apache.phoenix.parse.CreateIndexStatement;
-import org.apache.phoenix.parse.CreateSchemaStatement;
-import org.apache.phoenix.parse.CreateSequenceStatement;
-import org.apache.phoenix.parse.CreateTableStatement;
-import org.apache.phoenix.parse.DeclareCursorStatement;
-import org.apache.phoenix.parse.DropColumnStatement;
-import org.apache.phoenix.parse.DropFunctionStatement;
-import org.apache.phoenix.parse.DropIndexStatement;
-import org.apache.phoenix.parse.DropSchemaStatement;
-import org.apache.phoenix.parse.DropSequenceStatement;
-import org.apache.phoenix.parse.DropTableStatement;
-import org.apache.phoenix.parse.IndexKeyConstraint;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.OpenStatement;
-import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
-import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.PrimaryKeyConstraint;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryConstants;
@@ -426,6 +395,18 @@ public class MetaDataClient {
                     COLUMN_QUALIFIER + ", " +
                     IS_ROW_TIMESTAMP +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    private static final String MODIFY_COLUMN_ALTER_TABLE =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    COLUMN_NAME + "," +
+                    COLUMN_FAMILY + "," +
+                    DATA_TYPE + "," +
+                    COLUMN_SIZE + "," +
+                    DECIMAL_DIGITS +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String INSERT_COLUMN_ALTER_TABLE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
@@ -3297,6 +3278,147 @@ public class MetaDataClient {
             tableBoolUpsert.setString(3, tableName);
             tableBoolUpsert.setString(4, propertyValue);
             tableBoolUpsert.execute();
+        }
+    }
+
+    public MutationState modifyColumn(ModifyColumnStatement statement) throws SQLException {
+        PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
+        ColumnDef columnDef = statement.getColumnDef();
+        ColumnName columnName =columnDef.getColumnDefName();
+
+        // we can not modify index table/system table and project table.
+        if (table.getType() != PTableType.TABLE && table.getType() != PTableType.VIEW) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_MODIFY_TABLE_TYPE).build().buildException();
+        }
+
+        // Don't modify a child table
+        if (table.getParentName() != null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_MODIFY_CHILD_TABLE).build().buildException();
+        }
+
+        PColumn oldColumn = null;
+        for (PColumn column : table.getColumns()) {
+            if (column.getFamilyName() == null) {
+                if (column.getName().getString().equals(columnName.getColumnName())) {
+                    oldColumn = column;
+                }
+            } else {
+                if (column.getName().getString().equals(columnName.getColumnName()) &&
+                        ((columnName.getFamilyName() != null && column.getFamilyName().getString().equals(columnName.getFamilyName())) ||
+                                (columnName.getFamilyName() == null && column.getFamilyName().getString().equals(QueryConstants.DEFAULT_COLUMN_FAMILY)))) {
+                    oldColumn = column;
+                    break;
+                }
+            }
+        }
+
+        // Throwing an exception if the column don't find
+        if (oldColumn == null) {
+            throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(),
+                    columnName.getFamilyName(), columnName.getColumnName());
+        }
+
+        // Comparision of row keys were affected when we changed max length of pk columns to pad more placeholder,
+        // so we can not modify length of the PK column.
+        if (oldColumn.isRowTimestamp() || SchemaUtil.isPKColumn(oldColumn)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN).build().buildException();
+        }
+
+        if (oldColumn.getDataType().getSqlType() == columnDef.getDataType().getSqlType() &&
+                ((oldColumn.getMaxLength() > 0 && oldColumn.getMaxLength() == columnDef.getMaxLength()) ||
+                        (oldColumn.getScale() != null && oldColumn.getScale() == columnDef.getScale()))) {
+            // do nothing
+            logger.info("Column's properties will not be changed, because new properties are same with old properties! ");
+            return new MutationState(0, 0, connection);
+        }
+
+        // Checking whether new type is castable
+        if (!oldColumn.getDataType().isCastableTo(columnDef.getDataType())) {
+            throw new DataTypeCastException(columnDef.getDataType().getSqlTypeName(), oldColumn.getDataType().getSqlTypeName());
+        }
+
+        List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(1);
+
+        Long timestamp = TransactionUtil.getTableTimestamp(connection, table.isTransactional(),
+                table.isTransactional() ? table.getTransactionProvider() :
+                        (Provider) TableProperty.TRANSACTION_PROVIDER.getValue(
+                                connection.getQueryServices().getProps().get(QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB,
+                                        QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER)));
+
+        // Start to get mutation
+        connection.rollback();
+        boolean wasAutoCommit = connection.getAutoCommit();
+        try {
+            connection.setAutoCommit(false);
+
+            PreparedStatement colUpsert = connection.prepareStatement(MODIFY_COLUMN_ALTER_TABLE);
+            String tenantIdStr = connection.getTenantId() == null ?
+                    table.getTenantId() == null ? null : table.getTenantId().getString() : connection.getTenantId().getString();
+            try {
+                colUpsert.setString(1, tenantIdStr);
+                colUpsert.setString(2, table.getSchemaName().getString());
+                colUpsert.setString(3, table.getTableName().getString());
+                colUpsert.setString(4, columnName.getColumnName());
+                if (!SchemaUtil.isPKColumn(oldColumn) && oldColumn.getFamilyName() != null) {
+                    colUpsert.setString(5, oldColumn.getFamilyName().getString());
+                } else {
+                    colUpsert.setString(5, null);
+                }
+                colUpsert.setInt(6, columnDef.getDataType().getSqlType());
+                if (columnDef.getMaxLength() == null) {
+                    colUpsert.setNull(7, Types.INTEGER);
+                } else {
+                    colUpsert.setInt(7, columnDef.getMaxLength());
+                }
+                if (columnDef.getScale() == null) {
+                    colUpsert.setNull(8, Types.INTEGER);
+                } else {
+                    colUpsert.setInt(8, columnDef.getScale());
+                }
+                colUpsert.execute();
+            } finally {
+                colUpsert.close();
+            }
+
+            tableMetaData.addAll(connection.getMutationState().toMutations(null).next().getSecond());
+            connection.rollback();
+
+            // set sequence number of data table and table type
+            final long seqNum = table.getSequenceNumber() + 1;
+            int totalColumnCount = table.getColumns().size() + (table.getBucketNum() == null ? 0 : -1);
+            PreparedStatement tableUpsert = connection.prepareStatement(MUTATE_TABLE);
+            try {
+                tableUpsert.setString(1, tenantIdStr);
+                tableUpsert.setString(2, table.getSchemaName().getString());
+                tableUpsert.setString(3, table.getTableName().getString());
+                tableUpsert.setString(4, table.getType().getSerializedValue());
+                tableUpsert.setLong(5, seqNum);
+                tableUpsert.setInt(6, totalColumnCount);
+                tableUpsert.execute();
+            } finally {
+                tableUpsert.close();
+            }
+
+            tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+            connection.rollback();
+
+            Collections.reverse(tableMetaData);
+            MetaDataMutationResult result = connection.getQueryServices().modifyColumn(tableMetaData, table);
+
+            if (result.getMutationCode() == MutationCode.COLUMN_MODIFIED) {
+                logger.info(oldColumn.getName().getString() + " has been modified!");
+                addTableToCache(result);
+                if (result.getMutatedTableNames() != null) {
+                    for (byte[] name : result.getMutatedTableNames()) {
+                        String schema = SchemaUtil.getSchemaNameFromFullName(name);
+                        String tableName = SchemaUtil.getTableNameFromFullName(name);
+                        updateCache(connection.getTenantId(), schema, tableName, true);
+                    }
+                }
+            }
+            return new MutationState(0, 0, connection);
+        } finally {
+            connection.setAutoCommit(wasAutoCommit);
         }
     }
 

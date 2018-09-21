@@ -17,12 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
@@ -40,17 +34,17 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.SequenceAllocation;
-import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.TransactionFactory;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
@@ -102,6 +96,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException;
     public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists) throws SQLException;
     public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException;
+    public MetaDataMutationResult modifyColumn(List<Mutation> tableMetaData, PTable table) throws SQLException;
     public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata, PTableType tableType) throws SQLException;
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException;
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName,  Map<String, List<Pair<String,Object>>> stmtProperties,  PTable table) throws SQLException;
