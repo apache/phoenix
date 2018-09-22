@@ -18,7 +18,7 @@
 package org.apache.phoenix.hive.query;
 
 import com.google.common.collect.Lists;
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.mapred.JobConf;

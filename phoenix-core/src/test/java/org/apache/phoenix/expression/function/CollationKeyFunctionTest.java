@@ -27,7 +27,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.lang.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;

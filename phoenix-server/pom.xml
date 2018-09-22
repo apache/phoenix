@@ -100,7 +100,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <finalName>phoenix-${project.version}-server</finalName>
+                <finalName>phoenix-${project.version}-server</finalName>
                 <shadedArtifactAttached>false</shadedArtifactAttached>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
@@ -109,61 +109,178 @@
                             implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
                         <addHeader>false</addHeader>
                     </transformer>
-                  <transformer
-                      implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
-                    <resource>LICENSE.txt</resource>
-                    <file>${project.basedir}/../LICENSE</file>
-                  </transformer>
-                  <transformer
-                      implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
-                    <resource>NOTICE</resource>
-                    <file>${project.basedir}/../NOTICE</file>
-                  </transformer>
+                    <transformer
+                              implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                        <resource>LICENSE.txt</resource>
+                        <file>${project.basedir}/../LICENSE</file>
+                    </transformer>
+                    <transformer
+                              implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                        <resource>NOTICE</resource>
+                        <file>${project.basedir}/../NOTICE</file>
+                    </transformer>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                 </transformers>
                 <artifactSet>
-                <includes>
-                  <include>org.apache.phoenix:phoenix-core</include>
-                  <include>org.iq80.snappy:snappy</include>
-                  <include>org.antlr:antlr*</include>
-                  <include>joda-time:joda-time</include>
-                  <include>org.apache.tephra:tephra*</include>
-                  <include>com.google.code.gson:gson</include>
-                  <include>org.jruby.joni:joni</include>
-                  <include>org.jruby.jcodings:jcodings</include>
-                  <include>org.apache.twill:twill*</include>
-                  <include>com.google.inject.extensions:guice-assistedinject</include>
-                  <include>it.unimi.dsi:fastutil</include>
-                  <include>io.dropwizard.metrics:metrics-core</include>
-                  <include>org.apache.thrift:libthrift</include>
-                  <include>com.clearspring.analytics:stream</include>
-                  <include>com.salesforce.i18n:i18n-util</include>
-                  <include>com.ibm.icu:icu4j</include>
-                  <include>com.ibm.icu:icu4j-charset</include>
-                  <include>com.ibm.icu:icu4j-localespi</include>
-                </includes>
-                  <excludes>
-                    <exclude>org.apache.phoenix:phoenix-server</exclude>
-                  </excludes>
-              </artifactSet>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                    <exclude>META-INF/license/*</exclude>
-                    <exclude>LICENSE.*</exclude>
-                    <exclude>NOTICE.*</exclude>
-                  </excludes>
-                </filter>
-              </filters>
-             <relocations>
-                <relocation>
-                  <pattern>org.joda</pattern>
-                  <shadedPattern>${shaded.package}.org.joda</shadedPattern>
-                </relocation>
-             </relocations>
+                    <includes>
+                        <include>*:*</include>
+                    </includes>
+                    <!-- Exclude things that would be available in the standard location on the hbase classpath.
+                         This does *not* exclude transitive dependencies for these. To exclude an entire "tree"
+                         of dependencies, we need to mark those as "provided" dependencies below. -->
+                    <excludes>
+                        <exclude>org.apache.zookeeper:zookeeper</exclude>
+                        <exclude>junit:junit</exclude>
+                        <exclude>org.hamcrest:hamcrest-core</exclude>
+                        <exclude>jline:jline</exclude>
+                        <exclude>org.eclipse.jetty:*</exclude>
+                        <exclude>org.apache.phoenix:phoenix-server</exclude>
+                        <exclude>sqlline:sqlline</exclude>
+                        <exclude>log4j:log4j</exclude>
+                        <exclude>org.slf4j:slf4j-api</exclude>
+                        <exclude>org.slf4j:slf4j-log4j</exclude>
+                    </excludes>
+                </artifactSet>
+                <filters>
+                    <filter>
+                        <artifact>*:*</artifact>
+                        <excludes>
+                            <exclude>META-INF/*.SF</exclude>
+                            <exclude>META-INF/*.DSA</exclude>
+                            <exclude>META-INF/*.RSA</exclude>
+                            <exclude>META-INF/license/*</exclude>
+                            <exclude>LICENSE.*</exclude>
+                            <exclude>NOTICE.*</exclude>
+                        </excludes>
+                    </filter>
+                </filters>
+                <relocations>
+                    <relocation>
+                      <pattern>org.apache.commons</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
+                      <excludes>
+                        <exclude>org.apache.commons.csv.**</exclude>
+                        <exclude>org.apache.commons.logging.**</exclude>
+                        <exclude>org.apache.commons.configuration.**</exclude>
+                        <exclude>org.apache.commons.configuration2.**</exclude>
+                      </excludes>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.apache.htrace</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.htrace</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.apache.http</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.antlr</pattern>
+                      <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.iq80</pattern>
+                      <shadedPattern>${shaded.package}.org.iq80</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.jcodings</pattern>
+                      <shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.joda</pattern>
+                      <shadedPattern>${shaded.package}.org.joda</shadedPattern>
+                    </relocation>
+                    <!-- Tephra and dependencies -->
+                    <relocation>
+                      <pattern>co.cask.tephra</pattern>
+                      <shadedPattern>${shaded.package}.co.cask.tephra</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.apache.tephra</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.tephra</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.apache.twill</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.apache.thrift</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <!-- This would shade protobuf, but we don't package it as hbase provides it
+                           for all CPEPs. Similarly, we need to exclude the package so that
+                           Phoenix looks for it in the "standard" package. -->
+                      <pattern>com.google</pattern>
+                      <shadedPattern>${shaded.package}.com.google</shadedPattern>
+                      <excludes>
+                        <exclude>com.google.protobuf.**</exclude>
+                      </excludes>
+                    </relocation>
+                    <relocation>
+                      <pattern>com.codahale.metrics</pattern>
+                      <shadedPattern>${shaded.package}.com.codahale.metrics</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>it.unimi.dsi.fastutil</pattern>
+                      <shadedPattern>${shaded.package}.it.unimi.dsi.fastutil</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>com.ibm.icu</pattern>
+                      <shadedPattern>${shaded.package}.com.ibm.icu</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>com.force</pattern>
+                      <shadedPattern>${shaded.package}.com.force</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>com.clearspring</pattern>
+                      <shadedPattern>${shaded.package}.com.clearspring</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.joni</pattern>
+                      <shadedPattern>${shaded.package}.org.joni</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.jcodings</pattern>
+                      <shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.iq80.snappy</pattern>
+                      <shadedPattern>${shaded.package}.org.iq80.snappy</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>edu.umd.cs.findbugs.annotations</pattern>
+                      <shadedPattern>${shaded.package}.edu.umd.cs.findbugs.annotations</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>net.jcip.annotations</pattern>
+                      <shadedPattern>${shaded.package}.net.jcip.annotations</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.codehaus.jackson</pattern>
+                      <shadedPattern>${shaded.package}.org.codehaus.jackson</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>javax.annotation</pattern>
+                      <shadedPattern>${shaded.package}.javax.annotation</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>com.lmax.disruptor</pattern>
+                      <shadedPattern>${shaded.package}.com.lmax.disruptor</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>javax.servlet</pattern>
+                      <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.aopalliance</pattern>
+                      <shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
+                    </relocation>
+                    <relocation>
+                      <pattern>org.objectweb.asm</pattern>
+                      <shadedPattern>${shaded.package}.org.objectweb.asm</shadedPattern>
+                    </relocation>
+                </relocations>
             </configuration>
           </execution>
         </executions>
@@ -177,16 +294,68 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
     </dependency>
+    <!-- hbase's classpath will provide these, mark them as provided to prevent
+         them, and their transitive dependencies, from being included in the
+         shaded jar. -->
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-auth</artifactId>
-      <version>2.7.1</version>
-      <scope>test</scope>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-annotations</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-testing-util</artifactId>
-      <scope>test</scope>
+      <artifactId>hbase-mapreduce</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop2-compat</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-annotations</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>

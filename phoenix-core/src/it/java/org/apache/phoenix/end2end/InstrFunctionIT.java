@@ -131,4 +131,39 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
         testInstrFilter(conn, queryToExecute,"abcdefghijkl");
     }
 
+    @Test
+    public void testNonLiteralExpression() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        initTable(conn, tableName, "ASC", "asdf", "sdf");
+        // Should be able to use INSTR with a non-literal expression as the 2nd argument
+        String query = "SELECT INSTR(name, substr) FROM " + tableName;
+        testInstr(conn, query, 2);
+    }
+
+    @Test
+    public void testNonLiteralSourceExpression() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        initTable(conn, tableName, "ASC", "asdf", "sdf");
+        // Using the function inside the SELECT will test client-side.
+        String query = "SELECT INSTR('asdf', 'sdf') FROM " + tableName;
+        testInstr(conn, query, 2);
+        query = "SELECT INSTR('asdf', substr) FROM " + tableName;
+        testInstr(conn, query, 2);
+        query = "SELECT INSTR('qwerty', 'sdf') FROM " + tableName;
+        testInstr(conn, query, 0);
+        query = "SELECT INSTR('qwerty', substr) FROM " + tableName;
+        testInstr(conn, query, 0);
+        // Test the built-in function in a where clause to make sure
+        // it works server-side (and not just client-side).
+        query = "SELECT name FROM " + tableName + " WHERE INSTR(name, substr) = 2";
+        testInstrFilter(conn, query, "asdf");
+        query = "SELECT name FROM " + tableName + " WHERE INSTR(name, 'sdf') = 2";
+        testInstrFilter(conn, query, "asdf");
+        query = "SELECT name FROM " + tableName + " WHERE INSTR('asdf', substr) = 2";
+        testInstrFilter(conn, query, "asdf");
+        query = "SELECT name FROM " + tableName + " WHERE INSTR('asdf', 'sdf') = 2";
+        testInstrFilter(conn, query, "asdf");
+    }
 }

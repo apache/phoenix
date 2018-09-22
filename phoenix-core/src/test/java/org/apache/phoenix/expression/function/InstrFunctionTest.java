@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.expression.function;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
@@ -32,18 +34,27 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
 public class InstrFunctionTest {
+
+    private static Object evaluateExpression(String value, PDataType<?> dataType, String strToSearch, SortOrder order) throws SQLException {
+      Expression inputArg = LiteralExpression.newConstant(value,dataType,order);
+
+      Expression strToSearchExp = LiteralExpression.newConstant(strToSearch,dataType);
+      List<Expression> expressions = Arrays.<Expression>asList(inputArg,strToSearchExp);
+      Expression instrFunction = new InstrFunction(expressions);
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      instrFunction.evaluate(null,ptr);
+      return instrFunction.getDataType().toObject(ptr);
+    }
     
-    public static void inputExpression(String value, PDataType dataType, String strToSearch,Integer expected, SortOrder order) throws SQLException{
-        Expression inputArg = LiteralExpression.newConstant(value,dataType,order);
-        
-        Expression strToSearchExp = LiteralExpression.newConstant(strToSearch,dataType);
-        List<Expression> expressions = Arrays.<Expression>asList(inputArg,strToSearchExp);
-        Expression instrFunction = new InstrFunction(expressions);
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        instrFunction.evaluate(null,ptr);
-        Integer result = (Integer) instrFunction.getDataType().toObject(ptr);
-        assertTrue(result.compareTo(expected) == 0);
-        
+    public static void inputExpression(String value, PDataType<?> dataType, String strToSearch,Integer expected, SortOrder order) throws SQLException {
+        Object obj = evaluateExpression(value, dataType, strToSearch, order);
+        assertNotNull("Result was unexpectedly null", obj);
+        assertTrue(((Integer) obj).compareTo(expected) == 0);
+    }
+
+    public static void inputNullExpression(String value, PDataType<?> dataType, String strToSearch, SortOrder order) throws SQLException {
+        Object obj = evaluateExpression(value, dataType, strToSearch, order);
+        assertNull("Result was unexpectedly non-null", obj);
     }
     
     
@@ -72,10 +83,13 @@ public class InstrFunctionTest {
         inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, " ", 6, SortOrder.ASC);
         
         inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, " ", 6, SortOrder.DESC);
-        
-        inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, "", 0, SortOrder.ASC);
-        
-        inputExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, "", 0, SortOrder.DESC);
+
+        // Phoenix can't represent empty strings, so an empty or null search string should return null
+        // See PHOENIX-4884 for more chatter.
+        inputNullExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, "", SortOrder.ASC);
+        inputNullExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, "", SortOrder.DESC);
+        inputNullExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, null, SortOrder.ASC);
+        inputNullExpression("ABCDE FGHiJKL",PVarchar.INSTANCE, null, SortOrder.DESC);
         
         inputExpression("ABCDEABC",PVarchar.INSTANCE, "ABC", 1, SortOrder.ASC);
         
