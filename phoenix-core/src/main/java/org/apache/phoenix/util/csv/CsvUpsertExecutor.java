@@ -20,6 +20,7 @@ package org.apache.phoenix.util.csv;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Base64;
 import java.util.List;
@@ -30,6 +31,7 @@ import javax.annotation.Nullable;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.function.EncodeFormat;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -41,6 +43,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,9 +128,9 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
         private final String binaryEncoding;
 
         SimpleDatatypeConversionFunction(PDataType dataType, Connection conn) {
-            Properties props;
+            ReadOnlyProps props;
             try {
-                props = conn.getClientInfo();
+                props = conn.unwrap(PhoenixConnection.class).getQueryServices().getProps();
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
@@ -139,23 +142,23 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                 String dateFormat;
                 int dateSqlType = dataType.getResultSetSqlType();
                 if (dateSqlType == Types.DATE) {
-                    dateFormat = props.getProperty(QueryServices.DATE_FORMAT_ATTRIB,
+                    dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB,
                             DateUtil.DEFAULT_DATE_FORMAT);
                 } else if (dateSqlType == Types.TIME) {
-                    dateFormat = props.getProperty(QueryServices.TIME_FORMAT_ATTRIB,
+                    dateFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB,
                             DateUtil.DEFAULT_TIME_FORMAT);
                 } else {
-                    dateFormat = props.getProperty(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
+                    dateFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
                             DateUtil.DEFAULT_TIMESTAMP_FORMAT);                    
                 }
-                String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                String timeZoneId = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
                 this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
             } else {
                 this.dateTimeParser = null;
             }
             this.codec = codec;
-            this.binaryEncoding = props.getProperty(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING,
+            this.binaryEncoding = props.get(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING,
                             QueryServicesOptions.DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING);
         }
 
@@ -164,6 +167,9 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
         public Object apply(@Nullable String input) {
             if (input == null || input.isEmpty()) {
                 return null;
+            }
+            if (dataType == PTimestamp.INSTANCE) {
+                return DateUtil.parseTimestamp(input);
             }
             if (dateTimeParser != null) {
                 long epochTime = dateTimeParser.parseDateTime(input);
