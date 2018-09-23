@@ -50,6 +50,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
@@ -207,19 +208,19 @@ public class HashJoinRegionScanner implements RegionScanner {
                         }
                         if (tempTuples[i] == null) {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
-                                    lhs : TupleProjector.mergeProjectedValue(
-                                            (ProjectedValueTuple) lhs, schema, tempDestBitSet,
-                                            null, joinInfo.getSchemas()[i], tempSrcBitSet[i],
-                                            joinInfo.getFieldPositions()[i], useNewValueColumnQualifier);
+                                    lhs : mergeProjectedValue(
+                                            lhs, schema, tempDestBitSet, null,
+                                            joinInfo.getSchemas()[i], tempSrcBitSet[i],
+                                            joinInfo.getFieldPositions()[i]);
                             offerResult(joined, projected, result);
                             continue;
                         }
                         for (Tuple t : tempTuples[i]) {
                             Tuple joined = tempSrcBitSet[i] == ValueBitSet.EMPTY_VALUE_BITSET ?
-                                    lhs : TupleProjector.mergeProjectedValue(
-                                            (ProjectedValueTuple) lhs, schema, tempDestBitSet,
-                                            t, joinInfo.getSchemas()[i], tempSrcBitSet[i],
-                                            joinInfo.getFieldPositions()[i], useNewValueColumnQualifier);
+                                    lhs : mergeProjectedValue(
+                                            lhs, schema, tempDestBitSet, t,
+                                            joinInfo.getSchemas()[i], tempSrcBitSet[i],
+                                            joinInfo.getFieldPositions()[i]);
                             offerResult(joined, projected, result);
                         }
                     }
@@ -352,5 +353,38 @@ public class HashJoinRegionScanner implements RegionScanner {
         cells.add(arrayCell);
         MultiKeyValueTuple multi = new MultiKeyValueTuple(cells);
         resultQueue.offer(multi);
+    }
+
+    // PHOENIX-4917 Merge array element cell through hash join.
+    // Merge into first cell, then reattach array cell.
+    private Tuple mergeProjectedValue(
+        Tuple dest, KeyValueSchema destSchema, ValueBitSet destBitSet, Tuple src,
+        KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset)
+        throws IOException {
+
+        if (dest instanceof ProjectedValueTuple) {
+            return TupleProjector.mergeProjectedValue(
+                (ProjectedValueTuple) dest, destSchema, destBitSet, src,
+                srcSchema, srcBitSet, offset, useNewValueColumnQualifier);
+        }
+
+        ProjectedValueTuple first = projector.projectResults(
+            new SingleKeyValueTuple(dest.getValue(0)));
+        ProjectedValueTuple merged = TupleProjector.mergeProjectedValue(
+            first, destSchema, destBitSet, src, srcSchema,
+            srcBitSet, offset, useNewValueColumnQualifier);
+
+        int size = dest.size();
+        if (size == 1) {
+            return merged;
+        }
+
+        List<Cell> cells = new ArrayList<Cell>(size);
+        cells.add(merged.getValue(0));
+        for (int i = 1; i < size; i++) {
+            cells.add(dest.getValue(i));
+        }
+        MultiKeyValueTuple multi = new MultiKeyValueTuple(cells);
+        return multi;
     }
 }
