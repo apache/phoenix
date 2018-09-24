@@ -45,14 +45,14 @@ public class PTableKey {
     
     @Override
     public String toString() {
-        return name + (tenantId == null ? "" : " for " + tenantId.getString());
+        return name + ((tenantId == null || tenantId.getBytes().length==0) ? "" : " for " + tenantId.getString());
     }
     
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((tenantId == null) ? 0 : tenantId.hashCode());
+        result = prime * result + ((tenantId == null || tenantId.getBytes().length==0) ? 0 : tenantId.hashCode());
         result = prime * result + name.hashCode();
         return result;
     }

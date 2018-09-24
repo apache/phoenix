@@ -185,6 +185,7 @@ public class UpsertCompiler {
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         boolean isAutoCommit = connection.getAutoCommit();
+        int sizeOffset = 0;
         int numSplColumns =
                 (tableRef.getTable().isMultiTenant() ? 1 : 0)
                         + (tableRef.getTable().getViewIndexId() != null ? 1 : 0);
@@ -249,8 +250,13 @@ public class UpsertCompiler {
                     mutation.clear();
                 }
             }
-            // If auto commit is true, this last batch will be committed upon return
-            return new MutationState(tableRef, mutation, rowCount / batchSize * batchSize, maxSize, maxSizeBytes, connection);
+
+            if (isAutoCommit) {
+                // If auto commit is true, this last batch will be committed upon return
+                sizeOffset = rowCount / batchSize * batchSize;
+            }
+            return new MutationState(tableRef, mutation, sizeOffset, maxSize,
+                    maxSizeBytes, connection);
         }
     }
 
@@ -720,7 +726,7 @@ public class UpsertCompiler {
         final byte[][] values = new byte[nValuesToSet][];
         int nodeIndex = 0;
         if (isSharedViewIndex) {
-            values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+            values[nodeIndex++] = table.getViewIndexType().toBytes(table.getViewIndexId());
         }
         if (isTenantSpecific) {
             PName tenantId = connection.getTenantId();
@@ -787,7 +793,7 @@ public class UpsertCompiler {
                 LinkedHashSet<PColumn> updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
                 updateColumns.add(new PColumnImpl(
                         table.getPKColumns().get(position).getName(), // Use first PK column name as we know it won't conflict with others
-                        null, PVarbinary.INSTANCE, null, null, false, position, SortOrder.getDefault(), 0, null, false, null, false, false, null));
+                        null, PVarbinary.INSTANCE, null, null, false, position, SortOrder.getDefault(), 0, null, false, null, false, false, null, table.getPKColumns().get(position).getTimestamp()));
                 position++;
                 for (Pair<ColumnName,ParseNode> columnPair : onDupKeyPairs) {
                     ColumnName colName = columnPair.getFirst();

@@ -29,7 +29,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -111,7 +115,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
             // create child of parent view that should be able to use the parent's index
             String childViewDdl = "CREATE VIEW " + childViewName1 + " AS SELECT * FROM " + parentViewName + " WHERE A2 = 'Y'";
             conn.createStatement().execute(childViewDdl);
-            
+
+            PTable childViewPTable = PhoenixRuntime.getTableNoCache(conn, childViewName1);
             // create child of parent view that should *not* be able to use the parent's index
             String grandChildViewDdl1 = "CREATE VIEW " + childViewName2 + " AS SELECT * FROM " + childViewName1 + " WHERE A3 = 'Z'";
             conn.createStatement().execute(grandChildViewDdl1);
@@ -156,7 +161,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
         String childViewScanKey = isChildView ? ",'Y'" : "";
         assertEquals(
-            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER _IDX_" + baseTableName + " [-32768,'1'" + childViewScanKey + "] - [-32768,'3'" + childViewScanKey + "]\n" +
+            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER _IDX_" + baseTableName + " [-9223372036854775808,'1'" + childViewScanKey + "] - [-9223372036854775808,'3'" + childViewScanKey + "]\n" +
             "    SERVER FILTER BY FIRST KEY ONLY",
             QueryUtil.getExplainPlan(rs));
         
@@ -259,7 +264,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
                 " ORDER BY WO_ID, A_DATE DESC";
         ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 5 RANGES OVER _IDX_" + baseTableName + " [-32768,'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [-32768,'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']\n" + 
+            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 5 RANGES OVER _IDX_" + baseTableName + " [-9223372036854775808,'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [-9223372036854775808,'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']\n" +
             "    SERVER FILTER BY FIRST KEY ONLY",
             QueryUtil.getExplainPlan(rs));
         

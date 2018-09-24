@@ -83,6 +83,10 @@ public class HintNode {
         */
        USE_SORT_MERGE_JOIN,
        /**
+        * Persist the RHS results of a hash join.
+        */
+       USE_PERSISTENT_CACHE,
+       /**
         * Avoid using star-join optimization. Used for broadcast join (hash join) only.
         */
        NO_STAR_JOIN,
@@ -108,6 +112,11 @@ public class HintNode {
          * Enforces a forward scan.
          */
         FORWARD_SCAN,
+        /**
+         * Prefer a hash aggregate over a sort plus streaming aggregate.
+         * Issue https://issues.apache.org/jira/browse/PHOENIX-4751.
+         */
+        HASH_AGGREGATE,
     };
 
     private final Map<Hint,String> hints;

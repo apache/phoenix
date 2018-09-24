@@ -38,11 +38,13 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
+import org.apache.phoenix.util.MetaDataUtil;
 
 /**
  *
@@ -91,8 +93,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_13_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0 = MIN_TABLE_TIMESTAMP + 28;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0 = MIN_TABLE_TIMESTAMP + 29;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
     // Version below which we should disallow usage of mutable secondary indexing.
     public static final int MUTABLE_SI_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "10");
     public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
@@ -169,7 +172,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private PName tableName;
         private List<PColumn> columns;
         private List<PName> physicalNames;
-        private Short viewIndexId;
+        private PDataType viewIndexType;
+        private Long viewIndexId;
         
         public SharedTableState(PTable table) {
             this.tenantId = table.getTenantId();
@@ -177,6 +181,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.tableName = table.getTableName();
             this.columns = table.getColumns();
             this.physicalNames = table.getPhysicalNames();
+            this.viewIndexType = table.getViewIndexType();
             this.viewIndexId = table.getViewIndexId();
         }
         
@@ -199,7 +204,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
                     return PNameFactory.newName(physicalName.toByteArray());
                 }
             });
-            this.viewIndexId = (short)sharedTable.getViewIndexId();
+            this.viewIndexId = sharedTable.getViewIndexId();
+            this.viewIndexType = sharedTable.hasViewIndexType()
+                    ? PDataType.fromTypeId(sharedTable.getViewIndexType())
+                    : MetaDataUtil.getLegacyViewIndexIdDataType();
         }
 
         public PName getTenantId() {
@@ -222,10 +230,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
             return physicalNames;
         }
 
-        public Short getViewIndexId() {
+        public Long getViewIndexId() {
             return viewIndexId;
         }
-        
+
+        public PDataType getViewIndexType() {
+          return viewIndexType;
+        }
   }
     
   public static class MetaDataMutationResult {
@@ -238,8 +249,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private byte[] familyName;
         private boolean wasUpdated;
         private PSchema schema;
-        private Short viewIndexId;
-
+        private Long viewIndexId;
+        private PDataType viewIndexType;
         private List<PFunction> functions = new ArrayList<PFunction>(1);
         private long autoPartitionNum;
 
@@ -284,9 +295,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.tableNamesToDelete = tableNamesToDelete;
         }
         
-        public MetaDataMutationResult(MutationCode returnCode, int currentTime, PTable table, int viewIndexId) {
+        public MetaDataMutationResult(MutationCode returnCode, int currentTime, PTable table, long viewIndexId, PDataType viewIndexType ) {
             this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
-            this.viewIndexId = (short)viewIndexId;
+            this.viewIndexId = viewIndexId;
+            this.viewIndexType = viewIndexType;
         }
         
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete, List<SharedTableState> sharedTablesToDelete) {
@@ -342,9 +354,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
             return autoPartitionNum;
         }
         
-        public Short getViewIndexId() {
+        public Long getViewIndexId() {
             return viewIndexId;
         }
+
+      public PDataType getViewIndexType() {
+          return viewIndexType;
+      }
 
         public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
@@ -387,9 +403,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
           if (proto.hasAutoPartitionNum()) {
               result.autoPartitionNum = proto.getAutoPartitionNum();
           }
-            if (proto.hasViewIndexId()) {
-                result.viewIndexId = (short)proto.getViewIndexId();
-            }
+          if (proto.hasViewIndexId()) {
+               result.viewIndexId = proto.getViewIndexId();
+          }
+
+          result.viewIndexType = proto.hasViewIndexType()
+                    ? PDataType.fromTypeId(proto.getViewIndexType())
+                    : MetaDataUtil.getLegacyViewIndexIdDataType();
           return result;
         }
 
@@ -430,6 +450,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 sharedTableStateBuilder.setSchemaName(ByteStringer.wrap(sharedTableState.getSchemaName().getBytes()));
                 sharedTableStateBuilder.setTableName(ByteStringer.wrap(sharedTableState.getTableName().getBytes()));
                 sharedTableStateBuilder.setViewIndexId(sharedTableState.getViewIndexId());
+                sharedTableStateBuilder.setViewIndexType(sharedTableState.viewIndexType.getSqlType());
                 builder.addSharedTablesToDelete(sharedTableStateBuilder.build());
               }
             }
@@ -437,9 +458,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
               builder.setSchema(PSchema.toProto(result.schema));
             }
             builder.setAutoPartitionNum(result.getAutoPartitionNum());
-                if (result.getViewIndexId() != null) {
-                    builder.setViewIndexId(result.getViewIndexId());
-                }
+            if (result.getViewIndexId() != null) {
+                builder.setViewIndexId(result.getViewIndexId());
+            }
+            builder.setViewIndexType(result.getViewIndexType() == null
+					  ? MetaDataUtil.getLegacyViewIndexIdDataType().getSqlType()
+					  : result.getViewIndexType().getSqlType());
           }
           return builder.build();
         }

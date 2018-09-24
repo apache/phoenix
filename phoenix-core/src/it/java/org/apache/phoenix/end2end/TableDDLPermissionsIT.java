@@ -20,7 +20,6 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.util.Collections;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
@@ -54,6 +53,10 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
                         Action.READ, Action.EXEC);
                 grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
                         Action.READ, Action.EXEC);
+                grantPermissions(regularUser1.getShortName(), Collections.singleton("SYSTEM:MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM:MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
                 
             } else {
                 grantPermissions(regularUser1.getShortName(), PHOENIX_SYSTEM_TABLES, Action.READ, Action.EXEC);
@@ -64,6 +67,10 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
                         Action.READ, Action.EXEC);
                 grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
                         Action.READ, Action.EXEC);
+                grantPermissions(regularUser1.getShortName(), Collections.singleton("SYSTEM.MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
+            grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM.MUTEX"), Action.WRITE,
+                    Action.READ, Action.EXEC);
             }
         } catch (Throwable e) {
             if (e instanceof Exception) {

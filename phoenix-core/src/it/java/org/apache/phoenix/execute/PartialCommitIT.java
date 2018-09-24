@@ -267,7 +267,7 @@ public class PartialCommitIT extends BaseUniqueNamesOwnClusterIT {
         try (PhoenixConnection con = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             final Map<TableRef, MultiRowMutationState> mutations = Maps.newTreeMap(new TableRefComparator());
             // passing a null mutation state forces the connection.newMutationState() to be used to create the MutationState
-            return new PhoenixConnection(con, null) {
+            return new PhoenixConnection(con, (MutationState)null) {
                 @Override
                 protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
                     return new MutationState(maxSize, maxSizeBytes, this, mutations, false, null);

@@ -20,16 +20,15 @@ package org.apache.phoenix.jdbc;
 import java.util.Map;
 
 import org.apache.phoenix.monitoring.MetricType;
-import org.slf4j.Logger;
 
 public interface PhoenixMetricsLog {
 
-    void logOverAllReadRequestMetrics(Logger logger, Map<MetricType, Long> overAllQueryMetrics);
+    void logOverAllReadRequestMetrics(Map<MetricType, Long> overAllQueryMetrics, String sql);
 
-    void logRequestReadMetrics(Logger logger, Map<String, Map<MetricType, Long>> requestReadMetrics);
-    
-    void logWriteMetricsfoForMutations(Logger logger,  Map<String, Map<MetricType, Long>> mutationWriteMetrics);
-    
-    void logReadMetricInfoForMutationsSinceLastReset(Logger logger, Map<String, Map<MetricType, Long>> mutationReadMetrics);
+    void logRequestReadMetrics(Map<String, Map<MetricType, Long>> requestReadMetrics, String sql);
+
+    void logWriteMetricsfoForMutationsSinceLastReset(Map<String, Map<MetricType, Long>> mutationWriteMetrics);
+
+    void logReadMetricInfoForMutationsSinceLastReset(Map<String, Map<MetricType, Long>> mutationReadMetrics);
 
 }

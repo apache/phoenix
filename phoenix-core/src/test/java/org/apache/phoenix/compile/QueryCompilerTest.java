@@ -1253,7 +1253,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
     
-    
+
     @Test
     public void testDuplicatePKColumn() throws Exception {
         String ddl = "CREATE TABLE t (k1 VARCHAR, k1 VARCHAR CONSTRAINT pk PRIMARY KEY(k1))";
@@ -4500,7 +4500,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                     "    )\n" + 
                     ") SPLIT ON ('A','C','E','G','I')");
             conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(A,B,D)");
-            String query = "SELECT * FROM T WHERE A = 'C' and (A,B,D) > ('C','B','X') and D='C'";
+            String query = "SELECT * FROM T WHERE A = 'C' and (A,B,D) > ('C','B','X') and B < 'Z' and D='C'";
             PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
             QueryPlan plan = statement.optimizeQuery(query);
             assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());

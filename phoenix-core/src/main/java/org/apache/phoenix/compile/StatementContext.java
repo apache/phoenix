@@ -74,6 +74,7 @@ public class StatementContext {
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
     private final Map<PColumn, Integer> dataColumns;
+    private Map<Long, Boolean> retryingPersistentCache;
 
     private long currentTime = QueryConstants.UNSET_TIMESTAMP;
     private ScanRanges scanRanges = ScanRanges.EVERYTHING;
@@ -120,14 +121,15 @@ public class StatementContext {
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
         ReadOnlyProps props = connection.getQueryServices().getProps();
+        String timeZoneID = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                DateUtil.DEFAULT_TIME_ZONE_ID);
         this.dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        this.dateFormatter = DateUtil.getDateFormatter(dateFormat);
+        this.dateFormatter = DateUtil.getDateFormatter(dateFormat, timeZoneID);
         this.timeFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
-        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat);
+        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat, timeZoneID);
         this.timestampFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
-        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat);
-        this.dateFormatTimeZone = DateUtil.getTimeZone(props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
-                DateUtil.DEFAULT_TIME_ZONE_ID));
+        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat, timeZoneID);
+        this.dateFormatTimeZone = DateUtil.getTimeZone(timeZoneID);
         this.numberFormat = props.get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
@@ -137,6 +139,7 @@ public class StatementContext {
         this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
         this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
         this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
+        this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     }
 
     /**
@@ -325,5 +328,22 @@ public class StatementContext {
     public void setClientSideUpsertSelect(boolean isClientSideUpsertSelect) {
         this.isClientSideUpsertSelect = isClientSideUpsertSelect;
     }
-    
+
+    /*
+     * setRetryingPersistentCache can be used to override the USE_PERSISTENT_CACHE hint and disable the use of the
+     * persistent cache for a specific cache ID. This can be used to retry queries that failed when using the persistent
+     * cache.
+     */
+    public void setRetryingPersistentCache(long cacheId) {
+        retryingPersistentCache.put(cacheId, true);
+    }
+
+    public boolean getRetryingPersistentCache(long cacheId) {
+        Boolean retrying = retryingPersistentCache.get(cacheId);
+        if (retrying == null) {
+            return false;
+        } else {
+            return retrying;
+        }
+    }
 }

@@ -35,12 +35,12 @@ enum PTableType {
 message PColumn {
   required bytes columnNameBytes = 1;
   optional bytes familyNameBytes = 2;
-  required string dataType = 3;
+  optional string dataType = 3;
   optional int32 maxLength = 4;
   optional int32 scale = 5;
   required bool nullable = 6;
   required int32 position = 7;
-  required int32 sortOrder = 8;
+  optional int32 sortOrder = 8;
   optional int32 arraySize = 9;
   optional bytes viewConstant = 10;
   optional bool viewReferenced = 11;
@@ -48,6 +48,8 @@ message PColumn {
   optional bool isRowTimestamp = 13;
   optional bool isDynamic = 14;
   optional bytes columnQualifierBytes = 15;
+  optional int64 timestamp = 16;
+  optional bool derived = 17 [default = false];
 }
 
 message PTableStats {
@@ -83,7 +85,7 @@ message PTable {
   optional bytes viewStatement = 18;
   repeated bytes physicalNames = 19;
   optional bytes tenantId = 20;
-  optional int32 viewIndexId = 21;
+  optional int64 viewIndexId = 21;
   optional bytes indexType = 22;
   optional int64 statsTimeStamp = 23;
   optional bool storeNulls = 24;
@@ -101,6 +103,7 @@ message PTable {
   repeated EncodedCQCounter encodedCQCounters = 36;
   optional bool useStatsForParallelization = 37;
   optional int32 transactionProvider = 38;
+  optional int32 viewIndexType = 39 [default = 5];
 }
 
 message EncodedCQCounter {

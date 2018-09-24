@@ -50,6 +50,8 @@ enum MutationCode {
   AUTO_PARTITION_SEQUENCE_NOT_FOUND = 20;
   CANNOT_COERCE_AUTO_PARTITION_ID = 21;
   TOO_MANY_INDEXES = 22;
+  UNABLE_TO_CREATE_CHILD_LINK = 23;
+  UNABLE_TO_UPDATE_PARENT_TABLE = 24;
 };
 
 message SharedTableState {
@@ -58,7 +60,8 @@ message SharedTableState {
   required bytes tableName = 3;
   repeated PColumn columns = 4;  
   repeated bytes physicalNames = 5;
-  required int32 viewIndexId = 6;
+  required int64 viewIndexId = 6;
+  optional int32 viewIndexType = 7 [default = 5];
 }
 
 message MetaDataResponse {
@@ -73,7 +76,8 @@ message MetaDataResponse {
   repeated SharedTableState sharedTablesToDelete = 9;
   optional PSchema schema = 10;
   optional int64 autoPartitionNum = 11;
-  optional int32 viewIndexId = 12;
+  optional int64 viewIndexId = 12;
+  optional int32 viewIndexType = 13 [default = 5];
 }
 
 message GetTableRequest {
@@ -83,6 +87,9 @@ message GetTableRequest {
   required int64 tableTimestamp = 4;
   required int64 clientTimestamp = 5;
   optional int32 clientVersion = 6;	
+  optional bool skipAddingParentColumns = 7;
+  optional bool skipAddingIndexes = 8;
+  optional PTable lockedAncestorTable = 9;
 }
 
 message GetFunctionsRequest {
@@ -125,6 +132,7 @@ message DropTableRequest {
   required string tableType = 2;
   optional bool cascade = 3;
   optional int32 clientVersion = 4;
+  optional bool skipAddingParentColumns = 5;
 }
 
 message DropSchemaRequest {

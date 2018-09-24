@@ -47,6 +47,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -204,15 +205,19 @@ public abstract class ExplainTable {
             range = ptr.get();
         }
         if (changeViewIndexId) {
-            Short s = (Short) type.toObject(range);
-            s = (short) (s + (-Short.MAX_VALUE));
-            buf.append(s.toString());
+            buf.append(getViewIndexValue(type, range).toString());
         } else {
             Format formatter = context.getConnection().getFormatter(type);
             buf.append(type.toStringLiteral(range, formatter));
         }
     }
-    
+
+    private Long getViewIndexValue(PDataType type, byte[] range) {
+        boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(type);
+        Object s = type.toObject(range);
+        return (useLongViewIndex ? (Long) s : (Short) s) - (useLongViewIndex ? Long.MAX_VALUE : Short.MAX_VALUE);
+    }
+
     private static class RowKeyValueIterator implements Iterator<byte[]> {
         private final RowKeySchema schema;
         private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -258,17 +263,7 @@ public abstract class ExplainTable {
     
     private void appendScanRow(StringBuilder buf, Bound bound) {
         ScanRanges scanRanges = context.getScanRanges();
-        // TODO: review this and potentially intersect the scan ranges
-        // with the minMaxRange in ScanRanges to prevent having to do all this.
-        KeyRange minMaxRange = scanRanges.getMinMaxRange();
         Iterator<byte[]> minMaxIterator = Collections.emptyIterator();
-        if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
-            RowKeySchema schema = tableRef.getTable().getRowKeySchema();
-            if (!minMaxRange.isUnbound(bound)) {
-                // Use scan ranges from ScanRanges since it will have been intersected with minMaxRange
-                minMaxIterator = new RowKeyValueIterator(schema, scanRanges.getScanRange().getRange(bound));
-            }
-        }
         boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());
         boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
         int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();

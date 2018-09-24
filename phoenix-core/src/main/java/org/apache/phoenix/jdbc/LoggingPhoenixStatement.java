@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -24,25 +26,58 @@ import java.sql.Statement;
 public class LoggingPhoenixStatement extends DelegateStatement {
 
     private PhoenixMetricsLog phoenixMetricsLog;
-    
-    public LoggingPhoenixStatement(Statement stmt, PhoenixMetricsLog phoenixMetricsLog) {
+    private String sql;
+    private Connection conn;
+
+    public LoggingPhoenixStatement(Statement stmt, PhoenixMetricsLog phoenixMetricsLog, Connection conn) {
         super(stmt);
         this.phoenixMetricsLog = phoenixMetricsLog;
+        this.conn = conn;
+    }
+
+    @Override
+    public boolean execute(String sql) throws SQLException {
+        boolean result;
+        this.sql = sql;
+        result = super.execute(sql);
+        this.loggingAutoCommitHelper();
+        return result;
     }
 
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        return new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog);
+        this.sql = sql;
+        ResultSet rs = new LoggingPhoenixResultSet(super.executeQuery(sql), phoenixMetricsLog, this.sql);
+        this.loggingAutoCommitHelper();
+        return rs;
     }
-    
+
+    @Override
+    public int executeUpdate(String sql) throws SQLException {
+        int result;
+        this.sql = sql;
+        result = super.executeUpdate(sql);
+        this.loggingAutoCommitHelper();
+        return result;
+    }
+
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getResultSet(), phoenixMetricsLog);
+        // Re-use the cached ResultSet value since call to getResultSet() is not idempotent
+        ResultSet resultSet = super.getResultSet();
+        return (resultSet == null) ? null : new LoggingPhoenixResultSet(resultSet,
+                phoenixMetricsLog, sql);
     }
     
     @Override
     public ResultSet getGeneratedKeys() throws SQLException {
-        return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog);
+        return new LoggingPhoenixResultSet(super.getGeneratedKeys(), phoenixMetricsLog, this.sql);
     }
-    
+
+    private void loggingAutoCommitHelper() throws SQLException {
+        if(conn.getAutoCommit() && (conn instanceof LoggingPhoenixConnection)) {
+            ((LoggingPhoenixConnection)conn).loggingMetricsHelper();
+        }
+    }
+
 }

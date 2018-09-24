@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import net.jcip.annotations.Immutable;
 
@@ -136,6 +137,16 @@ public class HashCacheFactory implements ServerCacheFactory {
             } catch (IOException e) { // Not possible with ByteArrayInputStream
                 throw new RuntimeException(e);
             }
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            Set<ImmutableBytesPtr> keySet = hashCache.keySet();
+            for (ImmutableBytesPtr key : keySet) {
+                sb.append("key: " + key + " value: " + hashCache.get(key));
+            }
+            return sb.toString();
         }
 
         @Override

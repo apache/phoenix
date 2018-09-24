@@ -45,9 +45,9 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -742,9 +742,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
         plan = stmt.compileQuery("select * from my_table_mt_view where pkcol1 = 'a' and pkcol2 = 'b' and pkcol3 = 'c' and (pkcol1, pkcol2) < ('z', 'z')");
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
-        // TODO: in theory pkcol2 and pkcol3 could be bound, but we don't have the logic for that yet
         plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol2, pkcol3) > ('0', '0') and pkcol1 = '000000000000000'");
-        assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
     }
 
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {

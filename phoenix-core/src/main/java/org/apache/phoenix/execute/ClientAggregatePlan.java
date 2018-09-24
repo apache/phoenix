@@ -46,6 +46,7 @@ import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.iterate.AggregatingResultIterator;
 import org.apache.phoenix.iterate.BaseGroupedAggregatingResultIterator;
+import org.apache.phoenix.iterate.ClientHashAggregatingResultIterator;
 import org.apache.phoenix.iterate.DistinctAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
@@ -62,6 +63,7 @@ import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.UngroupedAggregatingResultIterator;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
@@ -77,6 +79,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     private final Expression having;
     private final ServerAggregators serverAggregators;
     private final ClientAggregators clientAggregators;
+    private final boolean useHashAgg;
     
     public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
@@ -90,6 +93,10 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // another one.
         this.serverAggregators = ServerAggregators.deserialize(context.getScan()
                         .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration(), null);
+
+        // Extract hash aggregate hint, if any.
+        HintNode hints = statement.getHint();
+        useHashAgg = hints != null && hints.hasHint(HintNode.Hint.HASH_AGGREGATE);
     }
 
     @Override
@@ -135,17 +142,25 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             aggResultIterator = new ClientUngroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators);
             aggResultIterator = new UngroupedAggregatingResultIterator(LookAheadResultIterator.wrap(aggResultIterator), clientAggregators);
         } else {
-            if (!groupBy.isOrderPreserving()) {
-                int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                        QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-                List<Expression> keyExpressions = groupBy.getKeyExpressions();
+            List<Expression> keyExpressions = groupBy.getKeyExpressions();
+            if (groupBy.isOrderPreserving()) {
+                aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
+            } else {
+                int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt
+                    (QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
                 List<OrderByExpression> keyExpressionOrderBy = Lists.newArrayListWithExpectedSize(keyExpressions.size());
                 for (Expression keyExpression : keyExpressions) {
                     keyExpressionOrderBy.add(new OrderByExpression(keyExpression, false, true));
                 }
-                iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
+
+                if (useHashAgg) {
+                    // Pass in orderBy to apply any sort that has been optimized away
+                    aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions, orderBy);
+                } else {
+                    iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
+                    aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
+                }
             }
-            aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, groupBy.getKeyExpressions());
             aggResultIterator = new GroupedAggregatingResultIterator(LookAheadResultIterator.wrap(aggResultIterator), clientAggregators);
         }
 
@@ -183,13 +198,18 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         if (where != null) {
             planSteps.add("CLIENT FILTER BY " + where.toString());
         }
-        if (!groupBy.isEmpty()) {
-            if (!groupBy.isOrderPreserving()) {
+        if (groupBy.isEmpty()) {
+            planSteps.add("CLIENT AGGREGATE INTO SINGLE ROW");
+        } else if (groupBy.isOrderPreserving()) {
+            planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+        } else if (useHashAgg) {
+            planSteps.add("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+            if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY) {
                 planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
             }
-            planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
         } else {
-            planSteps.add("CLIENT AGGREGATE INTO SINGLE ROW");            
+            planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
+            planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
         }
         if (having != null) {
             planSteps.add("CLIENT AFTER-AGGREGATION FILTER BY " + having.toString());

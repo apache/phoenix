@@ -25,6 +25,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -43,6 +44,7 @@ import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -474,14 +476,14 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
     
     
-    private static void assertTTL(Admin admin, String tableName, int ttl) throws Exception {
+    private static void assertTTL(Admin admin, String tableName, int ttl) throws TableNotFoundException, IOException {
         HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
         for (HColumnDescriptor colDesc : tableDesc.getFamilies()) {
             assertEquals(ttl,Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
             assertEquals(HColumnDescriptor.DEFAULT_TTL,colDesc.getTimeToLive());
         }
     }
-
+    
     @Test
     public void testSetTTL() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

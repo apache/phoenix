@@ -499,7 +499,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
         ResultSet rs = null;
         try {
-            rs = dbMetaData.getIndexInfo(null, schemaName, tableName, false, false);
+            rs = dbMetaData.getIndexInfo("", schemaName, tableName, false, false);
             while (rs.next()) {
                 final String indexName = rs.getString(6);
                 if (indexTable.equalsIgnoreCase(indexName)) {
