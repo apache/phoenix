@@ -1,3 +1,0 @@
-.. include:: ../NEWS.rst
-
-.. _
