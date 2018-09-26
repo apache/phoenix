@@ -212,7 +212,7 @@ class HTTPKerberosAuth(AuthBase):
 
             if self.mech_oid is not None: 
                 result, self.context[host] = kerberos.authGSSClientInit(kerb_spn,
-                    gssflags=gssflags, principal=self.principal, mech_oid=mech_oid)
+                    gssflags=gssflags, principal=self.principal, mech_oid=self.mech_oid)
             else:
                 result, self.context[host] = kerberos.authGSSClientInit(kerb_spn,
                     gssflags=gssflags, principal=self.principal)
