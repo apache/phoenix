@@ -119,6 +119,14 @@ public class ScanUtil {
         return scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null;
     }
 
+    // Designates a "simple scan", i.e. a scan that does not need to be scoped
+    // to a single region.
+    public static boolean isSimpleScan(Scan scan) {
+        return  ScanUtil.isNonAggregateScan(scan) &&
+                scan.getAttribute(BaseScannerRegionObserver.TOPN) == null &&
+                scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET) == null;
+    }
+
     // Use getTenantId and pass in column name to match against
     // in as PSchema attribute. If column name matches in 
     // KeyExpressions, set on scan as attribute
