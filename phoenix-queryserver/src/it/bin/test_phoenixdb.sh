@@ -5,10 +5,13 @@ set -x
 set -e
 
 function cleanup {
+    # Capture last command status
+    RCODE=$?
     set +e
     set +u
     kdestroy
     rm -rf $PY_ENV_PATH
+    exit $RCODE
 }
 
 trap cleanup EXIT
@@ -36,9 +39,9 @@ popd
 
 set -u
 echo "INSTALLING COMPONENTS"
-#pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install requests-gssapi
-pip install -e file:///${LOCAL_PY}/phoenixdb-module
+pip install -e file:///${LOCAL_PY}/requests-kerberos
+pip install -e file:///${LOCAL_PY}/python-phoenixdb
 
 export KRB5_CONFIG=$KRB5_CFG_FILE
 cat $KRB5_CONFIG
