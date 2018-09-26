@@ -167,7 +167,7 @@ class HTTPKerberosAuth(AuthBase):
     def __init__(
             self, mutual_authentication=REQUIRED,
             service="HTTP", delegate=False, force_preemptive=False,
-            principal=None, hostname_override=None,
+            principal=None, hostname_override=None, mech_oid=None,
             sanitize_mutual_error_response=True, send_cbt=True):
         self.context = {}
         self.mutual_authentication = mutual_authentication
@@ -177,6 +177,7 @@ class HTTPKerberosAuth(AuthBase):
         self.force_preemptive = force_preemptive
         self.principal = principal
         self.hostname_override = hostname_override
+        self.mech_oid = mech_oid
         self.sanitize_mutual_error_response = sanitize_mutual_error_response
         self.auth_done = False
         self.winrm_encryption_available = hasattr(kerberos, 'authGSSWinRMEncryptMessage')
@@ -209,8 +210,12 @@ class HTTPKerberosAuth(AuthBase):
             kerb_host = self.hostname_override if self.hostname_override is not None else host
             kerb_spn = "{0}@{1}".format(self.service, kerb_host)
 
-            result, self.context[host] = kerberos.authGSSClientInit(kerb_spn,
-                gssflags=gssflags, principal=self.principal)
+            if self.mech_oid is not None: 
+                result, self.context[host] = kerberos.authGSSClientInit(kerb_spn,
+                    gssflags=gssflags, principal=self.principal, mech_oid=mech_oid)
+            else:
+                result, self.context[host] = kerberos.authGSSClientInit(kerb_spn,
+                    gssflags=gssflags, principal=self.principal)
 
             if result < 1:
                 raise EnvironmentError(result, kerb_stage)
