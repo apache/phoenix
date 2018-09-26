@@ -32,6 +32,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
  *
@@ -75,8 +76,12 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     }
 
     @Override
-    protected boolean isRegionObserverFor(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null;
+    protected boolean skipRegionBoundaryCheck(Scan scan) {
+        return super.skipRegionBoundaryCheck(scan) || ScanUtil.isSimpleScan(scan);
     }
 
+    @Override
+    protected boolean isRegionObserverFor(Scan scan) {
+        return ScanUtil.isNonAggregateScan(scan);
+    }
 }
