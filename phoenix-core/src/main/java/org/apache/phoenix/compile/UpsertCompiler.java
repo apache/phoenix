@@ -76,12 +76,14 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.DelegateColumn;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
@@ -550,6 +552,21 @@ public class UpsertCompiler {
             // Use optimizer to choose the best plan
             QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), true, false, null);
             queryPlanToBe = compiler.compile();
+
+            if (sameTable) {
+                // in the UPSERT INTO X ... SELECT FROM X case enforce the source tableRef's TS
+                // as max TS, so that the query can safely restarted and still work of a snapshot
+                // (so it won't see its own data in case of concurrent splits)
+                // see PHOENIX-4849
+                long serverTime = selectResolver.getTables().get(0).getCurrentTime();
+                if (serverTime == QueryConstants.UNSET_TIMESTAMP) {
+                    // if this is the first time this table is resolved the ref's current time might not be defined, yet
+                    // in that case force an RPC to get the server time
+                    serverTime = new MetaDataClient(connection).getCurrentTime(schemaName, tableName);
+                }
+                Scan scan = queryPlanToBe.getContext().getScan();
+                ScanUtil.setTimeRange(scan, scan.getTimeRange().getMin(), serverTime);
+            }
             // This is post-fix: if the tableRef is a projected table, this means there are post-processing
             // steps and parallelIteratorFactory did not take effect.
             if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
