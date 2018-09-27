@@ -215,6 +215,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] INDEX_TYPE_BYTES = Bytes.toBytes(INDEX_TYPE);
     public static final String LINK_TYPE = "LINK_TYPE";
     public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
+    public static final String TASK_TYPE = "TASK_TYPE";
+    public static final byte[] TASK_TYPE_BYTES = Bytes.toBytes(TASK_TYPE);
+    public static final String TASK_TS = "TASK_TS";
+    public static final byte[] TASK_TS_BYTES = Bytes.toBytes(TASK_TS);
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
     public static final String VIEW_CONSTANT = "VIEW_CONSTANT";
@@ -379,7 +383,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);
     public static final TableName SYSTEM_LINK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CHILD_LINK_NAME);
 
-    
+    public static final String SYSTEM_TASK_TABLE = "TASK";
+    public static final String SYSTEM_TASK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
+    public static final byte[] SYSTEM_TASK_NAME_BYTES = Bytes.toBytes(SYSTEM_TASK_NAME);
+    public static final TableName SYSTEM_TASK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_NAME);
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
     public static final String QUERY_ID = "QUERY_ID";

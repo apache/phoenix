@@ -189,6 +189,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
             assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
             assertEquals(null, rs.getString("TABLE_SCHEM"));
             assertEquals(tableAName, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));

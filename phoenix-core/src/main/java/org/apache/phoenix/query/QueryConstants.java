@@ -347,28 +347,46 @@ public interface QueryConstants {
     
 	// Links from parent to child views are stored in a separate table for
 	// scalability
-	public static final String CREATE_CHILD_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\""
-			+ SYSTEM_CHILD_LINK_TABLE + "\"(\n" +
+	public static final String CREATE_CHILD_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+            SYSTEM_CHILD_LINK_TABLE + "\"(\n" +
 			// PK columns
-			TENANT_ID + " VARCHAR NULL," + TABLE_SCHEM + " VARCHAR NULL," + TABLE_NAME + " VARCHAR NOT NULL,"
-			+ COLUMN_NAME + " VARCHAR NULL," + COLUMN_FAMILY + " VARCHAR NULL," + LINK_TYPE + " UNSIGNED_TINYINT,\n"
-			+ "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME
-			+ "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" + HConstants.VERSIONS + "=%s,\n"
-			+ ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "="
-			+ Boolean.FALSE;
+			TENANT_ID + " VARCHAR NULL," +
+            TABLE_SCHEM + " VARCHAR NULL," +
+            TABLE_NAME + " VARCHAR NOT NULL," +
+            COLUMN_NAME + " VARCHAR NULL," +
+            COLUMN_FAMILY + " VARCHAR NULL," +
+            LINK_TYPE + " UNSIGNED_TINYINT,\n" +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," +
+            COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 	
-	 public static final String CREATE_MUTEX_METADTA =
-	            "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_MUTEX_TABLE_NAME + "\"(\n" +
-	            // Pk columns
-	            TENANT_ID + " VARCHAR NULL," +
-	            TABLE_SCHEM + " VARCHAR NULL," +
-	            TABLE_NAME + " VARCHAR NOT NULL," +
-	            COLUMN_NAME + " VARCHAR NULL," + // null for table row
-	            COLUMN_FAMILY + " VARCHAR NULL " + // using for CF to uniqueness for columns
-	            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
-	            + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
-	            HConstants.VERSIONS + "=%s,\n" +
-	            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
-	            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
-    
+	public static final String CREATE_MUTEX_METADTA =
+            "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_MUTEX_TABLE_NAME + "\"(\n" +
+             // Pk columns
+            TENANT_ID + " VARCHAR NULL," +
+            TABLE_SCHEM + " VARCHAR NULL," +
+	        TABLE_NAME + " VARCHAR NOT NULL," +
+	        COLUMN_NAME + " VARCHAR NULL," + // null for table row
+	        COLUMN_FAMILY + " VARCHAR NULL " + // using for CF to uniqueness for columns
+	        "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
+	        + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
+	        HConstants.VERSIONS + "=%s,\n" +
+	        ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+	        PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+
+	public static final String CREATE_TASK_METADATA =
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_TABLE + "\"(\n" +
+            // PK columns
+            TASK_TYPE + " UNSIGNED_TINYINT NOT NULL," +
+            TASK_TS + " TIMESTAMP NOT NULL," +
+            TENANT_ID + " VARCHAR NULL," +
+            TABLE_SCHEM + " VARCHAR NULL," +
+            TABLE_NAME + " VARCHAR NOT NULL,\n" +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
+            TABLE_NAME + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 }
