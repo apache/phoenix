@@ -192,7 +192,36 @@ public interface PTable extends PMetaDataEntity {
             return LinkType.values()[serializedValue-1];
         }
     }
-    
+
+    public enum TaskType {
+        DROP_CHILD_VIEWS((byte)1);
+
+        private final byte[] byteValue;
+        private final byte serializedValue;
+
+        TaskType(byte serializedValue) {
+            this.serializedValue = serializedValue;
+            this.byteValue = Bytes.toBytes(this.name());
+        }
+
+        public byte[] getBytes() {
+                return byteValue;
+        }
+
+        public byte getSerializedValue() {
+            return this.serializedValue;
+        }
+        public static TaskType getDefault() {
+            return DROP_CHILD_VIEWS;
+        }
+        public static TaskType fromSerializedValue(byte serializedValue) {
+            if (serializedValue < 1 || serializedValue > TaskType.values().length) {
+                    throw new IllegalArgumentException("Invalid TaskType " + serializedValue);
+            }
+            return TaskType.values()[serializedValue-1];
+        }
+    }
+
     public enum ImmutableStorageScheme implements ColumnValueEncoderDecoderSupplier {
         ONE_CELL_PER_COLUMN((byte)1) {
             @Override
