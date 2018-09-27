@@ -503,8 +503,10 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.TYPE_SEQUENCE, PTableType.SYSTEM);
             assertTrue(rs.next());
             assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, PTableType.SYSTEM);
+            assertTrue(rs.next());
+            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE, PTableType.SYSTEM);
             assertFalse(rs.next());
-            
+
             rs = meta.getTables(null, "", StringUtil.escapeLike(tenantTable2), new String[] {TABLE.getValue().getString()});
             assertFalse(rs.next());
 

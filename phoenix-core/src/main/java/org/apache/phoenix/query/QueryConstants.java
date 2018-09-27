@@ -347,8 +347,8 @@ public interface QueryConstants {
     
 	// Links from parent to child views are stored in a separate table for
 	// scalability
-	public static final String CREATE_CHILD_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\""
-			+ SYSTEM_CHILD_LINK_TABLE + "\"(\n" +
+	public static final String CREATE_CHILD_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+            SYSTEM_CHILD_LINK_TABLE + "\"(\n" +
 			// PK columns
 			TENANT_ID + " VARCHAR NULL," + TABLE_SCHEM + " VARCHAR NULL," + TABLE_NAME + " VARCHAR NOT NULL,"
 			+ COLUMN_NAME + " VARCHAR NULL," + COLUMN_FAMILY + " VARCHAR NULL," + LINK_TYPE + " UNSIGNED_TINYINT,\n"
@@ -371,4 +371,17 @@ public interface QueryConstants {
 	            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
 	            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
     
+	public static final String CREATE_TASK_METADATA =
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_TABLE + "\"(\n" +
+            // PK columns
+            TASK_TYPE + " UNSIGNED_TINYINT NOT NULL," +
+            TASK_TS + " TIMESTAMP NOT NULL," +
+            TENANT_ID + " VARCHAR NULL," +
+            TABLE_SCHEM + " VARCHAR NULL," +
+            TABLE_NAME + " VARCHAR NOT NULL,\n" +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
+            TABLE_NAME + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 }
