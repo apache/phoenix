@@ -428,7 +428,7 @@ public class BasePermissionsIT extends BaseTest {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
-                    assertFalse(stmt.execute("DROP TABLE IF EXISTS " + tableName));
+                    assertFalse(stmt.execute(String.format("DROP TABLE IF EXISTS %s CASCADE", tableName)));
                 }
                 return null;
             }
@@ -653,7 +653,7 @@ public class BasePermissionsIT extends BaseTest {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
-                    assertFalse(stmt.execute("DROP VIEW " + viewName));
+                    assertFalse(stmt.execute(String.format("DROP VIEW %s CASCADE", viewName)));
                 }
                 return null;
             }
