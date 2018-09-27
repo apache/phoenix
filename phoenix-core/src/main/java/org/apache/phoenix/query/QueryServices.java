@@ -323,6 +323,12 @@ public interface QueryServices extends SQLCloseable {
 
 	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
 
+    // The parameters defined for handling task stored in table SYSTEM.TASK
+	// The time interval between periodic scans of table SYSTEM.TASK
+    public static final String TASK_HANDLING_INTERVAL_MS_ATTRIB = "phoenix.task.handling.interval.ms";
+    // The maximum time for a task to stay in table SYSTEM.TASK
+    public static final String TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB = "phoenix.task.handling.maxInterval.ms";
+
     /**
      * Get executor service used for parallel scans
      */
