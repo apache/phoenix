@@ -341,6 +341,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
+    // default system task handling interval in milliseconds
+    public static final long DEFAULT_TASK_HANDLING_INTERVAL_MS = 60*1000; // 1 min
+    public static final long DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS = 30*60*1000; // 30 minutes
+
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
       {

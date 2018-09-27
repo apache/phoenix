@@ -86,6 +86,7 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1940,7 +1941,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 table = loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP,
                         clientVersion);
             } catch (ParentTableNotFoundException e) {
-                dropChildMetadata(e.getParentSchemaName(), e.getParentTableName(), e.getParentTenantId());
+                dropChildViews(env, e.getParentTenantId(), e.getParentSchemaName(), e.getParentTableName());
             }
             if (table != null) {
                 if (table.getTimeStamp() < clientTimeStamp) {
@@ -1965,7 +1966,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             // check if the table was dropped, but had child views that were have not yet
             // been cleaned up by compaction
             if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-                dropChildMetadata(schemaName, tableName, tenantIdBytes);
+                dropChildViews(env, tenantIdBytes, schemaName, tableName);
             }
             
             byte[] parentTableKey = null;
@@ -2346,19 +2347,31 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
     }
 
-    private void dropChildMetadata(byte[] schemaName, byte[] tableName, byte[] tenantIdBytes)
+    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes, byte[] schemaName, byte[] tableName)
             throws IOException, SQLException, ClassNotFoundException {
-        TableViewFinderResult childViewsResult = new TableViewFinderResult();
-        findAllChildViews(tenantIdBytes, schemaName, tableName, childViewsResult);
+        Table hTable =
+                ServerUtil.getHTableForCoprocessorScan(env,
+                        SchemaUtil.getPhysicalTableName(
+                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                                env.getConfiguration()));
+        TableViewFinderResult childViewsResult = ViewFinder.findRelatedViews(hTable, tenantIdBytes, schemaName, tableName,
+                PTable.LinkType.CHILD_TABLE, HConstants.LATEST_TIMESTAMP);
+
         if (childViewsResult.hasLinks()) {
+
             for (TableInfo viewInfo : childViewsResult.getLinks()) {
                 byte[] viewTenantId = viewInfo.getTenantId();
                 byte[] viewSchemaName = viewInfo.getSchemaName();
                 byte[] viewName = viewInfo.getTableName();
+                if (logger.isDebugEnabled()) {
+                    logger.debug("dropChildViews :" + Bytes.toString(schemaName) + "." + Bytes.toString(tableName) +
+                            " -> " + Bytes.toString(viewSchemaName) + "." + Bytes.toString(viewName) +
+                            "with tenant id :" + Bytes.toString(viewTenantId));
+                }
                 Properties props = new Properties();
                 if (viewTenantId != null && viewTenantId.length != 0)
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration())
+                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(props, env.getConfiguration())
                         .unwrap(PhoenixConnection.class)) {
                     MetaDataClient client = new MetaDataClient(connection);
                     org.apache.phoenix.parse.TableName viewTableName = org.apache.phoenix.parse.TableName
@@ -2369,7 +2382,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             }
         }
     }
-
     private boolean execeededIndexQuota(PTableType tableType, PTable parentTable) {
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
     }
@@ -2533,6 +2545,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     }
                     throw new IllegalStateException(msg);
                 }
+
                 // drop rows from catalog on this region
                 mutateRowsWithLocks(region, localMutations, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
                         HConstants.NO_NONCE);
@@ -2645,7 +2658,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
 
-            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            if (tableType == PTableType.TABLE || tableType == PTableType.VIEW || tableType == PTableType.SYSTEM) {
                 // check to see if the table has any child views
                 try (Table hTable =
                         ServerUtil.getHTableForCoprocessorScan(env,
@@ -2655,10 +2668,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     boolean hasChildViews =
                             ViewFinder.hasChildViews(hTable, tenantId, schemaName, tableName,
                                 clientTimeStamp);
-                    if (hasChildViews && !isCascade) {
-                        // DROP without CASCADE on tables with child views is not permitted
-                        return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                EnvironmentEdgeManager.currentTimeMillis(), null);
+                    if (hasChildViews) {
+                        if (!isCascade) {
+                            // DROP without CASCADE on tables with child views is not permitted
+                            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                    EnvironmentEdgeManager.currentTimeMillis(), null);
+                        }
+                        try {
+                            PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+                            TaskRegionObserver.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS, Bytes.toString(tenantId),
+                                Bytes.toString(schemaName), Bytes.toString(tableName), this.accessCheckEnabled);
+                        } catch (Throwable t) {
+                            logger.error("Adding a task to drop child views failed!", t);
+                        }
                     }
                 }
             }

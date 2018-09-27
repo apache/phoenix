@@ -540,6 +540,12 @@ public class SchemaUtil {
                 || Bytes.compareTo(tableName, SchemaUtil
                         .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true).getName()) == 0;
     }
+
+    public static boolean isTaskTable(byte[] tableName) {
+        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME_BYTES) == 0
+                || Bytes.compareTo(tableName, SchemaUtil
+                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME_BYTES, true).getName()) == 0;
+    }
     
     public static boolean isChildLinkTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CHILD_LINK_NAME_BYTES) == 0 || Bytes.compareTo(tableName,
@@ -548,6 +554,10 @@ public class SchemaUtil {
 
     public static boolean isSequenceTable(PTable table) {
         return PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME.equals(table.getName().getString());
+    }
+
+    public static boolean isTaskTable(PTable table) {
+        return PhoenixDatabaseMetaData.SYSTEM_TASK_NAME.equals(table.getName().getString());
     }
 
     public static boolean isMetaTable(PTable table) {
