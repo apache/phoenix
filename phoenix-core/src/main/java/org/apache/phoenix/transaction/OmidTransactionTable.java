@@ -19,7 +19,7 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -38,11 +37,11 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
-import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.omid.transaction.TTable;
 import org.apache.omid.transaction.Transaction;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -53,23 +52,23 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Service;
 import com.google.protobuf.ServiceException;
 
-public class OmidTransactionTable implements HTableInterface {
+public class OmidTransactionTable implements Table {
+    // Copied from HBase ProtobufUtil since it's not accessible
+    final static Result EMPTY_RESULT_EXISTS_TRUE = Result.create(null, true);
 
     private TTable tTable;
     private Transaction tx;
-    private boolean conflictFree;
 
     public OmidTransactionTable() throws SQLException {
         this.tTable = null;
         this.tx = null;
-        this.conflictFree = false;
     }
 
-    public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) throws SQLException {
+    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable) throws SQLException {
         this(ctx, hTable, false);
     }
 
-    public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, boolean isImmutable) throws SQLException  {
+    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isImmutable) throws SQLException  {
         assert(ctx instanceof OmidTransactionContext);
 
         OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
@@ -84,12 +83,6 @@ public class OmidTransactionTable implements HTableInterface {
         }
 
         this.tx = omidTransactionContext.getTransaction();
-
-//        if (pTable != null && pTable.getType() != PTableType.INDEX) {
-//            omidTransactionContext.markDMLFence(pTable);
-//        }
-
-        this.conflictFree = isImmutable;
     }
 
     @Override
@@ -111,11 +104,6 @@ public class OmidTransactionTable implements HTableInterface {
     public ResultScanner getScanner(Scan scan) throws IOException {
         scan.setTimeRange(0, Long.MAX_VALUE);
         return tTable.getScanner(tx, scan);
-    }
-
-    @Override
-    public byte[] getTableName() {
-        return tTable.getTableName();
     }
 
     @Override
@@ -151,7 +139,7 @@ public class OmidTransactionTable implements HTableInterface {
 
     @Override
     public void put(List<Put> puts) throws IOException {
-        throw new UnsupportedActionException("Function put(List<Put>) is not supported");
+        tTable.put(tx, puts);
     }
 
     @Override
@@ -160,231 +148,119 @@ public class OmidTransactionTable implements HTableInterface {
     }
 
     @Override
-    public void setAutoFlush(boolean autoFlush) {
-        tTable.setAutoFlush(autoFlush);
-    }
-
-    @Override
-    public boolean isAutoFlush() {
-        return tTable.isAutoFlush();
-    }
-
-    @Override
-    public long getWriteBufferSize() {
-        return tTable.getWriteBufferSize();
-    }
-
-    @Override
-    public void setWriteBufferSize(long writeBufferSize) throws IOException {
-        tTable.setWriteBufferSize(writeBufferSize);
-    }
-
-    @Override
-    public void flushCommits() throws IOException {
-        tTable.flushCommits();
-    }
-
-    @Override
     public void close() throws IOException {
         tTable.close();
     }
 
     @Override
-    public long incrementColumnValue(byte[] row, byte[] family,
-            byte[] qualifier, long amount, boolean writeToWAL)
-            throws IOException {
-        // TODO Auto-generated method stub
-        return 0;
-    }
-
-    @Override
-    public Boolean[] exists(List<Get> gets) throws IOException {
-            // TODO Auto-generated method stub
-            return null;
-    }
-
-    @Override
-    public void setAutoFlush(boolean autoFlush, boolean clearBufferOnFail) {
-        // TODO Auto-generated method stub
-    }
-
-    @Override
-    public void setAutoFlushTo(boolean autoFlush) {
-        tTable.setAutoFlush(autoFlush);
-    }
-
-    @Override
-    public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
-        throw new UnsupportedActionException("Function getRowOrBefore is not supported");
-//        return null;
-    }
-
-    @Override
     public TableName getName() {
-        assert(false);
-        // TODO Auto-generated method stub
-        return null;
+        byte[] name = tTable.getTableName();
+        return TableName.valueOf(name);
     }
 
     @Override
     public boolean[] existsAll(List<Get> gets) throws IOException {
-        throw new UnsupportedActionException("Function existsAll is not supported");
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void batch(List<? extends Row> actions, Object[] results)
             throws IOException, InterruptedException {
-        assert(false);
-
-        // TODO Auto-generated method stub
+        tTable.batch(tx, actions);
+        Arrays.fill(results, EMPTY_RESULT_EXISTS_TRUE);
     }
 
     @Override
     public Object[] batch(List<? extends Row> actions) throws IOException,
             InterruptedException {
-        List<Put> putList = new ArrayList<Put>();
-
-       for (Row row : actions) {
-           if (row instanceof Put) {
-               Put put = (Put) row;
-               if (conflictFree) {
-                   tTable.markPutAsConflictFreeMutation(put);
-               }
-               putList.add(put);
-           } else {
-               // TODO implement delete batch
-               assert (row instanceof Delete);
-               this.delete((Delete) row);
-           }
-       }
-
-       tTable.put(tx, putList);
-
-       return null;
+        Object[] results;
+        batch(actions, results = new Object[actions.size()]);
+        return results;
     }
 
     @Override
     public <R> void batchCallback(List<? extends Row> actions,
             Object[] results, Callback<R> callback) throws IOException,
             InterruptedException {
-        assert(false);
-
-        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public <R> Object[] batchCallback(List<? extends Row> actions,
             Callback<R> callback) throws IOException, InterruptedException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
             byte[] value, Put put) throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
             CompareOp compareOp, byte[] value, Put put) throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
             byte[] value, Delete delete) throws IOException {
-        // TODO Auto-generated method stub
-        assert(false);
-
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
             CompareOp compareOp, byte[] value, Delete delete)
             throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void mutateRow(RowMutations rm) throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Result append(Append append) throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Result increment(Increment increment) throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public long incrementColumnValue(byte[] row, byte[] family,
             byte[] qualifier, long amount) throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public long incrementColumnValue(byte[] row, byte[] family,
             byte[] qualifier, long amount, Durability durability)
             throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public CoprocessorRpcChannel coprocessorService(byte[] row) {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public <T extends Service, R> Map<byte[], R> coprocessorService(
             Class<T> service, byte[] startKey, byte[] endKey,
             Call<T, R> callable) throws ServiceException, Throwable {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public <T extends Service, R> void coprocessorService(Class<T> service,
             byte[] startKey, byte[] endKey, Call<T, R> callable,
             Callback<R> callback) throws ServiceException, Throwable {
-        assert(false);
-
-        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -392,10 +268,7 @@ public class OmidTransactionTable implements HTableInterface {
             MethodDescriptor methodDescriptor, Message request,
             byte[] startKey, byte[] endKey, R responsePrototype)
             throws ServiceException, Throwable {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -403,81 +276,43 @@ public class OmidTransactionTable implements HTableInterface {
             MethodDescriptor methodDescriptor, Message request,
             byte[] startKey, byte[] endKey, R responsePrototype,
             Callback<R> callback) throws ServiceException, Throwable {
-        assert(false);
-
-        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier,
             CompareOp compareOp, byte[] value, RowMutations mutation)
             throws IOException {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public int getOperationTimeout() {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public int getRpcTimeout() {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void setOperationTimeout(int arg0) {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void setRpcTimeout(int arg0) {
-        assert(false);
-
-        // TODO Auto-generated method stub
-        
+        throw new UnsupportedOperationException();
     }
 
-//    @Override
-//    public int getReadRpcTimeout() {
-//      assert(false);
-//
-//        // TODO Auto-generated method stub
-//      return 0;
-//    }
-//
-//    @Override
-//    public void setReadRpcTimeout(int readRpcTimeout) {
-//      assert(false);
-//
-//      // TODO Auto-generated method stub
-//    }
-//
-//    @Override
-//    public int getWriteRpcTimeout() {
-//      assert(false);
-//
-//      // TODO Auto-generated method stub
-//      return 0;
-//    }
-//
-//    @Override
-//    public void setWriteRpcTimeout(int writeRpcTimeout) {
-//      assert(false);
-//
-//      // TODO Auto-generated method stub
-//
-//    }
+    @Override
+    public long getWriteBufferSize() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setWriteBufferSize(long writeBufferSize) throws IOException {
+        throw new UnsupportedOperationException();
+    }
 }

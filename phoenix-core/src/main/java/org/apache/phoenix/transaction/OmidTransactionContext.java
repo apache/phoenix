@@ -22,7 +22,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.omid.proto.TSOProto;
 import org.apache.omid.transaction.AbstractTransaction.VisibilityLevel;
 import org.apache.omid.transaction.HBaseCellId;
@@ -299,8 +299,6 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public void markDMLFence(PTable dataTable) {
-        // TODO Auto-generated method stub
-        
     }
 
     /**
@@ -313,12 +311,12 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
 
     @Override
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isConflictFree) throws SQLException {
+    public Table getTransactionalTable(Table htable, boolean isConflictFree) throws SQLException {
         return new OmidTransactionTable(this, htable, isConflictFree);
     }
 
     @Override
-    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) throws SQLException {
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException {
         return new OmidTransactionTable(this, htable, table.isImmutableRows() || isIndex);
     }
 }

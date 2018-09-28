@@ -37,7 +37,6 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -113,7 +112,7 @@ public class PhoenixTxIndexMutationGenerator {
         stored.addAll(m);
     }
 
-    public Collection<Pair<Mutation, byte[]>> getIndexUpdates(HTableInterface htable, Iterator<? extends Mutation> mutationIterator) throws IOException, SQLException {
+    public Collection<Pair<Mutation, byte[]>> getIndexUpdates(Table htable, Iterator<? extends Mutation> mutationIterator) throws IOException, SQLException {
 
         if (!mutationIterator.hasNext()) {
             return Collections.emptyList();

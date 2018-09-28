@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -252,7 +253,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         // Either set txn on all existing OmidTransactionTable or throw exception
         // when attempting to get OmidTransactionTable if a txn is not in progress.
         txContext.begin(); 
-        HTableInterface txTable = txContext.getTransactionalTable(htable, false);
+        Table txTable = txContext.getTransactionalTable(htable, false);
 
         // Use HBase APIs to add a new row
         Put put = new Put(Bytes.toBytes("z"));

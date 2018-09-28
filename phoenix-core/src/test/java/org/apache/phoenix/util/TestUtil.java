@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -795,7 +796,7 @@ public class TestUtil {
         if (table.isTransactional()) {
             mutationState.startTransaction(table.getTransactionProvider());
         }
-        try (HTableInterface htable = mutationState.getHTable(table)) {
+        try (Table htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);

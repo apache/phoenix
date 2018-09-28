@@ -39,8 +39,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -292,8 +292,8 @@ public class MutationState implements SQLCloseable {
     // the Transaction outside of MutationState, this seems reasonable, as the member variables
     // would not change as these threads are running. We also clone mutationState to ensure that
     // the transaction context won't change due to a commit when auto commit is true.
-    public HTableInterface getHTable(PTable table) throws SQLException {
-        HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
+    public Table getHTable(PTable table) throws SQLException {
+        Table htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
             // We're only using this table for reading, so we want it wrapped even if it's an index
             htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows() || table.getType() == PTableType.INDEX);
@@ -532,7 +532,7 @@ public class MutationState implements SQLCloseable {
                             if (indexMutationsMap == null) {
                                 PhoenixTxIndexMutationGenerator generator = PhoenixTxIndexMutationGenerator.newGenerator(connection, table,
                                         indexList, mutationsPertainingToIndex.get(0).getAttributesMap());
-                                try (HTableInterface htable = connection.getQueryServices().getTable(
+                                try (Table htable = connection.getQueryServices().getTable(
                                         table.getPhysicalName().getBytes())) {
                                     Collection<Pair<Mutation, byte[]>> allMutations = generator.getIndexUpdates(htable,
                                             mutationsPertainingToIndex.iterator());
@@ -958,7 +958,7 @@ public class MutationState implements SQLCloseable {
                     // region servers.
                     shouldRetry = cache != null;
                     SQLException sqlE = null;
-                    HTableInterface hTable = connection.getQueryServices().getTable(htableName);
+                    Table hTable = connection.getQueryServices().getTable(htableName);
                     try {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
@@ -979,7 +979,7 @@ public class MutationState implements SQLCloseable {
                         for (final List<Mutation> mutationBatch : mutationBatchList) {
                             if (shouldRetryIndexedMutation) {
                                 // if there was an index write failure, retry the mutation in a loop
-                                final HTableInterface finalHTable = hTable;
+                                final Table finalHTable = hTable;
                                 PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
                                     @Override
                                     public void doMutation() throws IOException {
