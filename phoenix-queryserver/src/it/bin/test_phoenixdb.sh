@@ -39,7 +39,6 @@ popd
 
 set -u
 echo "INSTALLING COMPONENTS"
-pip install requests-gssapi
 pip install -e file:///${LOCAL_PY}/requests-kerberos
 pip install -e file:///${LOCAL_PY}/python-phoenixdb
 
