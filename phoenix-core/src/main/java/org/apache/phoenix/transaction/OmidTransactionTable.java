@@ -68,13 +68,13 @@ public class OmidTransactionTable implements Table {
         this(ctx, hTable, false);
     }
 
-    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isImmutable) throws SQLException  {
+    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isConflictFree) throws SQLException  {
         assert(ctx instanceof OmidTransactionContext);
 
         OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
 
         try {
-            tTable = new TTable(hTable, true);
+            tTable = new TTable(hTable, true, isConflictFree);
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.TRANSACTION_FAILED)
