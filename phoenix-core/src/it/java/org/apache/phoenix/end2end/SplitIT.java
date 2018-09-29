@@ -1,7 +1,8 @@
 package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -56,7 +57,7 @@ public class SplitIT extends BaseUniqueNamesOwnClusterIT {
                     try {
                         // split on the first row being scanned if splitPoint is null
                         splitPoint = splitPoint!=null ? splitPoint : results.get(0).getRow();
-                        splitTable(splitPoint, tableName);
+                        splitTable(splitPoint, TableName.valueOf(tableName));
                         tableWasSplitDuringScannerNext = true;
                     }
                     catch (SQLException e) {
@@ -69,14 +70,14 @@ public class SplitIT extends BaseUniqueNamesOwnClusterIT {
 
     }
 
-    public static void splitTable(byte[] splitPoint, String tableName) throws SQLException, IOException {
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        int nRegions = admin.getTableRegions(tableName.getBytes()).size();
+    public static void splitTable(byte[] splitPoint, TableName tableName) throws SQLException, IOException {
+        Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        int nRegions = admin.getTableRegions(tableName).size();
         int nInitialRegions = nRegions;
-        admin.split(tableName.getBytes(), splitPoint);
+        admin.split(tableName, splitPoint);
         admin.disableTable(tableName);
         admin.enableTable(tableName);
-        nRegions = admin.getTableRegions(tableName.getBytes()).size();
+        nRegions = admin.getTableRegions(tableName).size();
         if (nRegions == nInitialRegions)
             throw new IOException("Could not split for " + tableName);
     }
@@ -99,7 +100,7 @@ public class SplitIT extends BaseUniqueNamesOwnClusterIT {
         for (int i=0; i<7; i++) {
             if (splitTableBeforeUpsertSelect) {
                 // split the table and then run the UPSERT SELECT
-                splitTable(PInteger.INSTANCE.toBytes(Math.pow(2, i)), tableName);
+                splitTable(PInteger.INSTANCE.toBytes(Math.pow(2, i)), TableName.valueOf(tableName));
             }
             int upsertCount = stmt.executeUpdate();
             assertEquals((int) Math.pow(2, i), upsertCount);
@@ -124,7 +125,7 @@ public class SplitIT extends BaseUniqueNamesOwnClusterIT {
         for (int i=0; i<5; i++) {
             if (splitTableBeforeSelect) {
                 // split the table and then run the SELECT
-                splitTable(PInteger.INSTANCE.toBytes(Math.pow(2, i)), tableName);
+                splitTable(PInteger.INSTANCE.toBytes(Math.pow(2, i)), TableName.valueOf(tableName));
             }
 
             int count = 0;
@@ -151,21 +152,8 @@ public class SplitIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(rs.next());
             int rowCount = rs.getInt(1);
             assertFalse(rs.next());
-
-            // for ORDER BY a StaleRegionBoundaryException is thrown when a sp[it happens
-            if (orderBy) {
-                // if the table splits before the SELECT we always detect this so we never see rows written after the scan started
-                if (splitTableBeforeSelect)
-                    assertEquals((int) Math.pow(2, i + 1), rowCount);
-                // else we see rows written after the SELECT started
-                else if (i == 4) {
-                    assert ((int) Math.pow(2, i + 1) < rowCount);
-                }
-            }
-            // verify that we will see more rows written after the scan started after a split happens for simple select
-            else if ((splitTableBeforeSelect && i == 3) || i == 4) {
-                assert ((int) Math.pow(2, i + 1) < rowCount);
-            }
+            // in HBase 2.x we sometimes we see rows written after the scan started
+            assertTrue((int) Math.pow(2, i + 1) <= rowCount);
         }
         conn.close();
     }

@@ -17,31 +17,19 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.A_VALUE;
-import static org.apache.phoenix.util.TestUtil.ROW1;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Properties;
-
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+
+import java.sql.*;
+import java.util.Properties;
+
+import static org.apache.phoenix.util.TestUtil.*;
+import static org.junit.Assert.*;
 
 
 public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
@@ -173,7 +161,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         PreparedStatement stmt =
                 conn.prepareStatement("UPSERT INTO " + tableName
                         + " SELECT NEXT VALUE FOR keys, val FROM " + tableName);
-        HBaseAdmin admin =
+        Admin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         for (int i=0; i<12; i++) {
             admin.split(TableName.valueOf(tableName));
