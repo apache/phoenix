@@ -1364,7 +1364,6 @@ public class ViewIT extends SplitSystemCatalogIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
-            String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
             latch1 = new CountDownLatch(1);
             latch2 = new CountDownLatch(1);
             String tableDdl =
@@ -1389,23 +1388,15 @@ public class ViewIT extends SplitSystemCatalogIT {
             // wait till the thread makes the rpc to create the view
             latch1.await();
             tableDdl = "DROP TABLE " + fullTableName;
-            try {
-                // drop table should fail as we are concurrently adding a view
-                conn.createStatement().execute(tableDdl);
-                fail("Creating a view while concurrently dropping the base table should fail");
-            } catch (ConcurrentTableMutationException e) {
-            }
+            // drop table goes through first and so the view creation should fail
+            conn.createStatement().execute(tableDdl);
             latch2.countDown();
 
             Exception e = future.get();
-            assertNull(e);
+            assertTrue("Expected TableNotFoundException since drop table goes through first",
+                    e instanceof TableNotFoundException &&
+                            fullTableName.equals(((TableNotFoundException) e).getTableName()));
 
-            // create another view to ensure that the cell used to prevent
-            // concurrent modifications was removed
-            String ddl =
-                    "CREATE VIEW " + fullViewName2 + " (v2 VARCHAR) AS SELECT * FROM "
-                            + fullTableName + " WHERE k = 6";
-            conn.createStatement().execute(ddl);
         }
     }
 
@@ -1484,7 +1475,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                     "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)"
                             + tableDDLOptions;
             conn.createStatement().execute(tableDdl);
-            // create a two views
+            // create two views
             String ddl =
                     "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM "
                             + fullTableName + " WHERE k = 6";
