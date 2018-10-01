@@ -33,6 +33,7 @@ public interface PhoenixTransactionProvider {
         COLUMN_ENCODING(SQLExceptionCode.UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER),
         MAINTAIN_LOCAL_INDEX_ON_SERVER(null),
         SET_TTL(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE),
+        ALLOW_LOCAL_INDEX(SQLExceptionCode.CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE)
         ;
         
         private final SQLExceptionCode code;

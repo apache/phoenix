@@ -70,7 +70,6 @@ public class RollbackIT extends ParallelStatsDisabledIT {
                  { false, false, "TEPHRA" }, { false, true, "TEPHRA"  },
                  { true, false, "TEPHRA"  }, { true, true, "TEPHRA"  },
                  { false, false, "OMID" }, { false, true, "OMID"  },
-                 { true, false, "OMID"  }, { true, true, "OMID"  },
            }),2);
     }
     

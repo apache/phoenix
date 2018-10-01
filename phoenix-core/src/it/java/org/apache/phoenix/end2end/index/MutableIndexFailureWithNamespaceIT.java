@@ -72,7 +72,6 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
                 { "OMID", false, true, true, false, null},
                 { null, true, true, true, false, null},
                 { "TEPHRA", true, true, null, false, null},
-                { "OMID", true, true, null, false, null},
                 { null, false, true, true, true, null},
                 { null, false, true, false, true, false},
                 } 

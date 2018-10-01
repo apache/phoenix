@@ -1547,6 +1547,11 @@ public class MetaDataClient {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_INDEX_ON_MUTABLE_TABLE_WITH_ROWTIMESTAMP).setTableName(indexTableName.getTableName()).build().buildException();
                     }
                 }
+                if (dataTable.isTransactional() 
+                        && isLocalIndex 
+                        && dataTable.getTransactionProvider().getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE).setMessage(dataTable.getTransactionProvider().name()).setTableName(indexTableName.getTableName()).build().buildException();
+                }
                 int posOffset = 0;
                 List<PColumn> pkColumns = dataTable.getPKColumns();
                 Set<RowKeyColumnExpression> unusedPkColumns;

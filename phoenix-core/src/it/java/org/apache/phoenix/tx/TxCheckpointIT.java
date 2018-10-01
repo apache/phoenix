@@ -84,7 +84,6 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
                 { false, false, false, "TEPHRA" }, { false, false, true, "TEPHRA" }, { false, true, false, "TEPHRA" }, { false, true, true, "TEPHRA" },
                 { true, false, false, "TEPHRA" }, { true, false, true, "TEPHRA" }, { true, true, false, "TEPHRA" }, { true, true, true, "TEPHRA" },
                 { false, false, false, "OMID" }, { false, true, false, "OMID" }, 
-                { true, false, false, "OMID" }, { true, true, false, "OMID" },
            }),3);
     }
     

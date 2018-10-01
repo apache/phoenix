@@ -34,7 +34,6 @@ public class LocalMutableTxIndexIT extends BaseIndexIT {
         return TestUtil.filterTxParamData(
                 Arrays.asList(new Object[][] {
                     { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
-                    { true, true, "OMID", false },
                }), 2);
     }
 }

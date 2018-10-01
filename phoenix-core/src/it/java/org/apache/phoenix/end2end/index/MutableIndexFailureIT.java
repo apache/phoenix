@@ -66,6 +66,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -103,6 +105,7 @@ public class MutableIndexFailureIT extends BaseTest {
     private String fullIndexName;
 
     private final boolean transactional;
+    private final PhoenixTransactionProvider transactionProvider;
     private final boolean localIndex;
     private final String tableDDLOptions;
     private final boolean isNamespaceMapped;
@@ -118,6 +121,8 @@ public class MutableIndexFailureIT extends BaseTest {
 
     public MutableIndexFailureIT(String transactionProvider, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
         this.transactional = transactionProvider != null;
+        this.transactionProvider = transactionProvider == null ? null :
+            TransactionFactory.getTransactionProvider(TransactionFactory.Provider.valueOf(transactionProvider));
         this.localIndex = localIndex;
         this.tableDDLOptions = " SALT_BUCKETS=2, COLUMN_ENCODED_BYTES=NONE" + (transactional ? (",TRANSACTIONAL=true,TRANSACTION_PROVIDER='"+transactionProvider+"'") : "") 
                 + (disableIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE + "=" + disableIndexOnWriteFailure))
@@ -184,8 +189,6 @@ public class MutableIndexFailureIT extends BaseTest {
                     { "TEPHRA", true, true, false, false, null},
                     { "TEPHRA", false, false, false, false, null},
                     { "TEPHRA", false, true, false, false, null},
-                    { "OMID", true, false, false, false, null},
-                    { "OMID", true, true, false, false, null},
                     { "OMID", false, false, false, false, null},
                     { "OMID", false, true, false, false, null},
     
@@ -266,7 +269,10 @@ public class MutableIndexFailureIT extends BaseTest {
             // Create other index which should be local/global if the other index is global/local to
             // check the drop index.
             conn.createStatement().execute(
-                    "CREATE "  + (!localIndex ? "LOCAL " : "") + " INDEX " + secondIndexName + " ON " + fullTableName + " (v2) INCLUDE (v1)");
+                    "CREATE "  + ((!localIndex && 
+                            (transactionProvider == null 
+                            || !transactionProvider.isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX))) 
+                            ? "LOCAL " : "") + " INDEX " + secondIndexName + " ON " + fullTableName + " (v2) INCLUDE (v1)");
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + thirdIndexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
 

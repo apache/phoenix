@@ -122,7 +122,6 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
                     { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
     				{ true, false, null, false }, { true, false, null, true },
                     { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
-                    { true, true, "OMID", false }, 
                 }), 2);
     }
 

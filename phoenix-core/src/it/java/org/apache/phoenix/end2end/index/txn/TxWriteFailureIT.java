@@ -97,7 +97,7 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
     public static Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
                  { false, false, "TEPHRA" }, { false, true, "TEPHRA" }, { true, false, "TEPHRA" }, { true, true, "TEPHRA" },
-                 { false, false, "OMID" }, { false, true, "OMID" }, { true, false, "OMID" }, { true, true, "OMID" },
+                 { false, false, "OMID" }, { false, true, "OMID" }, 
            }), 2);
     }
     

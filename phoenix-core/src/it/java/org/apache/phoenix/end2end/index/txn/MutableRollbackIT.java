@@ -57,7 +57,7 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
     public static Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
             { false, "TEPHRA"}, { true, "TEPHRA"},
-            { false, "OMID"}, { true, "OMID"},
+            { false, "OMID"}, 
             }),1);
     }
 	

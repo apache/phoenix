@@ -61,6 +61,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -130,6 +131,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             throw new DoNotRetryIOException();
         }
     }
+    
     @Test
     public void testWithMixOfTxProviders() throws Exception {
         // No sense in running the test with every providers, so just run it with the default one
@@ -175,6 +177,27 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         }
     }
     
+    @Test
+    public void testPreventLocalIndexCreation() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+                if (provider.runTests() && provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX)) {
+                    String tableName = generateUniqueName();
+                    conn.createStatement().execute(
+                            "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+                    String indexName = generateUniqueName();
+                    try {
+                        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + "_IDX ON " + tableName + " (v1) INCLUDE(v2)");
+                        fail();
+                    } catch (SQLException e) {
+                        assertEquals(SQLExceptionCode.CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
+                    }
+                }
+            }
+        }
+    }
+
     @Test
     public void testQueryWithSCN() throws Exception {
         String tableName = generateUniqueName();
