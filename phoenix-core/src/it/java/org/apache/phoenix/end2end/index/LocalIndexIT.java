@@ -78,7 +78,29 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
         super(isNamespaceMapped);
     }
+
+    @Test
+    public void testDeleteFromLocalIndex() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
     
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT)");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v2)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, rand(), rand())");
+        // This would fail with an NPE before PHOENIX-4933
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE v1 < 1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM "+tableName);
+        rs.next();
+        assertEquals(0, rs.getInt(1));
+        rs.close();
+    }
+
     @Test
     public void testLocalIndexRoundTrip() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
