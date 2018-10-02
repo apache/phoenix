@@ -689,7 +689,26 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("Number of expected rows in stats table after major compaction didn't match", numRows, rs.getInt(1));
         }
     }
-    
+
+    private void verifyGuidePostGenerated(ConnectionQueryServices queryServices,
+            String tableName, String[] familyNames,
+            long guidePostWidth, boolean emptyGuidePostExpected) throws Exception {
+        try (HTableInterface statsHTable =
+                queryServices.getTable(
+                        SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
+                                queryServices.getProps()).getName())) {
+            for (String familyName : familyNames) {
+                GuidePostsInfo gps =
+                        StatisticsUtil.readStatistics(statsHTable,
+                                new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes(familyName)),
+                                HConstants.LATEST_TIMESTAMP);
+                assertTrue(emptyGuidePostExpected ? gps.isEmptyGuidePost() : !gps.isEmptyGuidePost());
+                assertTrue(gps.getByteCounts()[0] >= guidePostWidth);
+                assertTrue(gps.getGuidePostTimestamps()[0] > 0);
+            }
+        }
+    }
+
     @Test
     public void testEmptyGuidePostGeneratedWhenDataSizeLessThanGPWidth() throws Exception {
         String tableName = generateUniqueName();
@@ -705,25 +724,39 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("UPDATE STATISTICS " + tableName);
             ConnectionQueryServices queryServices =
                     conn.unwrap(PhoenixConnection.class).getQueryServices();
-            try (HTableInterface statsHTable =
-                    queryServices.getTable(
-                        SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
-                            queryServices.getProps()).getName())) {
-                GuidePostsInfo gps =
-                        StatisticsUtil.readStatistics(statsHTable,
-                            new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes("C1")),
-                            HConstants.LATEST_TIMESTAMP);
-                assertTrue(gps.isEmptyGuidePost());
-                assertEquals(guidePostWidth, gps.getByteCounts()[0]);
-                assertTrue(gps.getGuidePostTimestamps()[0] > 0);
-                gps =
-                        StatisticsUtil.readStatistics(statsHTable,
-                            new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes("C2")),
-                            HConstants.LATEST_TIMESTAMP);
-                assertTrue(gps.isEmptyGuidePost());
-                assertEquals(guidePostWidth, gps.getByteCounts()[0]);
-                assertTrue(gps.getGuidePostTimestamps()[0] > 0);
-            }
+            verifyGuidePostGenerated(queryServices, tableName, new String[] {"C1", "C2"}, guidePostWidth, true);
+        }
+    }
+
+    @Test
+    public void testCollectingAllVersionsOfCells() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            long guidePostWidth = 70;
+            String ddl =
+                    "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, c1.a bigint, c2.b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
+                            + ", USE_STATS_FOR_PARALLELIZATION=true" + ", VERSIONS=3";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+
+            ConnectionQueryServices queryServices =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices();
+
+            // The table only has one row. All cells just has one version, and the data size of the row
+            // is less than the guide post width, so we generate empty guide post.
+            verifyGuidePostGenerated(queryServices, tableName, new String[] {"C1", "C2"}, guidePostWidth, true);
+
+
+            conn.createStatement().execute("upsert into " + tableName + " values (100,101,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+
+            // We updated the row. Now each cell has two versions, and the data size of the row
+            // is >= the guide post width, so we generate non-empty guide post.
+            verifyGuidePostGenerated(queryServices, tableName, new String[] {"C1", "C2"}, guidePostWidth, false);
         }
     }
 

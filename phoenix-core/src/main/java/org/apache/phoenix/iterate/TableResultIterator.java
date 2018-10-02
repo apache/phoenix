@@ -170,7 +170,7 @@ public class TableResultIterator implements ResultIterator {
             } catch (SQLException e) {
                 try {
                     throw ServerUtil.parseServerException(e);
-                } catch(StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e1) {
+                } catch(HashJoinCacheNotFoundException e1) {
                     if(ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
                         // For non aggregate queries if we get stale region boundary exception we can
                         // continue scanning from the next value of lasted fetched result.
@@ -187,41 +187,25 @@ public class TableResultIterator implements ResultIterator {
                                 newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
                             }
                         }
-                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName().getName());
-                        if (e1 instanceof HashJoinCacheNotFoundException) {
-                            logger.debug(
-                                    "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
-                            if (retry <= 0) {
+                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                        logger.debug(
+                                "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
+                        if (retry <= 0) {
+                            throw e1;
+                        }
+                        Long cacheId = ((HashJoinCacheNotFoundException) e1).getCacheId();
+                        retry--;
+                        try {
+                            ServerCache cache = caches == null ? null :
+                                    caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
+                            if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(),
+                                    cache, plan.getTableRef().getTable())) {
                                 throw e1;
                             }
-                            Long cacheId = ((HashJoinCacheNotFoundException) e1).getCacheId();
-                            retry--;
-                            try {
-                                ServerCache cache = caches == null ? null :
-                                        caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
-                                if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(),
-                                        cache, plan.getTableRef().getTable())) {
-                                    throw e1;
-                                }
-                                this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
+                            this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
 
-                            } catch (Exception ex) {
-                                throw ServerUtil.parseServerException(ex);
-                            }
-                        } else {
-                            try {
-                                if(plan.getContext().isClientSideUpsertSelect()) {
-                                    if(ScanUtil.isLocalIndex(newScan)) {
-                                        throw e;
-                                    }
-                                    this.scanIterator =
-                                            new ScanningResultIterator(htable.getScanner(newScan), newScan, scanMetricsHolder);
-                                } else {
-                                    this.scanIterator = plan.iterator(scanGrouper, newScan);
-                                }
-                            } catch (IOException ex) {
-                                throw ServerUtil.parseServerException(ex);
-                            }
+                        } catch (Exception ex) {
+                            throw ServerUtil.parseServerException(ex);
                         }
                         lastTuple = scanIterator.next();
                     } else {
