@@ -2601,12 +2601,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     boolean foundAccessDeniedException = false;
                                     // when running spark/map reduce jobs the ADE might be wrapped
                                     // in a RemoteException
-                                    if (inspectIfAnyExceptionInChain(e, Collections.singletonList(AccessDeniedException.class))) {
+                                    if (inspectIfAnyExceptionInChain(e, Collections
+                                            .<Class<? extends Exception>> singletonList(AccessDeniedException.class))) {
                                         // Pass
                                         logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
                                         success = true;
-                                    } else if (inspectIfAnyExceptionInChain(e, Collections.singletonList(NamespaceNotFoundException.class))) {
+                                    } else if (inspectIfAnyExceptionInChain(e,
+                                            Collections.<Class<? extends Exception>> singletonList(
+                                                    NamespaceNotFoundException.class))) {
                                         // This exception is only possible if SYSTEM namespace mapping is enabled and SYSTEM namespace is missing
                                         // It implies that SYSTEM tables are not created and hence we shouldn't provide a connection
                                         AccessDeniedException ade = new AccessDeniedException("Insufficient permissions to create SYSTEM namespace and SYSTEM Tables");
@@ -2705,7 +2708,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             admin.createTable(tableDesc);
         }
         catch (IOException e) {
-            if (inspectIfAnyExceptionInChain(e, Arrays.<Class<? extends IOException>> asList(
+            if (inspectIfAnyExceptionInChain(e, Arrays.<Class<? extends Exception>> asList(
                     AccessDeniedException.class, org.apache.hadoop.hbase.TableExistsException.class))) {
                 // Ignore TableExistsException as another client might beat us during upgrade.
                 // Ignore AccessDeniedException, as it may be possible underpriviliged user trying to use the connection
@@ -2718,10 +2721,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
-    private boolean inspectIfAnyExceptionInChain(Throwable io, List<Class<? extends IOException>> ioList) {
+    private boolean inspectIfAnyExceptionInChain(Throwable io, List<Class<? extends Exception>> ioList) {
         boolean exceptionToIgnore = false;
         for (Throwable t : Throwables.getCausalChain(io)) {
-            for (Class<? extends IOException> exception : ioList) {
+            for (Class<? extends Exception> exception : ioList) {
                 exceptionToIgnore |= isExceptionInstanceOf(t, exception);
             }
             if (exceptionToIgnore) {
@@ -2732,7 +2735,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return exceptionToIgnore;
     }
 
-    private boolean isExceptionInstanceOf(Throwable io, Class<? extends IOException> exception) {
+    private boolean isExceptionInstanceOf(Throwable io, Class<? extends Exception> exception) {
         return exception.isInstance(io) || (io instanceof RemoteException
                 && (((RemoteException)io).getClassName().equals(exception.getName())));
     }
