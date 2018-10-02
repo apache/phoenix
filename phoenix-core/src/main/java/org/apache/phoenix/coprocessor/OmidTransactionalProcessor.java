@@ -17,16 +17,13 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.omid.transaction.OmidSnapshotFilter;
-import org.apache.phoenix.transaction.OmidTransactionProvider;
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 
 
 public class OmidTransactionalProcessor extends DelegateRegionObserver {
 
     public OmidTransactionalProcessor() {
-        // Hack for testing - retrieves the commit table client from the singleton OmidTransactionProvider
-        // TODO: use real commit table and get port from config
-        super(new OmidSnapshotFilter(OmidTransactionProvider.getInstance().getCommitTableClient()));
+        super(new BaseRegionObserver());
     }
 
 }

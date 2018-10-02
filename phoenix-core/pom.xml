@@ -204,52 +204,6 @@
   </build>
 
   <dependencies>
-  <dependency>
-    <groupId>org.apache.omid</groupId>
-    <artifactId>omid-hbase-client</artifactId>
-    <version>${omid.version}</version>
-    <exclusions>
-      <exclusion>
-        <groupId>org.testng</groupId>
-        <artifactId>testng</artifactId>
-      </exclusion>
-    </exclusions>
-  </dependency>
-  <dependency>
-    <groupId>org.apache.omid</groupId>
-    <artifactId>omid-hbase-coprocessor</artifactId>
-    <version>${omid.version}</version>
-    <exclusions>
-      <exclusion>
-        <groupId>org.testng</groupId>
-        <artifactId>testng</artifactId>
-      </exclusion>
-    </exclusions>
-  </dependency>
-  <dependency>
-    <groupId>org.apache.omid</groupId>
-    <artifactId>omid-tso-server</artifactId>
-    <version>${omid.version}</version>
-    <exclusions>
-      <exclusion>
-        <groupId>org.testng</groupId>
-        <artifactId>testng</artifactId>
-      </exclusion>
-    </exclusions>
-  </dependency>
-  <dependency>
-    <groupId>org.apache.omid</groupId>
-    <artifactId>omid-tso-server</artifactId>
-    <version>${omid.version}</version>
-    <type>test-jar</type>
-    <exclusions>
-      <exclusion>
-        <groupId>org.testng</groupId>
-        <artifactId>testng</artifactId>
-      </exclusion>
-    </exclusions>
-  </dependency>
-
     <!-- Transaction dependencies -->
     <dependency>
       <groupId>org.apache.tephra</groupId>
