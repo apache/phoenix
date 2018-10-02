@@ -51,7 +51,6 @@ import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
@@ -187,13 +186,13 @@ public class TableResultIterator implements ResultIterator {
                                 newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
                             }
                         }
-                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName().getName());
                         logger.debug(
                                 "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                         if (retry <= 0) {
                             throw e1;
                         }
-                        Long cacheId = ((HashJoinCacheNotFoundException) e1).getCacheId();
+                        Long cacheId = e1.getCacheId();
                         retry--;
                         try {
                             ServerCache cache = caches == null ? null :
