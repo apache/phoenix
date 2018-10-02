@@ -71,6 +71,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -2567,22 +2568,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     boolean foundAccessDeniedException = false;
                                     // when running spark/map reduce jobs the ADE might be wrapped
                                     // in a RemoteException
-                                    for (Throwable t : Throwables.getCausalChain(e)) {
-                                        if (t instanceof AccessDeniedException
-                                                || (t instanceof RemoteException
-                                                        && ((RemoteException) t).getClassName()
-                                                                .equals(AccessDeniedException.class
-                                                                        .getName()))) {
-                                            foundAccessDeniedException = true;
-                                            break;
-                                        }
-                                    }
-                                    if (foundAccessDeniedException) {
+                                    if (inspectIfAnyExceptionInChain(e, Collections.singletonList(AccessDeniedException.class))) {
                                         // Pass
                                         logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
                                         success = true;
-                                    } else if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), NamespaceNotFoundException.class))) {
+                                    } else if (inspectIfAnyExceptionInChain(e, Collections.singletonList(NamespaceNotFoundException.class))) {
                                         // This exception is only possible if SYSTEM namespace mapping is enabled and SYSTEM namespace is missing
                                         // It implies that SYSTEM tables are not created and hence we shouldn't provide a connection
                                         AccessDeniedException ade = new AccessDeniedException("Insufficient permissions to create SYSTEM namespace and SYSTEM Tables");
@@ -2677,14 +2668,38 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
             tableDesc.addFamily(columnDesc);
             admin.createTable(tableDesc);
-        } catch (IOException e) {
-            if(!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class)) ||
-                    !Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), org.apache.hadoop.hbase.TableNotFoundException.class))) {
-                // Ignore
+        }
+        catch (IOException e) {
+            if (inspectIfAnyExceptionInChain(e, Arrays.<Class<? extends IOException>> asList(
+                    AccessDeniedException.class, org.apache.hadoop.hbase.TableExistsException.class))) {
+                // Ignore TableExistsException as another client might beat us during upgrade.
+                // Ignore AccessDeniedException, as it may be possible underpriviliged user trying to use the connection
+                // which doesn't required upgrade.
+                logger.debug("Ignoring exception while creating mutex table during connection initialization: "
+                        + Throwables.getStackTraceAsString(e));
             } else {
                 throw e;
             }
         }
+    }
+    
+    private boolean inspectIfAnyExceptionInChain(Throwable io, List<Class<? extends IOException>> ioList) {
+        boolean exceptionToIgnore = false;
+        for (Throwable t : Throwables.getCausalChain(io)) {
+            for (Class<? extends IOException> exception : ioList) {
+                exceptionToIgnore |= isExceptionInstanceOf(t, exception);
+            }
+            if (exceptionToIgnore) {
+                break;
+            }
+
+        }
+        return exceptionToIgnore;
+    }
+
+    private boolean isExceptionInstanceOf(Throwable io, Class<? extends IOException> exception) {
+        return exception.isInstance(io) || (io instanceof RemoteException
+                && (((RemoteException)io).getClassName().equals(exception.getName())));
     }
 
     List<TableName> getSystemTableNamesInDefaultNamespace(HBaseAdmin admin) throws IOException {
