@@ -21,7 +21,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.http.annotation.Immutable;
+import net.jcip.annotations.Immutable;
+
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.tuple.Tuple;
 

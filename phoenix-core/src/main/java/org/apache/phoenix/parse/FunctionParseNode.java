@@ -30,7 +30,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.http.annotation.Immutable;
+import net.jcip.annotations.Immutable;
+
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Determinism;

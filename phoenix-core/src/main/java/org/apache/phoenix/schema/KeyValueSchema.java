@@ -19,9 +19,10 @@ package org.apache.phoenix.schema;
 
 import java.util.List;
 
+import net.jcip.annotations.Immutable;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;

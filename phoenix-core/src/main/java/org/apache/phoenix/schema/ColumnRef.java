@@ -21,8 +21,9 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 
+import net.jcip.annotations.Immutable;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
