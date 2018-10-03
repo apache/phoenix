@@ -124,6 +124,13 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     }
     
     @Override
+    /**
+     * Note: The concept of sort order for a RVC is currently broken for evaluate.
+     * As internally the members of the RVC each can be in one or other order.
+     * Since this class inherits from BaseCompoundExpression it is considered always ASC sort order
+     * Can't really fix this for evaluate as designed since we can't be sure if we are filtering
+     * Or constructing a key, and expression currently does not have the context of the operation being performed.
+     */
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if(literalExprPtr != null) {
             // if determined during construction that the row value constructor is just comprised of literal expressions, 

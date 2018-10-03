@@ -242,6 +242,12 @@ public class WhereOptimizer {
                     cnf.add(leftRanges);
                     clipLeftSpan = 0;
                     prevSortOrder = sortOrder;
+                    // since we have to clip the portion with the same sort order, we can no longer
+                    // extract the nodes from the where clause
+                    // for eg. for the schema A VARCHAR DESC, B VARCHAR ASC and query WHERE (A,B) < ('a','b')
+                    // the range (* - a\xFFb) is converted to (~a-*)(*-b)
+                    // so we still need to filter on A,B
+                    stopExtracting = true;
                 }
                 clipLeftSpan++;
                 slotOffset++;
@@ -2060,10 +2066,7 @@ public class WhereOptimizer {
 
                                 @Override
                                 public SortOrder getSortOrder() {
-                                    // The parts of the RVC have already been converted
-                                    // to ascending, so we don't need to consider the
-                                    // childPart sort order.
-                                    return SortOrder.ASC;
+                                    return childPart.getColumn().getSortOrder();
                                 }
 
                                 @Override

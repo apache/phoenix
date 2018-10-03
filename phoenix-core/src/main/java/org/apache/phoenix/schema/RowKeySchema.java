@@ -431,6 +431,7 @@ public class RowKeySchema extends ValueSchema {
             ptr.set(upperRange, 0, ptr.getOffset() + ptr.getLength());
             upperRange = ByteUtil.copyKeyBytesIfNecessary(ptr);
         }
+//        return KeyRange.getKeyRange(lowerRange, keyRange.isLowerInclusive(), upperRange, keyRange.isUpperInclusive());
         return KeyRange.getKeyRange(lowerRange, true, upperRange, true);
     }
 }
