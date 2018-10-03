@@ -19,7 +19,8 @@ package org.apache.phoenix.query;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
-import org.apache.http.annotation.Immutable;
+import net.jcip.annotations.Immutable;
+
 import org.apache.phoenix.iterate.SpoolTooBigToDiskException;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;

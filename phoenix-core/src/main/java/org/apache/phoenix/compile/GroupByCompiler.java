@@ -23,8 +23,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import net.jcip.annotations.Immutable;
+
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
