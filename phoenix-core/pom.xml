@@ -283,12 +283,6 @@
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf-java.version}</version>
     </dependency>
-    <!-- Intentionally avoid an dependencyManagement entry because of conflict with thin-client -->
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpclient</artifactId>
-      <version>4.0.1</version>
-    </dependency>
     <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
