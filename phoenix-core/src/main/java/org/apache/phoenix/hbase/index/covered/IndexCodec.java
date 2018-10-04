@@ -39,10 +39,12 @@ public interface IndexCodec {
      *            the current state of the table that needs to be cleaned up. Generally, you only care about the latest
      *            column values, for each column you are indexing for each index table.
      * @param context TODO
+     * @param regionStartKey TODO
+     * @param regionEndKey TODO
      * @return the pairs of (deletes, index table name) that should be applied.
      * @throws IOException
      */
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) throws IOException;
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException;
 
     // table state has the pending update already applied, before calling
     // get the new index entries
@@ -59,10 +61,12 @@ public interface IndexCodec {
      *            the current state of the table that needs to an index update Generally, you only care about the latest
      *            column values, for each column you are indexing for each index table.
      * @param context TODO
+     * @param regionStartKey TODO
+     * @param regionEndKey TODO
      * @return the pairs of (updates,index table name) that should be applied.
      * @throws IOException
      */
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) throws IOException;
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException;
 
     /**
      * This allows the codec to dynamically change whether or not indexing should take place for a table. If it doesn't
@@ -80,5 +84,5 @@ public interface IndexCodec {
      */
     public boolean isEnabled(Mutation m) throws IOException;
 
-    public void initialize(Configuration conf, byte[] startKey, byte[] endKey, byte[] tableName);
+    public void initialize(Configuration conf, byte[] tableName);
 }

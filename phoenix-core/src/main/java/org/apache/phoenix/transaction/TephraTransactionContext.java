@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -82,7 +83,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         this.tx = CODEC.decode(txnBytes);
     }
 
-    public TephraTransactionContext(PhoenixConnection connection) {
+    public TephraTransactionContext(PhoenixConnection connection) throws SQLException {
         PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());  
         assert (client instanceof TephraTransactionClient);
         this.txServiceClient = ((TephraTransactionClient)client).getTransactionClient();
@@ -222,6 +223,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                     .setSchemaName(dataTable.getSchemaName().getString())
                     .setTableName(dataTable.getTableName().getString()).build()
                     .buildException();
+        } finally {
+            // The client expects a transaction to be in progress on the txContext while the
+            // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
+            // finished, we start a new one here.
+            // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+            this.begin();
         }
     }
 
@@ -403,14 +410,14 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
     
     @Override
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
-        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    public Table getTransactionalTable(Table htable, boolean isConflictFree) {
+        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isConflictFree ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;
     }
 
     @Override
-    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) throws SQLException {
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException {
         // If we have indexes, wrap the HTable in a delegate HTable that
         // will attach the necessary index meta data in the event of a
         // rollback
@@ -444,7 +451,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         private final PTable table;
         private final PhoenixConnection connection;
 
-        private RollbackHookHTableWrapper(HTableInterface delegate, PTable table, PhoenixConnection connection) {
+        private RollbackHookHTableWrapper(Table delegate, PTable table, PhoenixConnection connection) {
             super(delegate);
             this.table = table;
             this.connection = connection;

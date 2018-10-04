@@ -37,8 +37,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -51,7 +51,6 @@ import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
@@ -74,7 +73,7 @@ import com.google.common.annotations.VisibleForTesting;
  */
 public class TableResultIterator implements ResultIterator {
     private final Scan scan;
-    private final HTableInterface htable;
+    private final Table htable;
     private final ScanMetricsHolder scanMetricsHolder;
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
@@ -187,13 +186,13 @@ public class TableResultIterator implements ResultIterator {
                                 newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
                             }
                         }
-                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName().getName());
                         logger.debug(
                                 "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                         if (retry <= 0) {
                             throw e1;
                         }
-                        Long cacheId = ((HashJoinCacheNotFoundException) e1).getCacheId();
+                        Long cacheId = e1.getCacheId();
                         retry--;
                         try {
                             ServerCache cache = caches == null ? null :
