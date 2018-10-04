@@ -19,7 +19,6 @@ package org.apache.phoenix.tx;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.createTransactionalTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -31,6 +30,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Get;
@@ -43,10 +44,14 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 /**
  * 
@@ -54,7 +59,21 @@ import org.junit.Test;
  * TODO: review with Tephra community
  *
  */
+@RunWith(Parameterized.class)
 public class FlappingTransactionIT extends ParallelStatsDisabledIT {
+    private final String txProvider;
+    
+    public FlappingTransactionIT(String provider) {
+        txProvider = provider;
+    }
+
+    @Parameters(name="FlappingTransactionIT_transactionProvider={0}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
+            {"TEPHRA"}, {"OMID"}
+           }),0);
+    }
+    
     @Test
     public void testDelete() throws Exception {
         String transTableName = generateUniqueName();
@@ -63,7 +82,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
-            TestUtil.createTransactionalTable(conn, fullTableName);
+            TestUtil.createTransactionalTable(conn, fullTableName, "TRANSACTION_PROVIDER='"+txProvider+"'");
             conn1.setAutoCommit(false);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
             assertFalse(rs.next());
@@ -103,7 +122,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
-            createTransactionalTable(conn, fullTableName);
+            TestUtil.createTransactionalTable(conn, fullTableName, "TRANSACTION_PROVIDER='"+txProvider+"'");
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(true);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
@@ -136,8 +155,11 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName + " WHERE int_col1 = 1");
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
+            // this succeeds rs = conn2.createStatement().executeQuery("SELECT int_col1 FROM " + fullTableName + " WHERE int_col1 = 1");
+            // this fails rs = conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName + " WHERE int_col1 = 1");
             rs = conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName + " WHERE int_col1 = 1");
-            assertFalse(rs.next());
+            boolean hasNext = rs.next();
+            assertFalse(hasNext);
             
             conn1.commit();
             
@@ -158,7 +180,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
-            createTransactionalTable(conn, fullTableName);
+            TestUtil.createTransactionalTable(conn, fullTableName, "TRANSACTION_PROVIDER='"+txProvider+"'");
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(true);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
@@ -212,7 +234,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
+        stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='"+txProvider+"'");
         Table htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
         stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
         conn.commit();
@@ -223,12 +245,13 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             assertEquals(1,rs.getInt(1));
         }
 
-        PhoenixTransactionContext txContext =
-              TransactionFactory.getTransactionProvider(TransactionFactory.Provider.TEPHRA).getTransactionContext(pconn);
-        Table txTable =
-                txContext.getTransactionalTable(htable, false);
-
-        txContext.begin();
+        PhoenixTransactionProvider provider = TransactionFactory.Provider.valueOf(txProvider).getTransactionProvider();
+        PhoenixTransactionContext txContext = provider.getTransactionContext(pconn);
+        // FIXME: must begin txn before getting transactional table
+        // Either set txn on all existing OmidTransactionTable or throw exception
+        // when attempting to get OmidTransactionTable if a txn is not in progress.
+        txContext.begin(); 
+        Table txTable = txContext.getTransactionalTable(htable, false);
 
         // Use HBase APIs to add a new row
         Put put = new Put(Bytes.toBytes("z"));
@@ -275,12 +298,10 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         }
         
         // Repeat the same as above, but this time abort the transaction
-        txContext =
-              TransactionFactory.getTransactionProvider(TransactionFactory.Provider.TEPHRA).getTransactionContext(pconn);
-        txTable =
-              txContext.getTransactionalTable(htable, false);
-
+        txContext = provider.getTransactionContext(pconn);
         txContext.begin();
+        txTable = txContext.getTransactionalTable(htable, false);
+
         
         // Use HBase APIs to add a new row
         put = new Put(Bytes.toBytes("j"));

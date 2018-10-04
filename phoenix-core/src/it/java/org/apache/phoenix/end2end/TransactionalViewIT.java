@@ -24,6 +24,8 @@ import static org.junit.Assert.assertEquals;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 import org.apache.phoenix.query.KeyRange;
@@ -31,12 +33,27 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
+@RunWith(Parameterized.class)
 public class TransactionalViewIT extends ParallelStatsEnabledIT {
 
     private String fullTableName;
     private String fullViewName;
-
+    private final String transactionProvider;
+      
+    public TransactionalViewIT(String transactionProvider) {
+        this.transactionProvider = transactionProvider;
+    }
+    
+    @Parameters(name="TransactionalViewIT_transactionProvider={0}")
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+                 {"TEPHRA"},{"OMID"}}),0);
+    }
+    
     @Before
     public void generateTableNames() {
         String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
@@ -51,7 +68,7 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName
-                    + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
+                    + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'";
             conn1.createStatement().execute(ddl);
             ddl = "CREATE VIEW " + fullViewName + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " where k>5";
             conn1.createStatement().execute(ddl);
@@ -86,7 +103,7 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName
-                    + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true";
+                    + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'";
             conn1.createStatement().execute(ddl);
             ddl = "CREATE VIEW " + fullViewName + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " where k>5";
             conn1.createStatement().execute(ddl);

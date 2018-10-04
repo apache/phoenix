@@ -109,7 +109,6 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -541,7 +540,11 @@ public class UpsertCompiler {
                 // Disable running upsert select on server side if a table has global mutable secondary indexes on it
                 boolean hasGlobalMutableIndexes = SchemaUtil.hasGlobalIndex(table) && !table.isImmutableRows();
                 boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
-                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit && !table.isTransactional()
+                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit 
+                        // We can run the upsert select for initial index population on server side for transactional
+                        // tables since the writes do not need to be done transactionally, since we gate the index
+                        // usage on successfully writing all data rows.
+                        && (!table.isTransactional() || table.getType() == PTableType.INDEX)
                         && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
                         && !select.isJoin() && !hasWhereSubquery && table.getRowTimestampColPos() == -1;
             }
@@ -1039,12 +1042,15 @@ public class UpsertCompiler {
             byte[] txState = table.isTransactional() ?
                     connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
+            ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
+            if (aggPlan.getTableRef().getTable().isTransactional() 
+                    || (table.getType() == PTableType.INDEX && table.isTransactional())) {
+                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+            }
             if (ptr.getLength() > 0) {
                 byte[] uuidValue = ServerCacheClient.generateId();
                 scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
-                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-                ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
             }
             ResultIterator iterator = aggPlan.iterator();
             try {

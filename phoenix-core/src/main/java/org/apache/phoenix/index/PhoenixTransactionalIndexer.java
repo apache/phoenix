@@ -100,7 +100,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
     public void start(CoprocessorEnvironment e) throws IOException {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)e;
         String serverName = env.getServerName().getServerName();
-        codec = new PhoenixIndexCodec(env.getConfiguration(), env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey(), env.getRegionInfo().getTable().getName());
+        codec = new PhoenixIndexCodec(env.getConfiguration(), env.getRegionInfo().getTable().getName());
         DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
         // setup the actual index writer
         // For transactional tables, we keep the index active upon a write failure

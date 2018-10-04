@@ -383,6 +383,7 @@ public class IndexTool extends Configured implements Tool {
             if (pdataTable.isTransactional()) {
                 configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
                     Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
+                configuration.set(PhoenixConfigurationUtil.TX_PROVIDER, pdataTable.getTransactionProvider().name());
             }
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
                 Long.toString(maxTimeRange));

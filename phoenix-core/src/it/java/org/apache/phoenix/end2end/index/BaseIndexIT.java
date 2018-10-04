@@ -67,10 +67,13 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -90,12 +93,12 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
     private final boolean localIndex;
     private final boolean transactional;
+    private final TransactionFactory.Provider transactionProvider;
     private final boolean mutable;
     private final String tableDDLOptions;
 
-    protected BaseIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
+    protected BaseIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
         this.mutable = mutable;
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
@@ -111,10 +114,14 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             }
         }
+        transactional = transactionProvider != null;
         if (transactional) {
             if (optionBuilder.length()!=0)
                 optionBuilder.append(",");
-            optionBuilder.append(" TRANSACTIONAL=true ");
+            optionBuilder.append(" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
+            this.transactionProvider = TransactionFactory.Provider.valueOf(transactionProvider);
+        } else {
+            this.transactionProvider = null;
         }
         this.tableDDLOptions = optionBuilder.toString();
     }
@@ -200,7 +207,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             ResultSet rs;
 
-            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+            rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(3,rs.getInt(1));
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
@@ -245,7 +252,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         if (iterator.hasNext()) {
             byte[] tableName = iterator.next().getFirst(); // skip data table mutations
             PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
-            boolean clientSideUpdate = !localIndex && (!mutable || transactional);
+            boolean clientSideUpdate = (!localIndex || (transactional && table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))) 
+                    && (!mutable || transactional);
             if (!clientSideUpdate) {
                 assertTrue(table.getType() == PTableType.TABLE); // should be data table
             }
@@ -257,18 +265,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateIndexAfterUpsertStarted() throws Exception {
-        testCreateIndexAfterUpsertStarted(false, 
+        testCreateIndexAfterUpsertStarted(transactional, 
                 SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
                 SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
-    }
-
-    @Test
-    public void testCreateIndexAfterUpsertStartedTxnl() throws Exception {
-        if (transactional) {
-            testCreateIndexAfterUpsertStarted(true, 
-                    SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
-                    SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
-        }
     }
 
     private void testCreateIndexAfterUpsertStarted(boolean readOwnWrites, String fullTableName, String fullIndexName) throws Exception {
@@ -934,7 +933,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             stmt.setString(2, "y");
             stmt.setString(3, "2");
             stmt.execute();
-            conn.commit();
+            if (!transactional) {
+                conn.commit();
+            }
 
             query = "SELECT * FROM " + fullTableName + " WHERE \"v2\" = '1'";
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -954,6 +955,18 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertEquals("x",rs.getString("V1"));
             assertEquals("1",rs.getString("v2"));
             assertFalse(rs.next());
+
+            // Shadow cells shouldn't exist yet since commit hasn't happened
+            if (transactional && transactionProvider == TransactionFactory.Provider.OMID) {
+                assertShadowCellsDoNotExist(conn, fullTableName, fullIndexName);
+            }
+
+            conn.commit();
+
+            // Confirm shadow cells exist after commit
+            if (transactional && transactionProvider == TransactionFactory.Provider.OMID) {
+                assertShadowCellsExist(conn, fullTableName, fullIndexName);
+            }
 
             query = "SELECT \"V1\", \"V1\" as foo1, \"v2\" as foo, \"v2\" as \"Foo1\", \"v2\" FROM " + fullTableName + " ORDER BY foo";
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -1040,12 +1053,22 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testIndexWithDecimalCol() throws Exception {
+    public void testIndexWithDecimalColServerSideUpsert() throws Exception {
+        testIndexWithDecimalCol(true);
+    }
+    
+    @Test
+    public void testIndexWithDecimalColClientSideUpsert() throws Exception {
+        testIndexWithDecimalCol(false);
+    }
+    
+    private void testIndexWithDecimalCol(boolean enableServerSideUpsert) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        props.setProperty(QueryServices.ENABLE_SERVER_UPSERT_SELECT, Boolean.toString(enableServerSideUpsert));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             String query;
@@ -1057,6 +1080,10 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             String ddl = null;
             ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
             conn.createStatement().execute(ddl);
+            
+            if (transactional && transactionProvider == TransactionFactory.Provider.OMID) {
+                assertShadowCellsExist(conn, fullTableName, fullIndexName);
+            }
 
             query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + fullTableName ;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -1081,6 +1108,46 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertEquals(new BigDecimal("5.3"), rs.getBigDecimal(3));
             assertFalse(rs.next());
         }
+    }
+
+    private static void assertShadowCellsDoNotExist(Connection conn, String fullTableName, String fullIndexName) 
+            throws Exception {
+        assertShadowCells(conn, fullTableName, fullIndexName, false);
+    }
+    
+    private static void assertShadowCellsExist(Connection conn, String fullTableName, String fullIndexName)
+            throws Exception {
+        assertShadowCells(conn, fullTableName, fullIndexName, true);
+    }
+    
+    private static void assertShadowCells(Connection conn, String fullTableName, String fullIndexName, boolean exists) 
+        throws Exception {
+        PTable ptable = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, fullTableName));
+        int nTableKVColumns = ptable.getColumns().size() - ptable.getPKColumns().size();
+        Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullTableName));
+        ResultScanner tableScanner = hTable.getScanner(new Scan());
+        Result tableResult;
+        PTable pindex = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, fullIndexName));
+        int nIndexKVColumns = pindex.getColumns().size() - pindex.getPKColumns().size();
+        Table hIndex = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullIndexName));
+        ResultScanner indexScanner = hIndex.getScanner(new Scan());
+        Result indexResult;
+        while ((indexResult = indexScanner.next()) != null) {
+            int nColumns = 0;
+            CellScanner scanner = indexResult.cellScanner();
+            while (scanner.advance()) {
+                nColumns++;
+            }
+            assertEquals(exists, nColumns > nIndexKVColumns * 2);
+            assertNotNull(tableResult = tableScanner.next());
+            nColumns = 0;
+            scanner = tableResult.cellScanner();
+            while (scanner.advance()) {
+                nColumns++;
+            }
+            assertEquals(exists, nColumns > nTableKVColumns * 2);
+        }
+        assertNull(tableScanner.next());
     }
 
     /**

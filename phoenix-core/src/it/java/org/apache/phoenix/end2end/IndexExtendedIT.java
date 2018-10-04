@@ -160,7 +160,6 @@ public class IndexExtendedIT extends BaseTest {
             //assert we are pulling from index table.
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            // TODO: why is it a 1-WAY parallel scan only for !transactional && mutable && localIndex
             IndexToolIT.assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName, indexTableFullName);
             
             rs = stmt.executeQuery(selectSql);
