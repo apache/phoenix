@@ -18,15 +18,25 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.sql.SQLException;
+import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.phoenix.coprocessor.OmidGCProcessor;
+import org.apache.phoenix.coprocessor.OmidTransactionalProcessor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
 public class OmidTransactionProvider implements PhoenixTransactionProvider {
     private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
+    public static final String OMID_TSO_PORT = "phoenix.omid.tso.port";
+    public static final String OMID_TSO_CONFLICT_MAP_SIZE = "phoenix.omid.tso.conflict.map.size";
+    public static final String OMID_TSO_TIMESTAMP_TYPE = "phoenix.omid.tso.timestamp.type";
+    public static final int DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE = 1000;
+    public static final String DEFAULT_OMID_TSO_TIMESTAMP_TYPE = "WORLD_TIME";
 
     public static final OmidTransactionProvider getInstance() {
         return INSTANCE;
@@ -36,33 +46,54 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
+    public String toString() {
+        return getProvider().toString();
+    }
+    
+    @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
-        //return new OmidTransactionContext(txnBytes);
-        return null;
+        // Remove last byte (which is used to identify transaction provider)
+        return new OmidTransactionContext(Arrays.copyOf(txnBytes,txnBytes.length-1));
     }
 
     @Override
-    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
-        //return new OmidTransactionContext(connection);
-        return null;
+    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException {
+        return new OmidTransactionContext(connection);
     }
 
     @Override
-    public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) {
-        // TODO Auto-generated method stub
-        return null;
+    public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) throws SQLException{
+        return new OmidTransactionClient();
+    }
+
+    static class OmidTransactionClient implements PhoenixTransactionClient {
+        @Override
+        public void close() throws IOException {}
     }
 
     @Override
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) {
-        // TODO Auto-generated method stub
-        return null;
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException{
+        return new OmidTransactionService();
+    }
+
+    static class OmidTransactionService implements PhoenixTransactionService {
+
+        public void start() {
+        }
+
+        @Override
+        public void close() throws IOException {
+        }
     }
 
     @Override
     public Class<? extends RegionObserver> getCoprocessor() {
-        // TODO Auto-generated method stub
-        return null;
+        return OmidTransactionalProcessor.class;
+    }
+
+    @Override
+    public Class<? extends RegionObserver> getGCCoprocessor() {
+        return OmidGCProcessor.class;
     }
 
     @Override
@@ -72,13 +103,11 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
 
     @Override
     public boolean isUnsupported(Feature feature) {
-        // FIXME: if we initialize a Set with the unsupported features
-        // and check for containment, we run into a test failure
-        // in SetPropertyOnEncodedTableIT.testSpecifyingColumnFamilyForTTLFails()
-        // due to TableProperty.colFamSpecifiedException being null
-        // (though it's set in the constructor). I suspect some
-        // mysterious class loader issue. The below works fine
-        // as a workaround.
-        return (feature == Feature.ALTER_NONTX_TO_TX);
+        return true;
+    }
+
+    @Override
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) {
+        return put;
     }
 }

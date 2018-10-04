@@ -106,16 +106,15 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         return getConnection(props);
     }
     
-    @Parameters(name="MutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
+    @Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                 { false, null, false }, { false, null, true },
                 { false, "TEPHRA", false }, { false, "TEPHRA", true },
-                //{ false, "OMID", false }, { false, "OMID", true },
+                { false, "OMID", false },
                 { true, null, false }, { true, null, true },
                 { true, "TEPHRA", false }, { true, "TEPHRA", true },
-                //{ true, "OMID", false }, { true, "OMID", true },
-                });
+                }),1);
     }
     
     @Test
