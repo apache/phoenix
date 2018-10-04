@@ -52,6 +52,9 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -72,7 +75,7 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
-    private final boolean transactional;
+    private final PhoenixTransactionProvider transactionProvider;
     private final String tableDDLOptions;
 
     private volatile boolean stopThreads = false;
@@ -81,17 +84,17 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     private static String INDEX_DDL;
     public static final AtomicInteger NUM_ROWS = new AtomicInteger(0);
 
-    public ImmutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
+    public ImmutableIndexIT(boolean localIndex, boolean transactional, String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         this.localIndex = localIndex;
-        this.transactional = transactional;
         if (!columnEncoded) {
-            if (optionBuilder.length()!=0)
-                optionBuilder.append(",");
-            optionBuilder.append("COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+            optionBuilder.append(",COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
         }
         if (transactional) {
-            optionBuilder.append(", TRANSACTIONAL=true");
+            optionBuilder.append(",TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
+            this.transactionProvider = TransactionFactory.Provider.valueOf(transactionProvider).getTransactionProvider();
+        } else {
+            this.transactionProvider = null;
         }
         this.tableDDLOptions = optionBuilder.toString();
 
@@ -107,13 +110,16 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-		return Arrays.asList(new Boolean[][] { 
-				{ false, false, false }, { false, false, true },
-				{ false, true, false }, { false, true, true },
-				{ true, false, false }, { true, false, true },
-                { true, true, false }, { true, true, true } });
+    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+		return TestUtil.filterTxParamData(
+		        Arrays.asList(new Object[][] { 
+    				{ false, false, null, false }, { false, false, null, true },
+    				{ false, true, "OMID", false }, 
+                    { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
+    				{ true, false, null, false }, { true, false, null, true },
+                    { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
+                }), 2);
     }
 
     @Test
@@ -249,7 +255,9 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         Iterator<Pair<byte[], List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
         assertTrue(iterator.hasNext());
         iterator.next();
-        assertEquals(!localIndex, iterator.hasNext());
+        assertEquals(!localIndex || 
+                (transactionProvider != null && 
+                 transactionProvider.isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)), iterator.hasNext());
     }
     
 

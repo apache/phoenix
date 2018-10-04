@@ -52,6 +52,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -70,15 +71,13 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
-    private final boolean mutable;
     private final boolean useSnapshot;
 
-    public IndexToolIT(boolean transactional, boolean mutable, boolean localIndex,
+    public IndexToolIT(String transactionProvider, boolean mutable, boolean localIndex,
             boolean directApi, boolean useSnapshot) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
+        this.transactional = transactionProvider != null;
         this.directApi = directApi;
-        this.mutable = mutable;
         this.useSnapshot = useSnapshot;
         StringBuilder optionBuilder = new StringBuilder();
         if (!mutable) {
@@ -88,7 +87,7 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             if (!(optionBuilder.length() == 0)) {
                 optionBuilder.append(",");
             }
-            optionBuilder.append(" TRANSACTIONAL=true ");
+            optionBuilder.append(" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
@@ -107,22 +106,22 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
     }
 
     @Parameters(
-            name = "transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}, useSnapshot = {4}")
-    public static Collection<Boolean[]> data() {
-        List<Boolean[]> list = Lists.newArrayListWithExpectedSize(16);
+            name = "transactionProvider={0},mutable={1},localIndex={2},directApi={3},useSnapshot={4}")
+    public static Collection<Object[]> data() {
+        List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
-        for (boolean transactional : Booleans) {
+        for (Object transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
                     for (boolean directApi : Booleans) {
                         for (boolean useSnapshot : Booleans) {
-                            list.add(new Boolean[] { transactional, mutable, localIndex, directApi, useSnapshot });
+                            list.add(new Object[] { transactionProvider, mutable, localIndex, directApi, useSnapshot });
                         }
                     }
                 }
             }
         }
-        return list;
+        return TestUtil.filterTxParamData(list,0);
     }
 
     @Test

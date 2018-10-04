@@ -30,6 +30,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -65,6 +66,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -102,6 +105,7 @@ public class MutableIndexFailureIT extends BaseTest {
     private String fullIndexName;
 
     private final boolean transactional;
+    private final PhoenixTransactionProvider transactionProvider;
     private final boolean localIndex;
     private final String tableDDLOptions;
     private final boolean isNamespaceMapped;
@@ -115,10 +119,12 @@ public class MutableIndexFailureIT extends BaseTest {
     protected static final int disableTimestampThresholdMs = 10000;
     protected static final int numRpcRetries = 2;
 
-    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
-        this.transactional = transactional;
+    public MutableIndexFailureIT(String transactionProvider, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
+        this.transactional = transactionProvider != null;
+        this.transactionProvider = transactionProvider == null ? null :
+            TransactionFactory.getTransactionProvider(TransactionFactory.Provider.valueOf(transactionProvider));
         this.localIndex = localIndex;
-        this.tableDDLOptions = " SALT_BUCKETS=2, COLUMN_ENCODED_BYTES=NONE" + (transactional ? ", TRANSACTIONAL=true " : "") 
+        this.tableDDLOptions = " SALT_BUCKETS=2, COLUMN_ENCODED_BYTES=NONE" + (transactional ? (",TRANSACTIONAL=true,TRANSACTION_PROVIDER='"+transactionProvider+"'") : "") 
                 + (disableIndexOnWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE + "=" + disableIndexOnWriteFailure))
                 + (throwIndexWriteFailure == null ? "" : (", " + PhoenixIndexFailurePolicy.THROW_INDEX_WRITE_FAILURE + "=" + throwIndexWriteFailure));
         this.tableName = FailingRegionObserver.FAIL_TABLE_NAME;
@@ -165,26 +171,27 @@ public class MutableIndexFailureIT extends BaseTest {
         return serverProps;
     }
 
-    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
-    public static List<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
-                // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
-                { false, false, false, false, false, false},
-                { false, false, false, true, false, null},
-                { true, false, false, true, false, null},
-                { false, true, false, null, false, null},
-                { true, true, false, true, false, null},
-                { false, false, false, false, false, null},
-                { false, true, false, false, false, null},
-                { false, false, false, false, false, null},
-                { false, false, false, true, false, null},
-                { false, false, false, true, false, null},
-                { false, true, false, true, false, null},
-                { false, true, false, true, false, null},
-                { false, false, false, true, true, null},
-                { false, false, false, false, true, false},
-                } 
-        );
+    @Parameters(name = "MutableIndexFailureIT_transactionProvider={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(
+                Arrays.asList(new Object[][] { 
+                    // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
+                    { null, false, false, false, false, false},
+                    { null, false, false, true, false, null},
+                    { "TEPHRA", false, false, true, false, null},
+                    { "OMID", false, false, true, false, null},
+                    { null, true, false, null, false, null},
+                    { "TEPHRA", true, false, true, false, null},
+                    { null, false, false, false, false, null},
+                    { null, true, false, false, false, null},
+                    { null, false, false, false, false, null},
+                    { null, false, false, true, false, null},
+                    { null, true, false, true, false, null},
+                    { null, true, false, true, false, null},
+                    { null, false, false, true, true, null},
+                    { null, false, false, false, true, false},
+                    }), 0);
+        
     }
 
     private void runRebuildTask(Connection conn) throws InterruptedException, SQLException {
@@ -250,7 +257,10 @@ public class MutableIndexFailureIT extends BaseTest {
             // Create other index which should be local/global if the other index is global/local to
             // check the drop index.
             conn.createStatement().execute(
-                    "CREATE "  + (!localIndex ? "LOCAL " : "") + " INDEX " + secondIndexName + " ON " + fullTableName + " (v2) INCLUDE (v1)");
+                    "CREATE "  + ((!localIndex && 
+                            (transactionProvider == null 
+                            || !transactionProvider.isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX))) 
+                            ? "LOCAL " : "") + " INDEX " + secondIndexName + " ON " + fullTableName + " (v2) INCLUDE (v1)");
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + thirdIndexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
 
@@ -462,17 +472,16 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
-    private void validateDataWithIndex(Connection conn, String fullTableName, String fullIndexName, boolean localIndex) throws SQLException {
+    private void validateDataWithIndex(Connection conn, String fullTableName, String fullIndexName, boolean localIndex) throws Exception {
         String query = "SELECT /*+ INDEX(" + fullTableName + " " + SchemaUtil.getTableNameFromFullName(fullIndexName) + ")  */ k,v1 FROM " + fullTableName;
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        ResultSet rs = conn.createStatement().executeQuery(query);
         String expectedPlan = " OVER "
                 + (localIndex
                         ? Bytes.toString(
                                 SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
                         : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped).getNameAsString());
-        String explainPlan = QueryUtil.getExplainPlan(rs);
+        String explainPlan = QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
         assertTrue(explainPlan, explainPlan.contains(expectedPlan));
-        rs = conn.createStatement().executeQuery(query);
         if (transactional) { // failed commit does not get retried
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
@@ -504,7 +513,7 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
-    private void updateTable(Connection conn, boolean commitShouldFail) throws SQLException {
+    private void updateTable(Connection conn, boolean commitShouldFail) throws Exception {
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
         // Insert new row
         stmt.setString(1, "d");

@@ -21,27 +21,36 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
 
 /**
  * Mapper that hands over rows from data table to the index table.
@@ -95,6 +104,18 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
        
         context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
         
+        PhoenixTransactionProvider provider = null;
+        Configuration conf = context.getConfiguration();
+        long ts = HConstants.LATEST_TIMESTAMP;
+        String txnIdStr = conf.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
+        if (txnIdStr != null) {
+            ts = Long.parseLong(txnIdStr);
+            provider = TransactionFactory.Provider.getDefault().getTransactionProvider();
+            String txnProviderStr = conf.get(PhoenixConfigurationUtil.TX_PROVIDER);
+            if (txnProviderStr != null) {
+                provider = TransactionFactory.Provider.valueOf(txnProviderStr).getTransactionProvider();
+            }
+        }
         try {
            final ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
            final List<Object> values = record.getValues();
@@ -102,16 +123,30 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
            indxWritable.write(this.pStatement);
            this.pStatement.execute();
             
-           final Iterator<Pair<byte[], List<Cell>>> uncommittedDataIterator = PhoenixRuntime.getUncommittedDataIterator(connection, true);
-           while (uncommittedDataIterator.hasNext()) {
-                Pair<byte[], List<Cell>> kvPair = uncommittedDataIterator.next();
-                if (Bytes.compareTo(Bytes.toBytes(indexTableName), kvPair.getFirst()) != 0) {
+           PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+           final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(true);
+           while (iterator.hasNext()) {
+                Pair<byte[], List<Mutation>> pair = iterator.next();
+                if (Bytes.compareTo(Bytes.toBytes(indexTableName), pair.getFirst()) != 0) {
                     // skip edits for other tables
                     continue;
                 }
-                List<Cell> keyValueList = kvPair.getSecond();
-                keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
-                for (Cell kv : keyValueList) {
+                List<Cell> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
+                for (Mutation mutation : pair.getSecond()) {
+                    if (mutation instanceof Put) {
+                        if (provider != null) {
+                            mutation = provider.markPutAsCommitted((Put)mutation, ts, ts);
+                        }
+                        for (List<Cell> cellList : mutation.getFamilyCellMap().values()) {
+                            List<Cell>keyValueList = preUpdateProcessor.preUpsert(mutation.getRow(), cellList);
+                            for (Cell keyValue : keyValueList) {
+                                keyValues.add(keyValue);
+                            }
+                        }
+                    }
+                }
+                Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
+                for (Cell kv : keyValues) {
                     outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                     context.write(outputKey, PhoenixKeyValueUtil.maybeCopyCell(kv));
                 }

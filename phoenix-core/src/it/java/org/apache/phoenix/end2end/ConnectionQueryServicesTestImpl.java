@@ -99,7 +99,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     }
     
     @Override
-    public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) {
+    public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) throws SQLException {
         PhoenixTransactionService txService = txServices[provider.ordinal()];
         if (txService == null) {
             txService = txServices[provider.ordinal()] = provider.getTransactionProvider().getTransactionService(config, connectionInfo);

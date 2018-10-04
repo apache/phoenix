@@ -24,117 +24,106 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
+import com.google.protobuf.InvalidProtocolBufferException;
+//import org.apache.omid.tso.TSOMockModule;
+
 public class OmidTransactionContext implements PhoenixTransactionContext {
+
+    public OmidTransactionContext() {
+    }
+
+    public OmidTransactionContext(PhoenixConnection connection) throws SQLException {
+    }
+
+    public OmidTransactionContext(byte[] txnBytes) throws InvalidProtocolBufferException {
+    }
+
+    public OmidTransactionContext(PhoenixTransactionContext ctx, boolean subTask) {
+    }
 
     @Override
     public void begin() throws SQLException {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void commit() throws SQLException {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void abort() throws SQLException {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void checkpoint(boolean hasUncommittedData) throws SQLException {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void commitDDLFence(PTable dataTable) throws SQLException {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void join(PhoenixTransactionContext ctx) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public boolean isTransactionRunning() {
-        // TODO Auto-generated method stub
         return false;
     }
 
     @Override
     public void reset() {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public long getTransactionId() {
-        // TODO Auto-generated method stub
         return 0;
     }
 
     @Override
     public long getReadPointer() {
-        // TODO Auto-generated method stub
         return 0;
     }
 
     @Override
     public long getWritePointer() {
-        // TODO Auto-generated method stub
         return 0;
     }
 
     @Override
     public PhoenixVisibilityLevel getVisibilityLevel() {
-        // TODO Auto-generated method stub
         return null;
     }
 
     @Override
     public void setVisibilityLevel(PhoenixVisibilityLevel visibilityLevel) {
-        // TODO Auto-generated method stub
-        
     }
 
     @Override
     public byte[] encodeTransaction() throws SQLException {
-        // TODO Auto-generated method stub
         return null;
     }
 
     @Override
     public Provider getProvider() {
-        return Provider.OMID;
+        return TransactionFactory.Provider.OMID;
     }
 
     @Override
-    public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask) {
+    public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext context, boolean subTask) {
         return null;
     }
 
     @Override
     public void markDMLFence(PTable dataTable) {
-        // TODO Auto-generated method stub
-        
     }
 
     @Override
-    public Table getTransactionalTable(Table htable, boolean isImmutable) {
-        // TODO Auto-generated method stub
-        return null;
+    public Table getTransactionalTable(Table htable, boolean isConflictFree) throws SQLException {
+        return new OmidTransactionTable(this, htable, isConflictFree);
     }
 
     @Override
-    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) {
-        // TODO Auto-generated method stub
-        return null;
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException {
+        return new OmidTransactionTable(this, htable, table.isImmutableRows() || isIndex);
     }
 }

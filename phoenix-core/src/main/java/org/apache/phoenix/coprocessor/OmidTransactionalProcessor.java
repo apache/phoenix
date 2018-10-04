@@ -15,24 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end.index;
+package org.apache.phoenix.coprocessor;
 
-import java.util.Arrays;
-import java.util.Collection;
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 
-import org.junit.runners.Parameterized.Parameters;
 
-public class GlobalMutableNonTxIndexIT extends BaseIndexIT {
+public class OmidTransactionalProcessor extends DelegateRegionObserver {
 
-    public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
-        super(localIndex, mutable, transactionProvider, columnEncoded);
-    }
-
-    @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-                { false, true, null, false }, { false, true, null, true }
-           });
+    public OmidTransactionalProcessor() {
+        super(new BaseRegionObserver());
     }
 
 }

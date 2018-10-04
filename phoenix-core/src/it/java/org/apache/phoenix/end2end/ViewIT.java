@@ -102,7 +102,7 @@ import com.google.common.collect.Maps;
 public class ViewIT extends SplitSystemCatalogIT {
 
     protected String tableDDLOptions;
-    protected boolean transactional;
+    protected String transactionProvider;
     protected boolean columnEncoded;
     
     private static final String FAILED_VIEWNAME = SchemaUtil.getTableName(SCHEMA2, "FAILED_VIEW");
@@ -111,12 +111,12 @@ public class ViewIT extends SplitSystemCatalogIT {
     private static volatile CountDownLatch latch1 = null;
     private static volatile CountDownLatch latch2 = null;
 
-    public ViewIT(boolean transactional, boolean columnEncoded) {
+    public ViewIT(String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder();
-        this.transactional = transactional;
+        this.transactionProvider = transactionProvider;
         this.columnEncoded = columnEncoded;
-        if (transactional) {
-            optionBuilder.append(" TRANSACTIONAL=true ");
+        if (transactionProvider != null) {
+            optionBuilder.append(" TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -126,11 +126,12 @@ public class ViewIT extends SplitSystemCatalogIT {
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameters(name="ViewIT_transactional={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { 
-            { true, false }, { true, true },
-            { false, false }, { false, true }});
+    @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+            { "TEPHRA", false }, { "TEPHRA", true },
+            { "OMID", false }, 
+            { null, false }, { null, true }}),0);
     }
     
     @BeforeClass

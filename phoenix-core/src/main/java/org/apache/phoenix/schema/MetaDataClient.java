@@ -1179,10 +1179,12 @@ public class MetaDataClient {
                 // If the table is a view, then we will end up calling update stats
                 // here for all the view indexes on it. We take care of local indexes later.
                 if (index.getIndexType() != IndexType.LOCAL) {
-                    if(table.getType() != PTableType.VIEW){
-                        rowCount += updateStatisticsInternal(index.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
-                    }else{
-                        rowCount += updateStatisticsInternal(table.getPhysicalName(), index, updateStatisticsStmt.getProps(), true);
+                    if (table.getType() != PTableType.VIEW) {
+                        rowCount += updateStatisticsInternal(index.getPhysicalName(), index,
+                                updateStatisticsStmt.getProps(), true);
+                    } else {
+                        rowCount += updateStatisticsInternal(table.getPhysicalName(), index,
+                                updateStatisticsStmt.getProps(), true);
                     }
                 }
             }
@@ -1543,6 +1545,11 @@ public class MetaDataClient {
                     if (tableWithRowTimestampCol) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_INDEX_ON_MUTABLE_TABLE_WITH_ROWTIMESTAMP).setTableName(indexTableName.getTableName()).build().buildException();
                     }
+                }
+                if (dataTable.isTransactional() 
+                        && isLocalIndex 
+                        && dataTable.getTransactionProvider().getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE).setMessage(dataTable.getTransactionProvider().name()).setTableName(indexTableName.getTableName()).build().buildException();
                 }
                 int posOffset = 0;
                 List<PColumn> pkColumns = dataTable.getPKColumns();
@@ -2124,10 +2131,20 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
+            if (TableProperty.TTL.getValue(commonFamilyProps) != null 
+                    && transactionProvider != null 
+                    && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
+                throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
+                .setMessage(transactionProvider.name())
+                .setSchemaName(schemaName)
+                .setTableName(tableName)
+                .build()
+                .buildException();
+            }
 
             // Put potentially inferred value into tableProps as it's used by the createTable call below
             // to determine which coprocessors to install on the new table.
-            tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, transactionProvider != null);
+            tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, transactionProvider);
             if (transactionProvider != null) {
                 // TODO: for Omid
                 // If TTL set, use Tephra TTL property name instead
@@ -2351,32 +2368,61 @@ public class MetaDataClient {
                 } else {
                 	Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
                     if (encodingSchemeSerializedByte == null) {
-                    	encodingSchemeSerializedByte = (byte)connection.getQueryServices().getProps().getInt(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB, QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES);
-                    } 
-                    encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
+                        // Ignore default if transactional and column encoding is not supported (as with OMID)
+                        if (transactionProvider == null || !transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
+                            encodingSchemeSerializedByte = (byte)connection.getQueryServices().getProps().getInt(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB,
+                                    QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES);
+                            encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
+                        }
+                    } else {
+                        encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
+                        if (encodingScheme != NON_ENCODED_QUALIFIERS && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
+                            throw new SQLExceptionInfo.Builder(
+                                    SQLExceptionCode.UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER)
+                            .setSchemaName(schemaName).setTableName(tableName)
+                            .setMessage(transactionProvider.name())
+                            .build()
+                            .buildException();
+                        }
+                    }
                     if (isImmutableRows) {
-                        immutableStorageScheme =
+                        ImmutableStorageScheme immutableStorageSchemeProp =
                                 (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
                                 .getValue(tableProps);
-                        if (immutableStorageScheme == null) {
-                            if (multiTenant) {
-                                immutableStorageScheme =
-                                        ImmutableStorageScheme
-                                        .valueOf(connection
-                                                .getQueryServices()
-                                                .getProps()
-                                                .get(
-                                                        QueryServices.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                        QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
-                            } else {
-                                immutableStorageScheme =
-                                        ImmutableStorageScheme
-                                        .valueOf(connection
-                                                .getQueryServices()
-                                                .getProps()
-                                                .get(
-                                                        QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                        QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                        if (immutableStorageSchemeProp == null) {
+                            // Ignore default if transactional and column encoding is not supported
+                            if (transactionProvider == null || 
+                                    !transactionProvider.getTransactionProvider().isUnsupported(
+                                            PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
+                                if (multiTenant) {
+                                    immutableStorageScheme =
+                                            ImmutableStorageScheme
+                                            .valueOf(connection
+                                                    .getQueryServices()
+                                                    .getProps()
+                                                    .get(
+                                                            QueryServices.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                            QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
+                                } else {
+                                    immutableStorageScheme =
+                                            ImmutableStorageScheme
+                                            .valueOf(connection
+                                                    .getQueryServices()
+                                                    .getProps()
+                                                    .get(
+                                                            QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                            QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                                }
+                            }
+                        } else {
+                            immutableStorageScheme = immutableStorageSchemeProp;
+                            if (immutableStorageScheme != ONE_CELL_PER_COLUMN && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
+                                throw new SQLExceptionInfo.Builder(
+                                        SQLExceptionCode.UNSUPPORTED_STORAGE_FORMAT_FOR_TXN_PROVIDER)
+                                .setSchemaName(schemaName).setTableName(tableName)
+                                .setMessage(transactionProvider.name())
+                                .build()
+                                .buildException();
                             }
                         }
                         if (immutableStorageScheme != ONE_CELL_PER_COLUMN
@@ -3131,6 +3177,7 @@ public class MetaDataClient {
             throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta,
                 metaPropertiesEvaluated.getIsTransactional(),
+                metaPropertiesEvaluated.getTransactionProvider(),
                 metaPropertiesEvaluated.getUpdateCacheFrequency(),
                 metaPropertiesEvaluated.getIsImmutableRows(),
                 metaPropertiesEvaluated.getDisableWAL(),
@@ -3143,13 +3190,14 @@ public class MetaDataClient {
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional, Long updateCacheFrequency) throws SQLException {
-        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L, null, null, null);
+        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null, updateCacheFrequency, null, null, null, null, -1L, null, null, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
-            Boolean isTransactional, Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
-            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema, ImmutableStorageScheme immutableStorageScheme
-            , Boolean useStatsForParallelization)
+            Boolean isTransactional, TransactionFactory.Provider transactionProvider,
+            Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
+            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema,
+            ImmutableStorageScheme immutableStorageScheme, Boolean useStatsForParallelization)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3183,6 +3231,9 @@ public class MetaDataClient {
         }
         if (isTransactional != null) {
             mutateBooleanProperty(tenantId, schemaName, tableName, TRANSACTIONAL, isTransactional);
+        }
+        if (transactionProvider !=null) {
+            mutateByteProperty(tenantId, schemaName, tableName, TRANSACTION_PROVIDER, transactionProvider.getCode());
         }
         if (updateCacheFrequency != null) {
             mutateLongProperty(tenantId, schemaName, tableName, UPDATE_CACHE_FREQUENCY, updateCacheFrequency);
@@ -3235,6 +3286,27 @@ public class MetaDataClient {
                 tableBoolUpsert.setNull(4, Types.BIGINT);
             } else {
                 tableBoolUpsert.setLong(4, propertyValue);
+            }
+            tableBoolUpsert.execute();
+        }
+    }
+    
+    private void mutateByteProperty(String tenantId, String schemaName, String tableName,
+            String propertyName, Byte propertyValue) throws SQLException {
+        String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                TENANT_ID + "," +
+                TABLE_SCHEM + "," +
+                TABLE_NAME + "," +
+                propertyName +
+                ") VALUES (?, ?, ?, ?)";
+        try (PreparedStatement tableBoolUpsert = connection.prepareStatement(updatePropertySql)) {
+            tableBoolUpsert.setString(1, tenantId);
+            tableBoolUpsert.setString(2, schemaName);
+            tableBoolUpsert.setString(3, tableName);
+            if (propertyValue == null) {
+                tableBoolUpsert.setNull(4, Types.TINYINT);
+            } else {
+                tableBoolUpsert.setByte(4, propertyValue);
             }
             tableBoolUpsert.execute();
         }
@@ -3723,7 +3795,7 @@ public class MetaDataClient {
      */
     private static byte[] getNewEmptyColumnFamilyOrNull (PTable table, PColumn columnToDrop) {
         if (table.getType() != PTableType.VIEW && !SchemaUtil.isPKColumn(columnToDrop) && table.getColumnFamilies().get(0).getName().equals(columnToDrop.getFamilyName()) && table.getColumnFamilies().get(0).getColumns().size() == 1) {
-            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()));
+            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()), table.getIndexType() == IndexType.LOCAL);
         }
         // If unchanged, return null
         return null;
@@ -4396,8 +4468,8 @@ public class MetaDataClient {
                                     connection.getQueryServices().getProps().get(
                                             QueryServices.DEFAULT_TRANSACTION_PROVIDER_ATTRIB,
                                             QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER));
-                    metaPropertiesEvaluated.setTransactionProvider(provider);
                 }
+                metaPropertiesEvaluated.setTransactionProvider(provider);
                 if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
                         .setMessage(provider.name() + ". ")
