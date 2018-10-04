@@ -28,10 +28,9 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -84,7 +83,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         this.tx = CODEC.decode(txnBytes);
     }
 
-    public TephraTransactionContext(PhoenixConnection connection) {
+    public TephraTransactionContext(PhoenixConnection connection) throws SQLException {
         PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());  
         assert (client instanceof TephraTransactionClient);
         this.txServiceClient = ((TephraTransactionClient)client).getTransactionClient();
@@ -224,6 +223,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                     .setSchemaName(dataTable.getSchemaName().getString())
                     .setTableName(dataTable.getTableName().getString()).build()
                     .buildException();
+        } finally {
+            // The client expects a transaction to be in progress on the txContext while the
+            // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
+            // finished, we start a new one here.
+            // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+            this.begin();
         }
     }
 
@@ -404,78 +409,27 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         return new TephraTransactionContext(context, subTask);
     }
     
-    public static class TransactionAwareHTableDelegate extends TransactionAwareHTable implements HTableInterface  {
-        private final HTableInterface delegate;
-        
-        public TransactionAwareHTableDelegate(HTableInterface hTable, TxConstants.ConflictDetection conflictLevel) {
-            super(hTable, conflictLevel);
-            delegate = hTable;
-        }
-        
-        @Override
-        public long incrementColumnValue(byte[] row, byte[] family, byte[] qualifier, long amount, boolean writeToWAL)
-                throws IOException {
-            return delegate.incrementColumnValue(row, family, qualifier, amount, writeToWAL);
-        }
-
-        @Override
-        public Boolean[] exists(List<Get> gets) throws IOException {
-            return delegate.exists(gets);
-        }
-
-        @Override
-        public void setAutoFlush(boolean autoFlush) {
-            delegate.setAutoFlush(autoFlush);
-        }
-
-        @Override
-        public void setAutoFlush(boolean autoFlush, boolean clearBufferOnFail) {
-            delegate.setAutoFlush(autoFlush, clearBufferOnFail);
-        }
-
-        @Override
-        public void setAutoFlushTo(boolean autoFlush) {
-            delegate.setAutoFlushTo(autoFlush);
-        }
-
-        @Override
-        public boolean isAutoFlush() {
-            return delegate.isAutoFlush();
-        }
-
-        @Override
-        public void flushCommits() throws IOException {
-            delegate.flushCommits();
-        }
-
-        @Override
-        public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
-            return delegate.getRowOrBefore(row, family);
-        }
-        
-    }
-    
     @Override
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
-        TransactionAwareHTableDelegate transactionAwareHTable = new TransactionAwareHTableDelegate(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    public Table getTransactionalTable(Table htable, boolean isConflictFree) {
+        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isConflictFree ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;
     }
 
     @Override
-    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) throws SQLException {
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException {
         // If we have indexes, wrap the HTable in a delegate HTable that
         // will attach the necessary index meta data in the event of a
         // rollback
-        TransactionAwareHTableDelegate transactionAwareHTable;
+        TransactionAwareHTable transactionAwareHTable;
         // Don't add immutable indexes (those are the only ones that would participate
         // during a commit), as we don't need conflict detection for these.
         if (isIndex) {
-            transactionAwareHTable = new TransactionAwareHTableDelegate(htable, TxConstants.ConflictDetection.NONE);
+            transactionAwareHTable = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.NONE);
             transactionAwareHTable.startTx(getTransaction());
         } else {
             htable = new RollbackHookHTableWrapper(htable, table, connection);
-            transactionAwareHTable = new TransactionAwareHTableDelegate(htable, table.isImmutableRows() ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+            transactionAwareHTable = new TransactionAwareHTable(htable, table.isImmutableRows() ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
             // Even for immutable, we need to do this so that an abort has the state
             // necessary to generate the rows to delete.
             this.addTransactionAware(transactionAwareHTable);
@@ -497,7 +451,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         private final PTable table;
         private final PhoenixConnection connection;
 
-        private RollbackHookHTableWrapper(HTableInterface delegate, PTable table, PhoenixConnection connection) {
+        private RollbackHookHTableWrapper(Table delegate, PTable table, PhoenixConnection connection) {
             super(delegate);
             this.table = table;
             this.connection = connection;

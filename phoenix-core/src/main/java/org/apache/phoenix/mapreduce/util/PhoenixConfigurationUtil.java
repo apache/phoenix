@@ -105,6 +105,8 @@ public final class PhoenixConfigurationUtil {
     
     public static final String TX_SCN_VALUE = "phoenix.mr.txscn.value";
     
+    public static final String TX_PROVIDER = "phoenix.mr.txprovider";
+
     /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
     public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
 
