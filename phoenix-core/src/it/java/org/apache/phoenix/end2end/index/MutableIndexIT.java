@@ -114,7 +114,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                 { false, "OMID", false },
                 { true, null, false }, { true, null, true },
                 { true, "TEPHRA", false }, { true, "TEPHRA", true },
-                { true, "OMID", false },
                 }),1);
     }
     

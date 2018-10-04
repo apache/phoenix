@@ -105,7 +105,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
-    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException {
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) {
         return null;
     }
 }
