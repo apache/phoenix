@@ -28,7 +28,6 @@ import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -36,6 +35,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -46,16 +46,11 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Service;
 import com.google.protobuf.ServiceException;
 
-public class DelegateHTable implements HTableInterface {
-    protected final HTableInterface delegate;
+public class DelegateHTable implements Table {
+    protected final Table delegate;
 
-    public DelegateHTable(HTableInterface delegate) {
+    public DelegateHTable(Table delegate) {
         this.delegate = delegate;
-    }
-
-    @Override
-    public byte[] getTableName() {
-        return delegate.getTableName();
     }
 
     @Override
@@ -76,11 +71,6 @@ public class DelegateHTable implements HTableInterface {
     @Override
     public boolean exists(Get get) throws IOException {
         return delegate.exists(get);
-    }
-
-    @Override
-    public Boolean[] exists(List<Get> gets) throws IOException {
-        return delegate.exists(gets);
     }
 
     @Override
@@ -115,12 +105,6 @@ public class DelegateHTable implements HTableInterface {
     @Override
     public Result[] get(List<Get> gets) throws IOException {
         return delegate.get(gets);
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public Result getRowOrBefore(byte[] row, byte[] family) throws IOException {
-        return delegate.getRowOrBefore(row, family);
     }
 
     @Override
@@ -195,23 +179,6 @@ public class DelegateHTable implements HTableInterface {
         return delegate.incrementColumnValue(row, family, qualifier, amount, durability);
     }
 
-    @SuppressWarnings("deprecation")
-    @Override
-    public long incrementColumnValue(byte[] row, byte[] family, byte[] qualifier, long amount, boolean writeToWAL)
-            throws IOException {
-        return delegate.incrementColumnValue(row, family, qualifier, amount, writeToWAL);
-    }
-
-    @Override
-    public boolean isAutoFlush() {
-        return delegate.isAutoFlush();
-    }
-
-    @Override
-    public void flushCommits() throws IOException {
-        delegate.flushCommits();
-    }
-
     @Override
     public void close() throws IOException {
         delegate.close();
@@ -232,22 +199,6 @@ public class DelegateHTable implements HTableInterface {
     public <T extends Service, R> void coprocessorService(Class<T> service, byte[] startKey, byte[] endKey,
             Call<T, R> callable, Callback<R> callback) throws ServiceException, Throwable {
         delegate.coprocessorService(service, startKey, endKey, callable, callback);
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public void setAutoFlush(boolean autoFlush) {
-        delegate.setAutoFlush(autoFlush);
-    }
-
-    @Override
-    public void setAutoFlush(boolean autoFlush, boolean clearBufferOnFail) {
-        delegate.setAutoFlush(autoFlush, clearBufferOnFail);
-    }
-
-    @Override
-    public void setAutoFlushTo(boolean autoFlush) {
-        delegate.setAutoFlushTo(autoFlush);
     }
 
     @Override

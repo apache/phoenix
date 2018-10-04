@@ -52,12 +52,12 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public void initialize(Configuration conf, byte[] regionStartKey, byte[] regionEndKey, byte[] tableName) {
+    public void initialize(Configuration conf, byte[] tableName) {
         groups = CoveredColumnIndexSpecifierBuilder.getColumns(conf);
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData indexMetaData) {
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData indexMetaData, byte[] regionStartKey, byte[] regionEndKey) {
         List<IndexUpdate> updates = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
             IndexUpdate update = getIndexUpdateForGroup(group, state, indexMetaData);
@@ -111,7 +111,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) {
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) {
         List<IndexUpdate> deletes = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
             deletes.add(getDeleteForGroup(group, state, context));
