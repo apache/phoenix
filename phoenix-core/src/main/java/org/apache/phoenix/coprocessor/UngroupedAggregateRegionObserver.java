@@ -431,6 +431,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] replayMutations = scan.getAttribute(BaseScannerRegionObserver.REPLAY_WRITES);
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
+        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        PhoenixTransactionProvider txnProvider = null;
+        if (txState != null) {
+            int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
+            txnProvider = TransactionFactory.getTransactionProvider(txState, clientVersion);
+        }
         List<Expression> selectExpressions = null;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
@@ -537,7 +543,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 useIndexProto = false;
             }
     
-            byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
             if(needToWrite) {
                 synchronized (lock) {
                     if (isRegionClosingOrSplitting) {
@@ -661,9 +666,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         env.getRegion().getRegionInfo().getStartKey(),
                                         env.getRegion().getRegionInfo().getEndKey());
 
-                                    if (txState != null) {
-                                        int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
-                                        PhoenixTransactionProvider txnProvider = TransactionFactory.getTransactionProvider(txState, clientVersion);
+                                    if (txnProvider != null) {
                                         put = txnProvider.markPutAsCommitted(put, ts, ts);
                                     }
                                     indexMutations.add(put);
@@ -733,6 +736,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             for (Mutation mutation : row.toRowMutations()) {
                                 if (replayMutations != null) {
                                     mutation.setAttribute(REPLAY_WRITES, replayMutations);
+                                } else if (txnProvider != null && projectedTable.getType() == PTableType.INDEX) {
+                                    mutation = txnProvider.markPutAsCommitted((Put)mutation, ts, ts);
                                 }
                                 mutations.add(mutation);
                             }

@@ -58,10 +58,12 @@ public class OmidTransactionTable implements Table {
 
     private TTable tTable;
     private Transaction tx;
+    private final boolean addShadowCells;
 
     public OmidTransactionTable() throws SQLException {
         this.tTable = null;
         this.tx = null;
+        this.addShadowCells = false;
     }
 
     public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable) throws SQLException {
@@ -69,10 +71,14 @@ public class OmidTransactionTable implements Table {
     }
 
     public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isConflictFree) throws SQLException  {
+        this(ctx, hTable, isConflictFree, false);
+    }
+    
+    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isConflictFree, boolean addShadowCells) throws SQLException  {
         assert(ctx instanceof OmidTransactionContext);
 
         OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
-
+        this.addShadowCells = addShadowCells;
         try {
             tTable = new TTable(hTable, true, isConflictFree);
         } catch (IOException e) {
@@ -92,7 +98,7 @@ public class OmidTransactionTable implements Table {
 
     @Override
     public void put(Put put) throws IOException {
-        tTable.put(tx, put);
+        tTable.put(tx, put, addShadowCells);
     }
 
     @Override
@@ -139,7 +145,7 @@ public class OmidTransactionTable implements Table {
 
     @Override
     public void put(List<Put> puts) throws IOException {
-        tTable.put(tx, puts);
+        tTable.put(tx, puts, addShadowCells);
     }
 
     @Override
@@ -166,7 +172,7 @@ public class OmidTransactionTable implements Table {
     @Override
     public void batch(List<? extends Row> actions, Object[] results)
             throws IOException, InterruptedException {
-        tTable.batch(tx, actions);
+        tTable.batch(tx, actions, addShadowCells);
         Arrays.fill(results, EMPTY_RESULT_EXISTS_TRUE);
     }
 

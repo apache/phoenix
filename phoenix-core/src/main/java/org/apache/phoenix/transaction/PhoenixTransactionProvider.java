@@ -65,5 +65,5 @@ public interface PhoenixTransactionProvider {
      * @return put operation with metadata
      * @throws IOException
      */
-    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) throws IOException;
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp);
 }

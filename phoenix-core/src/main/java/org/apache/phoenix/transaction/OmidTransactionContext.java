@@ -317,6 +317,9 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException {
-        return new OmidTransactionTable(this, htable, table.isImmutableRows() || isIndex);
+        // When we're getting a table for writing, if the table being written to is an index,
+        // write the shadow cells immediately since the only time we write to an index is
+        // when we initially populate it synchronously.
+        return new OmidTransactionTable(this, htable, table.isImmutableRows() || isIndex, isIndex);
     }
 }
