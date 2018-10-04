@@ -89,6 +89,9 @@ public class PostLocalIndexDDLCompiler {
                     scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
                 }
             }
+            if (dataTable.isTransactional()) {
+                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, connection.getMutationState().encodeTransaction());
+            }
 
             // Go through MutationPlan abstraction so that we can create local indexes
             // with a connectionless connection (which makes testing easier).

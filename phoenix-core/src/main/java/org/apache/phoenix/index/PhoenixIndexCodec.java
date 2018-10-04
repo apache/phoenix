@@ -36,8 +36,8 @@ import com.google.common.collect.Sets;
 
 /**
  * Phoenix-based {@link IndexCodec}. Manages all the logic of how to cleanup an index (
- * {@link #getIndexDeletes(TableState, IndexMetaData)}) as well as what the new index state should be (
- * {@link #getIndexUpserts(TableState, IndexMetaData)}).
+ * {@link #getIndexDeletes(TableState, IndexMetaData, byte[], byte[])}) as well as what the new index state should be (
+ * {@link #getIndexUpserts(TableState, IndexMetaData, byte[], byte[])}).
  */
 public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_MD = "IdxMD";
@@ -46,23 +46,19 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_MAINTAINERS = "IndexMaintainers";
     public static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
     
-    private byte[] regionStartKey;
-    private byte[] regionEndKey;
     private byte[] tableName;
     
     public PhoenixIndexCodec() {
         
     }
 
-    public PhoenixIndexCodec(Configuration conf, byte[] regionStartKey, byte[] regionEndKey, byte[] tableName) {
-        initialize(conf, regionStartKey, regionEndKey, tableName);
+    public PhoenixIndexCodec(Configuration conf, byte[] tableName) {
+        initialize(conf, tableName);
     }
     
 
     @Override
-    public void initialize(Configuration conf, byte[] regionStartKey, byte[] regionEndKey, byte[] tableName) {
-        this.regionStartKey = regionStartKey;
-        this.regionEndKey = regionEndKey;
+    public void initialize(Configuration conf, byte[] tableName) {
         this.tableName = tableName;
     }
 
@@ -74,7 +70,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) throws IOException {
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         PhoenixIndexMetaData metaData = (PhoenixIndexMetaData)context;
         List<IndexMaintainer> indexMaintainers = metaData.getIndexMaintainers();
         if (indexMaintainers.get(0).isRowDeleted(state.getPendingUpdate())) {
@@ -97,7 +93,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) throws IOException {
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         PhoenixIndexMetaData metaData = (PhoenixIndexMetaData)context;
         List<IndexMaintainer> indexMaintainers = metaData.getIndexMaintainers();
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();

@@ -21,18 +21,21 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.phoenix.schema.stats.StatsCollectorIT;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
 public class ColumnEncodedMutableTxStatsCollectorIT extends StatsCollectorIT {
 
-    public ColumnEncodedMutableTxStatsCollectorIT(boolean mutable, boolean transactional,
+    public ColumnEncodedMutableTxStatsCollectorIT(boolean mutable, String transactionProvider,
             boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
+        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
     }
 
-    @Parameters(name = "mutable = {0}, transactional = {1}, isUserTableNamespaceMapped = {2}, columnEncoded = {3}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(
-            new Boolean[][] { { true, true, false, true }, { true, true, true, true } });
+    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(
+                Arrays.asList(new Object[][] { 
+                    { true, "TEPHRA", false, true }, 
+                    { true, "TEPHRA", true, true } }), 1);
     }
 }

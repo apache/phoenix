@@ -20,7 +20,7 @@ package org.apache.phoenix.transaction;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
@@ -106,12 +106,12 @@ public interface PhoenixTransactionContext {
         }
 
         @Override
-        public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable) {
+        public Table getTransactionalTable(Table htable, boolean isConflictFree) {
             return null;
         }
 
         @Override
-        public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) {
+        public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) {
             return null;
         }
     };
@@ -230,6 +230,6 @@ public interface PhoenixTransactionContext {
     public Provider getProvider();
     public PhoenixTransactionContext newTransactionContext(PhoenixTransactionContext contex, boolean subTask);
 
-    public HTableInterface getTransactionalTable(HTableInterface htable, boolean isImmutable);
-    public HTableInterface getTransactionalTableWriter(PhoenixConnection connection, PTable table, HTableInterface htable, boolean isIndex) throws SQLException;
+    public Table getTransactionalTable(Table htable, boolean isConflictFree) throws SQLException;
+    public Table getTransactionalTableWriter(PhoenixConnection connection, PTable table, Table htable, boolean isIndex) throws SQLException;
 }

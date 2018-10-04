@@ -38,9 +38,9 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -52,18 +52,15 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	private final boolean localIndex;
 	private final String tableDDLOptions;
 
-	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded) {
+	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded, String transactionProvider) {
 	    StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append("TRANSACTION_PROVIDER='" + transactionProvider + "'");
 	    this.localIndex = localIndex;
 	    if (!columnEncoded) {
-	        if (optionBuilder.length()!=0)
-	            optionBuilder.append(",");
-	        optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+	        optionBuilder.append(",COLUMN_ENCODED_BYTES=0");
 	    }
 	    if (!mutable) {
-	        if (optionBuilder.length()!=0)
-	            optionBuilder.append(",");
-	        optionBuilder.append("IMMUTABLE_ROWS=true");
+	        optionBuilder.append(",IMMUTABLE_ROWS=true");
 	        if (!columnEncoded) {
 	            optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
 	        }
@@ -81,12 +78,13 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         return conn;
     }
 	
-	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
-                { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
-           });
+	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2},transactionProvider={3}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
+                { false, false, false, "TEPHRA" }, { false, false, true, "TEPHRA" }, { false, true, false, "TEPHRA" }, { false, true, true, "TEPHRA" },
+                { true, false, false, "TEPHRA" }, { true, false, true, "TEPHRA" }, { true, true, false, "TEPHRA" }, { true, true, true, "TEPHRA" },
+                { false, false, false, "OMID" }, { false, true, false, "OMID" }, 
+           }),3);
     }
     
     @Test
@@ -133,7 +131,6 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     }
     
     private void testRollbackOfUncommittedDelete(String indexDDL, String fullTableName) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = getConnection();
         conn.setAutoCommit(false);
         try {
@@ -179,7 +176,15 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             assertEquals("a2", rs.getString(3));
             assertFalse(rs.next());
             
-            //assert row is delete in index table
+            // assert row is deleted in data table
+            rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY k");
+            assertTrue(rs.next());
+            assertEquals("x2", rs.getString(1));
+            assertEquals("y2", rs.getString(2));
+            assertEquals("a2", rs.getString(3));
+            assertFalse(rs.next());
+            
+            // assert row is deleted in index table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY v1");
             assertTrue(rs.next());
             assertEquals("x2", rs.getString(1));
@@ -189,7 +194,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             
             conn.rollback();
             
-            //assert two rows in data table
+            // assert two rows in data table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY k");
             assertTrue(rs.next());
             assertEquals("x1", rs.getString(1));
@@ -201,7 +206,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             assertEquals("a2", rs.getString(3));
             assertFalse(rs.next());
             
-            //assert two rows in index table
+            // assert two rows in index table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY v1");
             assertTrue(rs.next());
             assertEquals("x1", rs.getString(1)); // fails here
@@ -266,7 +271,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 		ResultSet rs;
 		MutationState state = conn.unwrap(PhoenixConnection.class)
 				.getMutationState();
-		state.startTransaction(TransactionFactory.Provider.TEPHRA);
+		conn.createStatement().executeQuery("select 1 from " + fullTableName + " LIMIT 1").next();
 		long wp = state.getWritePointer();
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a4', 'b4' from " + fullTableName + "");
@@ -330,7 +335,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 			conn.commit();
 
 	        MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
-	        state.startTransaction(TransactionFactory.Provider.TEPHRA);
+	        // Start a new transaction
+	        stmt.executeQuery("select 1 from " + fullTableName + "1 LIMIT 1").next();
 	        long wp = state.getWritePointer();
 	        conn.createStatement().execute("delete from " + fullTableName + "1 where id1=fk1b AND fk1b=id1");
 	        assertEquals(PhoenixVisibilityLevel.SNAPSHOT, state.getVisibilityLevel());

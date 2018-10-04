@@ -24,6 +24,7 @@ import java.util.Map;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.stats.StatsCollectorIT;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -31,15 +32,18 @@ import com.google.common.collect.Maps;
 
 public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
 
-    public SysTableNamespaceMappedStatsCollectorIT(boolean mutable, boolean transactional,
+    public SysTableNamespaceMappedStatsCollectorIT(boolean mutable, String transactionProvider,
             boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
+        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
     }
 
-    @Parameters(name = "mutable = {0}, transactional = {1}, isUserTableNamespaceMapped = {2}, columnEncoded = {3}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(
-            new Boolean[][] { { true, true, false, false }, { true, true, false, true }, });
+    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(
+            new Object[][] { 
+                { true, "TEPHRA", false, false }, { true, "TEPHRA", false, true }, 
+                { true, "OMID", false, false },
+            }), 1);
     }
 
     @BeforeClass

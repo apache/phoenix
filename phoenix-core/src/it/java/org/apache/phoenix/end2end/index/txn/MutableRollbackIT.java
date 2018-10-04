@@ -32,10 +32,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -49,14 +46,19 @@ import org.junit.runners.Parameterized.Parameters;
 public class MutableRollbackIT extends ParallelStatsDisabledIT {
 	
 	private final boolean localIndex;
+    private final String tableDDLOptions;
 
-	public MutableRollbackIT(boolean localIndex) {
+	public MutableRollbackIT(boolean localIndex, String transactionProvider) {
 		this.localIndex = localIndex;
+        this.tableDDLOptions = " TRANSACTION_PROVIDER='" + transactionProvider + "'";
 	}
 	
-	@Parameters(name="MutableRollbackIT_localIndex={0}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
-        return Arrays.asList(new Boolean[] { false, true});
+	@Parameters(name="MutableRollbackIT_localIndex={0},transactionProvider={1}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
+            { false, "TEPHRA"}, { true, "TEPHRA"},
+            { false, "OMID"}, 
+            }),1);
     }
 	
 	private static Connection getConnection() throws SQLException {
@@ -77,8 +79,8 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-            stmt.execute("CREATE TABLE " + fullTableName2 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
+            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)" + tableDDLOptions);
+            stmt.execute("CREATE TABLE " + fullTableName2 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true,"+tableDDLOptions);
             stmt.execute("CREATE "+(localIndex? " LOCAL " : "")+"INDEX " + indexName1 + " ON " + fullTableName1 + " (v1) INCLUDE(v2)");
             stmt.execute("CREATE "+(localIndex? " LOCAL " : "")+"INDEX " + indexName2 + " ON " + fullTableName2 + " (v1) INCLUDE(v2)");
             
@@ -210,8 +212,8 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-            stmt.execute("CREATE TABLE " + fullTableName2 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
+            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+tableDDLOptions);
+            stmt.execute("CREATE TABLE " + fullTableName2 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true,"+tableDDLOptions);
             stmt.execute("CREATE "+(localIndex? " LOCAL " : "")+"INDEX " + indexName1 + " ON " + fullTableName1 + " (v1, k)");
             stmt.execute("CREATE "+(localIndex? " LOCAL " : "")+"INDEX " + indexName2 + " ON " + fullTableName2 + " (v1, k)");
             
@@ -294,11 +296,6 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
             
             conn.rollback();
             assertDataAndIndexRows(stmt, fullTableName1, fullTableName2, indexName1);
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            if(localIndex) {
-                dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName1);
-                dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName2);
-            }
         } finally {
             conn.close();
         }
@@ -347,7 +344,7 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+tableDDLOptions);
             stmt.execute("CREATE "+(localIndex? " LOCAL " : "")+"INDEX " + indexName1 + " ON " + fullTableName1 + " (v1, k)");
             
             stmt.executeUpdate("upsert into " + fullTableName1 + " values('x', 'yyyy', 'a')");
@@ -435,8 +432,6 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
             assertEquals("x", rs.getString(1));
             assertEquals("yyyy", rs.getString(2));
             assertFalse(rs.next());
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            if(localIndex) dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName1);
         } finally {
             conn.close();
         }
@@ -451,7 +446,7 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            stmt.execute("CREATE TABLE " + fullTableName1 + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+tableDDLOptions);
             stmt.execute("CREATE "+(localIndex? " LOCAL " : "")+"INDEX " + indexName1 + " ON " + fullTableName1 + " (v1)");
             stmt.executeUpdate("upsert into " + fullTableName1 + " values('x', 'a', 'a')");
             conn.commit();
@@ -501,19 +496,8 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
             assertEquals("x", rs.getString(1));
             assertEquals("a", rs.getString(2));
             assertFalse(rs.next());
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            if(localIndex) dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName1);
         } finally {
             conn.close();
         }
     }
-
-    private void dropTable(HBaseAdmin admin, Connection conn, String tableName) throws SQLException, IOException {
-        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
-        if(admin.tableExists(tableName)) {
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
-        } 
-    }
-
 }

@@ -39,15 +39,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
-import org.apache.phoenix.cache.IndexMetaDataCache;
-import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -294,10 +292,11 @@ public class MutationState implements SQLCloseable {
     // the Transaction outside of MutationState, this seems reasonable, as the member variables
     // would not change as these threads are running. We also clone mutationState to ensure that
     // the transaction context won't change due to a commit when auto commit is true.
-    public HTableInterface getHTable(PTable table) throws SQLException {
-        HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
+    public Table getHTable(PTable table) throws SQLException {
+        Table htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
-            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows());
+            // We're only using this table for reading, so we want it wrapped even if it's an index
+            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows() || table.getType() == PTableType.INDEX);
         }
         return htable;
     }
@@ -533,7 +532,7 @@ public class MutationState implements SQLCloseable {
                             if (indexMutationsMap == null) {
                                 PhoenixTxIndexMutationGenerator generator = PhoenixTxIndexMutationGenerator.newGenerator(connection, table,
                                         indexList, mutationsPertainingToIndex.get(0).getAttributesMap());
-                                try (HTableInterface htable = connection.getQueryServices().getTable(
+                                try (Table htable = connection.getQueryServices().getTable(
                                         table.getPhysicalName().getBytes())) {
                                     Collection<Pair<Mutation, byte[]>> allMutations = generator.getIndexUpdates(htable,
                                             mutationsPertainingToIndex.iterator());
@@ -562,8 +561,7 @@ public class MutationState implements SQLCloseable {
                         MultiRowMutationState multiRowMutationState = mutations.remove(key);
                         if (multiRowMutationState != null) {
                             final List<Mutation> deleteMutations = Lists.newArrayList();
-                            generateMutations(tableRef, mutationTimestamp, serverTimestamp, multiRowMutationState,
-                                    deleteMutations, null);
+                            generateMutations(key, mutationTimestamp, serverTimestamp, multiRowMutationState, deleteMutations, null);
                             if (indexMutations == null) {
                                 indexMutations = deleteMutations;
                             } else {
@@ -960,7 +958,7 @@ public class MutationState implements SQLCloseable {
                     // region servers.
                     shouldRetry = cache != null;
                     SQLException sqlE = null;
-                    HTableInterface hTable = connection.getQueryServices().getTable(htableName);
+                    Table hTable = connection.getQueryServices().getTable(htableName);
                     try {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
@@ -968,7 +966,12 @@ public class MutationState implements SQLCloseable {
                                 uncommittedPhysicalNames.add(table.getPhysicalName().getString());
                                 phoenixTransactionContext.markDMLFence(table);
                             }
-                            hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, !tableInfo.isDataTable());
+                            // Only pass true for last argument if the index is being written to on it's own (i.e. initial
+                            // index population), not if it's being written to for normal maintenance due to writes to
+                            // the data table. This case is different because the initial index population does not need
+                            // to be done transactionally since the index is only made active after all writes have
+                            // occurred successfully.
+                            hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, tableInfo.isDataTable() && table.getType() == PTableType.INDEX);
                         }
                         numMutations = mutationList.size();
                         GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
@@ -981,7 +984,7 @@ public class MutationState implements SQLCloseable {
                         for (final List<Mutation> mutationBatch : mutationBatchList) {
                             if (shouldRetryIndexedMutation) {
                                 // if there was an index write failure, retry the mutation in a loop
-                                final HTableInterface finalHTable = hTable;
+                                final Table finalHTable = hTable;
                                 PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
                                     @Override
                                     public void doMutation() throws IOException {

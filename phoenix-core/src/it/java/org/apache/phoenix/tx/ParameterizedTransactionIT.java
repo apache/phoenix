@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -54,6 +55,9 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -68,29 +72,39 @@ import com.google.common.collect.Lists;
 public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     
     private final String tableDDLOptions;
+    private final String tableDDLOptionsWithoutProvider;
+    private final PhoenixTransactionProvider transactionProvider;
 
-    public ParameterizedTransactionIT(boolean mutable, boolean columnEncoded) {
+    public ParameterizedTransactionIT(Boolean mutable, Boolean columnEncoded, String transactionProvider) {
         StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append("TRANSACTION_PROVIDER='"+transactionProvider+"',");
+        this.transactionProvider = TransactionFactory.Provider.valueOf(transactionProvider).getTransactionProvider();
+        StringBuilder optionBuilder2 = new StringBuilder();
         if (!columnEncoded) {
-            optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+            optionBuilder2.append("COLUMN_ENCODED_BYTES=0,");
         }
         if (!mutable) {
-            if (optionBuilder.length() > 0) {
-                optionBuilder.append(",");
-            }
-            optionBuilder.append("IMMUTABLE_ROWS=true");
+            optionBuilder2.append("IMMUTABLE_ROWS=true,");
             if (!columnEncoded) {
-                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+                optionBuilder2.append("IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN +",");
             }
         }
+        if (optionBuilder2.length() > 0) {
+            optionBuilder2.setLength(optionBuilder2.length()-1);
+            optionBuilder.append(optionBuilder2);
+        } else {
+            optionBuilder.setLength(optionBuilder.length()-1);
+        }
         this.tableDDLOptions = optionBuilder.toString();
+        this.tableDDLOptionsWithoutProvider = optionBuilder2.toString();
     }
     
-    @Parameters(name="TransactionIT_mutable={0},columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 {false, false }, {false, true }, {true, false }, { true, true },
-           });
+    @Parameters(name="ParameterizedTransactionIT_mutable={0},columnEncoded={1},transactionProvider={2}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
+                 {false, false, "TEPHRA" }, {false, true, "TEPHRA" }, {true, false, "TEPHRA" }, { true, true, "TEPHRA" },
+                 {false, false, "OMID" }, {true, false, "OMID" },
+           }), 2);
     }
     
     @Test
@@ -134,7 +148,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
         String selectSql = "SELECT * FROM "+fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + (tableDDLOptions.length() > 0 ? "," : "") + "TRANSACTIONAL=true");
+            String ddl = "create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + (tableDDLOptions.length() > 0 ? "," : "") + "TRANSACTIONAL=true";
+            conn.createStatement().execute(ddl);
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
@@ -263,7 +278,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         String nonTxTableName = generateUniqueName();
 
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)" + tableDDLOptions);
+        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)" + tableDDLOptionsWithoutProvider);
         conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (1)");
         conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (2, 'a')");
         conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (3, 'b')");
@@ -279,7 +294,19 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         }
         htable.put(puts);
         
-        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + " SET TRANSACTIONAL=true");
+        try {
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + " SET TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
+            if (transactionProvider.isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                fail();
+            }
+        } catch (SQLException e) {
+            if (transactionProvider.isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL.getErrorCode(), e.getErrorCode());
+                return;
+            } else {
+                throw e;
+            }
+        }
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes( nonTxTableName));
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));
@@ -328,7 +355,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
 
         Connection conn = DriverManager.getConnection(getUrl());
         // Put table in SYSTEM schema to prevent attempts to update the cache after we disable SYSTEM.CATALOG
-        conn.createStatement().execute("CREATE TABLE \"SYSTEM\"." + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)" + tableDDLOptions);
+        conn.createStatement().execute("CREATE TABLE \"SYSTEM\"." + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)" + tableDDLOptionsWithoutProvider);
         conn.createStatement().execute("UPSERT INTO \"SYSTEM\"." + nonTxTableName + " VALUES (1)");
         conn.commit();
         // Reset empty column value to an empty value like it is pre-transactions
@@ -343,10 +370,14 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             // This will succeed initially in updating the HBase metadata, but then will fail when
             // the SYSTEM.CATALOG table is attempted to be updated, exercising the code to restore
             // the coprocessors back to the non transactional ones.
-            conn.createStatement().execute("ALTER TABLE \"SYSTEM\"." + nonTxTableName + " SET TRANSACTIONAL=true");
+            conn.createStatement().execute("ALTER TABLE \"SYSTEM\"." + nonTxTableName + " SET TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
             fail();
         } catch (SQLException e) {
-            assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
+            if (transactionProvider.isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL.getErrorCode(), e.getErrorCode());
+            } else {
+                assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
+            }
         } finally {
             admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
             admin.close();
@@ -358,7 +389,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
-        assertFalse(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));
+        Class<? extends RegionObserver> clazz = transactionProvider.getCoprocessor();
+        assertFalse(htable.getTableDescriptor().getCoprocessors().contains(clazz.getName()));
         assertEquals(1,conn.unwrap(PhoenixConnection.class).getQueryServices().
                 getTableDescriptor(Bytes.toBytes("SYSTEM." + nonTxTableName)).
                 getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
@@ -376,7 +408,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         PTable table = pconn.getTable(new PTableKey(null, t1));
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));
+        Class<? extends RegionObserver> clazz = transactionProvider.getCoprocessor();
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(clazz.getName()));
         
         try {
             ddl = "ALTER TABLE " + t1 + " SET transactional=false";
@@ -390,8 +423,19 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(t2));
         desc.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
         admin.createTable(desc);
-        ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true";
-        conn.createStatement().execute(ddl);
+        try {
+            ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true,transaction_provider='" + transactionProvider + "'";
+            conn.createStatement().execute(ddl);
+            if (transactionProvider.isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                fail();
+            }
+        } catch (SQLException e) {
+            if (transactionProvider.isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL.getErrorCode(), e.getErrorCode());
+                return;
+            }
+            throw e;
+        }
 
         HTableDescriptor htableDescriptor = admin.getTableDescriptor(TableName.valueOf(t2));
         String str = htableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA);
@@ -405,12 +449,12 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX.getErrorCode(), e.getErrorCode());
         }
-        ddl += " transactional=true";
+        ddl += " transactional=true,transaction_provider='" + transactionProvider + "'";
         conn.createStatement().execute(ddl);
         table = pconn.getTable(new PTableKey(null, t1));
         htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(TephraTransactionalProcessor.class.getName()));
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(clazz.getName()));
     }
 
     @Test

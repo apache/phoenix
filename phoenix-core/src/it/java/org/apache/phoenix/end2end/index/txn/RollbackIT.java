@@ -45,11 +45,16 @@ import org.junit.runners.Parameterized.Parameters;
 public class RollbackIT extends ParallelStatsDisabledIT {
 	
 	private final boolean localIndex;
-	private final boolean mutable;
+    private final String tableDDLOptions;
 
-	public RollbackIT(boolean localIndex, boolean mutable) {
+	public RollbackIT(boolean localIndex, boolean mutable, String transactionProvider) {
 		this.localIndex = localIndex;
-		this.mutable = mutable;
+        StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append(" TRANSACTION_PROVIDER='" + transactionProvider + "'");
+        if (!mutable) {
+            optionBuilder.append(",IMMUTABLE_ROWS=true");
+        }
+        this.tableDDLOptions = optionBuilder.toString();
 	}
 	
     private static Connection getConnection() throws SQLException {
@@ -59,12 +64,13 @@ public class RollbackIT extends ParallelStatsDisabledIT {
         return conn;
     }
     
-	@Parameters(name="RollbackIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false, false }, { false, true },
-                 { true, false }, { true, true } 
-           });
+	@Parameters(name="RollbackIT_localIndex={0},mutable={1},transactionProvider={2}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
+                 { false, false, "TEPHRA" }, { false, true, "TEPHRA"  },
+                 { true, false, "TEPHRA"  }, { true, true, "TEPHRA"  },
+                 { false, false, "OMID" }, { false, true, "OMID"  },
+           }),2);
     }
     
     @Test
@@ -76,7 +82,7 @@ public class RollbackIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+tableDDLOptions);
             stmt.execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)");
             
             stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'y', 'a')");
@@ -120,7 +126,7 @@ public class RollbackIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR, v1 VARCHAR, v2 VARCHAR, CONSTRAINT pk PRIMARY KEY (v1, v2))"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR, v1 VARCHAR, v2 VARCHAR, CONSTRAINT pk PRIMARY KEY (v1, v2))"+tableDDLOptions);
             stmt.execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + "(v1, k)");
             
             stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'y', 'a')");

@@ -19,7 +19,6 @@ package org.apache.phoenix.rpc;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
@@ -43,6 +42,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -50,7 +50,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 /**
- * Verifies the number of rpcs calls from {@link MetaDataClient} updateCache() 
+ * Verifies the number of RPC calls from {@link MetaDataClient} updateCache() 
  * for transactional and non-transactional tables.
  */
 public class UpdateCacheIT extends ParallelStatsDisabledIT {
@@ -67,10 +67,15 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpdateCacheForTxnTable() throws Exception {
-        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
-        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
-        helpTestUpdateCache(fullTableName, new int[] {1, 1});
+        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+            if (provider.runTests()) {
+                String tableName = generateUniqueName();
+                String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
+                Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+                helpTestUpdateCache(fullTableName, new int[] {1, 1});
+            }
+        }
     }
     
     @Test

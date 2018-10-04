@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -122,6 +123,7 @@ import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
@@ -675,15 +677,6 @@ public class TestUtil {
         assertEquals(rs.getDate(6), date);
     }
     
-    public static String getTableName(Boolean mutable, Boolean transactional) {
-        StringBuilder tableNameBuilder = new StringBuilder(DEFAULT_DATA_TABLE_NAME);
-        if (mutable!=null)
-            tableNameBuilder.append(mutable ? "_MUTABLE" : "_IMMUTABLE");
-        if (transactional!=null)
-            tableNameBuilder.append(transactional ? "_TXN" : "_NON_TXN");
-        return tableNameBuilder.toString();
-    }
-
     public static ClientAggregators getSingleSumAggregator(String url, Properties props) throws SQLException {
         try (PhoenixConnection pconn = DriverManager.getConnection(url, props).unwrap(PhoenixConnection.class)) {
             PhoenixStatement statement = new PhoenixStatement(pconn);
@@ -803,7 +796,7 @@ public class TestUtil {
         if (table.isTransactional()) {
             mutationState.startTransaction(table.getTransactionProvider());
         }
-        try (HTableInterface htable = mutationState.getHTable(table)) {
+        try (Table htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);
@@ -1087,5 +1080,29 @@ public class TestUtil {
             }
         }
         assertTrue(!rs.next());
+    }
+    
+    public static Collection<Object[]> filterTxParamData(Collection<Object[]> data, int index) {
+        boolean runAllTests = true;
+        boolean runNoTests = true;
+        
+        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+            runAllTests &= provider.runTests();
+            runNoTests &= !provider.runTests();
+        }
+        if (runNoTests) {
+            return Collections.emptySet();
+        }
+        if (runAllTests) {
+            return data;
+        }
+        List<Object[]> filteredData = Lists.newArrayListWithExpectedSize(data.size());
+        for (Object[] params : data) {
+            String provider = (String)params[index];
+            if (provider == null || TransactionFactory.Provider.valueOf(provider).runTests()) {
+                filteredData.add(params);
+            }
+        }
+        return filteredData;
     }
 }

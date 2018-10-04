@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
-import static org.apache.phoenix.util.TestUtil.getTableName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 

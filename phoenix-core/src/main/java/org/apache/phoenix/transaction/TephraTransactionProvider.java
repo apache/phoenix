@@ -18,10 +18,12 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -59,12 +61,17 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     }
     
     @Override
+    public String toString() {
+        return getProvider().toString();
+    }
+    
+    @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
        return new TephraTransactionContext(txnBytes);
     }
     
     @Override
-    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) {
+    public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException {
         return new TephraTransactionContext(connection);
     }
 
@@ -185,6 +192,9 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
+    public Class<? extends RegionObserver> getGCCoprocessor() {return null;}
+
+    @Override
     public Provider getProvider() {
         return TransactionFactory.Provider.TEPHRA;
     }
@@ -194,4 +204,8 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
         return false;
     }
 
+    @Override
+    public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) {
+        return put;
+    }
 }

@@ -177,14 +177,14 @@ public class TestCoveredColumnIndexCodec {
 
     // check the codec for deletes it should send
     LocalTableState state = new LocalTableState(table, p);
-    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
+    Iterable<IndexUpdate> updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
     assertFalse("Found index updates without any existing kvs in table!", updates.iterator().next()
         .isValid());
 
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
     state.addPendingUpdates(kvs);
-    updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA);
+    updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
     assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
         .hasNext());
     for (IndexUpdate update : updates) {
@@ -207,7 +207,7 @@ public class TestCoveredColumnIndexCodec {
     state = new LocalTableState(table, d);
     state.setCurrentTimestamp(2);
     // check the cleanup of the current table, after the puts (mocking a 'next' update)
-    updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA);
+    updates = codec.getIndexDeletes(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
     for (IndexUpdate update : updates) {
       assertTrue("Didn't have any index cleanup, even though there is current state",
         update.isValid());
@@ -237,7 +237,7 @@ public class TestCoveredColumnIndexCodec {
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyMap().get(FAMILY));
-    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA);
+    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",
         update.isValid());

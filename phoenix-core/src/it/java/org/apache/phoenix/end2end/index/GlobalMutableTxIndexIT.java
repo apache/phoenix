@@ -20,19 +20,22 @@ package org.apache.phoenix.end2end.index;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
 public class GlobalMutableTxIndexIT extends BaseIndexIT {
 
-    public GlobalMutableTxIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
-        super(localIndex, mutable, transactional, columnEncoded);
+    public GlobalMutableTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
+        super(localIndex, mutable, transactionProvider, columnEncoded);
     }
 
-    @Parameters(name="GlobalMutableTxIndexIT_localIndex={0},mutable={1},transactional={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false, true, true, false }, { false, true, true, true }
-           });
+    @Parameters(name="GlobalMutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(
+                Arrays.asList(new Object[][] {
+                    { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
+                    { false, true, "OMID", false },
+               }), 2);
     }
 
 }

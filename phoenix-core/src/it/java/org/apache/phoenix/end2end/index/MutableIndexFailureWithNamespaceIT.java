@@ -39,9 +39,9 @@ import com.google.common.collect.Maps;
  */
 public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
 
-    public MutableIndexFailureWithNamespaceIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped,
+    public MutableIndexFailureWithNamespaceIT(String transactionProvider, boolean localIndex, boolean isNamespaceMapped,
             Boolean disableIndexOnWriteFailure, boolean failRebuildTask, Boolean throwIndexWriteFailure) {
-        super(transactional, localIndex, isNamespaceMapped, disableIndexOnWriteFailure, failRebuildTask,
+        super(transactionProvider, localIndex, isNamespaceMapped, disableIndexOnWriteFailure, failRebuildTask,
                 throwIndexWriteFailure);
     }
     
@@ -66,13 +66,14 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
     public static List<Object[]> data() {
         return Arrays.asList(new Object[][] { 
                 // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
-                { false, false, true, true, false, null},
-                { false, false, true, true, false, true},
-                { true, false, true, true, false, null},
-                { false, true, true, true, false, null},
-                { true, true, true, null, false, null},
-                { false, false, true, true, true, null},
-                { false, false, true, false, true, false},
+                { null, false, true, true, false, null},
+                { null, false, true, true, false, true},
+                { "TEPHRA", false, true, true, false, null},
+                { "OMID", false, true, true, false, null},
+                { null, true, true, true, false, null},
+                { "TEPHRA", true, true, null, false, null},
+                { null, false, true, true, true, null},
+                { null, false, true, false, true, false},
                 } 
         );
     }
