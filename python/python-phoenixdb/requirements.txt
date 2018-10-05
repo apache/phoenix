@@ -1,0 +1,7 @@
+-e git+https://bitbucket.org/lalinsky/python-sqlline.git#egg=sqlline
+nose
+protobuf>=3.0.0
+sphinx
+flake8
+requests
+requests-kerberos
