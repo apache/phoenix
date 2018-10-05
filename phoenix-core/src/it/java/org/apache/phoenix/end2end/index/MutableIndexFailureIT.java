@@ -180,30 +180,21 @@ public class MutableIndexFailureIT extends BaseTest {
                 Arrays.asList(new Object[][] { 
                     // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
                     { null, false, false, false, false, false},
-                    { null, false, true, true, false, null},
-                    { null, false, true, true, false, true},
                     { null, false, false, true, false, null},
-                    { null, true, true, true, false, null},
+                    { "TEPHRA", false, false, true, false, null},
+                    { "OMID", false, false, true, false, null},
                     { null, true, false, null, false, null},
-                    { "TEPHRA", true, false, false, false, null},
-                    { "TEPHRA", true, true, false, false, null},
-                    { "TEPHRA", false, false, false, false, null},
-                    { "TEPHRA", false, true, false, false, null},
-                    { "OMID", false, false, false, false, null},
-                    { "OMID", false, true, false, false, null},
-    
+                    { "TEPHRA", true, false, true, false, null},
                     { null, false, false, false, false, null},
                     { null, true, false, false, false, null},
                     { null, false, false, false, false, null},
                     { null, false, false, true, false, null},
-                    { null, false, false, true, false, null},
                     { null, true, false, true, false, null},
                     { null, true, false, true, false, null},
                     { null, false, false, true, true, null},
-                    { null, false, true, true, true, null},
                     { null, false, false, false, true, false},
-                    { null, false, true, false, true, false},
                     }), 0);
+        
     }
 
     private void runRebuildTask(Connection conn) throws InterruptedException, SQLException {

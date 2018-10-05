@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import java.util.Arrays;
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -29,6 +29,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -63,8 +64,8 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
     }
     
     @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
-    public static List<Object[]> data() {
-        return Arrays.asList(new Object[][] { 
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                 // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
                 { null, false, true, true, false, null},
                 { null, false, true, true, false, true},
@@ -75,7 +76,7 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
                 { null, false, true, true, true, null},
                 { null, false, true, false, true, false},
                 } 
-        );
+        ),0);
     }
 
 }

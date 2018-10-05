@@ -25,7 +25,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class TransactionFactory {
     public enum Provider {
-        TEPHRA((byte)1, TephraTransactionProvider.getInstance(), false),
+        TEPHRA((byte)1, TephraTransactionProvider.getInstance(), true),
         OMID((byte)2, OmidTransactionProvider.getInstance(), true);
         
         private final byte code;

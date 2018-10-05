@@ -933,6 +933,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             stmt.setString(2, "y");
             stmt.setString(3, "2");
             stmt.execute();
+            if (!transactional) {
+                conn.commit();
+            }
 
             query = "SELECT * FROM " + fullTableName + " WHERE \"v2\" = '1'";
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
