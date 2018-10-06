@@ -737,9 +737,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             boolean isSalted = table.getBucketNum()!=null;
             boolean tenantColSkipped = false;
             List<PColumn> columns = table.getColumns();
-            columns = Lists.newArrayList(columns.subList(isSalted ? 1 : 0, columns.size()));
+            int startOffset = isSalted ? 1 : 0;
+			columns = Lists.newArrayList(columns.subList(startOffset, columns.size()));
             for (PColumn column : columns) {
-                if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(0))) {
+                if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(startOffset))) {
                     // skip the tenant column
                     tenantColSkipped = true;
                     continue;
@@ -874,7 +875,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
                 int pkPos = table.getPKColumns().indexOf(column);
                 if (pkPos!=-1) {
-                    short keySeq = (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
+                    short keySeq = (short) (pkPos + 1 - startOffset - (tenantColSkipped ? 1 : 0));
                     keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
                 }
                 cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
