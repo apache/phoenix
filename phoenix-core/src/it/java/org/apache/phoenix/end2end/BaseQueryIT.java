@@ -53,20 +53,20 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected static final String[] GLOBAL_INDEX_DDLS =
             new String[] {
                     "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE (" + "    A_STRING, "
-                            + "    B_STRING, " + "    A_DATE) %s",
+                            + "    B_STRING, " + "    A_DATE)",
                     "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
-                            + "    A_DATE) %s",
+                            + "    A_DATE)",
                     "CREATE INDEX %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
-                            + "    B_STRING, " + "    A_DATE) %s",
+                            + "    B_STRING, " + "    A_DATE)",
                     NO_INDEX };
     protected static final String[] LOCAL_INDEX_DDLS =
             new String[] {
                     "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE (" + "    A_STRING, "
-                            + "    B_STRING, " + "    A_DATE) %s",
+                            + "    B_STRING, " + "    A_DATE)",
                     "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
-                            + "    A_DATE) %s",
+                            + "    A_DATE)",
                     "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
-                            + "    B_STRING, " + "    A_DATE) %s" };
+                            + "    B_STRING, " + "    A_DATE)" };
     protected static String[] INDEX_DDLS;
     static {
         INDEX_DDLS = new String[GLOBAL_INDEX_DDLS.length + LOCAL_INDEX_DDLS.length];
@@ -108,8 +108,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
         this.indexName = generateUniqueName();
         if (idxDdl.length() > 0) {
             this.indexDDL =
-                    String.format(idxDdl, indexName, tableName,
-                        keepDeletedCells ? "KEEP_DELETED_CELLS=true" : "KEEP_DELETED_CELLS=false");
+                    String.format(idxDdl, indexName, tableName);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
                 conn.createStatement().execute(this.indexDDL);
