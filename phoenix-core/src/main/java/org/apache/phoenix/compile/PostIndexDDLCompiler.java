@@ -104,7 +104,7 @@ public class PostIndexDDLCompiler {
         updateStmtStr.append("UPSERT /*+ NO_INDEX */ INTO ").append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(tableName).append("\"(")
            .append(indexColumns).append(") ");
         final StringBuilder selectQueryBuilder = new StringBuilder();
-        selectQueryBuilder.append(" SELECT ").append(dataColumns).append(" FROM ")
+        selectQueryBuilder.append(" SELECT /*+ NO_INDEX */ ").append(dataColumns).append(" FROM ")
         .append(schemaName.length() == 0 ? "" : '"' + schemaName + "\".").append('"').append(dataTable.getTableName().getString()).append('"');
         this.selectQuery = selectQueryBuilder.toString();
         updateStmtStr.append(this.selectQuery);
