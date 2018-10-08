@@ -231,6 +231,24 @@ public class WhereOptimizer {
                 if (prevSortOrder == null)  {
                     prevSortOrder = sortOrder;
                 } else if (prevSortOrder != sortOrder) {
+                    //Consider the Universe of keys to be [0,7]+ on the leading column A
+                    // and [0,7]+ on trailing column B, with a padbyte of 0 for ASC and 7 for DESC
+                    //if our key range for ASC keys is leading [2,*] and trailing [3,*], → [x203 - x777]
+                    //for this particular plan the leading key is descending (ie index desc)
+                    // consider the data
+                    // (3,2) ORDER BY A,B→ x302 → ORDER BY A DESC,B → x472
+                    // (3,3) ORDER BY A,B→ x303 → ORDER BY A DESC,B → x473
+                    // (3,4) ORDER BY A,B→ x304 → ORDER BY A DESC,B → x474
+                    // (2,3) ORDER BY A,B→ x203 → ORDER BY A DESC,B → x573
+                    // (2,7) ORDER BY A,B→ x207 → ORDER BY A DESC,B → x577
+                    // And the logical expression (A,B) > (2,3)
+                    // In the DESC A order the selected values are not contiguous, (2,7),(3,2),(3,3),(3,4)
+                    // In the normal ASC order by the values are all contiguous
+                    // Therefore the key cannot be extracted out and a full filter must be applied
+                    // In addition, the boundary of the scan is tricky as the values are not bound by
+                    // (2,3) it is instead bound by (2,7), this should map to, [x000,x577]
+                    // FUTURE: May be able to perform a type of skip scan for this case.
+
                     // If the sort order changes, we must clip the portion with the same sort order
                     // and invert the key ranges and swap the upper and lower bounds.
                     List<KeyRange> leftRanges = clipLeft(schema, slot.getPKPosition() + slotOffset - clipLeftSpan, clipLeftSpan, keyRanges, ptr);
