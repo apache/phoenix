@@ -22,14 +22,18 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
+import org.apache.phoenix.expression.function.InvertFunction;
+import org.apache.phoenix.expression.rewrite.RowValueConstructorExpressionRewriter;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -111,7 +115,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         Expression rhsExpr = children.get(1);
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
-        
+
         if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof ArrayElemRefExpression) && !(rhsExpr instanceof ArrayElemRefExpression)) {
             if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
@@ -128,6 +132,18 @@ public class ComparisonExpression extends BaseCompoundExpression {
             if ( ! ( lhsExpr instanceof RowValueConstructorExpression ) ) {
                 lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
             }
+
+            /*
+            At this point both sides should be in the same row format.
+            We add the inverts so the filtering can be done properly for mixed sort type RVCs.
+            The entire RVC has to be in ASC for the actual compare to work since compare simply does
+             a varbyte compare.  See PHOENIX-4841
+            */
+            RowValueConstructorExpressionRewriter rvcRewriter =
+                    RowValueConstructorExpressionRewriter.getSingleton();
+            lhsExpr = rvcRewriter.rewriteAllChildrenAsc((RowValueConstructorExpression) lhsExpr);
+            rhsExpr = rvcRewriter.rewriteAllChildrenAsc((RowValueConstructorExpression) rhsExpr);
+
             children = Arrays.asList(lhsExpr, rhsExpr);
         } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
             throw TypeMismatchException.newException(lhsExprDataType, rhsExprDataType,
