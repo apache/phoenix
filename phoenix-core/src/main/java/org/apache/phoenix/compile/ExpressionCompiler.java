@@ -376,7 +376,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // operation given that we know the join is local.
             if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
                 try {
-                    return new LocalIndexDataColumnRef(context, node.getName());
+                    return new LocalIndexDataColumnRef(context, context.getCurrentTable(), node.getName());
                 } catch (ColumnFamilyNotFoundException c) {
                     throw e;
                 }
