@@ -869,7 +869,7 @@ public class JoinCompiler {
                     if (columnRef.getTableRef().equals(tableRef)
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                         if (columnRef instanceof LocalIndexColumnRef) {
-                            sourceColumns.add(new LocalIndexDataColumnRef(context, IndexUtil.getIndexColumnName(columnRef.getColumn())));
+                            sourceColumns.add(new LocalIndexDataColumnRef(context, tableRef, IndexUtil.getIndexColumnName(columnRef.getColumn())));
                         } else {
                             sourceColumns.add(columnRef);
                         }

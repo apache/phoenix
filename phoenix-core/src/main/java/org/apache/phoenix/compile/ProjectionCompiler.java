@@ -218,7 +218,7 @@ public class ProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     try {
-                        ref = new LocalIndexDataColumnRef(context, indexColName);
+                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
@@ -291,7 +291,7 @@ public class ProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     try {
-                        ref = new LocalIndexDataColumnRef(context, indexColName);
+                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
                         indexColumnFamily =
                                 indexColumn.getFamilyName() == null ? null

@@ -225,7 +225,7 @@ public class TupleProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
                     try {
-                        localIndexColumnRefSet.add(new LocalIndexDataColumnRef(context, node.getName()));
+                        localIndexColumnRefSet.add(new LocalIndexDataColumnRef(context, context.getCurrentTable(), node.getName()));
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
                     }
