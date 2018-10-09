@@ -431,6 +431,10 @@ public class RowKeySchema extends ValueSchema {
             ptr.set(upperRange, 0, ptr.getOffset() + ptr.getLength());
             upperRange = ByteUtil.copyKeyBytesIfNecessary(ptr);
         }
+        //Have to update the bounds to inclusive
+        //Consider a partial key on pk columns (INT A, INT B, ....)  and a predicate (A,B) > (3,5)
+        //This initial key as a row key would look like  (x0305 - *]
+        //If we were to clip the left to (x03 - *], we would skip values like (3,6)
         return KeyRange.getKeyRange(lowerRange, true, upperRange, true);
     }
 }
