@@ -2084,6 +2084,12 @@ public class WhereOptimizer {
 
                                 @Override
                                 public SortOrder getSortOrder() {
+                                    //WARNING HACK: Handle the different paths for InList vs Normal Comparison
+                                    //The code paths in InList assume the sortOrder is ASC for their optimizations
+                                    //The code paths for Comparisons on RVC rewrite equality, for the non-equality cases return actual sort order
+                                    if(rvcElementOp == CompareOp.EQUAL || rvcElementOp == CompareOp.NOT_EQUAL){
+                                        return SortOrder.ASC;
+                                    }
                                     return childPart.getColumn().getSortOrder();
                                 }
 
