@@ -328,8 +328,8 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
 
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX " + idx1 + " ON " + nonTxTableName + "1(a.v, b.v) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX " + idx2 + " ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX " + idx1 + " ON " + nonTxTableName + "1(a.v, b.v)");
+        conn.createStatement().execute("CREATE INDEX " + idx2 + " ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v)");
 
         try {
             conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true," + tableDDLOptions);

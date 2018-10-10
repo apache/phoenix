@@ -1065,7 +1065,7 @@ public class MetaDataClient {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, statement.getTableType());
 
         boolean isAppendOnlySchema = false;
         long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
@@ -1143,13 +1143,26 @@ public class MetaDataClient {
         return connection.getQueryServices().updateData(plan);
     }
 
-    private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> props, Map<String, Object> tableProps,
-            Map<String, Object> commonFamilyProps) {
+    /**
+     * Populate properties for the table and common properties for all column families of the table
+     * @param statementProps Properties specified in SQL statement
+     * @param tableProps Properties for an HTableDescriptor
+     * @param commonFamilyProps Properties common to all column families
+     * @param tableType Used to distinguish between index creation vs. base table creation paths
+     * @throws SQLException
+     */
+    private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> statementProps, Map<String, Object> tableProps,
+            Map<String, Object> commonFamilyProps, PTableType tableType) throws SQLException {
         // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
         ColumnFamilyDescriptor defaultDescriptor = ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
-        if (!props.isEmpty()) {
-            Collection<Pair<String,Object>> propsList = props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
+        if (!statementProps.isEmpty()) {
+            Collection<Pair<String,Object>> propsList = statementProps.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
             for (Pair<String,Object> prop : propsList) {
+                if (tableType == PTableType.INDEX && MetaDataUtil.propertyNotAllowedToBeOutOfSync(prop.getFirst())) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                            .setMessage("Property: " + prop.getFirst()).build()
+                            .buildException();
+                }
                 if (defaultDescriptor.getValue(Bytes.toBytes(prop.getFirst())) == null) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                 } else {
@@ -1502,7 +1515,7 @@ public class MetaDataClient {
 
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX);
         List<Pair<ParseNode, SortOrder>> indexParseNodeAndSortOrderList = ik.getParseNodeAndSortOrderList();
         List<ColumnName> includedColumns = statement.getIncludeColumns();
         TableRef tableRef = null;
@@ -1897,6 +1910,57 @@ public class MetaDataClient {
         connection.getQueryServices().deleteMutexCell(tenantId, schemaName, tableName, columnName, null);
     }
 
+    /**
+     *
+     * Populate the properties for each column family referenced in the create table statement
+     * @param familyNames column families referenced in the create table statement
+     * @param commonFamilyProps properties common to all column families
+     * @param statement create table statement
+     * @param defaultFamilyName the default column family name
+     * @param isLocalIndex true if in the create local index path
+     * @param familyPropList list containing pairs of column families and their corresponding properties
+     * @throws SQLException
+     */
+    private void populateFamilyPropsList(Map<String, PName> familyNames, Map<String,Object> commonFamilyProps,
+            CreateTableStatement statement, String defaultFamilyName, boolean isLocalIndex,
+            final List<Pair<byte[],Map<String,Object>>> familyPropList) throws SQLException {
+        for (PName familyName : familyNames.values()) {
+            String fam = familyName.getString();
+            Collection<Pair<String, Object>> propsForCF =
+                    statement.getProps().get(IndexUtil.getActualColumnFamilyName(fam));
+            // No specific properties for this column family, so add the common family properties
+            if (propsForCF.isEmpty()) {
+                familyPropList.add(new Pair<>(familyName.getBytes(),commonFamilyProps));
+            } else {
+                Map<String,Object> combinedFamilyProps = Maps.newHashMapWithExpectedSize(propsForCF.size() + commonFamilyProps.size());
+                combinedFamilyProps.putAll(commonFamilyProps);
+                for (Pair<String,Object> prop : propsForCF) {
+                    // Don't allow specifying column families for TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE.
+                    // These properties can only be applied for all column families of a table and can't be column family specific.
+                    // See PHOENIX-3955
+                    if (!fam.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY) && MetaDataUtil.propertyNotAllowedToBeOutOfSync(prop.getFirst())) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY)
+                                .setMessage("Property: " + prop.getFirst())
+                                .build()
+                                .buildException();
+                    }
+                    combinedFamilyProps.put(prop.getFirst(), prop.getSecond());
+                }
+                familyPropList.add(new Pair<>(familyName.getBytes(),combinedFamilyProps));
+            }
+        }
+
+        if (familyNames.isEmpty()) {
+            // If there are no family names, use the default column family name. This also takes care of the case when
+            // the table ddl has only PK cols present (which means familyNames is empty).
+            byte[] cf =
+                    defaultFamilyName == null ? (!isLocalIndex? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES
+                            : QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
+                            : Bytes.toBytes(defaultFamilyName);
+            familyPropList.add(new Pair<>(cf, commonFamilyProps));
+        }
+    }
+
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexType,
             final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
@@ -1937,7 +2001,6 @@ public class MetaDataClient {
             ImmutableStorageScheme immutableStorageScheme = ONE_CELL_PER_COLUMN;
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
-                storeNulls = parent.getStoreNulls();
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
 
@@ -2552,7 +2615,6 @@ public class MetaDataClient {
                     .build().buildException();
             }
 
-            List<Pair<byte[],Map<String,Object>>> familyPropList = Lists.newArrayListWithExpectedSize(familyNames.size());
             if (!statement.getProps().isEmpty()) {
                 for (String familyName : statement.getProps().keySet()) {
                     if (!familyName.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
@@ -2567,36 +2629,8 @@ public class MetaDataClient {
             }
             throwIfInsufficientColumns(schemaName, tableName, pkColumns, saltBucketNum!=null, multiTenant);
 
-            for (PName familyName : familyNames.values()) {
-                String fam = familyName.getString();
-                Collection<Pair<String, Object>> props =
-                        statement.getProps().get(IndexUtil.getActualColumnFamilyName(fam));
-                if (props.isEmpty()) {
-                    familyPropList.add(new Pair<byte[],Map<String,Object>>(familyName.getBytes(),commonFamilyProps));
-                } else {
-                    Map<String,Object> combinedFamilyProps = Maps.newHashMapWithExpectedSize(props.size() + commonFamilyProps.size());
-                    combinedFamilyProps.putAll(commonFamilyProps);
-                    for (Pair<String,Object> prop : props) {
-                        // Don't allow specifying column families for TTL. TTL can only apply for the all the column families of the table
-                        // i.e. it can't be column family specific.
-                        if (!familyName.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY) && prop.getFirst().equals(ColumnFamilyDescriptorBuilder.TTL)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL).build().buildException();
-                        }
-                        combinedFamilyProps.put(prop.getFirst(), prop.getSecond());
-                    }
-                    familyPropList.add(new Pair<byte[],Map<String,Object>>(familyName.getBytes(),combinedFamilyProps));
-                }
-            }
-
-            if (familyNames.isEmpty()) {
-                //if there are no family names, use the default column family name. This also takes care of the case when
-                //the table ddl has only PK cols present (which means familyNames is empty).
-                byte[] cf =
-                        defaultFamilyName == null ? (!isLocalIndex? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES
-                                : QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
-                                : Bytes.toBytes(defaultFamilyName);
-                familyPropList.add(new Pair<byte[],Map<String,Object>>(cf, commonFamilyProps));
-            }
+            List<Pair<byte[],Map<String,Object>>> familyPropList = Lists.newArrayListWithExpectedSize(familyNames.size());
+            populateFamilyPropsList(familyNames, commonFamilyProps, statement, defaultFamilyName, isLocalIndex, familyPropList);
 
             // Bootstrapping for our SYSTEM.TABLE that creates itself before it exists
             if (SchemaUtil.isMetaTable(schemaName,tableName)) {

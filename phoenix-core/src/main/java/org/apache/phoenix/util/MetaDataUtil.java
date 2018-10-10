@@ -25,8 +25,10 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -80,6 +82,7 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
@@ -93,8 +96,22 @@ public class MetaDataUtil {
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
     private static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
-    public static final byte[] PARENT_TABLE_KEY_BYTES = Bytes.toBytes("PARENT_TABLE");
-    
+    public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
+    public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_VIEW_INDEX_TABLE_PROP_NAME);
+
+    public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
+    public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
+
+    public static final String DATA_TABLE_NAME_PROP_NAME = "DATA_TABLE_NAME";
+
+    public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
+
+    // See PHOENIX-3955
+    public static final List<String> SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES = ImmutableList.of(
+            ColumnFamilyDescriptorBuilder.TTL,
+            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
+            ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
+
     public static boolean areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
         // As of 3.0, we allow a client and server to differ for the minor version.
         // Care has to be taken to upgrade the server before the client, as otherwise
@@ -700,17 +717,20 @@ public class MetaDataUtil {
         return true;
     }
 
-    public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
-    public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_VIEW_INDEX_TABLE_PROP_NAME);
+    public static boolean propertyNotAllowedToBeOutOfSync(String colFamProp) {
+        return SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.contains(colFamProp);
+    }
 
-    public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
-    public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
-
-    public static final String DATA_TABLE_NAME_PROP_NAME = "DATA_TABLE_NAME";
-
-    public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
-
-
+    public static Map<String, Object> getSyncedProps(ColumnFamilyDescriptor defaultCFDesc) {
+        Map<String, Object> syncedProps = new HashMap<>();
+        if (defaultCFDesc != null) {
+            for (String propToKeepInSync: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+                syncedProps.put(propToKeepInSync, Bytes.toString(
+                        defaultCFDesc.getValue(Bytes.toBytes(propToKeepInSync))));
+            }
+        }
+        return syncedProps;
+    }
 
     public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp){
         return newTableRowsScan(key, null, startTimeStamp, stopTimeStamp);

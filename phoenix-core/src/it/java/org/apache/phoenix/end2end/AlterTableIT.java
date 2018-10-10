@@ -926,7 +926,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             // set HColumnProperty property when adding a pk column and other key value columns should work
             ddl = "ALTER TABLE "
                     + dataTableFullName
-                    + " ADD k3 DECIMAL PRIMARY KEY, col2 bigint, CF.col3 bigint IN_MEMORY = true, CF.IN_MEMORY=false, CF.REPLICATION_SCOPE = 1";
+                    + " ADD k3 DECIMAL PRIMARY KEY, col2 bigint, CF.col3 bigint IN_MEMORY = true, CF.IN_MEMORY=false, REPLICATION_SCOPE = 1";
             conn.createStatement().execute(ddl);
             // assert that k3 was added as new pk
             ResultSet rs = conn.getMetaData().getPrimaryKeys("", schemaName, dataTableName);
@@ -947,7 +947,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 assertEquals(2, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());
-                assertEquals(0, columnFamilies[0].getScope());
+                assertEquals(1, columnFamilies[0].getScope());
                 assertEquals("CF", columnFamilies[1].getNameAsString());
                 assertEquals(false, columnFamilies[1].isInMemory());
                 assertEquals(1, columnFamilies[1].getScope());
