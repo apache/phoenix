@@ -31,9 +31,7 @@ import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.util.*;
 import org.junit.Before;
 import org.junit.Test;
@@ -1318,8 +1316,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             conn.createStatement().execute("CREATE SCHEMA " + schemaName);
-
-            conn.createStatement().execute("DROP TABLE IF EXISTS " + tableName);
             conn.createStatement().execute("CREATE TABLE " + tableName +
                     " (ID CHAR(3) NOT NULL, COL1 VARCHAR(5), COL2 VARCHAR(3), COL3 CHAR(4), COL4 CHAR(4)"
                     + " CONSTRAINT PKVIEW PRIMARY KEY(ID, COL1)) " + tableDDLOptions);
@@ -1331,6 +1327,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL3 CHAR(6)");
             //Decreasing char length
             conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL4 CHAR(2)");
+            //Increasing char length of the indexed column
+            //Indexed columns will convert fixed length columns to variable length while creating the index,
+            //but length/scale of field still had been reserved old values.
             conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL2 CHAR(5)");
 
             conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES('124','12345','12345','123456','12')");
@@ -1341,11 +1340,13 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                     table.getTableName().getString(), 6);
             assertColumnModify(QueryConstants.DEFAULT_COLUMN_FAMILY + ":" + "COL3", table.getSchemaName().getString(),
                     "IDX_COL2", 6);
-
             assertColumnModify("COL4", table.getSchemaName().getString(),
                     table.getTableName().getString(), 2);
             assertColumnModify(QueryConstants.DEFAULT_COLUMN_FAMILY + ":" + "COL4", table.getSchemaName().getString(),
                     "IDX_COL2", 2);
+            //char length of the indexed column will not change
+            assertColumnModify(QueryConstants.DEFAULT_COLUMN_FAMILY + ":" + "COL2", table.getSchemaName().getString(),
+                    "IDX_COL2", 3);
 
             {
                 assertEquals(QueryUtil.getExplainPlan(conn.createStatement().executeQuery(" explain select * from " + tableName)),
@@ -1510,14 +1511,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String query = "SELECT " + COLUMN_SIZE + ", "+ DECIMAL_DIGITS + "," +  COLUMN_FAMILY + "," + DATA_TYPE  +
                 " FROM \"SYSTEM\".CATALOG WHERE "
                 + TABLE_SCHEM + " = ? AND " + TABLE_NAME + " = ?  AND "
-                + COLUMN_NAME + " = ?" + " AND " + COLUMN_FAMILY + " = ?";
+                + COLUMN_NAME + " = ?";
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, schemaName);
             stmt.setString(2, tableName);
             stmt.setString(3, columnName);
-            stmt.setString(4, QueryConstants.DEFAULT_COLUMN_FAMILY);
+           // stmt.setString(4, QueryConstants.DEFAULT_COLUMN_FAMILY);
             ResultSet rs = stmt.executeQuery();
 
             assertTrue(rs.next());

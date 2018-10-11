@@ -4547,11 +4547,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
                                 // Since the columns of fixed length which in present in primary key of index table will be converted
                                 // to variable length when index tables are created, So we will not process indexed columns.
-                                if (isColumnIndexed) {
-                                    // do nothing
-                                }
 
-                                // Modify length/scala of covered columns
+                                // Modify length/scale of covered columns
                                 if (coveredColumn != null) {
                                     String indexedColName = IndexUtil.getIndexColumnName(column);
                                     byte[] columnKey = getColumnKey(indexKey, Bytes.toBytes(indexedColName), coveredColumn.getFamily());
