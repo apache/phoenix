@@ -192,14 +192,7 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme.QualifierOutOfRangeException;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -3388,6 +3381,11 @@ public class MetaDataClient {
         if (oldColumn == null) {
             throw new ColumnNotFoundException(table.getSchemaName().getString(), table.getTableName().getString(),
                     columnName.getFamilyName(), columnName.getColumnName());
+        }
+
+        // Shouldn't decrease length of char type whether the query results will be incorrect.
+        if (columnDef.getDataType() instanceof PChar && oldColumn.getMaxLength() > columnDef.getMaxLength()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_DECREASE_CHAR_LENGTH).build().buildException();
         }
 
         // Comparision of row keys were affected when we changed max length of pk columns to pad more placeholder,

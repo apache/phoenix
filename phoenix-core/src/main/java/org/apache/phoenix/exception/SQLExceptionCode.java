@@ -376,10 +376,11 @@ public enum SQLExceptionCode {
     INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE(1138, "XCL38", "IMMUTABLE_STORAGE_SCHEME property cannot be changed from/to ONE_CELL_PER_COLUMN "),
     CANNOT_SET_GUIDE_POST_WIDTH(1139, "XCL39", "Guide post width can only be set on base data tables"),
 
-    INVALID_DATA_TYPE_CAST(1141, "XCL41", "Cannot modify column because of invalid data type cast"),
+    INVALID_DATA_TYPE_CAST(1141, "XCL41", "Can't modify column because of invalid data type cast"),
     DISALLOW_MODIFY_TABLE_TYPE(1142, "XCL42", "Only common table or view can be modified!"),
     DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN(1143, "XCL43", "Timestamp column or PK column can not be modified!"),
-    DISALLOW_MODIFY_CHILD_TABLE(1144, "XCL44", "This table have a parent table, so it can not be modified!"),
+    DISALLOW_MODIFY_CHILD_TABLE(1144, "XCL44", "This table have a parent table which can not be modified!"),
+    DISALLOW_DECREASE_CHAR_LENGTH(1145, "XCL45", "Can't decrease length of char type which less than the old data type"),
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
