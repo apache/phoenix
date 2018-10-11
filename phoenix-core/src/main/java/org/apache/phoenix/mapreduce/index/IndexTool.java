@@ -383,6 +383,7 @@ public class IndexTool extends Configured implements Tool {
             if (pdataTable.isTransactional()) {
                 configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
                     Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
+                configuration.set(PhoenixConfigurationUtil.TX_PROVIDER, pdataTable.getTransactionProvider().name());
             }
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
                 Long.toString(maxTimeRange));
@@ -750,7 +751,7 @@ public class IndexTool extends Configured implements Tool {
 
         ResultSet rs = null;
         try {
-            rs = dbMetaData.getIndexInfo(null, schemaName, tableName, false, false);
+            rs = dbMetaData.getIndexInfo("", schemaName, tableName, false, false);
             while (rs.next()) {
                 final String indexName = rs.getString(6);
                 if (indexTable.equalsIgnoreCase(indexName)) {

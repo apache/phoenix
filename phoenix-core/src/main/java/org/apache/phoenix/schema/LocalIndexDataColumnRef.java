@@ -33,15 +33,17 @@ public class LocalIndexDataColumnRef extends ColumnRef {
     final private Set<PColumn> columns;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
-    public LocalIndexDataColumnRef(StatementContext context, String indexColumnName) throws MetaDataEntityNotFoundException, SQLException {
+    public LocalIndexDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
+            throws MetaDataEntityNotFoundException, SQLException {
         super(FromCompiler.getResolver(
-            FACTORY.namedTable(null, TableName.create(context.getCurrentTable().getTable()
-                    .getSchemaName().getString(), context.getCurrentTable().getTable()
-                    .getParentTableName().getString())), context.getConnection(), false).resolveTable(
-            context.getCurrentTable().getTable().getSchemaName().getString(),
-            context.getCurrentTable().getTable().getParentTableName().getString()), IndexUtil
-                .getDataColumnFamilyName(indexColumnName), IndexUtil
-                .getDataColumnName(indexColumnName));
+            FACTORY.namedTable(
+                null,
+                TableName.create(tRef.getTable().getSchemaName().getString(), tRef.getTable()
+                        .getParentTableName().getString())), context.getConnection(), false)
+                .resolveTable(context.getCurrentTable().getTable().getSchemaName().getString(),
+                    context.getCurrentTable().getTable().getParentTableName().getString()),
+                IndexUtil.getDataColumnFamilyName(indexColumnName), IndexUtil
+                        .getDataColumnName(indexColumnName));
         position = context.getDataColumnPosition(this.getColumn());
         columns = context.getDataColumns();
     }

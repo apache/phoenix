@@ -79,7 +79,29 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
         super(isNamespaceMapped);
     }
+
+    @Test
+    public void testDeleteFromLocalIndex() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
     
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT)");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v2)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, rand(), rand())");
+        // This would fail with an NPE before PHOENIX-4933
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE v1 < 1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM "+tableName);
+        rs.next();
+        assertEquals(0, rs.getInt(1));
+        rs.close();
+    }
+
     @Test
     public void testLocalIndexRoundTrip() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
@@ -667,6 +689,35 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName + " WHERE v2 = '2'");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
+        conn1.close();
+    }
+
+    @Test
+    public void testLocalIndexSelfJoin() throws Exception {
+      String tableName = generateUniqueName();
+      String indexName = "IDX_" + generateUniqueName();
+      Connection conn1 = DriverManager.getConnection(getUrl());
+      if (isNamespaceMapped) {
+          conn1.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+      }
+        String ddl =
+                "CREATE TABLE "
+                        + tableName
+                        + " (customer_id integer primary key, postal_code varchar, country_code varchar)";
+        conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("UPSERT INTO " + tableName + " values(1,'560103','IN')");
+        conn1.commit();
+        conn1.createStatement().execute(
+            "CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(postal_code)");
+        ResultSet rs =
+                conn1.createStatement()
+                        .executeQuery(
+                            "SELECT * from "
+                                    + tableName
+                                    + " c1, "
+                                    + tableName
+                                    + " c2 where c1.customer_id=c2.customer_id and c2.postal_code='560103'");
+        assertTrue(rs.next());
         conn1.close();
     }
 

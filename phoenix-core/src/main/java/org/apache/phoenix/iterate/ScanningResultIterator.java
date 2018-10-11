@@ -90,7 +90,10 @@ public class ScanningResultIterator implements ResultIterator {
     private void getScanMetrics() {
 
         if (!scanMetricsUpdated && scanMetricsEnabled) {
-            ScanMetrics scanMetrics = scanner.getScanMetrics();
+            ScanMetrics scanMetrics = scan.getScanMetrics();
+            if (scanMetrics == null) {
+                return;
+            }
             Map<String, Long> scanMetricsMap = scanMetrics.getMetricsMap();
             if(scanMetricsMap == null) {
                 return;

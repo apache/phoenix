@@ -115,6 +115,8 @@ public class PTableImpl implements PTable {
     // Have MultiMap for String->PColumn (may need family qualifier)
     private List<PColumn> pkColumns;
     private List<PColumn> allColumns;
+    // columns that were inherited from a parent table but that were dropped in the view
+    private List<PColumn> excludedColumns;
     private List<PColumnFamily> families;
     private Map<byte[], PColumnFamily> familyByBytes;
     private Map<String, PColumnFamily> familyByString;
@@ -217,8 +219,8 @@ public class PTableImpl implements PTable {
     
     // For indexes stored in shared physical tables
     public PTableImpl(PName tenantId, PName schemaName, PName tableName, long timestamp, List<PColumnFamily> families, 
-            List<PColumn> columns, List<PName> physicalNames,PDataType viewIndexType, Long viewIndexId, boolean multiTenant, boolean isNamespaceMpped, ImmutableStorageScheme storageScheme, QualifierEncodingScheme qualifierEncodingScheme,
-            EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization) throws SQLException {
+            List<PColumn> columns, List<PName> physicalNames, PDataType viewIndexType, Long viewIndexId, boolean multiTenant, boolean isNamespaceMpped, ImmutableStorageScheme storageScheme, QualifierEncodingScheme qualifierEncodingScheme,
+            EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization, Integer bucketNum) throws SQLException {
         this.pkColumns = this.allColumns = Collections.emptyList();
         this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
         this.indexes = Collections.emptyList();
@@ -229,10 +231,14 @@ public class PTableImpl implements PTable {
             familyByString.put(family.getName().getString(), family);
         }
         this.families = families;
+        if (bucketNum!=null) {
+            columns = columns.subList(1, columns.size());
+        }
         init(tenantId, this.schemaName, this.tableName, PTableType.INDEX, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
             this.schemaName, parentTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
             null, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
-            transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMpped, null, false, storageScheme, qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization);
+            transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMpped, null,
+            false, storageScheme, qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization, null);
     }
 
     public PTableImpl(long timeStamp) { // For delete marker
@@ -288,7 +294,7 @@ public class PTableImpl implements PTable {
     /**
      * Used to create a PTable for views or view indexes, the basePTable is for attributes we inherit from the physical table
      */
-    public static PTableImpl makePTable(PTable view, PTable baseTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount) throws SQLException {
+    public static PTableImpl makePTable(PTable view, PTable baseTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount, Collection<PColumn> excludedColumns) throws SQLException {
         // if a TableProperty is not valid on a view we set it to the base table value
         // if a TableProperty is valid on a view and is not mutable on a view we set it to the base table value
         // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view 
@@ -300,7 +306,7 @@ public class PTableImpl implements PTable {
             view.getViewIndexType(), view.getViewIndexId(), view.getIndexType(),
             baseTableColumnCount, view.rowKeyOrderOptimizable(), baseTable.getTransactionProvider(), view.getUpdateCacheFrequency(),
             view.getIndexDisableTimestamp(), view.isNamespaceMapped(), baseTable.getAutoPartitionSeqName(), baseTable.isAppendOnlySchema(),
-            baseTable.getImmutableStorageScheme(), baseTable.getEncodingScheme(), view.getEncodedCQCounter(), view.useStatsForParallelization());
+            baseTable.getImmutableStorageScheme(), baseTable.getEncodingScheme(), view.getEncodedCQCounter(), view.useStatsForParallelization(), excludedColumns);
     }
     
     public static PTableImpl makePTable(PTable table, PTableType type, Collection<PColumn> columns) throws SQLException {
@@ -356,7 +362,7 @@ public class PTableImpl implements PTable {
                 indexType, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, rowKeyOrderOptimizable, transactionProvider,
                 updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName,
                 isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedCQCounter,
-                useStatsForParallelization);
+                useStatsForParallelization, null);
     }
 
     public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
@@ -374,7 +380,7 @@ public class PTableImpl implements PTable {
                 defaultFamilyName, viewExpression, disableWAL, multiTenant, storeNulls, viewType,viewIndexType,  viewIndexId,
                 indexType, baseColumnCount, rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency,
                 indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme,
-                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization);
+                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization, null);
     }
 
     private PTableImpl(PTable table, boolean rowKeyOrderOptimizable, PIndexState state, long timeStamp,
@@ -388,7 +394,7 @@ public class PTableImpl implements PTable {
                 table.getIndexType(), baseTableColumnCount, rowKeyOrderOptimizable, table.getTransactionProvider(),
                 updateCacheFrequency, table.getIndexDisableTimestamp(), table.isNamespaceMapped(),
                 table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(),
-                table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+                table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization(), null);
     }
 
     private PTableImpl(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state,
@@ -398,12 +404,14 @@ public class PTableImpl implements PTable {
             boolean storeNulls, ViewType viewType, PDataType viewIndexType, Long viewIndexId, IndexType indexType,
             int baseColumnCount, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider, long updateCacheFrequency,
             long indexDisableTimestamp, boolean isNamespaceMapped, String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme, 
-            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization) throws SQLException {
+            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter,
+            Boolean useStatsForParallelization, Collection<PColumn> excludedColumns)
+            throws SQLException {
         init(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
                 parentSchemaName, parentTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
                 viewExpression, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
                 transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme, 
-                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization);
+                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization, excludedColumns);
     }
     
     @Override
@@ -438,7 +446,7 @@ public class PTableImpl implements PTable {
             boolean multiTenant, boolean storeNulls, ViewType viewType,PDataType viewIndexType,  Long viewIndexId,
             IndexType indexType , int baseColumnCount, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider, long updateCacheFrequency, long indexDisableTimestamp, 
             boolean isNamespaceMapped, String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme, QualifierEncodingScheme qualifierEncodingScheme, 
-            EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization) throws SQLException {
+            EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization, Collection<PColumn> excludedColumns) throws SQLException {
         Preconditions.checkNotNull(schemaName);
         Preconditions.checkArgument(tenantId==null || tenantId.getBytes().length > 0); // tenantId should be null or not empty
         int estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE + 4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
@@ -627,6 +635,7 @@ public class PTableImpl implements PTable {
         this.baseColumnCount = baseColumnCount;
         this.encodedCQCounter = encodedCQCounter;
         this.useStatsForParallelization = useStatsForParallelization;
+        this.excludedColumns = excludedColumns == null ? ImmutableList.<PColumn>of() : ImmutableList.copyOf(excludedColumns);
     }
 
     @Override
@@ -1077,6 +1086,11 @@ public class PTableImpl implements PTable {
     public List<PColumn> getColumns() {
         return allColumns;
     }
+    
+    @Override
+    public List<PColumn> getExcludedColumns() {
+        return excludedColumns;
+    }
 
     @Override
     public long getSequenceNumber() {
@@ -1365,7 +1379,7 @@ public class PTableImpl implements PTable {
                         isImmutableRows, physicalNames, defaultFamilyName, viewStatement, disableWAL,
                         multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
                         transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoParititonSeqName, 
-                        isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedColumnQualifierCounter, useStatsForParallelization);
+                        isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedColumnQualifierCounter, useStatsForParallelization, null);
             return result;
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible

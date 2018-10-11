@@ -46,6 +46,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -66,11 +67,16 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
     private static final String ROW_TO_FAIL = "fail";
     
     private final boolean localIndex;
-	private final boolean mutable;
+    private final String tableDDLOptions;
 
-	public TxWriteFailureIT(boolean localIndex, boolean mutable) {
+	public TxWriteFailureIT(boolean localIndex, boolean mutable, String transactionProvider) {
 		this.localIndex = localIndex;
-		this.mutable = mutable;
+        StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append(" TRANSACTION_PROVIDER='" + transactionProvider + "'");
+        if (!mutable) {
+            optionBuilder.append(",IMMUTABLE_ROWS=true");
+        }
+        this.tableDDLOptions = optionBuilder.toString();
 	}
 	
 	@BeforeClass
@@ -85,11 +91,12 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 	
-	@Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                 { false, false }, { false, true }, { true, false }, { true, true }
-           });
+	@Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1},transactionProvider={2}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
+                 { false, false, "TEPHRA" }, { false, true, "TEPHRA" }, { true, false, "TEPHRA" }, { true, true, "TEPHRA" },
+                 { false, false, "OMID" }, { false, true, "OMID" }, 
+           }), 2);
     }
     
     @Before
@@ -120,7 +127,7 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
         Connection conn = driver.connect(url, props);
         conn.setAutoCommit(false);
         conn.createStatement().execute(
-                "CREATE TABLE " + dataTableFullName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+                "CREATE TABLE " + dataTableFullName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR)"+tableDDLOptions);
         conn.createStatement().execute(
                 "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + dataTableFullName + " (v1)");
         

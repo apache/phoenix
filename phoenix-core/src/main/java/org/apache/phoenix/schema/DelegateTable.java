@@ -81,6 +81,11 @@ public class DelegateTable implements PTable {
     public List<PColumn> getColumns() {
         return delegate.getColumns();
     }
+    
+    @Override
+    public List<PColumn> getExcludedColumns() {
+        return delegate.getExcludedColumns();
+    }
 
     @Override
     public List<PColumnFamily> getColumnFamilies() {

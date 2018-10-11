@@ -104,24 +104,9 @@ public abstract class RegionScannerFactory {
       final ImmutableBytesWritable ptr, final boolean useQualifierAsListIndex) {
     return new RegionScanner() {
 
-      private boolean hasReferences = checkForReferenceFiles();
       private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
       private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
-
-      // If there are any reference files after local index region merge some cases we might
-      // get the records less than scan start row key. This will happen when we replace the
-      // actual region start key with merge region start key. This method gives whether are
-      // there any reference files in the region or not.
-      private boolean checkForReferenceFiles() {
-        if(!ScanUtil.isLocalIndex(scan)) return false;
-        for (byte[] family : scan.getFamilies()) {
-          if (getRegion().getStore(family).hasReferences()) {
-            return true;
-          }
-        }
-        return false;
-      }
 
       // Get the actual scan start row of local index. This will be used to compare the row
       // key of the results less than scan start row when there are references.
@@ -183,7 +168,7 @@ public abstract class RegionScannerFactory {
             arrayElementCell = result.get(arrayElementCellPosition);
           }
           if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
-            if(hasReferences && actualStartKey!=null) {
+            if(actualStartKey!=null) {
               next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
                   null, arrayElementCell);
               if (result.isEmpty()) {

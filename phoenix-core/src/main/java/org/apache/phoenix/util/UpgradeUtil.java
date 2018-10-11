@@ -74,6 +74,7 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -104,6 +105,7 @@ import org.apache.phoenix.coprocessor.TableViewFinderResult;
 import org.apache.phoenix.coprocessor.ViewFinder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -1222,7 +1224,135 @@ public class UpgradeUtil {
             queryConn.getQueryServices().clearCache();
         }
     }
-    
+
+    /**
+     * Synchronize column family properties using the default cf properties for a given table
+     * @param tableDesc table descriptor of table to modify
+     * @param defaultColFam default column family used as the baseline for property synchronization
+     * @param syncedProps Map of properties to be kept in sync as read from the default column family descriptor
+     * @return modified table descriptor builder
+     */
+    private static TableDescriptorBuilder syncColFamProperties(TableDescriptor tableDesc, ColumnFamilyDescriptor defaultColFam,
+            Map<String, Object> syncedProps) {
+        TableDescriptorBuilder tableDescBuilder = TableDescriptorBuilder.newBuilder(tableDesc);
+        // Ensure that all column families have necessary properties in sync (including local index cf if present)
+        for (ColumnFamilyDescriptor currentColFam: tableDesc.getColumnFamilies()) {
+            if (!currentColFam.equals(defaultColFam)) {
+                ColumnFamilyDescriptorBuilder colFamDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(currentColFam);
+                for (String prop: MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+                    String existingPropVal = Bytes.toString(currentColFam.getValue(Bytes.toBytes(prop)));
+                    String expectedPropVal = syncedProps.get(prop).toString();
+                    if (existingPropVal == null || !existingPropVal.toLowerCase().equals(expectedPropVal.toLowerCase())) {
+                        // Need to synchronize this property for the current column family descriptor
+                        colFamDescBuilder.setValue(prop, expectedPropVal);
+                    }
+                }
+                if (!colFamDescBuilder.equals(ColumnFamilyDescriptorBuilder.newBuilder(currentColFam))) {
+                    tableDescBuilder.modifyColumnFamily(colFamDescBuilder.build());
+                }
+            }
+        }
+        return tableDescBuilder;
+    }
+
+    /**
+     * Add the table descriptor to the set of table descriptors to keep in sync, if it has been changed
+     * @param origTableDesc original table descriptor of the table in question
+     * @param defaultColFam column family to be used for synchronizing properties
+     * @param syncedProps Map of properties to be kept in sync as read from the default column family descriptor
+     * @param tableDescsToSync set of modified table descriptors
+     * @throws SQLException
+     */
+    private static void addTableDescIfPropsChanged(TableDescriptor origTableDesc, ColumnFamilyDescriptor defaultColFam,
+            Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
+        TableDescriptorBuilder tableDescBuilder = syncColFamProperties(origTableDesc, defaultColFam, syncedProps);
+        if (!origTableDesc.equals(tableDescBuilder.build())) {
+            tableDescsToSync.add(tableDescBuilder.build());
+        }
+    }
+
+    /**
+     * Synchronize certain properties across column families of global index tables for a given base table
+     * @param cqs CQS object to get table descriptor from PTable
+     * @param baseTable base table
+     * @param defaultColFam column family to be used for synchronizing properties
+     * @param syncedProps Map of properties to be kept in sync as read from the default column family descriptor
+     * @param tableDescsToSync set of modified table descriptors
+     */
+    private static void syncGlobalIndexesForTable(ConnectionQueryServices cqs, PTable baseTable, ColumnFamilyDescriptor defaultColFam,
+            Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
+        for (PTable indexTable: baseTable.getIndexes()) {
+            // We already handle local index property synchronization when considering all column families of the base table
+            if (indexTable.getIndexType() == IndexType.GLOBAL) {
+                addTableDescIfPropsChanged(cqs.getTableDescriptor(indexTable.getPhysicalName().getBytes()),
+                        defaultColFam, syncedProps, tableDescsToSync);
+            }
+        }
+    }
+
+    /**
+     * Synchronize certain properties across column families of view index tables for a given base table
+     * @param cqs CQS object to get table descriptor from PTable
+     * @param baseTable base table
+     * @param defaultColFam column family to be used for synchronizing properties
+     * @param syncedProps Map of properties to be kept in sync as read from the default column family descriptor
+     * @param tableDescsToSync set of modified table descriptors
+     */
+    private static void syncViewIndexTable(ConnectionQueryServices cqs, PTable baseTable, ColumnFamilyDescriptor defaultColFam,
+            Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
+        String viewIndexName = MetaDataUtil.getViewIndexPhysicalName(baseTable.getPhysicalName().getString());
+        if (!Strings.isNullOrEmpty(viewIndexName)) {
+            try {
+                addTableDescIfPropsChanged(cqs.getTableDescriptor(Bytes.toBytes(viewIndexName)),
+                        defaultColFam, syncedProps, tableDescsToSync);
+            } catch (TableNotFoundException ignore) {
+                // Ignore since this means that a view index table does not exist for this table
+            }
+        }
+    }
+
+    /**
+     * Make sure that all tables have necessary column family properties in sync
+     * with each other and also in sync with all the table's indexes
+     * See PHOENIX-3955
+     * @param conn Phoenix connection
+     * @param admin HBase admin used for getting existing tables and their descriptors
+     * @throws SQLException
+     * @throws IOException
+     */
+    public static void syncTableAndIndexProperties(PhoenixConnection conn, Admin admin)
+    throws SQLException, IOException {
+        Set<TableDescriptor> tableDescriptorsToSynchronize = new HashSet<>();
+        for (TableDescriptor origTableDesc : admin.listTableDescriptors()) {
+            if (MetaDataUtil.isViewIndex(origTableDesc.getTableName().getNameWithNamespaceInclAsString())) {
+                // Ignore physical view index tables since we handle them for each base table already
+                continue;
+            }
+            PTable table = null;
+            String tableName = origTableDesc.getTableName().getNameAsString();
+            try {
+                table = PhoenixRuntime.getTable(conn, tableName);
+            } catch (TableNotFoundException e) {
+                // Ignore tables not mapped to a Phoenix Table
+                logger.warn("Error getting PTable for HBase table: " + tableName);
+                continue;
+            }
+            if (table.getType() == PTableType.INDEX) {
+                // Ignore global index tables since we handle them for each base table already
+                continue;
+            }
+            ColumnFamilyDescriptor defaultColFam = origTableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table));
+            Map<String, Object> syncedProps = MetaDataUtil.getSyncedProps(defaultColFam);
+
+            addTableDescIfPropsChanged(origTableDesc, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+            syncGlobalIndexesForTable(conn.getQueryServices(), table, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+            syncViewIndexTable(conn.getQueryServices(), table, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+        }
+        for (TableDescriptor t: tableDescriptorsToSynchronize) {
+            admin.modifyTable(t);
+        }
+    }
+
     private static void upsertBaseColumnCountInHeaderRow(PhoenixConnection metaConnection,
             String tenantId, String schemaName, String viewOrTableName, int baseColumnCount)
             throws SQLException {

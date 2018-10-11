@@ -183,7 +183,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
             throws IOException {
 
         // get the index updates for this current batch
-        Iterable<IndexUpdate> upserts = codec.getIndexUpserts(state, indexMetaData);
+        Iterable<IndexUpdate> upserts = codec.getIndexUpserts(state, indexMetaData, env.getRegionInfo().getStartKey(), env.getRegionInfo().getEndKey());
         state.resetTrackedColumns();
 
         /*
@@ -221,7 +221,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
     }
 
     /**
-     * Get the index deletes from the codec {@link IndexCodec#getIndexDeletes(TableState, IndexMetaData)} and then add them to the
+     * Get the index deletes from the codec {@link IndexCodec#getIndexDeletes(TableState, IndexMetaData, byte[], byte[])} and then add them to the
      * update map.
      * <p>
      * Expects the {@link LocalTableState} to already be correctly setup (correct timestamp, updates applied, etc).
@@ -231,7 +231,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      */
     protected void addDeleteUpdatesToMap(IndexUpdateManager updateMap, LocalTableState state, long ts, IndexMetaData indexMetaData)
             throws IOException {
-        Iterable<IndexUpdate> cleanup = codec.getIndexDeletes(state, indexMetaData);
+        Iterable<IndexUpdate> cleanup = codec.getIndexDeletes(state, indexMetaData, env.getRegionInfo().getStartKey(), env.getRegionInfo().getEndKey());
         if (cleanup != null) {
             for (IndexUpdate d : cleanup) {
                 if (!d.isValid()) {

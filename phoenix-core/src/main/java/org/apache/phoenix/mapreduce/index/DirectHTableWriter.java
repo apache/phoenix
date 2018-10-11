@@ -26,10 +26,16 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
 
 /**
  * Writes mutations directly to HBase using HBase front-door APIs.
@@ -65,7 +71,24 @@ public class DirectHTableWriter {
 
     public void write(List<Mutation> mutations) throws IOException, InterruptedException {
         Object[] results = new Object[mutations.size()];
-        table.batch(mutations, results);
+        String txnIdStr = conf.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
+        if (txnIdStr == null) {
+            table.batch(mutations, results);
+        } else {
+            long ts = Long.parseLong(txnIdStr);
+            PhoenixTransactionProvider provider = TransactionFactory.Provider.getDefault().getTransactionProvider();
+            String txnProviderStr = conf.get(PhoenixConfigurationUtil.TX_PROVIDER);
+            if (txnProviderStr != null) {
+                provider = TransactionFactory.Provider.valueOf(txnProviderStr).getTransactionProvider();
+            }
+            List<Mutation> shadowedMutations = Lists.newArrayListWithExpectedSize(mutations.size());
+            for (Mutation m : mutations) {
+                if (m instanceof Put) {
+                    shadowedMutations.add(provider.markPutAsCommitted((Put)m, ts, ts));
+                }
+            }
+            table.batch(shadowedMutations, results);
+        }
     }
 
     protected Configuration getConf() {

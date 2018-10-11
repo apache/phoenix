@@ -102,7 +102,7 @@ import com.google.common.collect.Maps;
 public class ViewIT extends SplitSystemCatalogIT {
 
     protected String tableDDLOptions;
-    protected boolean transactional;
+    protected String transactionProvider;
     protected boolean columnEncoded;
     
     private static final String FAILED_VIEWNAME = SchemaUtil.getTableName(SCHEMA2, "FAILED_VIEW");
@@ -111,12 +111,12 @@ public class ViewIT extends SplitSystemCatalogIT {
     private static volatile CountDownLatch latch1 = null;
     private static volatile CountDownLatch latch2 = null;
 
-    public ViewIT(boolean transactional, boolean columnEncoded) {
+    public ViewIT(String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder();
-        this.transactional = transactional;
+        this.transactionProvider = transactionProvider;
         this.columnEncoded = columnEncoded;
-        if (transactional) {
-            optionBuilder.append(" TRANSACTIONAL=true ");
+        if (transactionProvider != null) {
+            optionBuilder.append(" TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -126,11 +126,12 @@ public class ViewIT extends SplitSystemCatalogIT {
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameters(name="ViewIT_transactional={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { 
-            { true, false }, { true, true },
-            { false, false }, { false, true }});
+    @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+            { "TEPHRA", false }, { "TEPHRA", true },
+            { "OMID", false }, 
+            { null, false }, { null, true }}),0);
     }
     
     @BeforeClass
@@ -734,7 +735,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
-        assertPKs(rs, new String[] {"K3"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3"});
         
         // sanity check upserts into base table and view
         conn.createStatement().executeUpdate("upsert into " + fullTableName + " (k1, k2, v1) values (1, 1, 1)");
@@ -763,12 +764,14 @@ public class ViewIT extends SplitSystemCatalogIT {
         ddl = "CREATE VIEW " + fullViewName + "(v2 VARCHAR, k3 VARCHAR, k4 INTEGER NOT NULL, CONSTRAINT PKVEW PRIMARY KEY (k3, k4)) AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
         conn.createStatement().execute(ddl);
         
+        PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+        
         // assert PK metadata
         ResultSet rs =
                 conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
-        assertPKs(rs, new String[] {"K3", "K4"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
     }
     
     @Test
@@ -788,7 +791,7 @@ public class ViewIT extends SplitSystemCatalogIT {
 
         // assert PK metadata
         ResultSet rs = conn.getMetaData().getPrimaryKeys(null, SCHEMA2, viewName);
-        assertPKs(rs, new String[] {"K3", "K4"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
     }
     
     @Test
@@ -1019,8 +1022,8 @@ public class ViewIT extends SplitSystemCatalogIT {
                         + tableName + " WHERE KEY_PREFIX = 'ab4' ");
 
                 // upsert rows
-                upsertRows(viewName1, tenantConn);
-                upsertRows(viewName2, tenantConn);
+                upsertRows(tableName, viewName1, tenantConn);
+                upsertRows(tableName, viewName2, tenantConn);
 
                 // run queries
                 String[] whereClauses =
@@ -1137,7 +1140,7 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
-    private void upsertRows(String viewName1, Connection tenantConn) throws SQLException {
+    private void upsertRows(String tableName, String viewName1, Connection tenantConn) throws SQLException, IOException {
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1
                 + " (pk1, pk2, col1, col3) VALUES ('testa', 'testb', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1
@@ -1364,7 +1367,6 @@ public class ViewIT extends SplitSystemCatalogIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
-            String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
             latch1 = new CountDownLatch(1);
             latch2 = new CountDownLatch(1);
             String tableDdl =
@@ -1389,23 +1391,15 @@ public class ViewIT extends SplitSystemCatalogIT {
             // wait till the thread makes the rpc to create the view
             latch1.await();
             tableDdl = "DROP TABLE " + fullTableName;
-            try {
-                // drop table should fail as we are concurrently adding a view
-                conn.createStatement().execute(tableDdl);
-                fail("Creating a view while concurrently dropping the base table should fail");
-            } catch (ConcurrentTableMutationException e) {
-            }
+            // drop table goes through first and so the view creation should fail
+            conn.createStatement().execute(tableDdl);
             latch2.countDown();
 
             Exception e = future.get();
-            assertNull(e);
+            assertTrue("Expected TableNotFoundException since drop table goes through first",
+                    e instanceof TableNotFoundException &&
+                            fullTableName.equals(((TableNotFoundException) e).getTableName()));
 
-            // create another view to ensure that the cell used to prevent
-            // concurrent modifications was removed
-            String ddl =
-                    "CREATE VIEW " + fullViewName2 + " (v2 VARCHAR) AS SELECT * FROM "
-                            + fullTableName + " WHERE k = 6";
-            conn.createStatement().execute(ddl);
         }
     }
 
@@ -1484,7 +1478,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                     "CREATE TABLE " + fullTableName + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)"
                             + tableDDLOptions;
             conn.createStatement().execute(tableDdl);
-            // create a two views
+            // create two views
             String ddl =
                     "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM "
                             + fullTableName + " WHERE k = 6";
