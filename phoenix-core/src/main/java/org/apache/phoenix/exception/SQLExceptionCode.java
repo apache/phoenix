@@ -306,6 +306,7 @@ public enum SQLExceptionCode {
     TTL_UNSUPPORTED_FOR_TXN_TABLE(10947, "44A28", "TTL is not supported for"),
     CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE(10948, "44A29", "Local indexes cannot be created for"),
     CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX(10949, "44A30", "Cannot set or alter the following properties on an index: "
+            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.toString()),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
