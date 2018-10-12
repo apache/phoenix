@@ -423,7 +423,7 @@ public class MutableIndexFailureIT extends BaseTest {
 
     private void addRowsInTableDuringRetry(final String tableName)
             throws SQLException, InterruptedException, ExecutionException {
-        int threads=10;
+        int threads=9;
         boolean wasFailWrite = FailingRegionObserver.FAIL_WRITE;
         boolean wasToggleFailWriteForRetry = FailingRegionObserver.TOGGLE_FAIL_WRITE_FOR_RETRY;
         try {
@@ -600,6 +600,9 @@ public class MutableIndexFailureIT extends BaseTest {
                                 break;
                             }
                         }
+                    }
+                    if (TOGGLE_FAIL_WRITE_FOR_RETRY) {
+                        FAIL_WRITE = !FAIL_WRITE;
                     }
                 }
             }
