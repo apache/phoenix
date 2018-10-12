@@ -1041,7 +1041,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     public static PDataType fromSqlTypeName(String sqlTypeName) {
         for (PDataType t : PDataTypeFactory.getInstance().getTypes()) {
-            if (t.getSqlTypeName().equals(sqlTypeName)) return t;
+            if (t.getSqlTypeName().equalsIgnoreCase(sqlTypeName)) return t;
         }
         throw newIllegalDataException("Unsupported sql type: " + sqlTypeName);
     }
