@@ -3384,8 +3384,9 @@ public class MetaDataClient {
         }
 
         // Shouldn't decrease length of char type whether the query results will be incorrect.
-        if (columnDef.getDataType() instanceof PChar && oldColumn.getMaxLength() > columnDef.getMaxLength()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_DECREASE_CHAR_LENGTH).build().buildException();
+        if (oldColumn.getMaxLength() != null && columnDef.getMaxLength() != null &&
+                oldColumn.getMaxLength() > columnDef.getMaxLength()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH).build().buildException();
         }
 
         // Comparision of row keys were affected when we changed max length of pk columns to pad more placeholder,

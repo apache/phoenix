@@ -1706,19 +1706,19 @@ public final class MetaDataProtos {
      */
     org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder getTableOrBuilder();
 
-    // repeated bytes tablesToDelete = 4;
+    // repeated bytes mutatedTableNames = 4;
     /**
-     * <code>repeated bytes tablesToDelete = 4;</code>
+     * <code>repeated bytes mutatedTableNames = 4;</code>
      */
-    java.util.List<com.google.protobuf.ByteString> getTablesToDeleteList();
+    java.util.List<com.google.protobuf.ByteString> getMutatedTableNamesList();
     /**
-     * <code>repeated bytes tablesToDelete = 4;</code>
+     * <code>repeated bytes mutatedTableNames = 4;</code>
      */
-    int getTablesToDeleteCount();
+    int getMutatedTableNamesCount();
     /**
-     * <code>repeated bytes tablesToDelete = 4;</code>
+     * <code>repeated bytes mutatedTableNames = 4;</code>
      */
-    com.google.protobuf.ByteString getTablesToDelete(int index);
+    com.google.protobuf.ByteString getMutatedTableNames(int index);
 
     // optional bytes columnName = 5;
     /**
@@ -1926,10 +1926,10 @@ public final class MetaDataProtos {
             }
             case 34: {
               if (!((mutable_bitField0_ & 0x00000008) == 0x00000008)) {
-                tablesToDelete_ = new java.util.ArrayList<com.google.protobuf.ByteString>();
+                mutatedTableNames_ = new java.util.ArrayList<com.google.protobuf.ByteString>();
                 mutable_bitField0_ |= 0x00000008;
               }
-              tablesToDelete_.add(input.readBytes());
+              mutatedTableNames_.add(input.readBytes());
               break;
             }
             case 42: {
@@ -2000,7 +2000,7 @@ public final class MetaDataProtos {
             e.getMessage()).setUnfinishedMessage(this);
       } finally {
         if (((mutable_bitField0_ & 0x00000008) == 0x00000008)) {
-          tablesToDelete_ = java.util.Collections.unmodifiableList(tablesToDelete_);
+          mutatedTableNames_ = java.util.Collections.unmodifiableList(mutatedTableNames_);
         }
         if (((mutable_bitField0_ & 0x00000080) == 0x00000080)) {
           function_ = java.util.Collections.unmodifiableList(function_);
@@ -2094,27 +2094,27 @@ public final class MetaDataProtos {
       return table_;
     }
 
-    // repeated bytes tablesToDelete = 4;
-    public static final int TABLESTODELETE_FIELD_NUMBER = 4;
-    private java.util.List<com.google.protobuf.ByteString> tablesToDelete_;
+    // repeated bytes mutatedTableNames = 4;
+    public static final int MUTATEDTABLENAMES_FIELD_NUMBER = 4;
+    private java.util.List<com.google.protobuf.ByteString> mutatedTableNames_;
     /**
-     * <code>repeated bytes tablesToDelete = 4;</code>
+     * <code>repeated bytes mutatedTableNames = 4;</code>
      */
     public java.util.List<com.google.protobuf.ByteString>
-        getTablesToDeleteList() {
-      return tablesToDelete_;
+        getMutatedTableNamesList() {
+      return mutatedTableNames_;
     }
     /**
-     * <code>repeated bytes tablesToDelete = 4;</code>
+     * <code>repeated bytes mutatedTableNames = 4;</code>
      */
-    public int getTablesToDeleteCount() {
-      return tablesToDelete_.size();
+    public int getMutatedTableNamesCount() {
+      return mutatedTableNames_.size();
     }
     /**
-     * <code>repeated bytes tablesToDelete = 4;</code>
+     * <code>repeated bytes mutatedTableNames = 4;</code>
      */
-    public com.google.protobuf.ByteString getTablesToDelete(int index) {
-      return tablesToDelete_.get(index);
+    public com.google.protobuf.ByteString getMutatedTableNames(int index) {
+      return mutatedTableNames_.get(index);
     }
 
     // optional bytes columnName = 5;
@@ -2311,7 +2311,7 @@ public final class MetaDataProtos {
       returnCode_ = org.apache.phoenix.coprocessor.generated.MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS;
       mutationTime_ = 0L;
       table_ = org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance();
-      tablesToDelete_ = java.util.Collections.emptyList();
+      mutatedTableNames_ = java.util.Collections.emptyList();
       columnName_ = com.google.protobuf.ByteString.EMPTY;
       familyName_ = com.google.protobuf.ByteString.EMPTY;
       functionName_ = com.google.protobuf.ByteString.EMPTY;
@@ -2367,8 +2367,8 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000004) == 0x00000004)) {
         output.writeMessage(3, table_);
       }
-      for (int i = 0; i < tablesToDelete_.size(); i++) {
-        output.writeBytes(4, tablesToDelete_.get(i));
+      for (int i = 0; i < mutatedTableNames_.size(); i++) {
+        output.writeBytes(4, mutatedTableNames_.get(i));
       }
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         output.writeBytes(5, columnName_);
@@ -2420,12 +2420,12 @@ public final class MetaDataProtos {
       }
       {
         int dataSize = 0;
-        for (int i = 0; i < tablesToDelete_.size(); i++) {
+        for (int i = 0; i < mutatedTableNames_.size(); i++) {
           dataSize += com.google.protobuf.CodedOutputStream
-            .computeBytesSizeNoTag(tablesToDelete_.get(i));
+            .computeBytesSizeNoTag(mutatedTableNames_.get(i));
         }
         size += dataSize;
-        size += 1 * getTablesToDeleteList().size();
+        size += 1 * getMutatedTableNamesList().size();
       }
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         size += com.google.protobuf.CodedOutputStream
@@ -2501,8 +2501,8 @@ public final class MetaDataProtos {
         result = result && getTable()
             .equals(other.getTable());
       }
-      result = result && getTablesToDeleteList()
-          .equals(other.getTablesToDeleteList());
+      result = result && getMutatedTableNamesList()
+          .equals(other.getMutatedTableNamesList());
       result = result && (hasColumnName() == other.hasColumnName());
       if (hasColumnName()) {
         result = result && getColumnName()
@@ -2567,9 +2567,9 @@ public final class MetaDataProtos {
         hash = (37 * hash) + TABLE_FIELD_NUMBER;
         hash = (53 * hash) + getTable().hashCode();
       }
-      if (getTablesToDeleteCount() > 0) {
-        hash = (37 * hash) + TABLESTODELETE_FIELD_NUMBER;
-        hash = (53 * hash) + getTablesToDeleteList().hashCode();
+      if (getMutatedTableNamesCount() > 0) {
+        hash = (37 * hash) + MUTATEDTABLENAMES_FIELD_NUMBER;
+        hash = (53 * hash) + getMutatedTableNamesList().hashCode();
       }
       if (hasColumnName()) {
         hash = (37 * hash) + COLUMNNAME_FIELD_NUMBER;
@@ -2730,7 +2730,7 @@ public final class MetaDataProtos {
           tableBuilder_.clear();
         }
         bitField0_ = (bitField0_ & ~0x00000004);
-        tablesToDelete_ = java.util.Collections.emptyList();
+        mutatedTableNames_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000008);
         columnName_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000010);
@@ -2807,10 +2807,10 @@ public final class MetaDataProtos {
           result.table_ = tableBuilder_.build();
         }
         if (((bitField0_ & 0x00000008) == 0x00000008)) {
-          tablesToDelete_ = java.util.Collections.unmodifiableList(tablesToDelete_);
+          mutatedTableNames_ = java.util.Collections.unmodifiableList(mutatedTableNames_);
           bitField0_ = (bitField0_ & ~0x00000008);
         }
-        result.tablesToDelete_ = tablesToDelete_;
+        result.mutatedTableNames_ = mutatedTableNames_;
         if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
           to_bitField0_ |= 0x00000008;
         }
@@ -2886,13 +2886,13 @@ public final class MetaDataProtos {
         if (other.hasTable()) {
           mergeTable(other.getTable());
         }
-        if (!other.tablesToDelete_.isEmpty()) {
-          if (tablesToDelete_.isEmpty()) {
-            tablesToDelete_ = other.tablesToDelete_;
+        if (!other.mutatedTableNames_.isEmpty()) {
+          if (mutatedTableNames_.isEmpty()) {
+            mutatedTableNames_ = other.mutatedTableNames_;
             bitField0_ = (bitField0_ & ~0x00000008);
           } else {
-            ensureTablesToDeleteIsMutable();
-            tablesToDelete_.addAll(other.tablesToDelete_);
+            ensureMutatedTableNamesIsMutable();
+            mutatedTableNames_.addAll(other.mutatedTableNames_);
           }
           onChanged();
         }
@@ -3206,73 +3206,73 @@ public final class MetaDataProtos {
         return tableBuilder_;
       }
 
-      // repeated bytes tablesToDelete = 4;
-      private java.util.List<com.google.protobuf.ByteString> tablesToDelete_ = java.util.Collections.emptyList();
-      private void ensureTablesToDeleteIsMutable() {
+      // repeated bytes mutatedTableNames = 4;
+      private java.util.List<com.google.protobuf.ByteString> mutatedTableNames_ = java.util.Collections.emptyList();
+      private void ensureMutatedTableNamesIsMutable() {
         if (!((bitField0_ & 0x00000008) == 0x00000008)) {
-          tablesToDelete_ = new java.util.ArrayList<com.google.protobuf.ByteString>(tablesToDelete_);
+          mutatedTableNames_ = new java.util.ArrayList<com.google.protobuf.ByteString>(mutatedTableNames_);
           bitField0_ |= 0x00000008;
          }
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
       public java.util.List<com.google.protobuf.ByteString>
-          getTablesToDeleteList() {
-        return java.util.Collections.unmodifiableList(tablesToDelete_);
+          getMutatedTableNamesList() {
+        return java.util.Collections.unmodifiableList(mutatedTableNames_);
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
-      public int getTablesToDeleteCount() {
-        return tablesToDelete_.size();
+      public int getMutatedTableNamesCount() {
+        return mutatedTableNames_.size();
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
-      public com.google.protobuf.ByteString getTablesToDelete(int index) {
-        return tablesToDelete_.get(index);
+      public com.google.protobuf.ByteString getMutatedTableNames(int index) {
+        return mutatedTableNames_.get(index);
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
-      public Builder setTablesToDelete(
+      public Builder setMutatedTableNames(
           int index, com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  ensureTablesToDeleteIsMutable();
-        tablesToDelete_.set(index, value);
+  ensureMutatedTableNamesIsMutable();
+        mutatedTableNames_.set(index, value);
         onChanged();
         return this;
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
-      public Builder addTablesToDelete(com.google.protobuf.ByteString value) {
+      public Builder addMutatedTableNames(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  ensureTablesToDeleteIsMutable();
-        tablesToDelete_.add(value);
+  ensureMutatedTableNamesIsMutable();
+        mutatedTableNames_.add(value);
         onChanged();
         return this;
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
-      public Builder addAllTablesToDelete(
+      public Builder addAllMutatedTableNames(
           java.lang.Iterable<? extends com.google.protobuf.ByteString> values) {
-        ensureTablesToDeleteIsMutable();
-        super.addAll(values, tablesToDelete_);
+        ensureMutatedTableNamesIsMutable();
+        super.addAll(values, mutatedTableNames_);
         onChanged();
         return this;
       }
       /**
-       * <code>repeated bytes tablesToDelete = 4;</code>
+       * <code>repeated bytes mutatedTableNames = 4;</code>
        */
-      public Builder clearTablesToDelete() {
-        tablesToDelete_ = java.util.Collections.emptyList();
+      public Builder clearMutatedTableNames() {
+        mutatedTableNames_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000008);
         onChanged();
         return this;
@@ -18507,104 +18507,104 @@ public final class MetaDataProtos {
       "me\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\031\n\007columns\030\004" +
       " \003(\0132\010.PColumn\022\025\n\rphysicalNames\030\005 \003(\014\022\023\n" +
       "\013viewIndexId\030\006 \002(\003\022\030\n\rviewIndexType\030\007 \001(" +
-      "\005:\0015\"\353\002\n\020MetaDataResponse\022!\n\nreturnCode\030" +
+      "\005:\0015\"\356\002\n\020MetaDataResponse\022!\n\nreturnCode\030" +
       "\001 \001(\0162\r.MutationCode\022\024\n\014mutationTime\030\002 \001" +
-      "(\003\022\026\n\005table\030\003 \001(\0132\007.PTable\022\026\n\016tablesToDe" +
-      "lete\030\004 \003(\014\022\022\n\ncolumnName\030\005 \001(\014\022\022\n\nfamily",
-      "Name\030\006 \001(\014\022\024\n\014functionName\030\007 \001(\014\022\034\n\010func" +
-      "tion\030\010 \003(\0132\n.PFunction\022/\n\024sharedTablesTo" +
-      "Delete\030\t \003(\0132\021.SharedTableState\022\030\n\006schem" +
-      "a\030\n \001(\0132\010.PSchema\022\030\n\020autoPartitionNum\030\013 " +
-      "\001(\003\022\023\n\013viewIndexId\030\014 \001(\003\022\030\n\rviewIndexTyp" +
-      "e\030\r \001(\005:\0015\"\364\001\n\017GetTableRequest\022\020\n\010tenant" +
-      "Id\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableNam" +
-      "e\030\003 \002(\014\022\026\n\016tableTimestamp\030\004 \002(\003\022\027\n\017clien" +
-      "tTimestamp\030\005 \002(\003\022\025\n\rclientVersion\030\006 \001(\005\022" +
-      "\037\n\027skipAddingParentColumns\030\007 \001(\010\022\031\n\021skip",
-      "AddingIndexes\030\010 \001(\010\022$\n\023lockedAncestorTab" +
-      "le\030\t \001(\0132\007.PTable\"\212\001\n\023GetFunctionsReques" +
-      "t\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctionNames\030\002 \003" +
-      "(\014\022\032\n\022functionTimestamps\030\003 \003(\003\022\027\n\017client" +
-      "Timestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"V" +
-      "\n\020GetSchemaRequest\022\022\n\nschemaName\030\001 \002(\t\022\027" +
-      "\n\017clientTimestamp\030\002 \002(\003\022\025\n\rclientVersion" +
-      "\030\003 \002(\005\"d\n\022CreateTableRequest\022\036\n\026tableMet" +
-      "adataMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 " +
-      "\001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r\n\025CreateFu",
-      "nctionRequest\022\036\n\026tableMetadataMutations\030" +
-      "\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007replace\030\003 \001(" +
-      "\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023CreateSchema" +
-      "Request\022\036\n\026tableMetadataMutations\030\001 \003(\014\022" +
-      "\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion\030\003 \002" +
-      "(\005\"\216\001\n\020DropTableRequest\022\036\n\026tableMetadata" +
-      "Mutations\030\001 \003(\014\022\021\n\ttableType\030\002 \002(\t\022\017\n\007ca" +
-      "scade\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\022\037\n\027sk" +
-      "ipAddingParentColumns\030\005 \001(\010\"_\n\021DropSchem" +
-      "aRequest\022\037\n\027schemaMetadataMutations\030\001 \003(",
-      "\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion\030\003" +
-      " \002(\005\"I\n\020AddColumnRequest\022\036\n\026tableMetadat" +
-      "aMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"" +
-      "J\n\021DropColumnRequest\022\036\n\026tableMetadataMut" +
-      "ations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"L\n\023M" +
-      "odifyColumnRequest\022\036\n\026tableMetadataMutat" +
-      "ions\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"^\n\023Dro" +
-      "pFunctionRequest\022\036\n\026tableMetadataMutatio" +
-      "ns\030\001 \003(\014\022\020\n\010ifExists\030\002 \001(\010\022\025\n\rclientVers" +
-      "ion\030\003 \001(\005\"P\n\027UpdateIndexStateRequest\022\036\n\026",
-      "tableMetadataMutations\030\001 \003(\014\022\025\n\rclientVe" +
-      "rsion\030\002 \001(\005\"*\n\021ClearCacheRequest\022\025\n\rclie" +
-      "ntVersion\030\001 \001(\005\"*\n\022ClearCacheResponse\022\024\n" +
-      "\014unfreedBytes\030\001 \001(\003\"*\n\021GetVersionRequest" +
-      "\022\025\n\rclientVersion\030\001 \001(\005\"E\n\022GetVersionRes" +
-      "ponse\022\017\n\007version\030\001 \002(\003\022\036\n\026systemCatalogT" +
-      "imestamp\030\002 \001(\003\"\205\001\n\032ClearTableFromCacheRe" +
-      "quest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030\002 " +
-      "\002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTimestam" +
-      "p\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033ClearT",
-      "ableFromCacheResponse*\316\005\n\014MutationCode\022\030" +
-      "\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FO" +
-      "UND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_AL" +
-      "READY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUTAT" +
-      "ION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEWER_" +
-      "TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_MUTATIO" +
-      "N\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE_N" +
-      "OT_FOUND\020\t\022\033\n\027FUNCTION_ALREADY_EXISTS\020\n\022" +
-      "\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NEWER_FUNCTIO" +
-      "N_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_REGION\020\r\022\031\n",
-      "\025SCHEMA_ALREADY_EXISTS\020\016\022\026\n\022NEWER_SCHEMA" +
-      "_FOUND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024SCHEMA" +
-      "_NOT_IN_REGION\020\021\022\032\n\026TABLES_EXIST_ON_SCHE" +
-      "MA\020\022\022\035\n\031UNALLOWED_SCHEMA_MUTATION\020\023\022%\n!A" +
-      "UTO_PARTITION_SEQUENCE_NOT_FOUND\020\024\022#\n\037CA" +
-      "NNOT_COERCE_AUTO_PARTITION_ID\020\025\022\024\n\020TOO_M" +
-      "ANY_INDEXES\020\026\022\037\n\033UNABLE_TO_CREATE_CHILD_" +
-      "LINK\020\027\022!\n\035UNABLE_TO_UPDATE_PARENT_TABLE\020" +
-      "\030\022\023\n\017COLUMN_MODIFIED\020\0312\236\007\n\017MetaDataServi" +
-      "ce\022/\n\010getTable\022\020.GetTableRequest\032\021.MetaD",
-      "ataResponse\0227\n\014getFunctions\022\024.GetFunctio" +
-      "nsRequest\032\021.MetaDataResponse\0221\n\tgetSchem" +
-      "a\022\021.GetSchemaRequest\032\021.MetaDataResponse\022" +
-      "5\n\013createTable\022\023.CreateTableRequest\032\021.Me" +
-      "taDataResponse\022;\n\016createFunction\022\026.Creat" +
-      "eFunctionRequest\032\021.MetaDataResponse\0227\n\014c" +
-      "reateSchema\022\024.CreateSchemaRequest\032\021.Meta" +
-      "DataResponse\0221\n\tdropTable\022\021.DropTableReq" +
-      "uest\032\021.MetaDataResponse\0223\n\ndropSchema\022\022." +
-      "DropSchemaRequest\032\021.MetaDataResponse\0227\n\014",
-      "dropFunction\022\024.DropFunctionRequest\032\021.Met" +
-      "aDataResponse\0221\n\taddColumn\022\021.AddColumnRe" +
-      "quest\032\021.MetaDataResponse\0223\n\ndropColumn\022\022" +
-      ".DropColumnRequest\032\021.MetaDataResponse\0227\n" +
-      "\014modifyColumn\022\024.ModifyColumnRequest\032\021.Me" +
-      "taDataResponse\022?\n\020updateIndexState\022\030.Upd" +
-      "ateIndexStateRequest\032\021.MetaDataResponse\022" +
-      "5\n\nclearCache\022\022.ClearCacheRequest\032\023.Clea" +
-      "rCacheResponse\0225\n\ngetVersion\022\022.GetVersio" +
-      "nRequest\032\023.GetVersionResponse\022P\n\023clearTa",
-      "bleFromCache\022\033.ClearTableFromCacheReques" +
-      "t\032\034.ClearTableFromCacheResponseBB\n(org.a" +
-      "pache.phoenix.coprocessor.generatedB\016Met" +
-      "aDataProtosH\001\210\001\001\240\001\001"
+      "(\003\022\026\n\005table\030\003 \001(\0132\007.PTable\022\031\n\021mutatedTab" +
+      "leNames\030\004 \003(\014\022\022\n\ncolumnName\030\005 \001(\014\022\022\n\nfam",
+      "ilyName\030\006 \001(\014\022\024\n\014functionName\030\007 \001(\014\022\034\n\010f" +
+      "unction\030\010 \003(\0132\n.PFunction\022/\n\024sharedTable" +
+      "sToDelete\030\t \003(\0132\021.SharedTableState\022\030\n\006sc" +
+      "hema\030\n \001(\0132\010.PSchema\022\030\n\020autoPartitionNum" +
+      "\030\013 \001(\003\022\023\n\013viewIndexId\030\014 \001(\003\022\030\n\rviewIndex" +
+      "Type\030\r \001(\005:\0015\"\364\001\n\017GetTableRequest\022\020\n\010ten" +
+      "antId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttable" +
+      "Name\030\003 \002(\014\022\026\n\016tableTimestamp\030\004 \002(\003\022\027\n\017cl" +
+      "ientTimestamp\030\005 \002(\003\022\025\n\rclientVersion\030\006 \001" +
+      "(\005\022\037\n\027skipAddingParentColumns\030\007 \001(\010\022\031\n\021s",
+      "kipAddingIndexes\030\010 \001(\010\022$\n\023lockedAncestor" +
+      "Table\030\t \001(\0132\007.PTable\"\212\001\n\023GetFunctionsReq" +
+      "uest\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctionNames\030" +
+      "\002 \003(\014\022\032\n\022functionTimestamps\030\003 \003(\003\022\027\n\017cli" +
+      "entTimestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(" +
+      "\005\"V\n\020GetSchemaRequest\022\022\n\nschemaName\030\001 \002(" +
+      "\t\022\027\n\017clientTimestamp\030\002 \002(\003\022\025\n\rclientVers" +
+      "ion\030\003 \002(\005\"d\n\022CreateTableRequest\022\036\n\026table" +
+      "MetadataMutations\030\001 \003(\014\022\025\n\rclientVersion" +
+      "\030\002 \001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r\n\025Creat",
+      "eFunctionRequest\022\036\n\026tableMetadataMutatio" +
+      "ns\030\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007replace\030\003" +
+      " \001(\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023CreateSch" +
+      "emaRequest\022\036\n\026tableMetadataMutations\030\001 \003" +
+      "(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion\030" +
+      "\003 \002(\005\"\216\001\n\020DropTableRequest\022\036\n\026tableMetad" +
+      "ataMutations\030\001 \003(\014\022\021\n\ttableType\030\002 \002(\t\022\017\n" +
+      "\007cascade\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\022\037\n" +
+      "\027skipAddingParentColumns\030\005 \001(\010\"_\n\021DropSc" +
+      "hemaRequest\022\037\n\027schemaMetadataMutations\030\001",
+      " \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersio" +
+      "n\030\003 \002(\005\"I\n\020AddColumnRequest\022\036\n\026tableMeta" +
+      "dataMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001" +
+      "(\005\"J\n\021DropColumnRequest\022\036\n\026tableMetadata" +
+      "Mutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"L" +
+      "\n\023ModifyColumnRequest\022\036\n\026tableMetadataMu" +
+      "tations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"^\n\023" +
+      "DropFunctionRequest\022\036\n\026tableMetadataMuta" +
+      "tions\030\001 \003(\014\022\020\n\010ifExists\030\002 \001(\010\022\025\n\rclientV" +
+      "ersion\030\003 \001(\005\"P\n\027UpdateIndexStateRequest\022",
+      "\036\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rclien" +
+      "tVersion\030\002 \001(\005\"*\n\021ClearCacheRequest\022\025\n\rc" +
+      "lientVersion\030\001 \001(\005\"*\n\022ClearCacheResponse" +
+      "\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n\021GetVersionRequ" +
+      "est\022\025\n\rclientVersion\030\001 \001(\005\"E\n\022GetVersion" +
+      "Response\022\017\n\007version\030\001 \002(\003\022\036\n\026systemCatal" +
+      "ogTimestamp\030\002 \001(\003\"\205\001\n\032ClearTableFromCach" +
+      "eRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName" +
+      "\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTimes" +
+      "tamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033Cle",
+      "arTableFromCacheResponse*\316\005\n\014MutationCod" +
+      "e\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT" +
+      "_FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN" +
+      "_ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_MU" +
+      "TATION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEW" +
+      "ER_TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_MUTA" +
+      "TION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_TABL" +
+      "E_NOT_FOUND\020\t\022\033\n\027FUNCTION_ALREADY_EXISTS" +
+      "\020\n\022\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NEWER_FUNC" +
+      "TION_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_REGION\020\r",
+      "\022\031\n\025SCHEMA_ALREADY_EXISTS\020\016\022\026\n\022NEWER_SCH" +
+      "EMA_FOUND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024SCH" +
+      "EMA_NOT_IN_REGION\020\021\022\032\n\026TABLES_EXIST_ON_S" +
+      "CHEMA\020\022\022\035\n\031UNALLOWED_SCHEMA_MUTATION\020\023\022%" +
+      "\n!AUTO_PARTITION_SEQUENCE_NOT_FOUND\020\024\022#\n" +
+      "\037CANNOT_COERCE_AUTO_PARTITION_ID\020\025\022\024\n\020TO" +
+      "O_MANY_INDEXES\020\026\022\037\n\033UNABLE_TO_CREATE_CHI" +
+      "LD_LINK\020\027\022!\n\035UNABLE_TO_UPDATE_PARENT_TAB" +
+      "LE\020\030\022\023\n\017COLUMN_MODIFIED\020\0312\236\007\n\017MetaDataSe" +
+      "rvice\022/\n\010getTable\022\020.GetTableRequest\032\021.Me",
+      "taDataResponse\0227\n\014getFunctions\022\024.GetFunc" +
+      "tionsRequest\032\021.MetaDataResponse\0221\n\tgetSc" +
+      "hema\022\021.GetSchemaRequest\032\021.MetaDataRespon" +
+      "se\0225\n\013createTable\022\023.CreateTableRequest\032\021" +
+      ".MetaDataResponse\022;\n\016createFunction\022\026.Cr" +
+      "eateFunctionRequest\032\021.MetaDataResponse\0227" +
+      "\n\014createSchema\022\024.CreateSchemaRequest\032\021.M" +
+      "etaDataResponse\0221\n\tdropTable\022\021.DropTable" +
+      "Request\032\021.MetaDataResponse\0223\n\ndropSchema" +
+      "\022\022.DropSchemaRequest\032\021.MetaDataResponse\022",
+      "7\n\014dropFunction\022\024.DropFunctionRequest\032\021." +
+      "MetaDataResponse\0221\n\taddColumn\022\021.AddColum" +
+      "nRequest\032\021.MetaDataResponse\0223\n\ndropColum" +
+      "n\022\022.DropColumnRequest\032\021.MetaDataResponse" +
+      "\0227\n\014modifyColumn\022\024.ModifyColumnRequest\032\021" +
+      ".MetaDataResponse\022?\n\020updateIndexState\022\030." +
+      "UpdateIndexStateRequest\032\021.MetaDataRespon" +
+      "se\0225\n\nclearCache\022\022.ClearCacheRequest\032\023.C" +
+      "learCacheResponse\0225\n\ngetVersion\022\022.GetVer" +
+      "sionRequest\032\023.GetVersionResponse\022P\n\023clea",
+      "rTableFromCache\022\033.ClearTableFromCacheReq" +
+      "uest\032\034.ClearTableFromCacheResponseBB\n(or" +
+      "g.apache.phoenix.coprocessor.generatedB\016" +
+      "MetaDataProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -18622,7 +18622,7 @@ public final class MetaDataProtos {
           internal_static_MetaDataResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_MetaDataResponse_descriptor,
-              new java.lang.String[] { "ReturnCode", "MutationTime", "Table", "TablesToDelete", "ColumnName", "FamilyName", "FunctionName", "Function", "SharedTablesToDelete", "Schema", "AutoPartitionNum", "ViewIndexId", "ViewIndexType", });
+              new java.lang.String[] { "ReturnCode", "MutationTime", "Table", "MutatedTableNames", "ColumnName", "FamilyName", "FunctionName", "Function", "SharedTablesToDelete", "Schema", "AutoPartitionNum", "ViewIndexId", "ViewIndexType", });
           internal_static_GetTableRequest_descriptor =
             getDescriptor().getMessageTypes().get(2);
           internal_static_GetTableRequest_fieldAccessorTable = new

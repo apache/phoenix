@@ -69,7 +69,7 @@ message MetaDataResponse {
   optional MutationCode returnCode = 1;
   optional int64 mutationTime = 2;
   optional PTable table = 3;
-  repeated bytes tablesToDelete = 4;
+  repeated bytes mutatedTableNames = 4;
   optional bytes columnName = 5;
   optional bytes familyName = 6;
   optional bytes functionName = 7;

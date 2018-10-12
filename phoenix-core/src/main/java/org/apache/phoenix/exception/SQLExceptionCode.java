@@ -288,7 +288,8 @@ public enum SQLExceptionCode {
     CANNOT_SWITCH_TXN_PROVIDERS(1096, "44A27", "Cannot switch transaction providers."),
     TTL_UNSUPPORTED_FOR_TXN_TABLE(10947, "44A28", "TTL is not supported for"),
     CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE(10948, "44A29", "Local indexes cannot be created for"),
-    CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX(10949, "44A30", "Cannot set or alter the following properties on an index: "),
+    CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX(10949, "44A30", "Cannot set or alter the following properties on an index: "
+            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.toString()),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -380,7 +381,7 @@ public enum SQLExceptionCode {
     DISALLOW_MODIFY_TABLE_TYPE(1142, "XCL42", "Only common table or view can be modified!"),
     DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN(1143, "XCL43", "Timestamp column or PK column can not be modified!"),
     DISALLOW_MODIFY_CHILD_TABLE(1144, "XCL44", "This table have a parent table which can not be modified!"),
-    DISALLOW_DECREASE_CHAR_LENGTH(1145, "XCL45", "Can't decrease length of char type which less than the old data type"),
+    DISALLOW_DECREASE_COLUMN_LENGTH(1145, "XCL45", "Can't decrease length of char type which less than the old data type"),
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).

@@ -370,10 +370,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
               for(PFunctionProtos.PFunction function: proto.getFunctionList())
               result.functions.add(PFunction.createFromProto(function));
           }
-          if (proto.getTablesToDeleteCount() > 0) {
+          if (proto.getMutatedTableNamesCount() > 0) {
             result.mutatedTableNames =
-                Lists.newArrayListWithExpectedSize(proto.getTablesToDeleteCount());
-            for (ByteString tableName : proto.getTablesToDeleteList()) {
+                Lists.newArrayListWithExpectedSize(proto.getMutatedTableNamesCount());
+            for (ByteString tableName : proto.getMutatedTableNamesList()) {
               result.mutatedTableNames.add(tableName.toByteArray());
             }
           }
@@ -420,7 +420,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
             }
             if (result.getMutatedTableNames() != null) {
               for (byte[] tableName : result.mutatedTableNames) {
-                builder.addTablesToDelete(ByteStringer.wrap(tableName));
+                builder.addMutatedTableNames(ByteStringer.wrap(tableName));
               }
             }
             if(result.getColumnName() != null){

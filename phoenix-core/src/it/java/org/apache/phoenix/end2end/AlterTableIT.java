@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -48,10 +50,7 @@ import org.junit.runners.Parameterized.Parameters;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.sql.Connection;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
@@ -1297,7 +1296,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN.getErrorCode(), e.getErrorCode());
             }
-            conn.close();
         }
     }
 
@@ -1312,66 +1310,37 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN.getErrorCode(), e.getErrorCode());
             }
-            conn.close();
         }
     }
 
     @Test
-    public void testQueryAfterModifiedColumn() throws Exception {
-        Properties props = new Properties();
-        String tableName = generateUniqueName();
-        String indexName = "IDX_" + tableName;
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
-            conn.createStatement().execute("CREATE TABLE " + tableName
-                    + " (a VARCHAR(5), b VARCHAR(5), CONSTRAINT PK PRIMARY KEY (a))");
-            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (b)");
-            conn.createStatement().execute("UPSERT INTO " + tableName + " Values('a','12345')");
-            conn.createStatement().execute("UPSERT INTO " + tableName + " Values('b','13555')");
-            conn.createStatement().execute("UPSERT INTO " + tableName + " Values('c','13666')");
-            conn.commit();
-            conn.createStatement().execute("ALTER TABLE " + tableName + " modify b VARCHAR(2)");
-            conn.createStatement().execute("UPSERT INTO " + tableName + " Values('d','13')");
-
-            {
-                ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX*/ b from " + tableName + " WHERE b='13'");
-                assertTrue(rs.next());
-                assertEquals("13", rs.getString(1));
-            }
-
-            {
-                ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX*/ b from " + tableName + " WHERE b='13555'");
-                assertTrue(rs.next());
-                assertEquals("13555", rs.getString(1));
-            }
-
-            {
-                ResultSet rs = conn.createStatement().executeQuery("SELECT \"0:B\" from " + indexName + " WHERE \"0:B\"='13555'");
-                assertTrue(rs.next());
-                assertEquals("13555", rs.getString(1));
-            }
-
-            {
-                ResultSet rs = conn.createStatement().executeQuery("SELECT \"0:B\" from " + indexName + " WHERE \"0:B\"='13'");
-                assertTrue(rs.next());
-                assertEquals("13", rs.getString(1));
-            }
-        }
-    }
-
-    @Test
-    public void testModifiedCharType() throws Exception {
+    public void testDecreasingLengthOfColumn() throws Exception {
         Properties props = new Properties();
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            conn.createStatement().execute("CREATE TABLE " + tableName + " (a char(5), b char(5), CONSTRAINT PK PRIMARY KEY (a))");
-            conn.createStatement().execute("ALTER TABLE " + tableName + " modify b char(2)");
-        }  catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DISALLOW_DECREASE_CHAR_LENGTH.getErrorCode(), e.getErrorCode());
+            conn.createStatement().execute("CREATE TABLE " + tableName +
+                    " (a char(5), b char(5), c varchar(5), d decimal(5,2) CONSTRAINT PK PRIMARY KEY (a))");
+
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " modify b char(2)");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH.getErrorCode(), e.getErrorCode());
+            }
+
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " modify c varchar(2)");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH.getErrorCode(), e.getErrorCode());
+            }
+
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " modify c decimal(2, 1)");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH.getErrorCode(), e.getErrorCode());
+            }
         }
     }
-
 
     @Test
     public void testModifyColumnWithIndexTables() throws Exception {
@@ -1410,11 +1379,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                     "IDX_COL2", 3);
 
             {
-                assertEquals(QueryUtil.getExplainPlan(conn.createStatement().executeQuery(" explain select * from " + tableName)),
-                        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + schemaName + ":IDX_COL2");
-
                 // Getting query results by index table
-                ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where COL2='123' and COL3='1234'");
                 assertTrue(rs.next());
                 assertEquals("123", rs.getString(1));
                 assertEquals("12345", rs.getString(2));
@@ -1423,18 +1389,12 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 // The length of column col3 added 2
                 assertEquals("1234  ", rs.getString(4));
                 assertEquals("1444", rs.getString(5));
-                assertTrue(rs.next());
-                assertEquals("124", rs.getString(1));
-                assertEquals("12345", rs.getString(2));
-                assertEquals("12345", rs.getString(3));
-                assertEquals("123456", rs.getString(4));
-                assertEquals("12  ", rs.getString(5));
                 assertFalse(rs.next());
                 rs.close();
             }
 
             {
-                ResultSet rs = conn.createStatement().executeQuery("select * from " + schemaName + ".IDX_COL2");
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + schemaName + ".IDX_COL2 where \"0:COL2\"='123'");
                 assertTrue(rs.next());
                 // Col2 as a index column that length of type was changed,
                 // but the result length will not change.
@@ -1445,17 +1405,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 // the result length has increased too.
                 assertEquals("1234  ", rs.getString(4));
                 assertEquals("1444", rs.getString(5));
-                assertTrue(rs.next());
-                assertEquals("12345", rs.getString(1));
-                assertEquals("124", rs.getString(2));
-                assertEquals("12345", rs.getString(3));
-                assertEquals("123456", rs.getString(4));
-                assertEquals("12  ", rs.getString(5));
                 assertFalse(rs.next());
                 rs.close();
             }
-
-            conn.close();
         }
     }
 
@@ -1489,8 +1441,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL1 CHAR(5)");
             conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL2 VARCHAR(10)");
             conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL3 DECIMAL(8,5)");
-            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL6 VARCHAR(2)");
-            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL7 DECIMAL(2,1)");
 
             // validate system.catalog
             assertColumnModify("COL1", table.getSchemaName().getString(),
@@ -1499,10 +1449,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                     table.getTableName().getString(), 10);
             assertColumnModify("COL3", table.getSchemaName().getString(),
                     table.getTableName().getString(), 8, 5, PDecimal.INSTANCE);
-            assertColumnModify("COL6", table.getSchemaName().getString(),
-                    table.getTableName().getString(), 2);
-            assertColumnModify("COL7", table.getSchemaName().getString(),
-                    table.getTableName().getString(), 2, 1, PDecimal.INSTANCE);
 
             // validate client meta cache
             PTable newTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
@@ -1510,7 +1456,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertEquals(newTable.getColumns().get(2).getMaxLength().intValue(), 10);
             assertEquals(newTable.getColumns().get(3).getMaxLength().intValue(), 8);
             assertEquals(newTable.getColumns().get(3).getScale().intValue(), 5);
-            assertTrue(newTable.getSequenceNumber() == 5);
+            assertTrue(newTable.getSequenceNumber() == 3);
 
             // validate old data
             ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
@@ -1524,9 +1470,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertEquals(new BigDecimal("12.111"), rs.getBigDecimal(4));
             assertEquals("12345", rs.getString(5));
             assertEquals(1, rs.getInt(6));
-            // decreasing length of varchar type, expected value will not changed.
             assertEquals("12345", rs.getString(7));
-            // decreasing length of big decimal type, expected value will not changed.
             assertEquals(new BigDecimal("12.111"), rs.getBigDecimal(8));
             assertFalse(rs.next());
             rs.close();

@@ -323,13 +323,18 @@ public class QueryOptimizer {
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
                 QueryPlan plan = compiler.compile();
+
+                boolean optimizedOrderBy = plan.getOrderBy().getOrderByExpressions().isEmpty() &&
+                        !dataPlan.getOrderBy().getOrderByExpressions().isEmpty();
+
                 // If query doesn't have where clause and some of columns to project are missing
                 // in the index then we need to get missing columns from main table for each row in
                 // local index. It's like full scan of both local index and data table which is inefficient.
                 // Then we don't use the index. If all the columns to project are present in the index 
-                // then we can use the index even the query doesn't have where clause. 
+                // then we can use the index even the query doesn't have where clause.
+                // We'll use the index anyway if it allowed us to optimize an ORDER BY clause away.
                 if (index.getIndexType() == IndexType.LOCAL && indexSelect.getWhere() == null
-                        && !plan.getContext().getDataColumns().isEmpty()) {
+                        && !plan.getContext().getDataColumns().isEmpty() && !optimizedOrderBy) {
                     return null;
                 }
                 indexTableRef = plan.getTableRef();
