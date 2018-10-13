@@ -264,7 +264,7 @@ public class WhereOptimizer {
                     // extract the nodes from the where clause
                     // for eg. for the schema A VARCHAR DESC, B VARCHAR ASC and query WHERE (A,B) < ('a','b')
                     // the range (* - a\xFFb) is converted to (~a-*)(*-b)
-                    // so we still need to filter on A,B
+                    // so we still need to filter on A
                     stopExtracting = true;
                 }
                 clipLeftSpan++;
@@ -2084,9 +2084,12 @@ public class WhereOptimizer {
 
                                 @Override
                                 public SortOrder getSortOrder() {
-                                    //WARNING HACK: Handle the different paths for InList vs Normal Comparison
+                                    //See PHOENIX-4969: Clean up and unify code paths for RVCs with
+                                    //  respect to Optimizations for SortOrder
+                                    //Handle the different paths for InList vs Normal Comparison
                                     //The code paths in InList assume the sortOrder is ASC for their optimizations
                                     //The code paths for Comparisons on RVC rewrite equality, for the non-equality cases return actual sort order
+                                    //This work around should work but a more general approach can be taken.
                                     if(rvcElementOp == CompareOp.EQUAL || rvcElementOp == CompareOp.NOT_EQUAL){
                                         return SortOrder.ASC;
                                     }
