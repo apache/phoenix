@@ -303,11 +303,15 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
             rs = conn1.createStatement().executeQuery(query);
             String v = "";
+            int i = 0;
             while(rs.next()) {
                 String next = rs.getString("v1");
                 assertTrue(v.compareTo(next) <= 0);
                 v = next;
+                i++;
             }
+            // see PHOENIX-4967
+            assertEquals(4, i);
             rs.close();
 
             query = "SELECT * FROM " + tableName +" ORDER BY V1 DESC NULLS LAST";
@@ -321,16 +325,65 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
             rs = conn1.createStatement().executeQuery(query);
             v = "zz";
+            i = 0;
             while(rs.next()) {
                 String next = rs.getString("v1");
                 assertTrue(v.compareTo(next) >= 0);
                 v = next;
+                i++;
             }
+            // see PHOENIX-4967
+            assertEquals(4, i);
             rs.close();
 
         }
     }
-    
+
+    @Test
+    public void testLocalIndexReverseScanShouldReturnAllRows() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
+        createBaseTable(tableName, null, "('e','i','o')");
+        try (Connection conn1 = getConnection()) {
+            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('j',2,4,2,'b')");
+            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('q',3,1,1,'c')");
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+
+            String query = "SELECT V1 FROM " + tableName +" ORDER BY V1 DESC NULLS LAST";
+            ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
+
+            Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            int numRegions = admin.getTableRegions(physicalTableName).size();
+
+            assertEquals(
+                "CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER "
+                        + indexPhysicalTableName + " [1]\n"
+                                + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                                + "CLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
+
+            rs = conn1.createStatement().executeQuery(query);
+            String v = "zz";
+            int i = 0;
+            while(rs.next()) {
+                String next = rs.getString("v1");
+                assertTrue(v.compareTo(next) >= 0);
+                v = next;
+                i++;
+            }
+            // see PHOENIX-4967
+            assertEquals(4, i);
+            rs.close();
+
+        }
+    }
+
     @Test
     public void testLocalIndexScanJoinColumnsFromDataTable() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
