@@ -41,7 +41,7 @@ public class LocalIndexDataColumnRef extends ColumnRef {
                 TableName.create(tRef.getTable().getSchemaName().getString(), tRef.getTable()
                         .getParentTableName().getString())), context.getConnection(), false)
                 .resolveTable(context.getCurrentTable().getTable().getSchemaName().getString(),
-                    context.getCurrentTable().getTable().getParentTableName().getString()),
+                    tRef.getTable().getParentTableName().getString()),
                 IndexUtil.getDataColumnFamilyName(indexColumnName), IndexUtil
                         .getDataColumnName(indexColumnName));
         position = context.getDataColumnPosition(this.getColumn());
