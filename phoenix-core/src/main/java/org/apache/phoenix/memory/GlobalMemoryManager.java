@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix.memory;
 
-import org.apache.http.annotation.GuardedBy;
+import net.jcip.annotations.GuardedBy;
+
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 /**
  *
  * Global memory manager to track course grained memory usage across all requests.

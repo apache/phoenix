@@ -36,11 +36,12 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
     but this prevents having to load the whole table into Spark first.
   */
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    val(pushedFilters, unhandledFilters) = buildFilter(filters)
     new PhoenixRDD(
       sqlContext.sparkContext,
       tableName,
       requiredColumns,
-      Some(buildFilter(filters)),
+      Some(pushedFilters),
       Some(zkUrl),
       new Configuration(),
       dateAsTimestamp
@@ -62,12 +63,13 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
 
   // Attempt to create Phoenix-accepted WHERE clauses from Spark filters,
   // mostly inspired from Spark SQL JDBCRDD and the couchbase-spark-connector
-  private def buildFilter(filters: Array[Filter]): String = {
+  private def buildFilter(filters: Array[Filter]): (String, Array[Filter]) = {
     if (filters.isEmpty) {
-      return ""
+      return ("" , Array[Filter]())
     }
 
     val filter = new StringBuilder("")
+    val unsupportedFilters = Array[Filter]();
     var i = 0
 
     filters.foreach(f => {
@@ -92,12 +94,18 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
         case StringStartsWith(attr, value) => filter.append(s" ${escapeKey(attr)} LIKE ${compileValue(value + "%")}")
         case StringEndsWith(attr, value) => filter.append(s" ${escapeKey(attr)} LIKE ${compileValue("%" + value)}")
         case StringContains(attr, value) => filter.append(s" ${escapeKey(attr)} LIKE ${compileValue("%" + value + "%")}")
+        case _ => unsupportedFilters :+ f
       }
 
       i = i + 1
     })
 
-    filter.toString()
+    (filter.toString(), unsupportedFilters)
+  }
+
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    val(pushedFilters, unhandledFilters) = buildFilter(filters)
+    unhandledFilters
   }
 
   // Helper function to escape column key to work with SQL queries

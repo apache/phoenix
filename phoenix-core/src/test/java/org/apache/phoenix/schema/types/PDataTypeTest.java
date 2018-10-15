@@ -1949,4 +1949,10 @@ public class PDataTypeTest {
             }
         }
     }
+
+    @Test
+    public void testFromSqlTypeName() {
+        assertEquals(PVarchar.INSTANCE, PDataType.fromSqlTypeName("varchar"));
+    }
+
 }
