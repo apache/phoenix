@@ -3733,6 +3733,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             newKVs.remove(disableTimeStampKVIndex);
                             newKVs.set(indexStateKVIndex, KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                                     INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
+                        } else if (disableTimeStampKVIndex == -1) { // clear disableTimestamp if client didn't pass it in
+                            newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                                PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES, timeStamp, PLong.INSTANCE.toBytes(0)));
+                            disableTimeStampKVIndex = newKVs.size() - 1;
                         }
                     } else if (newState == PIndexState.DISABLE) {
                         //reset the counter for pending disable when transitioning from PENDING_DISABLE to DISABLE
