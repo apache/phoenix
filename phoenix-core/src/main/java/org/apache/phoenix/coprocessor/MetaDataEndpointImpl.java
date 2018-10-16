@@ -3964,6 +3964,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         return;
                     }
                 } else if (currentState == PIndexState.DISABLE) {
+                    // Index already disabled, so can't revert to PENDING_DISABLE
+                    if (newState == PIndexState.PENDING_DISABLE) {
+                        // returning TABLE_ALREADY_EXISTS here means the client doesn't throw an exception
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
                     // Can't transition back to INACTIVE if INDEX_DISABLE_TIMESTAMP is 0
                     if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE &&
                         (newState != PIndexState.INACTIVE || curTimeStampVal == 0)) {
@@ -3975,13 +3983,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     // Done building, but was disable before that, so that in disabled state
                     if (newState == PIndexState.ACTIVE) {
                         newState = PIndexState.DISABLE;
-                    }
-                    // Can't transition from DISABLE to PENDING_DISABLE
-                    if (newState == PIndexState.PENDING_DISABLE) {
-                        builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
-                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        done.run(builder.build());
-                        return;
                     }
                 }
                 if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE) {
