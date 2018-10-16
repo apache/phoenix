@@ -116,9 +116,10 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
         for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
-                    if (!TransactionFactory.getTransactionProvider(
-                            TransactionFactory.Provider.valueOf(transactionProvider))
-                            .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+                    if (transactionProvider == null 
+                            || !TransactionFactory.getTransactionProvider(
+                                    TransactionFactory.Provider.valueOf(transactionProvider))
+                                .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
                         for (boolean directApi : Booleans) {
                             for (boolean useSnapshot : Booleans) {
                                 list.add(new Object[] { transactionProvider, mutable, localIndex, directApi, useSnapshot });
