@@ -82,6 +82,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -474,9 +476,13 @@ public class ViewIT extends SplitSystemCatalogIT {
         conn.createStatement().execute(tableDdl);
         String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
-        String indexName = generateUniqueName();
-        ddl = "CREATE LOCAL INDEX " + indexName + " on " + fullViewName1 + "(v2)";
-        conn.createStatement().execute(ddl);
+        if (transactionProvider == null ||
+                !TransactionFactory.getTransactionProvider(
+                        TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+            String indexName = generateUniqueName();
+            ddl = "CREATE LOCAL INDEX " + indexName + " on " + fullViewName1 + "(v2)";
+            conn.createStatement().execute(ddl);
+        }
         ddl = "CREATE VIEW " + fullViewName2 + "(v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 10";
         conn.createStatement().execute(ddl);
         
@@ -665,7 +671,11 @@ public class ViewIT extends SplitSystemCatalogIT {
     
     @Test
     public void testViewUsesTableLocalIndex() throws Exception {
-        testViewUsesTableIndex(true);
+        if (transactionProvider == null ||
+                !TransactionFactory.getTransactionProvider(
+                        TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+            testViewUsesTableIndex(true);
+        }
     }
 
     

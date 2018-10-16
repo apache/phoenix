@@ -48,6 +48,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -110,12 +112,18 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
     public static Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
-        for (Object transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
+        for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
-                    for (boolean directApi : Booleans) {
-                        for (boolean useSnapshot : Booleans) {
-                            list.add(new Object[] { transactionProvider, mutable, localIndex, directApi, useSnapshot });
+                    if (!localIndex 
+                            || transactionProvider == null 
+                            || !TransactionFactory.getTransactionProvider(
+                                    TransactionFactory.Provider.valueOf(transactionProvider))
+                                .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+                        for (boolean directApi : Booleans) {
+                            for (boolean useSnapshot : Booleans) {
+                                list.add(new Object[] { transactionProvider, mutable, localIndex, directApi, useSnapshot });
+                            }
                         }
                     }
                 }

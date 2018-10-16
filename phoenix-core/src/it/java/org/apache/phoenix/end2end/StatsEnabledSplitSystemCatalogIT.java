@@ -45,6 +45,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -61,20 +63,20 @@ import com.google.common.collect.Maps;
 public class StatsEnabledSplitSystemCatalogIT extends BaseUniqueNamesOwnClusterIT {
 	
 	private String tableDDLOptions;
-	private boolean transactional;
+	private String transactionProvider;
 
-	public StatsEnabledSplitSystemCatalogIT(boolean transactional) {
+	public StatsEnabledSplitSystemCatalogIT(String transactionProvider) {
 	        StringBuilder optionBuilder = new StringBuilder();
-	        this.transactional = transactional;
-	        if (transactional) {
-	            optionBuilder.append(" TRANSACTIONAL=true ");
+	        this.transactionProvider = transactionProvider;
+	        if (transactionProvider != null) {
+	            optionBuilder.append(" TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
 	        }
 	        this.tableDDLOptions = optionBuilder.toString();
 	    }
 
 	@Parameters(name = "transactional = {0}")
-	public static Collection<Boolean> data() {
-		return Arrays.asList(new Boolean[] { false, true });
+	public static Collection<Object> data() {
+		return Arrays.asList(new Object[] { null, "TEPHRA", "OMID" });
 	}
 	
 	@BeforeClass
@@ -101,7 +103,11 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseUniqueNamesOwnClusterI
 
     @Test
     public void testSaltedUpdatableViewWithLocalIndex() throws Exception {
-        testUpdatableViewWithIndex(3, true);
+        if (transactionProvider == null ||
+                !TransactionFactory.getTransactionProvider(
+                        TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+            testUpdatableViewWithIndex(3, true);
+        }
     }
 	
 	@Test
@@ -111,7 +117,11 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseUniqueNamesOwnClusterI
     
     @Test
     public void testNonSaltedUpdatableViewWithLocalIndex() throws Exception {
-        testUpdatableViewWithIndex(null, true);
+        if (transactionProvider == null ||
+                !TransactionFactory.getTransactionProvider(
+                        TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+            testUpdatableViewWithIndex(null, true);
+        }
     }
     
     @Test
@@ -212,7 +222,7 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseUniqueNamesOwnClusterI
         }
         conn.commit();
         
-        analyzeTable(conn, fullParentViewName, transactional);
+        analyzeTable(conn, fullParentViewName, transactionProvider != null);
         
         List<KeyRange> splits = getAllSplits(conn, fullParentViewName);
         assertEquals(4, splits.size());
