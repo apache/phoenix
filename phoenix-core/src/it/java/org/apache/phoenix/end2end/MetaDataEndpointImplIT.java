@@ -1,4 +1,4 @@
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -15,6 +15,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.phoenix.coprocessor.TableViewFinderResult;
+import org.apache.phoenix.coprocessor.ViewFinder;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -44,7 +46,7 @@ import com.google.common.collect.Maps;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
+public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     private final TableName catalogTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
     private final TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);
 
