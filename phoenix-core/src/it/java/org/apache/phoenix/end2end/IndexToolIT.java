@@ -116,7 +116,8 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
         for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
-                    if (transactionProvider == null 
+                    if (!localIndex 
+                            || transactionProvider == null 
                             || !TransactionFactory.getTransactionProvider(
                                     TransactionFactory.Provider.valueOf(transactionProvider))
                                 .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
