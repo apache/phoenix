@@ -74,9 +74,12 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseUniqueNamesOwnClusterI
 	        this.tableDDLOptions = optionBuilder.toString();
 	    }
 
-	@Parameters(name = "transactional = {0}")
-	public static Collection<Object> data() {
-		return Arrays.asList(new Object[] { null, "TEPHRA", "OMID" });
+	@Parameters(name = "transactionProvider = {0}")
+	public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+            { "TEPHRA" },
+            { "OMID" }, 
+            { null }}),0);
 	}
 	
 	@BeforeClass
