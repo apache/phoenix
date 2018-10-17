@@ -635,7 +635,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 // an exact byte count based on the number or rows is not possible because
                 // it is variable on a row-by-row basis.
                 long sumOfGuidePostsWidth = rs.getLong(3);
-                assertTrue(hasShadowCells ? sumOfGuidePostsWidth > 2 * c2Bytes && sumOfGuidePostsWidth <= 3 * c2Bytes: rs.getLong(3) == c2Bytes);
+                assertTrue(hasShadowCells ? sumOfGuidePostsWidth > c2Bytes : sumOfGuidePostsWidth == c2Bytes);
                 count++;
             }
         }
