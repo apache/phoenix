@@ -107,7 +107,9 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProperties();
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
     @Parameters(name="localIndex = {0}")
