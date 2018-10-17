@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -46,13 +47,15 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
     @Parameters(name="localIndex = {0} , isNamespaceEnabled = {1}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false, true},{ true, false }
+        return Arrays.asList(new Boolean[][] {
+                 { false, true},
+                 { true, true }
            });
     }
     
