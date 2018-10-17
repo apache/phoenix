@@ -461,6 +461,27 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         public int getOperationTimeout() {
             return delegate.getOperationTimeout();
         }
+
+        @Override
+        public int getReadRpcTimeout() {
+            return delegate.getReadRpcTimeout();
+        }
+
+        @Override
+        public void setReadRpcTimeout(int readRpcTimeout) {
+            delegate.setReadRpcTimeout(readRpcTimeout);
+        }
+
+        @Override
+        public int getWriteRpcTimeout() {
+            return delegate.getWriteRpcTimeout();
+        }
+
+        @Override
+        public void setWriteRpcTimeout(int writeRpcTimeout) {
+            delegate.setWriteRpcTimeout(writeRpcTimeout);
+        }
+
     }
     
     @Override
