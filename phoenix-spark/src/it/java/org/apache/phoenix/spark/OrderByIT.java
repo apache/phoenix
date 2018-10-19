@@ -1,26 +1,10 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.spark;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -28,85 +12,49 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.end2end.BaseOrderByIT;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryBuilder;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
+import org.junit.Ignore;
 import org.junit.Test;
+
+import com.google.common.collect.Lists;
+
+import scala.Option;
+import scala.collection.JavaConverters;
 
 public class OrderByIT extends BaseOrderByIT {
 
-    @Test
-    public void testOrderByWithPosition() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
+    @Override
+    protected ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
+                                                    String expectedPhoenixExceptionMsg, String expectedSparkExceptionMsg) {
+        ResultSet rs = null;
         try {
-            String tableName = generateUniqueName();
-            String ddl = "CREATE TABLE " + tableName +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
-            createTestTable(getUrl(), ddl);
-
-            String dml = "UPSERT INTO " + tableName + " VALUES(?, ?)";
-            PreparedStatement stmt = conn.prepareStatement(dml);
-            stmt.setString(1, "a");
-            stmt.setInt(2, 40);
-            stmt.execute();
-            stmt.setString(1, "b");
-            stmt.setInt(2, 20);
-            stmt.execute();
-            stmt.setString(1, "c");
-            stmt.setInt(2, 30);
-            stmt.execute();
-            conn.commit();
-
-            String query = "select count(*), col1 from " + tableName + " group by col1 order by 2";
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
-            assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
-            assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
-            assertFalse(rs.next());
-
-            query = "select a_string x, col1 y from " + tableName + " order by x";
-            rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals("a",rs.getString(1));
-            assertEquals(40,rs.getInt(2));
-            assertTrue(rs.next());
-            assertEquals("b",rs.getString(1));
-            assertEquals(20,rs.getInt(2));
-            assertTrue(rs.next());
-            assertEquals("c",rs.getString(1));
-            assertEquals(30,rs.getInt(2));
-            assertFalse(rs.next());
-
-            query = "select * from " + tableName + " order by 2";
-            rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals("b",rs.getString(1));
-            assertEquals(20,rs.getInt(2));
-            assertTrue(rs.next());
-            assertEquals("c",rs.getString(1));
-            assertEquals(30,rs.getInt(2));
-            assertTrue(rs.next());
-            assertEquals("a",rs.getString(1));
-            assertEquals(40,rs.getInt(2));
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
+            rs = executeQuery(conn, queryBuilder);
+            fail();
         }
+        catch(Exception e) {
+            assertTrue(e.getMessage().contains(expectedSparkExceptionMsg));
+        }
+        return rs;
+    }
+
+    @Override
+    protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+        return SparkUtil.executeQuery(conn, queryBuilder, getUrl(), config);
     }
 
     @Test
     public void testOrderByWithJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
             String tableName1 = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName1 +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer " +
@@ -156,8 +104,33 @@ public class OrderByIT extends BaseOrderByIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select t1.* from " + tableName1 + " t1 join " + tableName2 + " t2 on t1.a_string = t2.a_string order by 3";
-            ResultSet rs = conn.createStatement().executeQuery(query);
+            // create two PhoenixRDDs  using the table names and columns that are required for the JOIN query
+            List<String> table1Columns = Lists.newArrayList("A_STRING", "CF1.A", "CF1.B", "COL1", "CF2.C", "CF2.D");
+            SQLContext sqlContext = SparkUtil.getSqlContext();
+            Dataset phoenixDataSet =
+                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName1,
+                            JavaConverters.collectionAsScalaIterableConverter(table1Columns)
+                                    .asScala().toSeq(),
+                            Option.apply((String) null), Option.apply(getUrl()), config, false,
+                            null).toDataFrame(sqlContext);
+            phoenixDataSet.registerTempTable(tableName1);
+            List<String> table2Columns = Lists.newArrayList("A_STRING", "COL1");
+            phoenixDataSet =
+                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName2,
+                            JavaConverters.collectionAsScalaIterableConverter(table2Columns)
+                                    .asScala().toSeq(),
+                            Option.apply((String) null), Option.apply(getUrl()), config, false,
+                            null).toDataFrame(sqlContext);
+            phoenixDataSet.registerTempTable(tableName2);
+
+            String query =
+                    "SELECT T1.* FROM " + tableName1 + " T1 JOIN " + tableName2
+                            + " T2 ON T1.A_STRING = T2.A_STRING ORDER BY T1.`CF1.B`";
+            Dataset<Row> dataset =
+                    sqlContext.sql(query);
+            List<Row> rows = dataset.collectAsList();
+            ResultSet rs = new SparkResultSet(rows, dataset.columns());
+
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
             assertEquals(40,rs.getInt(2));
@@ -181,8 +154,12 @@ public class OrderByIT extends BaseOrderByIT {
             assertEquals(60,rs.getInt(6));
             assertFalse(rs.next());
 
-            query = "select t1.a_string, t2.col1 from " + tableName1 + " t1 join " + tableName2 + " t2 on t1.a_string = t2.a_string order by 2";
-            rs = conn.createStatement().executeQuery(query);
+            query =
+                    "select t1.a_string, t2.col1 from " + tableName1 + " t1 join " + tableName2
+                            + " t2 on t1.a_string = t2.a_string order by t2.col1";
+            dataset =  sqlContext.sql(query);
+            rows = dataset.collectAsList();
+            rs = new SparkResultSet(rows, dataset.columns());
             assertTrue(rs.next());
             assertEquals("b",rs.getString(1));
             assertEquals(20,rs.getInt(2));
@@ -193,18 +170,14 @@ public class OrderByIT extends BaseOrderByIT {
             assertEquals("a",rs.getString(1));
             assertEquals(40,rs.getInt(2));
             assertFalse(rs.next());
-        } finally {
-            conn.close();
         }
     }
 
     @Test
     public void testOrderByWithUnionAll() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)){
+            conn.setAutoCommit(false);
             String tableName1 = generateUniqueName();
             String ddl = "CREATE TABLE  " + tableName1 +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer " +
@@ -254,8 +227,32 @@ public class OrderByIT extends BaseOrderByIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select a_string, cf2.d from " + tableName1 + " union all select * from " + tableName2 + " order by 2";
-            ResultSet rs = conn.createStatement().executeQuery(query);
+
+            List<String> table1Columns = Lists.newArrayList("A_STRING", "CF1.A", "CF1.B", "COL1", "CF2.C", "CF2.D");
+            SQLContext sqlContext = SparkUtil.getSqlContext();
+            Dataset phoenixDataSet =
+                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName1,
+                            JavaConverters.collectionAsScalaIterableConverter(table1Columns)
+                                    .asScala().toSeq(),
+                            Option.apply((String) null), Option.apply(getUrl()), config, false,
+                            null).toDataFrame(sqlContext);
+            phoenixDataSet.registerTempTable(tableName1);
+            List<String> table2Columns = Lists.newArrayList("A_STRING", "COL1");
+            phoenixDataSet =
+                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName2,
+                            JavaConverters.collectionAsScalaIterableConverter(table2Columns)
+                                    .asScala().toSeq(),
+                            Option.apply((String) null), Option.apply(getUrl()), config, false,
+                            null).toDataFrame(sqlContext);
+            phoenixDataSet.registerTempTable(tableName2);
+
+            String query =
+                    "select a_string, `cf2.d` from " + tableName1 + " union all select * from "
+                            + tableName2 + " order by `cf2.d`";
+            Dataset<Row> dataset =
+                    sqlContext.sql(query);
+            List<Row> rows = dataset.collectAsList();
+            ResultSet rs = new SparkResultSet(rows, dataset.columns());
             assertTrue(rs.next());
             assertEquals("bb",rs.getString(1));
             assertEquals(10,rs.getInt(2));
@@ -275,8 +272,6 @@ public class OrderByIT extends BaseOrderByIT {
             assertEquals("b",rs.getString(1));
             assertEquals(80,rs.getInt(2));
             assertFalse(rs.next());
-        } finally {
-            conn.close();
         }
     }
 
@@ -316,8 +311,22 @@ public class OrderByIT extends BaseOrderByIT {
             stmt.execute();
             conn.commit();
 
-            String query = "SELECT col1+col2, col4, a_string FROM " + tableName + " ORDER BY 1, 2";
-            ResultSet rs = conn.createStatement().executeQuery(query);
+            SQLContext sqlContext = SparkUtil.getSqlContext();
+            Dataset phoenixDataSet =
+                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName,
+                            JavaConverters
+                                    .collectionAsScalaIterableConverter(
+                                        Lists.newArrayList("col1", "col2", "col4"))
+                                    .asScala().toSeq(),
+                            Option.apply((String) null), Option.apply(getUrl()), config, false,
+                            null).toDataFrame(sqlContext);
+
+            phoenixDataSet.registerTempTable(tableName);
+            Dataset<Row> dataset =
+                    sqlContext.sql("SELECT col1+col2, col4, a_string FROM " + tableName
+                            + " ORDER BY col1+col2, col4");
+            List<Row> rows = dataset.collectAsList();
+            ResultSet rs = new SparkResultSet(rows, dataset.columns());
             assertTrue(rs.next());
             assertEquals("a", rs.getString(3));
             assertTrue(rs.next());
@@ -331,44 +340,11 @@ public class OrderByIT extends BaseOrderByIT {
         }
     }
 
-
-    @Test
-    public void testOrderByRVC() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();
-        String ddl = "create table " + tableName + " (testpk varchar not null primary key, l_quantity decimal(15,2), l_discount decimal(15,2))";
-        conn.createStatement().execute(ddl);
-
-        PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " values ('a',0.1,0.9)");
-        stmt.execute();
-        stmt = conn.prepareStatement(" upsert into " + tableName + " values ('b',0.5,0.5)");
-        stmt.execute();
-        stmt = conn.prepareStatement(" upsert into " + tableName + " values ('c',0.9,0.1)");
-        stmt.execute();
-        conn.commit();
-
-        ResultSet rs;
-        stmt = conn.prepareStatement("select l_discount,testpk from " + tableName + " order by (l_discount,l_quantity)");
-        rs = stmt.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(0.1, rs.getDouble(1), 0.01);
-        assertEquals("c", rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(0.5, rs.getDouble(1), 0.01);
-        assertEquals("b", rs.getString(2));
-        assertTrue(rs.next());
-        assertEquals(0.9, rs.getDouble(1), 0.01);
-        assertEquals("a", rs.getString(2));
-    }
-
     @Test
     public void testColumnFamily() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
-
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
             String tableName = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer, col2 integer" +
@@ -402,8 +378,26 @@ public class OrderByIT extends BaseOrderByIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select * from " + tableName + " order by 2, 5";
-            ResultSet rs = conn.createStatement().executeQuery(query);
+
+            List<String> columns =
+                    Lists.newArrayList("A_STRING", "CF1.A", "CF1.B", "COL1", "CF2.C", "CF2.D",
+                        "COL2");
+
+            SQLContext sqlContext = SparkUtil.getSqlContext();
+            Dataset phoenixDataSet =
+                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName,
+                            JavaConverters.collectionAsScalaIterableConverter(columns).asScala()
+                                    .toSeq(),
+                            Option.apply((String) null), Option.apply(url), config, false, null)
+                                    .toDataFrame(sqlContext);
+
+            phoenixDataSet.registerTempTable(tableName);
+            Dataset<Row> dataset =
+                    sqlContext.sql("SELECT A_STRING, `CF1.A`, `CF1.B`, COL1, `CF2.C`, `CF2.D`, COL2 from "
+                            + tableName + " ORDER BY `CF1.A`,`CF2.C`");
+            List<Row> rows = dataset.collectAsList();
+            ResultSet rs = new SparkResultSet(rows, dataset.columns());
+
             assertTrue(rs.next());
             assertEquals("c",rs.getString(1));
             assertEquals(30,rs.getInt(2));
@@ -430,8 +424,12 @@ public class OrderByIT extends BaseOrderByIT {
             assertEquals(1,rs.getInt(7));
             assertFalse(rs.next());
 
-            query = "select * from " + tableName + " order by 7";
-            rs = conn.createStatement().executeQuery(query);
+            dataset =
+                    sqlContext.sql("SELECT A_STRING, `CF1.A`, `CF1.B`, COL1, `CF2.C`, `CF2.D`, COL2 from "
+                            + tableName + " ORDER BY COL2");
+            rows = dataset.collectAsList();
+            rs = new SparkResultSet(rows, dataset.columns());
+
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
             assertEquals(40,rs.getInt(2));
@@ -457,8 +455,6 @@ public class OrderByIT extends BaseOrderByIT {
             assertEquals(60,rs.getInt(6));
             assertEquals(3,rs.getInt(7));
             assertFalse(rs.next());
-        } finally {
-            conn.close();
         }
     }
 }

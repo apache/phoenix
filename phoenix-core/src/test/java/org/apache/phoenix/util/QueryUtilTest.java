@@ -66,14 +66,14 @@ public class QueryUtilTest {
     @Test
     public void testConstructSelectStatement() {
         assertEquals(
-                "SELECT \"ID\",\"NAME\" FROM MYTAB",
+                "SELECT \"ID\" , \"NAME\" FROM MYTAB",
                 QueryUtil.constructSelectStatement("MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
 
     @Test
     public void testConstructSelectStatementWithSchema() {
         assertEquals(
-                "SELECT \"ID\",\"NAME\" FROM A.MYTAB",
+                "SELECT \"ID\" , \"NAME\" FROM A.MYTAB",
                 QueryUtil.constructSelectStatement("A.MYTAB", ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
     
@@ -83,7 +83,7 @@ public class QueryUtilTest {
         final String schemaName = SchemaUtil.getEscapedArgument("a");
         final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         assertEquals(
-                "SELECT \"ID\",\"NAME\" FROM \"a\".MYTAB",
+                "SELECT \"ID\" , \"NAME\" FROM \"a\".MYTAB",
                 QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
     
@@ -93,14 +93,14 @@ public class QueryUtilTest {
         final String schemaName = SchemaUtil.getEscapedArgument("a");
         final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         assertEquals(
-                "SELECT \"ID\",\"NAME\" FROM \"a\".\"mytab\"",
+                "SELECT \"ID\" , \"NAME\" FROM \"a\".\"mytab\"",
                 QueryUtil.constructSelectStatement(fullTableName, ImmutableList.of(ID_COLUMN,NAME_COLUMN),null));
     }
 
     @Test
     public void testConstructSelectWithHint() {
         assertEquals(
-            "SELECT /*+ NO_INDEX */ \"col1\",\"col2\" FROM MYTAB WHERE (\"col2\"=? and \"col3\" is null)",
+            "SELECT /*+ NO_INDEX */ \"col1\" , \"col2\" FROM MYTAB WHERE (\"col2\"=? and \"col3\" is null)",
             QueryUtil.constructSelectStatement("MYTAB", Lists.newArrayList("col1", "col2"),
                 "\"col2\"=? and \"col3\" is null", Hint.NO_INDEX, true));
     }
