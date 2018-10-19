@@ -217,45 +217,15 @@ public final class QueryUtil {
      *
      * @param fullTableName name of the table for which the select statement needs to be created.
      * @param columns list of columns to be projected in the select statement.
-     * @param conditions The condition clause to be added to the WHERE condition
+     * @param whereClause The condition clause to be added to the WHERE condition
      * @param hint hint to use
      * @param escapeCols whether to escape the projected columns
      * @return Select Query
      */
     public static String constructSelectStatement(String fullTableName, List<String> columns,
-            final String conditions, Hint hint, boolean escapeCols) {
-        Preconditions.checkNotNull(fullTableName, "Table name cannot be null");
-        if (columns == null || columns.isEmpty()) {
-            throw new IllegalArgumentException("At least one column must be provided");
-        }
-        StringBuilder query = new StringBuilder();
-        query.append("SELECT ");
-
-        String hintStr = "";
-        if (hint != null) {
-            final HintNode node = new HintNode(hint.name());
-            hintStr = node.toString();
-        }
-        query.append(hintStr);
-
-        for (String col : columns) {
-            if (col != null) {
-                String fullColumnName = col;
-                if (escapeCols) {
-                    fullColumnName = getEscapedFullColumnName(col);
-                }
-                query.append(fullColumnName);
-                query.append(",");
-            }
-        }
-        // Remove the trailing comma
-        query.setLength(query.length() - 1);
-        query.append(" FROM ");
-        query.append(fullTableName);
-        if (conditions != null && conditions.length() > 0) {
-            query.append(" WHERE (").append(conditions).append(")");
-        }
-        return query.toString();
+            final String whereClause, Hint hint, boolean escapeCols) {
+        return new QueryBuilder().setFullTableName(fullTableName).setSelectColumns(columns)
+                .setWhereClause(whereClause).setHint(hint).setEscapeCols(escapeCols).build();
     }
 
     /**
