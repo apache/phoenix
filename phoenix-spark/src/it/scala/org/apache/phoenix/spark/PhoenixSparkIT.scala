@@ -23,6 +23,7 @@ import org.joda.time.DateTime
 import org.apache.spark.{SparkConf, SparkContext}
 import scala.collection.mutable.ListBuffer
 import org.apache.hadoop.conf.Configuration
+
 /**
   * Note: If running directly from an IDE, these are the recommended VM parameters:
   * -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
@@ -287,11 +288,11 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
     val plan = res.queryExecution.sparkPlan
     // filters should be pushed into phoenix relation
-    assert(plan.toString.contains("PushedFilters: [IsNotNull(COL1), IsNotNull(ID), " +
-      "EqualTo(COL1,test_row_1), EqualTo(ID,1)]"))
+    assert(plan.toString.contains("PushedFilters: [*IsNotNull(COL1), *IsNotNull(ID), " +
+      "*EqualTo(COL1,test_row_1), *EqualTo(ID,1)]"))
     // spark should run the filters on the rows returned by Phoenix
-    assert(!plan.toString.contains("Filter (((isnotnull(COL1#8) && isnotnull(ID#7L)) " +
-      "&& (COL1#8 = test_row_1)) && (ID#7L = 1))"))
+    assert(!plan.toString.matches(".*Filter (((isnotnull(COL1.*) && isnotnull(ID.*)) "
+      + " && (COL1.* = test_row_1)) && (ID.* = 1)).*"))
   }
 
   test("Can persist a dataframe using 'DataFrame.saveToPhoenix'") {
