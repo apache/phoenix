@@ -55,6 +55,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
 
     private HBaseTransactionManager transactionManager = null;
     private volatile CommitTable.Client commitTableClient = null;
+    private CommitTable.Writer commitTableWriter = null;
 
     public static final OmidTransactionProvider getInstance() {
         return INSTANCE;
@@ -151,8 +152,10 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
             clientConf.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
             clientConf.setHBaseConfiguration(config);
             commitTableClient = commitTable.getClient();
-
-            transactionManager = HBaseTransactionManager.builder(clientConf).commitTableClient(commitTableClient)
+            commitTableWriter = commitTable.getWriter();
+            transactionManager = HBaseTransactionManager.builder(clientConf)
+                    .commitTableClient(commitTableClient)
+                    .commitTableWriter(commitTableWriter)
                     .tsoClient(client).build();
         } catch (IOException | InterruptedException e) {
             throw new SQLExceptionInfo.Builder(
