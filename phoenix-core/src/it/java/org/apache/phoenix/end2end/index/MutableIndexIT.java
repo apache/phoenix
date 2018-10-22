@@ -56,6 +56,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -865,6 +866,41 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           assertEquals(0.5F, rs.getFloat(1), 0.0);
           assertEquals("foo", rs.getString(3));
       } 
+  }
+
+  /**
+   * PHOENIX-4988
+   * Test updating only a non-indexed column after two successive deletes to an indexed row
+   */
+  @Test
+  public void testUpdateNonIndexedColumn() throws Exception {
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IDX_" + generateUniqueName();
+      String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+      String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+      try (Connection conn = getConnection()) {
+          conn.setAutoCommit(false);
+          conn.createStatement().execute("CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " + tableDDLOptions);
+          conn.createStatement().execute("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (v2)");
+          conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1,v2) VALUES ('testKey','v1_1','v2_1')");
+          conn.commit();
+          conn.createStatement().executeUpdate("DELETE FROM " + fullTableName);
+          conn.commit();
+          conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1,v2) VALUES ('testKey','v1_2','v2_2')");
+          conn.commit();
+          conn.createStatement().executeUpdate("DELETE FROM " + fullTableName);
+          conn.commit();
+          conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1) VALUES ('testKey','v1_3')");
+          conn.commit();
+          IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
+          // PHOENIX-4980
+          // When there is a flush after a data table update of non-indexed columns, the
+          // index gets out of sync on the next write
+          getUtility().getHBaseAdmin().flush(TableName.valueOf(fullTableName));
+          conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1,v2) VALUES ('testKey','v1_4','v2_3')");
+          conn.commit();
+          IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
+      }
   }
 
 private void upsertRow(String dml, Connection tenantConn, int i) throws SQLException {

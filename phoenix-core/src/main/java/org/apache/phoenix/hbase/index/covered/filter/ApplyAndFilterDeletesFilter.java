@@ -116,8 +116,13 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
       // kvs in the last column, so we can safely ignore the last deleteFamily, and just use this
       // one. In fact, it means that all the previous deletes can be ignored because the family must
       // not match anymore.
-      this.coveringDelete.reset();
-      this.coveringDelete.deleteFamily = nextKV;
+      // We could potentially have multiple deleteFamily for the same row and family
+      // (e.g. upsert row+family, delete it, upsert again, delete again),
+      // in which case we keep the first one since its timestamp dominates
+      if (coveringDelete.deleteFamily == null || !CellUtil.matchingFamily(coveringDelete.deleteFamily, nextKV)) {
+          this.coveringDelete.reset();
+          this.coveringDelete.deleteFamily = nextKV;
+      }
       return ReturnCode.SKIP;
     case DeleteColumn:
       // similar to deleteFamily, all the newer deletes/puts would have been seen at this point, so
