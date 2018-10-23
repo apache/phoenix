@@ -272,6 +272,7 @@ public class MetaDataClient {
                     TABLE_NAME + "," +
                     SYNC_INDEX_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?)";
+
     private static final String CREATE_TABLE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
@@ -1147,7 +1148,7 @@ public class MetaDataClient {
     /**
      * Populate properties for the table and common properties for all column families of the table
      * @param statementProps Properties specified in SQL statement
-     * @param tableProps Properties for an HTableDescriptor
+     * @param tableProps Properties for an HTableDescriptor and Phoenix Table Properties
      * @param commonFamilyProps Properties common to all column families
      * @param tableType Used to distinguish between index creation vs. base table creation paths
      * @throws SQLException
@@ -1164,9 +1165,17 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
+                // HTableDescriptor property or Phoenix Table Property
                 if (defaultDescriptor.getValue(Bytes.toBytes(prop.getFirst())) == null) {
+                    // See PHOENIX-4891
+                    if (tableType == PTableType.INDEX && UPDATE_CACHE_FREQUENCY.equals(prop.getFirst())) {
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX)
+                                .build()
+                                .buildException();
+                    }
                     tableProps.put(prop.getFirst(), prop.getSecond());
-                } else {
+                } else { // HColumnDescriptor property
                     commonFamilyProps.put(prop.getFirst(), prop.getSecond());
                 }
             }
@@ -2127,8 +2136,11 @@ public class MetaDataClient {
             }
             long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
                 QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
+            if (tableType == PTableType.INDEX && parent != null) {
+                updateCacheFrequency = parent.getUpdateCacheFrequency();
+            }
             Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
-            if (updateCacheFrequencyProp != null) {
+            if (tableType != PTableType.INDEX && updateCacheFrequencyProp != null) {
                 updateCacheFrequency = updateCacheFrequencyProp;
             }
             String autoPartitionSeq = (String) TableProperty.AUTO_PARTITION_SEQ.getValue(tableProps);
@@ -3612,9 +3624,13 @@ public class MetaDataClient {
                     }
                 }
 
-                if (!table.getIndexes().isEmpty() && (numPkColumnsAdded>0 || metaProperties.getNonTxToTx())) {
+                if (!table.getIndexes().isEmpty() &&
+                        (numPkColumnsAdded>0 || metaProperties.getNonTxToTx() ||
+                                metaPropertiesEvaluated.getUpdateCacheFrequency() != null)) {
                     for (PTable index : table.getIndexes()) {
-                        incrementTableSeqNum(index, index.getType(), numPkColumnsAdded, metaProperties.getNonTxToTx() ? Boolean.TRUE : null, metaPropertiesEvaluated.getUpdateCacheFrequency());
+                        incrementTableSeqNum(index, index.getType(), numPkColumnsAdded,
+                                metaProperties.getNonTxToTx() ? Boolean.TRUE : null,
+                                metaPropertiesEvaluated.getUpdateCacheFrequency());
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
@@ -4440,6 +4456,13 @@ public class MetaDataClient {
         }
 
         if (metaProperties.getUpdateCacheFrequencyProp() != null) {
+            // See PHOENIX-4891
+            if (table.getType() == PTableType.INDEX) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX)
+                        .build()
+                        .buildException();
+            }
             if (metaProperties.getUpdateCacheFrequencyProp().longValue() != table.getUpdateCacheFrequency()) {
                 metaPropertiesEvaluated.setUpdateCacheFrequency(metaProperties.getUpdateCacheFrequencyProp());
                 changingPhoenixTableProperty = true;

@@ -2538,7 +2538,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Keep the TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE properties of new column families
      * in sync with the existing column families. Note that we use the new values for these properties in case they
      * are passed from our alter table command, if not, we use the default column family's value for each property
-     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES}
+     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES}
      * @param allFamiliesProps Map of all column family properties
      * @param table original table
      * @param tableDescBuilder new table descriptor builder
@@ -2584,7 +2584,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Set the new values for properties that are to be kept in sync amongst those column families of the table which are
      * not referenced in the context of our alter table command, including the local index column family if it exists
-     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES}
+     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES}
      * @param tableDesc original table descriptor
      * @param allFamiliesProps Map of all column family properties
      * @param newTTL new value of TTL
@@ -2605,7 +2605,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Set properties to be kept in sync for global indexes of a table, as well as
      * the physical table corresponding to indexes created on views of a table
-     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES} and
+     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES} and
      * @param table base table
      * @param tableAndIndexDescriptorMappings old to new table descriptor mappings
      * @param applyPropsToAllIndexesDefaultCF new properties to apply to all index column families

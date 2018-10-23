@@ -23,6 +23,7 @@ import java.util.Map;
 
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -263,7 +264,7 @@ public enum SQLExceptionCode {
     NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS(1048,"43A05","Local indexes aren't allowed on tables with immutable rows."),
     COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY(1049, "43A06", "Column family not allowed for table properties."),
     COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY(1050, "43A07", "Setting  or altering any of the following properties: "
-            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.toString()
+            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.toString()
             + " for a column family is not supported since they must be kept in sync. You can only set these properties for the entire table."),
     CANNOT_ALTER_PROPERTY(1051, "43A08", "Property can be specified or changed only when creating a table."),
     CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED(1052, "43A09", "Property cannot be specified for a column family that is not being added or modified."),
@@ -308,7 +309,9 @@ public enum SQLExceptionCode {
     TTL_UNSUPPORTED_FOR_TXN_TABLE(10947, "44A28", "TTL is not supported for"),
     CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE(10948, "44A29", "Local indexes cannot be created for"),
     CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX(10949, "44A30", "Cannot set or alter the following properties on an index: "
-            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.toString()),
+            + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.toString()),
+    CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX(10950, "44A31", "Cannot set or alter "
+            + PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " on an index"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
