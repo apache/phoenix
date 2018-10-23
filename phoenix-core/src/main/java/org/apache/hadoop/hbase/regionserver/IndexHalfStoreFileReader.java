@@ -17,8 +17,6 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
-
 import java.io.IOException;
 import java.util.Map;
 
@@ -28,12 +26,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.index.IndexMaintainer;
 
 /**
@@ -60,9 +56,8 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     private final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers;
     private final byte[][] viewConstants;
     private final int offset;
-    private final HRegionInfo childRegionInfo;
+    private final HRegionInfo regionInfo;
     private final byte[] regionStartKeyInHFile;
-    private final HRegionInfo currentRegion;
 
     /**
      * @param fs
@@ -74,19 +69,17 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
      * @param conf
      * @param indexMaintainers
      * @param viewConstants
-     * @param childRegionInfo
+     * @param regionInfo
      * @param regionStartKeyInHFile
      * @param splitKey
-     * @param currentRegion
      * @throws IOException
      */
     public IndexHalfStoreFileReader(final FileSystem fs, final Path p, final CacheConfig cacheConf,
             final FSDataInputStreamWrapper in, long size, final Reference r,
             final Configuration conf,
             final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers,
-            final byte[][] viewConstants, final HRegionInfo childRegionInfo,
-            byte[] regionStartKeyInHFile, byte[] splitKey, HRegionInfo currentRegion)
-            throws IOException {
+            final byte[][] viewConstants, final HRegionInfo regionInfo,
+            byte[] regionStartKeyInHFile, byte[] splitKey) throws IOException {
         super(fs, p, in, size, cacheConf, conf);
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
@@ -94,10 +87,9 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
         this.splitRow = CellUtil.cloneRow(KeyValue.createKeyValueFromKey(splitkey));
         this.indexMaintainers = indexMaintainers;
         this.viewConstants = viewConstants;
-        this.childRegionInfo = childRegionInfo;
+        this.regionInfo = regionInfo;
         this.regionStartKeyInHFile = regionStartKeyInHFile;
         this.offset = regionStartKeyInHFile.length;
-        this.currentRegion = currentRegion;
     }
 
     public int getOffset() {
@@ -113,7 +105,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     }
 
     public HRegionInfo getRegionInfo() {
-        return childRegionInfo;
+        return regionInfo;
     }
 
     public byte[] getRegionStartKeyInHFile() {
@@ -133,30 +125,8 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     }
 
     @Override
-    public StoreFileScanner getStoreFileScanner(boolean cacheBlocks, boolean pread,
-                                                boolean isCompaction, long readPt) {
-        return new LocalIndexStoreFileScanner(this, getScanner(cacheBlocks, pread, isCompaction),
-                true, getHFileReader().hasMVCCInfo(), readPt);
-    }
-
-    @Override
-    public boolean passesKeyRangeFilter(Scan scan) {
-        if (scan.getAttribute(SCAN_START_ROW_SUFFIX) == null) {
-            // Scan from compaction.
-            return true;
-        }
-        byte[] startKey = currentRegion.getStartKey();
-        byte[] endKey = currentRegion.getEndKey();
-        // If the region start key is not the prefix of the scan start row then we can return empty
-        // scanners. This is possible during merge where one of the child region scan should not return any
-        // results as we go through merged region.
-        int prefixLength =
-                scan.getStartRow().length - scan.getAttribute(SCAN_START_ROW_SUFFIX).length;
-        if (Bytes.compareTo(scan.getStartRow(), 0, prefixLength,
-                (startKey.length == 0 ? new byte[endKey.length] : startKey), 0,
-                (startKey.length == 0 ? endKey.length : startKey.length)) != 0) {
-            return false;
-        }
-        return true;
+    public StoreFileScanner getStoreFileScanner(boolean cacheBlocks, boolean pread, boolean isCompaction, long readPt) {
+        return new LocalIndexStoreFileScanner(this, getScanner(cacheBlocks, pread, isCompaction), true,
+                getHFileReader().hasMVCCInfo(), readPt);
     }
 }

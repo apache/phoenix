@@ -162,11 +162,11 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                             indexMaintainer);
                     }
                 }
-                if (indexMaintainers.isEmpty()) return reader;
+                if(indexMaintainers.isEmpty()) return reader;
                 byte[][] viewConstants = getViewConstants(dataTable);
-                return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r,
-                        ctx.getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
-                        childRegion, regionStartKeyInHFile, splitKey, region.getRegionInfo());
+                return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
+                        .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
+                        childRegion, regionStartKeyInHFile, splitKey);
             } catch (ClassNotFoundException e) {
                 throw new IOException(e);
             } catch (SQLException e) {
@@ -247,6 +247,10 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     /**
      * @param env
      * @param store Local Index store
+     * @param scan
+     * @param scanType
+     * @param earliestPutTs
+     * @param request
      * @return StoreScanner for new Local Index data for a passed store and Null if repair is not possible
      * @throws IOException
      */
