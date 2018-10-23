@@ -28,7 +28,7 @@ import com.google.common.collect.Multimap;
 
 public class DelegateIndexFailurePolicy implements IndexFailurePolicy {
 
-    private final IndexFailurePolicy delegate;
+    private IndexFailurePolicy delegate;
     
     public DelegateIndexFailurePolicy(IndexFailurePolicy delegate) {
         this.delegate = delegate;
@@ -55,4 +55,7 @@ public class DelegateIndexFailurePolicy implements IndexFailurePolicy {
         delegate.stop(arg0);
     }
 
+    public void setDelegate(IndexFailurePolicy delegate) {
+        this.delegate = delegate;
+    }
 }
