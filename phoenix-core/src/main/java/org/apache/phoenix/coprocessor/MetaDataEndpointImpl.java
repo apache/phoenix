@@ -3949,6 +3949,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 } else if (currentState == PIndexState.DISABLE) {
+                    // Index already disabled, so can't revert to PENDING_DISABLE
+                    if (newState == PIndexState.PENDING_DISABLE) {
+                        // returning TABLE_ALREADY_EXISTS here means the client doesn't throw an exception
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
                     // Can't transition back to INACTIVE if INDEX_DISABLE_TIMESTAMP is 0
                     if (newState != PIndexState.BUILDING && newState != PIndexState.DISABLE &&
                         (newState != PIndexState.INACTIVE || curTimeStampVal == 0)) {
@@ -3960,13 +3968,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // Done building, but was disable before that, so that in disabled state
                     if (newState == PIndexState.ACTIVE) {
                         newState = PIndexState.DISABLE;
-                    }
-                    // Can't transition from DISABLE to PENDING_DISABLE
-                    if (newState == PIndexState.PENDING_DISABLE) {
-                        builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
-                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        done.run(builder.build());
-                        return;
                     }
                 }
                 if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE) {
@@ -3986,6 +3987,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             newKVs.remove(disableTimeStampKVIndex);
                             newKVs.set(indexStateKVIndex, KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                                     INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
+                        } else if (disableTimeStampKVIndex == -1) { // clear disableTimestamp if client didn't pass it in
+                            newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+                                PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES, timeStamp, PLong.INSTANCE.toBytes(0)));
+                            disableTimeStampKVIndex = newKVs.size() - 1;
                         }
                     } else if (newState == PIndexState.DISABLE) {
                         //reset the counter for pending disable when transitioning from PENDING_DISABLE to DISABLE
