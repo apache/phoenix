@@ -21,7 +21,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -107,7 +106,7 @@ public class MetaDataUtil {
     public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
 
     // See PHOENIX-3955
-    public static final List<String> SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES = ImmutableList.of(
+    public static final List<String> SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES = ImmutableList.of(
             ColumnFamilyDescriptorBuilder.TTL,
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
@@ -718,13 +717,13 @@ public class MetaDataUtil {
     }
 
     public static boolean propertyNotAllowedToBeOutOfSync(String colFamProp) {
-        return SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES.contains(colFamProp);
+        return SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.contains(colFamProp);
     }
 
     public static Map<String, Object> getSyncedProps(ColumnFamilyDescriptor defaultCFDesc) {
         Map<String, Object> syncedProps = new HashMap<>();
         if (defaultCFDesc != null) {
-            for (String propToKeepInSync: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+            for (String propToKeepInSync: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
                 syncedProps.put(propToKeepInSync, Bytes.toString(
                         defaultCFDesc.getValue(Bytes.toBytes(propToKeepInSync))));
             }

@@ -46,6 +46,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
@@ -150,6 +151,14 @@ public class UpgradeUtil {
             + "INTO SYSTEM.CATALOG "
             + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, BASE_COLUMN_COUNT) "
             + "VALUES (?, ?, ?, ?, ?, ?) ";
+
+    public static final String UPSERT_UPDATE_CACHE_FREQUENCY =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+            TENANT_ID + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
+            UPDATE_CACHE_FREQUENCY +
+            ") VALUES (?, ?, ?, ?)";
 
     public static String SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW = "SELECT "
             + "BASE_COLUMN_COUNT "
@@ -1239,7 +1248,7 @@ public class UpgradeUtil {
         for (ColumnFamilyDescriptor currentColFam: tableDesc.getColumnFamilies()) {
             if (!currentColFam.equals(defaultColFam)) {
                 ColumnFamilyDescriptorBuilder colFamDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(currentColFam);
-                for (String prop: MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+                for (String prop: MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
                     String existingPropVal = Bytes.toString(currentColFam.getValue(Bytes.toBytes(prop)));
                     String expectedPropVal = syncedProps.get(prop).toString();
                     if (existingPropVal == null || !existingPropVal.toLowerCase().equals(expectedPropVal.toLowerCase())) {
@@ -1311,6 +1320,71 @@ public class UpgradeUtil {
         }
     }
 
+    private static void syncUpdateCacheFreqForIndexesOfTable(PTable baseTable,
+            PreparedStatement stmt) throws SQLException {
+        for (PTable index : baseTable.getIndexes()) {
+            if (index.getUpdateCacheFrequency() == baseTable.getUpdateCacheFrequency()) {
+                continue;
+            }
+            stmt.setString(2, index.getSchemaName().getString());
+            stmt.setString(3, index.getTableName().getString());
+            stmt.setLong(4, baseTable.getUpdateCacheFrequency());
+            stmt.addBatch();
+        }
+    }
+
+    /**
+     * See PHOENIX-4891. We set the UPDATE_CACHE_FREQUENCY of indexes to be same as their parent.
+     * We do this for both physical base tables as well as views
+     * @param conn Phoenix Connection object
+     * @param table PTable corresponding to a physical base table
+     * @throws SQLException
+     * @throws IOException
+     */
+    public static void syncUpdateCacheFreqAllIndexes(PhoenixConnection conn, PTable table)
+    throws SQLException, IOException {
+        // Use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG
+        try(PhoenixConnection newConn = new PhoenixConnection(conn, HConstants.LATEST_TIMESTAMP)) {
+            // Clear the server-side cache so that we get the latest built PTables
+            newConn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            byte[] tenantId = newConn.getTenantId() != null ?
+                    newConn.getTenantId().getBytes() : null;
+
+            PreparedStatement stmt =
+                    newConn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
+            stmt.setString(1, Bytes.toString(tenantId));
+            syncUpdateCacheFreqForIndexesOfTable(table, stmt);
+
+            TableViewFinderResult childViewsResult = new TableViewFinderResult();
+            try (Table childLinkTable = newConn.getQueryServices()
+                    .getTable(SchemaUtil.getPhysicalName(
+                            PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                            newConn.getQueryServices().getProps())
+                            .getName())) {
+                ViewFinder.findAllRelatives(childLinkTable, tenantId,
+                        table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+                        LinkType.CHILD_TABLE, childViewsResult);
+
+                // Iterate over the chain of child views
+                for (TableInfo tableInfo: childViewsResult.getLinks()) {
+                    PTable view;
+                    String viewName = SchemaUtil.getTableName(tableInfo.getSchemaName(),
+                            tableInfo.getTableName());
+                    try {
+                        view = PhoenixRuntime.getTable(newConn, viewName);
+                    } catch (TableNotFoundException e) {
+                        // Ignore
+                        logger.warn("Error getting PTable for view: " + viewName);
+                        continue;
+                    }
+                    syncUpdateCacheFreqForIndexesOfTable(view, stmt);
+                }
+            }
+            stmt.executeBatch();
+            newConn.commit();
+        }
+    }
+
     /**
      * Make sure that all tables have necessary column family properties in sync
      * with each other and also in sync with all the table's indexes
@@ -1328,7 +1402,7 @@ public class UpgradeUtil {
                 // Ignore physical view index tables since we handle them for each base table already
                 continue;
             }
-            PTable table = null;
+            PTable table;
             String tableName = origTableDesc.getTableName().getNameAsString();
             try {
                 table = PhoenixRuntime.getTable(conn, tableName);
@@ -1341,6 +1415,7 @@ public class UpgradeUtil {
                 // Ignore global index tables since we handle them for each base table already
                 continue;
             }
+            syncUpdateCacheFreqAllIndexes(conn, table);
             ColumnFamilyDescriptor defaultColFam = origTableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table));
             Map<String, Object> syncedProps = MetaDataUtil.getSyncedProps(defaultColFam);
 

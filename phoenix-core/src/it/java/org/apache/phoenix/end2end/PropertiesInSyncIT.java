@@ -25,9 +25,12 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -35,17 +38,23 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES;
+import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
+import static org.apache.phoenix.util.UpgradeUtil.UPSERT_UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
+import static org.apache.phoenix.util.UpgradeUtil.syncUpdateCacheFreqAllIndexes;
+import static org.apache.phoenix.end2end.index.IndexMetadataIT.assertUpdateCacheFreq;
 
 /**
  * Test properties that need to be kept in sync amongst all column families and indexes of a table
@@ -58,10 +67,14 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     private static final int INITIAL_TTL_VALUE = 700;
     private static final KeepDeletedCells INITIAL_KEEP_DELETED_CELLS_VALUE = KeepDeletedCells.TRUE;
     private static final int INITIAL_REPLICATION_SCOPE_VALUE = 1;
+    private static final int INITIAL_UPDATE_CACHE_FREQUENCY = 100;
+    private static final int INITIAL_UPDATE_CACHE_FREQUENCY_VIEWS = 900;
     private static final int MODIFIED_TTL_VALUE = INITIAL_TTL_VALUE + 300;
     private static final KeepDeletedCells MODIFIED_KEEP_DELETED_CELLS_VALUE =
             (INITIAL_KEEP_DELETED_CELLS_VALUE == KeepDeletedCells.TRUE) ? KeepDeletedCells.FALSE: KeepDeletedCells.TRUE;
     private static final int MODIFIED_REPLICATION_SCOPE_VALUE = (INITIAL_REPLICATION_SCOPE_VALUE == 1) ? 0 : 1;
+    private static final int MODIFIED_UPDATE_CACHE_FREQUENCY = INITIAL_UPDATE_CACHE_FREQUENCY + 300;
+    private static final int MODIFIED_UPDATE_CACHE_FREQUENCY_VIEWS = INITIAL_UPDATE_CACHE_FREQUENCY_VIEWS + 300;
 
 
     // Test that we disallow specifying synced properties to be set per column family when creating a table
@@ -69,7 +82,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     public void testDisallowSyncedPropsToBeSetColFamSpecificCreateTable() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), new Properties());
         String tableName = generateUniqueName();
-        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
                 conn.createStatement().execute("create table " + tableName
                         + " (id INTEGER not null primary key, "
@@ -103,7 +116,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         String viewName = "VIEW_" + tableName;
         conn.createStatement().execute("create view " + viewName
                 + " (new_col SMALLINT) as select * from " + tableName + " where id > 1");
-        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
                 conn.createStatement().execute("create local index " + localIndexName
                         + " on " + tableName + "(name) "
@@ -139,8 +152,8 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     public void testSyncedPropsBaseTableCreateIndex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), new Properties());
         String tableName = createBaseTableWithProps(conn);
-        createIndexTable(conn, tableName, PTable.IndexType.LOCAL);
-        String globalIndexName = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL);
+        createIndexTable(conn, tableName, PTable.IndexType.LOCAL).getSecond();
+        String globalIndexName = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond();
 
         // We pass the base table as the physical HBase table since our check includes checking the local index column family too
         verifyHBaseColumnFamilyProperties(tableName, conn, false, false);
@@ -153,7 +166,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     public void testSyncedPropsBaseTableCreateViewIndex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), new Properties());
         String tableName = createBaseTableWithProps(conn);
-        String viewIndexName = createIndexTable(conn, tableName, null);
+        String viewIndexName = createIndexTable(conn, tableName, null).getSecond();
 
         verifyHBaseColumnFamilyProperties(tableName, conn, false, false);
         verifyHBaseColumnFamilyProperties(viewIndexName, conn, false, false);
@@ -167,7 +180,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         String tableName = createBaseTableWithProps(conn);
         StringBuilder alterAllSyncedPropsString = new StringBuilder();
         String modPropString = COL_FAM1 + ".%s=" + DUMMY_PROP_VALUE + ",";
-        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
                 conn.createStatement().execute("alter table " + tableName
                         + " set " + COL_FAM1 + "." + propName + "=" + DUMMY_PROP_VALUE);
@@ -199,11 +212,11 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         Set<String> tablesToCheck = new HashSet<>();
         tablesToCheck.add(tableName);
         for (int i=0; i<2; i++) {
-            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.LOCAL));
-            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.GLOBAL));
+            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.LOCAL).getSecond());
+            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond());
         }
         // Create a view and view index
-        tablesToCheck.add(createIndexTable(conn, tableName, null));
+        tablesToCheck.add(createIndexTable(conn, tableName, null).getSecond());
 
         // Now alter the base table's properties. This should get propagated to all index tables
         conn.createStatement().execute("alter table " + tableName + " set TTL=" + MODIFIED_TTL_VALUE
@@ -215,8 +228,8 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         }
 
         // Any indexes created henceforth should have the modified properties
-        String newGlobalIndex = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL);
-        String newViewIndex = createIndexTable(conn, tableName, null);
+        String newGlobalIndex = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond();
+        String newViewIndex = createIndexTable(conn, tableName, null).getSecond();
         verifyHBaseColumnFamilyProperties(newGlobalIndex, conn, true, false);
         verifyHBaseColumnFamilyProperties(newViewIndex, conn, true, false);
         conn.close();
@@ -229,7 +242,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         String tableName = createBaseTableWithProps(conn);
 
         // Test that we are not allowed to set any property to be kept in sync, specific to the new column family to be added
-        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
                 conn.createStatement().execute(
                         "alter table " + tableName + " add " + NEW_CF + ".new_column varchar(2) "
@@ -246,11 +259,11 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         Set<String> tablesToCheck = new HashSet<>();
         tablesToCheck.add(tableName);
         for (int i=0; i<2; i++) {
-            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.LOCAL));
-            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.GLOBAL));
+            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.LOCAL).getSecond());
+            tablesToCheck.add(createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond());
         }
         // Create a view and view index
-        tablesToCheck.add(createIndexTable(conn, tableName, null));
+        tablesToCheck.add(createIndexTable(conn, tableName, null).getSecond());
 
         // Now add a new column family while simultaneously modifying properties to be kept in sync,
         // as well as a property which does not need to be kept in sync. Properties to be kept in sync
@@ -285,8 +298,8 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     public void testDisallowAlterGlobalIndexTable() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), new Properties());
         String tableName = createBaseTableWithProps(conn);
-        String globalIndexName = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL);
-        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES) {
+        String globalIndexName = createIndexTable(conn, tableName, PTable.IndexType.GLOBAL).getSecond();
+        for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
                 conn.createStatement().execute("alter table " + globalIndexName + " set "
                 + propName + "=" + DUMMY_PROP_VALUE);
@@ -312,12 +325,12 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         createdTables.add(baseTableName1);
         // Create different indexes on the base table
         for (int i=0; i<2; i++) {
-            createdTables.add(createIndexTable(conn, baseTableName, PTable.IndexType.GLOBAL));
-            createdTables.add(createIndexTable(conn, baseTableName, PTable.IndexType.LOCAL));
-            createdTables.add(createIndexTable(conn, baseTableName, null));
-            createdTables.add(createIndexTable(conn, baseTableName1, PTable.IndexType.GLOBAL));
-            createdTables.add(createIndexTable(conn, baseTableName1, PTable.IndexType.LOCAL));
-            createdTables.add(createIndexTable(conn, baseTableName1, null));
+            createdTables.add(createIndexTable(conn, baseTableName, PTable.IndexType.GLOBAL).getSecond());
+            createdTables.add(createIndexTable(conn, baseTableName, PTable.IndexType.LOCAL).getSecond());
+            createdTables.add(createIndexTable(conn, baseTableName, null).getSecond());
+            createdTables.add(createIndexTable(conn, baseTableName1, PTable.IndexType.GLOBAL).getSecond());
+            createdTables.add(createIndexTable(conn, baseTableName1, PTable.IndexType.LOCAL).getSecond());
+            createdTables.add(createIndexTable(conn, baseTableName1, null).getSecond());
         }
         for (String t: createdTables) {
             verifyHBaseColumnFamilyProperties(t, conn, false, false);
@@ -369,6 +382,77 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         conn.close();
     }
 
+    @Test
+    public void testOldClientSyncUpdateCacheFreqUpgradePath() throws Exception {
+        PTable base, index;
+        String baseTableName, viewName, viewName2;
+        Map<String, Set<String>> createdTablesAndViews = new HashMap<>();
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
+            baseTableName = createBaseTableWithProps(conn);
+            createdTablesAndViews.put(baseTableName, new HashSet<>());
+            Set<String> indexes = createdTablesAndViews.get(baseTableName);
+            indexes.add(createIndexTable(conn, baseTableName, PTable.IndexType.GLOBAL).getSecond());
+            indexes.add(createIndexTable(conn, baseTableName, PTable.IndexType.LOCAL).getFirst());
+
+            viewName = createViewOnBaseTableOrView(conn, baseTableName);
+            createdTablesAndViews.put(viewName, new HashSet<>());
+            indexes = createdTablesAndViews.get(viewName);
+            indexes.add(createIndexTable(conn, viewName, PTable.IndexType.GLOBAL).getSecond());
+
+            viewName2 = createViewOnBaseTableOrView(conn, viewName);
+            createdTablesAndViews.put(viewName2, new HashSet<>());
+            indexes = createdTablesAndViews.get(viewName2);
+            indexes.add(createIndexTable(conn, viewName2, PTable.IndexType.LOCAL).getFirst());
+
+            // Intentionally make UPDATE_CACHE_FREQUENCY out of sync for indexes
+            PreparedStatement stmt = conn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
+            for (String tableOrViewName : createdTablesAndViews.keySet()) {
+                base = PhoenixRuntime.getTable(conn, tableOrViewName);
+                for (String indexTableName : createdTablesAndViews.get(tableOrViewName)) {
+                    index = PhoenixRuntime.getTable(conn, indexTableName);
+                    PName tenantId = index.getTenantId();
+                    stmt.setString(1, tenantId == null ? null : tenantId.getString());
+                    stmt.setString(2, index.getSchemaName().getString());
+                    stmt.setString(3, index.getTableName().getString());
+                    stmt.setLong(4, base.getType() == PTableType.TABLE ?
+                            MODIFIED_UPDATE_CACHE_FREQUENCY : MODIFIED_UPDATE_CACHE_FREQUENCY_VIEWS);
+                    stmt.addBatch();
+                }
+            }
+            stmt.executeBatch();
+            conn.commit();
+
+            // Clear the server-side cache so that we get the latest built PTables
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            // Verify that the modified values are reflected
+            for (String tableOrViewName : createdTablesAndViews.keySet()) {
+                assertUpdateCacheFreq(conn, tableOrViewName, baseTableName.equals(tableOrViewName) ?
+                        INITIAL_UPDATE_CACHE_FREQUENCY : INITIAL_UPDATE_CACHE_FREQUENCY_VIEWS);
+                for (String indexName : createdTablesAndViews.get(tableOrViewName)) {
+                    assertUpdateCacheFreq(conn, indexName, baseTableName.equals(tableOrViewName) ?
+                            MODIFIED_UPDATE_CACHE_FREQUENCY : MODIFIED_UPDATE_CACHE_FREQUENCY_VIEWS);
+                }
+            }
+
+            PhoenixConnection upgradeConn = conn.unwrap(PhoenixConnection.class);
+            upgradeConn.setRunningUpgrade(true);
+            syncUpdateCacheFreqAllIndexes(upgradeConn,
+                    PhoenixRuntime.getTableNoCache(conn, baseTableName));
+
+            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            // Verify that indexes have the synced values for UPDATE_CACHE_FREQUENCY
+            for (String tableOrViewName : createdTablesAndViews.keySet()) {
+                long expectedVal = baseTableName.equals(tableOrViewName) ?
+                        INITIAL_UPDATE_CACHE_FREQUENCY : INITIAL_UPDATE_CACHE_FREQUENCY_VIEWS;
+                assertUpdateCacheFreq(conn, tableOrViewName, expectedVal);
+                for (String indexOnTableOrView : createdTablesAndViews.get(tableOrViewName)) {
+                    assertUpdateCacheFreq(conn, indexOnTableOrView, expectedVal);
+                }
+            }
+        }
+    }
+
     /**
      * Helper method to modify the synced properties for a column family descriptor
      * @param cfdb The column family descriptor builder object
@@ -392,7 +476,8 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                 + " (id INTEGER not null primary key, type varchar(5), "
                 + COL_FAM1 + ".name varchar(10), " + COL_FAM2 + ".flag boolean) "
                 + "TTL=" + INITIAL_TTL_VALUE + ",KEEP_DELETED_CELLS=" + INITIAL_KEEP_DELETED_CELLS_VALUE
-                + ",REPLICATION_SCOPE=" + INITIAL_REPLICATION_SCOPE_VALUE);
+                + ",REPLICATION_SCOPE=" + INITIAL_REPLICATION_SCOPE_VALUE
+                + ",UPDATE_CACHE_FREQUENCY=" + INITIAL_UPDATE_CACHE_FREQUENCY);
         return tableName;
     }
 
@@ -402,33 +487,43 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
      * @param baseTableName Name of the HBase base table on which to create an index
      * @param indexType LOCAL, GLOBAL or if we pass in null as the indexType,
      *                 we create a view and an index on that view for the given base table
-     * @return The physical HBase table corresponding to the index created
+     * @return A pair consisting of the index name and the name of the physical HBase table
+     * corresponding to the index created
      * @throws SQLException
      */
-    private String createIndexTable(Connection conn, String baseTableName, PTable.IndexType indexType) throws SQLException {
+    private Pair<String,String> createIndexTable(Connection conn, String baseTableName,
+            PTable.IndexType indexType) throws SQLException {
         // Create a view on top of the base table and then an index on that view
         if (indexType == null) {
-            String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
+            String viewName = createViewOnBaseTableOrView(conn, baseTableName);
             String viewIndexName = VIEW_INDEX_TABLE_PREFIX + baseTableName;
-            conn.createStatement().execute("create view " + viewName
-                    + " (new_col SMALLINT) as select * from " + baseTableName + " where id > 1");
             conn.createStatement().execute("create index view_index_" + generateUniqueName()
                     + " on " + viewName + " (flag)");
-            return viewIndexName;
+            return new Pair<>(viewIndexName, viewIndexName);
         }
         switch(indexType) {
         case LOCAL:
             String localIndexName = baseTableName + "_LOCAL_" + generateUniqueName();
             conn.createStatement().execute(
                     "create local index " + localIndexName + " on " + baseTableName + "(flag)");
-            return baseTableName;
+            return new Pair<>(localIndexName, baseTableName);
         case GLOBAL:
             String globalIndexName = baseTableName + "_GLOBAL_" + generateUniqueName();
             conn.createStatement()
                     .execute("create index " + globalIndexName + " on " + baseTableName + "(name)");
-            return globalIndexName;
+            return new Pair<>(globalIndexName, globalIndexName);
+        default:
+            return new Pair<>(baseTableName, baseTableName);
         }
-        return baseTableName;
+    }
+
+    private String createViewOnBaseTableOrView(Connection conn, String baseTableOrView) throws SQLException {
+        String viewName = "VIEW_" + baseTableOrView + "_" + generateUniqueName();
+        conn.createStatement().execute("create view " + viewName
+                + " (" + generateUniqueName() + " SMALLINT) as select * from "
+                + baseTableOrView + " where id > 1 UPDATE_CACHE_FREQUENCY="
+                + INITIAL_UPDATE_CACHE_FREQUENCY_VIEWS);
+        return viewName;
     }
 
     /**
