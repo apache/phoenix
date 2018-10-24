@@ -206,7 +206,7 @@
   <dependencies>
   <dependency>
     <groupId>org.apache.omid</groupId>
-    <artifactId>omid-hbase-client-hbase1.3</artifactId>
+    <artifactId>omid-hbase-client-hbase1.x</artifactId>
     <version>${omid.version}</version>
     <exclusions>
       <exclusion>
@@ -217,7 +217,7 @@
   </dependency>
   <dependency>
     <groupId>org.apache.omid</groupId>
-    <artifactId>omid-hbase-coprocessor-hbase1.3</artifactId>
+    <artifactId>omid-hbase-coprocessor-hbase1.x</artifactId>
     <version>${omid.version}</version>
     <exclusions>
       <exclusion>
@@ -228,7 +228,7 @@
   </dependency>
   <dependency>
     <groupId>org.apache.omid</groupId>
-    <artifactId>omid-tso-server-hbase1.3</artifactId>
+    <artifactId>omid-tso-server-hbase1.x</artifactId>
     <version>${omid.version}</version>
     <exclusions>
       <exclusion>
@@ -239,7 +239,7 @@
   </dependency>
   <dependency>
     <groupId>org.apache.omid</groupId>
-    <artifactId>omid-tso-server-hbase1.3</artifactId>
+    <artifactId>omid-tso-server-hbase1.x</artifactId>
     <version>${omid.version}</version>
     <type>test-jar</type>
     <exclusions>
