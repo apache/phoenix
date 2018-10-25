@@ -17,10 +17,14 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
+
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -96,15 +100,34 @@ public class UnionCompiler {
             projectedColumns.add(projectedColumn);
         }
         Long scn = statement.getConnection().getSCN();
-        PTable tempTable = PTableImpl.makePTable(statement.getConnection().getTenantId(),
-            UNION_SCHEMA_NAME, UNION_TABLE_NAME, PTableType.SUBQUERY, null,
-            HConstants.LATEST_TIMESTAMP, scn == null ? HConstants.LATEST_TIMESTAMP : scn,
-            null, null, projectedColumns, null, null, null, true, null, null, null, true,
-            true, true, null, null, null, null, false, null, 0, 0L,
-            SchemaUtil.isNamespaceMappingEnabled(PTableType.SUBQUERY,
-                statement.getConnection().getQueryServices().getProps()), null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
-        TableRef tableRef = new TableRef(null, tempTable, 0, false);
-        return tableRef;
+        PTable tempTable = new PTableImpl.Builder()
+                .setType(PTableType.SUBQUERY)
+                .setTimeStamp(HConstants.LATEST_TIMESTAMP)
+                .setIndexDisableTimestamp(0L)
+                .setSequenceNumber(scn == null ? HConstants.LATEST_TIMESTAMP : scn)
+                .setImmutableRows(true)
+                .setDisableWAL(true)
+                .setMultiTenant(true)
+                .setStoreNulls(true)
+                .setUpdateCacheFrequency(0)
+                .setNamespaceMapped(SchemaUtil.isNamespaceMappingEnabled(PTableType.SUBQUERY,
+                        statement.getConnection().getQueryServices().getProps()))
+                .setAppendOnlySchema(false)
+                .setImmutableStorageScheme(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)
+                .setQualifierEncodingScheme(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)
+                .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
+                .setEncodedCQCounter(PTable.EncodedCQCounter.NULL_COUNTER)
+                .setUseStatsForParallelization(true)
+                .setExcludedColumns(ImmutableList.of())
+                .setTenantId(statement.getConnection().getTenantId())
+                .setSchemaName(UNION_SCHEMA_NAME)
+                .setTableName(UNION_TABLE_NAME)
+                .setRowKeyOrderOptimizable(false)
+                .setIndexes(Collections.emptyList())
+                .setPhysicalNames(ImmutableList.of())
+                .setColumns(projectedColumns)
+                .build();
+        return new TableRef(null, tempTable, 0, false);
     }
 
     private static void compareExperssions(int i, Expression expression,

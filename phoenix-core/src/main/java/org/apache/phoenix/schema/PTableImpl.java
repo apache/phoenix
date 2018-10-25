@@ -36,6 +36,7 @@ import java.util.Map.Entry;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -69,7 +70,6 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
@@ -102,164 +102,661 @@ import com.google.common.collect.Maps;
 public class PTableImpl implements PTable {
     private static final Integer NO_SALTING = -1;
 
-    private PTableKey key;
-    private PName name;
-    private PName schemaName = PName.EMPTY_NAME;
-    private PName tableName = PName.EMPTY_NAME;
-    private PName tenantId;
-    private PTableType type;
-    private PIndexState state;
-    private long sequenceNumber;
-    private long timeStamp;
-    private long indexDisableTimestamp;
-    // Have MultiMap for String->PColumn (may need family qualifier)
-    private List<PColumn> pkColumns;
-    private List<PColumn> allColumns;
-    // columns that were inherited from a parent table but that were dropped in the view
-    private List<PColumn> excludedColumns;
-    private List<PColumnFamily> families;
-    private Map<byte[], PColumnFamily> familyByBytes;
-    private Map<String, PColumnFamily> familyByString;
-    private ListMultimap<String, PColumn> columnsByName;
-    private Map<KVColumnFamilyQualifier, PColumn> kvColumnsByQualifiers;
-    private PName pkName;
-    private Integer bucketNum;
-    private RowKeySchema rowKeySchema;
-    // Indexes associated with this table.
-    private List<PTable> indexes;
-    // Data table name that the index is created on.
-    private PName parentName;
-    private PName parentSchemaName;
-    private PName parentTableName;
-    private List<PName> physicalNames;
-    private boolean isImmutableRows;
     private IndexMaintainer indexMaintainer;
     private ImmutableBytesWritable indexMaintainersPtr;
-    private PName defaultFamilyName;
-    private String viewStatement;
-    private boolean disableWAL;
-    private boolean multiTenant;
-    private boolean storeNulls;
-    private TransactionFactory.Provider transactionProvider;
-    private ViewType viewType;
-    private PDataType viewIndexType;
-    private Long viewIndexId;
-    private int estimatedSize;
-    private IndexType indexType;
-    private int baseColumnCount;
-    private boolean rowKeyOrderOptimizable; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
-    private boolean hasColumnsRequiringUpgrade; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
-    private int rowTimestampColPos;
-    private long updateCacheFrequency;
-    private boolean isNamespaceMapped;
-    private String autoPartitionSeqName;
-    private boolean isAppendOnlySchema;
-    private ImmutableStorageScheme immutableStorageScheme;
-    private QualifierEncodingScheme qualifierEncodingScheme;
-    private EncodedCQCounter encodedCQCounter;
-    private Boolean useStatsForParallelization;
 
-    public PTableImpl() {
-        this.indexes = Collections.emptyList();
-        this.physicalNames = Collections.emptyList();
-        this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
-    }
-    
-    // Constructor used at table creation time
-    public PTableImpl(PName tenantId, String schemaName, String tableName, long timestamp, List<PColumnFamily> families, boolean isNamespaceMapped) {
-        Preconditions.checkArgument(tenantId==null || tenantId.getBytes().length > 0); // tenantId should be null or not empty
-        this.tenantId = tenantId;
-        this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName, tableName));
-        this.key = new PTableKey(tenantId, name.getString());
-        this.schemaName = PNameFactory.newName(schemaName);
-        this.tableName = PNameFactory.newName(tableName);
-        this.type = PTableType.VIEW;
-        this.viewType = ViewType.MAPPED;
-        this.timeStamp = timestamp;
-        this.pkColumns = this.allColumns = Collections.emptyList();
-        this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
-        this.indexes = Collections.emptyList();
-        this.familyByBytes = Maps.newHashMapWithExpectedSize(families.size());
-        this.familyByString = Maps.newHashMapWithExpectedSize(families.size());
-        for (PColumnFamily family : families) {
-            familyByBytes.put(family.getName().getBytes(), family);
-            familyByString.put(family.getName().getString(), family);
+    private final PTableKey key;
+    private final PName name;
+    private final PName schemaName;
+    private final PName tableName;
+    private final PName tenantId;
+    private final PTableType type;
+    private final PIndexState state;
+    private final long sequenceNumber;
+    private final long timeStamp;
+    private final long indexDisableTimestamp;
+    // Have MultiMap for String->PColumn (may need family qualifier)
+    private final List<PColumn> pkColumns;
+    private final List<PColumn> allColumns;
+    // columns that were inherited from a parent table but that were dropped in the view
+    private final List<PColumn> excludedColumns;
+    private final List<PColumnFamily> families;
+    private final Map<byte[], PColumnFamily> familyByBytes;
+    private final Map<String, PColumnFamily> familyByString;
+    private final ListMultimap<String, PColumn> columnsByName;
+    private final Map<KVColumnFamilyQualifier, PColumn> kvColumnsByQualifiers;
+    private final PName pkName;
+    private final Integer bucketNum;
+    private final RowKeySchema rowKeySchema;
+    // Indexes associated with this table.
+    private final List<PTable> indexes;
+    // Data table name that the index is created on.
+    private final PName parentName;
+    private final PName parentSchemaName;
+    private final PName parentTableName;
+    private final List<PName> physicalNames;
+    private final boolean isImmutableRows;
+    private final PName defaultFamilyName;
+    private final String viewStatement;
+    private final boolean disableWAL;
+    private final boolean multiTenant;
+    private final boolean storeNulls;
+    private final TransactionFactory.Provider transactionProvider;
+    private final ViewType viewType;
+    private final PDataType viewIndexType;
+    private final Long viewIndexId;
+    private final int estimatedSize;
+    private final IndexType indexType;
+    private final int baseColumnCount;
+    private final boolean rowKeyOrderOptimizable; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
+    private final boolean hasColumnsRequiringUpgrade; // TODO: remove when required that tables have been upgrade for PHOENIX-2067
+    private final int rowTimestampColPos;
+    private final long updateCacheFrequency;
+    private final boolean isNamespaceMapped;
+    private final String autoPartitionSeqName;
+    private final boolean isAppendOnlySchema;
+    private final ImmutableStorageScheme immutableStorageScheme;
+    private final QualifierEncodingScheme qualifierEncodingScheme;
+    private final EncodedCQCounter encodedCQCounter;
+    private final Boolean useStatsForParallelization;
+
+    public static class Builder {
+        private PTableKey key;
+        private PName name;
+        private PName schemaName = PName.EMPTY_NAME;
+        private PName tableName = PName.EMPTY_NAME;
+        private PName tenantId;
+        private PTableType type;
+        private PIndexState state;
+        private long sequenceNumber;
+        private long timeStamp;
+        private long indexDisableTimestamp;
+        private List<PColumn> pkColumns;
+        private List<PColumn> allColumns;
+        private List<PColumn> excludedColumns;
+        private List<PColumnFamily> families;
+        private Map<byte[], PColumnFamily> familyByBytes;
+        private Map<String, PColumnFamily> familyByString;
+        private ListMultimap<String, PColumn> columnsByName;
+        private Map<KVColumnFamilyQualifier, PColumn> kvColumnsByQualifiers;
+        private PName pkName;
+        private Integer bucketNum;
+        private RowKeySchema rowKeySchema;
+        private List<PTable> indexes;
+        private PName parentName;
+        private PName parentSchemaName;
+        private PName parentTableName;
+        private List<PName> physicalNames;
+        private boolean isImmutableRows;
+        private IndexMaintainer indexMaintainer;
+        private ImmutableBytesWritable indexMaintainersPtr;
+        private PName defaultFamilyName;
+        private String viewStatement;
+        private boolean disableWAL;
+        private boolean multiTenant;
+        private boolean storeNulls;
+        private TransactionFactory.Provider transactionProvider;
+        private ViewType viewType;
+        private PDataType viewIndexType;
+        private Long viewIndexId;
+        private int estimatedSize;
+        private IndexType indexType;
+        private int baseColumnCount;
+        private boolean rowKeyOrderOptimizable;
+        private boolean hasColumnsRequiringUpgrade;
+        private int rowTimestampColPos;
+        private long updateCacheFrequency;
+        private boolean isNamespaceMapped;
+        private String autoPartitionSeqName;
+        private boolean isAppendOnlySchema;
+        private ImmutableStorageScheme immutableStorageScheme;
+        private QualifierEncodingScheme qualifierEncodingScheme;
+        private EncodedCQCounter encodedCQCounter;
+        private Boolean useStatsForParallelization;
+        // Optionally set columns for the builder, but not for the actual PTable
+        private Collection<PColumn> columns;
+
+        public Builder setKey(PTableKey key) {
+            this.key = key;
+            return this;
         }
-        this.families = families;
-        this.physicalNames = Collections.emptyList();
-        this.isNamespaceMapped = isNamespaceMapped;
-    }
-    
-    public PTableImpl(PName tenantId, String schemaName, String tableName, long timestamp, List<PColumnFamily> families, boolean isNamespaceMapped, ImmutableStorageScheme storageScheme, QualifierEncodingScheme encodingScheme, Boolean useStatsForParallelization) { // For base table of mapped VIEW
-        Preconditions.checkArgument(tenantId==null || tenantId.getBytes().length > 0); // tenantId should be null or not empty
-        this.tenantId = tenantId;
-        this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName, tableName));
-        this.key = new PTableKey(tenantId, name.getString());
-        this.schemaName = PNameFactory.newName(schemaName);
-        this.tableName = PNameFactory.newName(tableName);
-        this.type = PTableType.VIEW;
-        this.viewType = ViewType.MAPPED;
-        this.timeStamp = timestamp;
-        this.pkColumns = this.allColumns = Collections.emptyList();
-        this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
-        this.indexes = Collections.emptyList();
-        this.familyByBytes = Maps.newHashMapWithExpectedSize(families.size());
-        this.familyByString = Maps.newHashMapWithExpectedSize(families.size());
-        for (PColumnFamily family : families) {
-            familyByBytes.put(family.getName().getBytes(), family);
-            familyByString.put(family.getName().getString(), family);
+
+        public Builder setName(PName name) {
+            this.name = name;
+            return this;
         }
-        this.families = families;
-        this.physicalNames = Collections.emptyList();
-        this.isNamespaceMapped = isNamespaceMapped;
-        this.immutableStorageScheme = storageScheme;
-        this.qualifierEncodingScheme = encodingScheme;
-        this.useStatsForParallelization = useStatsForParallelization;
-    }
-    
-    // For indexes stored in shared physical tables
-    public PTableImpl(PName tenantId, PName schemaName, PName tableName, long timestamp, List<PColumnFamily> families, 
-            List<PColumn> columns, List<PName> physicalNames, PDataType viewIndexType, Long viewIndexId, boolean multiTenant, boolean isNamespaceMpped, ImmutableStorageScheme storageScheme, QualifierEncodingScheme qualifierEncodingScheme,
-            EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization, Integer bucketNum) throws SQLException {
-        this.pkColumns = this.allColumns = Collections.emptyList();
-        this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
-        this.indexes = Collections.emptyList();
-        this.familyByBytes = Maps.newHashMapWithExpectedSize(families.size());
-        this.familyByString = Maps.newHashMapWithExpectedSize(families.size());
-        for (PColumnFamily family : families) {
-            familyByBytes.put(family.getName().getBytes(), family);
-            familyByString.put(family.getName().getString(), family);
+
+        public Builder setSchemaName(PName schemaName) {
+            this.schemaName = schemaName;
+            return this;
         }
-        this.families = families;
-        if (bucketNum!=null) {
-            columns = columns.subList(1, columns.size());
+
+        public Builder setTableName(PName tableName) {
+            this.tableName = tableName;
+            return this;
         }
-        init(tenantId, this.schemaName, this.tableName, PTableType.INDEX, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
-            this.schemaName, parentTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
-            null, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
-            transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMpped, null,
-            false, storageScheme, qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization, null);
+
+        public Builder setTenantId(PName tenantId) {
+            this.tenantId = tenantId;
+            return this;
+        }
+
+        public Builder setType(PTableType type) {
+            this.type = type;
+            return this;
+        }
+
+        public Builder setState(PIndexState state) {
+            this.state = state;
+            return this;
+        }
+
+        public Builder setSequenceNumber(long sequenceNumber) {
+            this.sequenceNumber = sequenceNumber;
+            return this;
+        }
+
+        public Builder setTimeStamp(long timeStamp) {
+            this.timeStamp = timeStamp;
+            return this;
+        }
+
+        public Builder setIndexDisableTimestamp(long indexDisableTimestamp) {
+            this.indexDisableTimestamp = indexDisableTimestamp;
+            return this;
+        }
+
+        public Builder setPkColumns(List<PColumn> pkColumns) {
+            this.pkColumns = pkColumns;
+            return this;
+        }
+
+        public Builder setAllColumns(List<PColumn> allColumns) {
+            this.allColumns = allColumns;
+            return this;
+        }
+
+        public Builder setExcludedColumns(List<PColumn> excludedColumns) {
+            this.excludedColumns = excludedColumns;
+            return this;
+        }
+
+        public Builder setFamilyAttributes(List<PColumnFamily> families) {
+            this.familyByBytes = Maps.newHashMapWithExpectedSize(families.size());
+            this.familyByString = Maps.newHashMapWithExpectedSize(families.size());
+            for (PColumnFamily family : families) {
+                familyByBytes.put(family.getName().getBytes(), family);
+                familyByString.put(family.getName().getString(), family);
+            }
+            this.families = families;
+            return this;
+        }
+
+        public Builder setFamilies(List<PColumnFamily> families) {
+            this.families = families;
+            return this;
+        }
+
+        public Builder setFamilyByBytes(Map<byte[], PColumnFamily> familyByBytes) {
+            this.familyByBytes = familyByBytes;
+            return this;
+        }
+
+        public Builder setFamilyByString(Map<String, PColumnFamily> familyByString) {
+            this.familyByString = familyByString;
+            return this;
+        }
+
+        public Builder setColumnsByName(ListMultimap<String, PColumn> columnsByName) {
+            this.columnsByName = columnsByName;
+            return this;
+        }
+
+        public Builder setKvColumnsByQualifiers(Map<KVColumnFamilyQualifier, PColumn> kvColumnsByQualifiers) {
+            this.kvColumnsByQualifiers = kvColumnsByQualifiers;
+            return this;
+        }
+
+        public Builder setPkName(PName pkName) {
+            this.pkName = pkName;
+            return this;
+        }
+
+        public Builder setBucketNum(Integer bucketNum) {
+            this.bucketNum = bucketNum;
+            return this;
+        }
+
+        public Builder setRowKeySchema(RowKeySchema rowKeySchema) {
+            this.rowKeySchema = rowKeySchema;
+            return this;
+        }
+
+        public Builder setIndexes(List<PTable> indexes) {
+            this.indexes = indexes;
+            return this;
+        }
+
+        public Builder setParentName(PName parentName) {
+            this.parentName = parentName;
+            return this;
+        }
+
+        public Builder setParentSchemaName(PName parentSchemaName) {
+            this.parentSchemaName = parentSchemaName;
+            return this;
+        }
+
+        public Builder setParentTableName(PName parentTableName) {
+            this.parentTableName = parentTableName;
+            return this;
+        }
+
+        public Builder setPhysicalNames(List<PName> physicalNames) {
+            this.physicalNames = physicalNames;
+            return this;
+        }
+
+        public Builder setImmutableRows(boolean immutableRows) {
+            isImmutableRows = immutableRows;
+            return this;
+        }
+
+        public Builder setIndexMaintainer(IndexMaintainer indexMaintainer) {
+            this.indexMaintainer = indexMaintainer;
+            return this;
+        }
+
+        public Builder setIndexMaintainersPtr(ImmutableBytesWritable indexMaintainersPtr) {
+            this.indexMaintainersPtr = indexMaintainersPtr;
+            return this;
+        }
+
+        public Builder setDefaultFamilyName(PName defaultFamilyName) {
+            this.defaultFamilyName = defaultFamilyName;
+            return this;
+        }
+
+        public Builder setViewStatement(String viewStatement) {
+            this.viewStatement = viewStatement;
+            return this;
+        }
+
+        public Builder setDisableWAL(boolean disableWAL) {
+            this.disableWAL = disableWAL;
+            return this;
+        }
+
+        public Builder setMultiTenant(boolean multiTenant) {
+            this.multiTenant = multiTenant;
+            return this;
+        }
+
+        public Builder setStoreNulls(boolean storeNulls) {
+            this.storeNulls = storeNulls;
+            return this;
+        }
+
+        public Builder setTransactionProvider(TransactionFactory.Provider transactionProvider) {
+            this.transactionProvider = transactionProvider;
+            return this;
+        }
+
+        public Builder setViewType(ViewType viewType) {
+            this.viewType = viewType;
+            return this;
+        }
+
+        public Builder setViewIndexType(PDataType viewIndexType) {
+            this.viewIndexType = viewIndexType;
+            return this;
+        }
+
+        public Builder setViewIndexId(Long viewIndexId) {
+            this.viewIndexId = viewIndexId;
+            return this;
+        }
+
+        public Builder setEstimatedSize(int estimatedSize) {
+            this.estimatedSize = estimatedSize;
+            return this;
+        }
+
+        public Builder setIndexType(IndexType indexType) {
+            this.indexType = indexType;
+            return this;
+        }
+
+        public Builder setBaseColumnCount(int baseColumnCount) {
+            this.baseColumnCount = baseColumnCount;
+            return this;
+        }
+
+        public Builder setRowKeyOrderOptimizable(boolean rowKeyOrderOptimizable) {
+            this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
+            return this;
+        }
+
+        public Builder setHasColumnsRequiringUpgrade(boolean hasColumnsRequiringUpgrade) {
+            this.hasColumnsRequiringUpgrade = hasColumnsRequiringUpgrade;
+            return this;
+        }
+
+        public Builder setRowTimestampColPos(int rowTimestampColPos) {
+            this.rowTimestampColPos = rowTimestampColPos;
+            return this;
+        }
+
+        public Builder setUpdateCacheFrequency(long updateCacheFrequency) {
+            this.updateCacheFrequency = updateCacheFrequency;
+            return this;
+        }
+
+        public Builder setNamespaceMapped(boolean namespaceMapped) {
+            isNamespaceMapped = namespaceMapped;
+            return this;
+        }
+
+        public Builder setAutoPartitionSeqName(String autoPartitionSeqName) {
+            this.autoPartitionSeqName = autoPartitionSeqName;
+            return this;
+        }
+
+        public Builder setAppendOnlySchema(boolean appendOnlySchema) {
+            isAppendOnlySchema = appendOnlySchema;
+            return this;
+        }
+
+        public Builder setImmutableStorageScheme(ImmutableStorageScheme immutableStorageScheme) {
+            this.immutableStorageScheme = immutableStorageScheme;
+            return this;
+        }
+
+        public Builder setQualifierEncodingScheme(QualifierEncodingScheme qualifierEncodingScheme) {
+            this.qualifierEncodingScheme = qualifierEncodingScheme;
+            return this;
+        }
+
+        public Builder setEncodedCQCounter(EncodedCQCounter encodedCQCounter) {
+            this.encodedCQCounter = encodedCQCounter;
+            return this;
+        }
+
+        public Builder setUseStatsForParallelization(Boolean useStatsForParallelization) {
+            this.useStatsForParallelization = useStatsForParallelization;
+            return this;
+        }
+
+        /**
+         * Note: When set in the builder, we must call {@link Builder#initDerivedAttributes()}
+         * before building the PTable in order to correctly populate other attributes of the PTable
+         * @param columns PColumns to be set in the builder
+         * @return PTableImpl.Builder object
+         */
+        public Builder setColumns(Collection<PColumn> columns) {
+            this.columns = columns;
+            return this;
+        }
+
+        /**
+         * Populate derivable attributes of the PTable
+         * @return PTableImpl.Builder object
+         * @throws SQLException
+         */
+        private Builder initDerivedAttributes() throws SQLException {
+            checkTenantId(this.tenantId);
+            Preconditions.checkNotNull(this.schemaName);
+            Preconditions.checkNotNull(this.tableName);
+            Preconditions.checkNotNull(this.columns);
+            Preconditions.checkNotNull(this.indexes);
+            Preconditions.checkNotNull(this.physicalNames);
+            Preconditions.checkNotNull(this.hasColumnsRequiringUpgrade);
+            Preconditions.checkNotNull(this.rowKeyOrderOptimizable);
+
+            PName fullName = PNameFactory.newName(SchemaUtil.getTableName(
+                    this.schemaName.getString(), this.tableName.getString()));
+            int estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE +
+                    4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
+                    PNameFactory.getEstimatedSize(this.tenantId) +
+                    PNameFactory.getEstimatedSize(this.schemaName) +
+                    PNameFactory.getEstimatedSize(this.tableName) +
+                    PNameFactory.getEstimatedSize(this.pkName) +
+                    PNameFactory.getEstimatedSize(this.parentTableName) +
+                    PNameFactory.getEstimatedSize(this.defaultFamilyName);
+            int numPKColumns = 0;
+            List<PColumn> pkColumns;
+            PColumn[] allColumns;
+            if (this.bucketNum != null) {
+                // Add salt column to allColumns and pkColumns, but don't add to
+                // columnsByName, since it should not be addressable via name.
+                allColumns = new PColumn[this.columns.size()+1];
+                allColumns[SALTING_COLUMN.getPosition()] = SALTING_COLUMN;
+                pkColumns = Lists.newArrayListWithExpectedSize(this.columns.size()+1);
+                ++numPKColumns;
+            } else {
+                allColumns = new PColumn[this.columns.size()];
+                pkColumns = Lists.newArrayListWithExpectedSize(this.columns.size());
+            }
+            // Must do this as with the new method of storing diffs, we just care about
+            // ordinal position relative order and not the true ordinal value itself.
+            List<PColumn> sortedColumns = Lists.newArrayList(this.columns);
+            Collections.sort(sortedColumns, new Comparator<PColumn>() {
+                @Override
+                public int compare(PColumn o1, PColumn o2) {
+                    return Integer.valueOf(o1.getPosition()).compareTo(o2.getPosition());
+                }
+            });
+
+            int position = 0;
+            if (this.bucketNum != null) {
+                position = 1;
+            }
+            ListMultimap<String, PColumn> populateColumnsByName =
+                    ArrayListMultimap.create(this.columns.size(), 1);
+            Map<KVColumnFamilyQualifier, PColumn> populateKvColumnsByQualifiers =
+                    Maps.newHashMapWithExpectedSize(this.columns.size());
+            for (PColumn column : sortedColumns) {
+                allColumns[position] = column;
+                position++;
+                PName familyName = column.getFamilyName();
+                if (familyName == null) {
+                    ++numPKColumns;
+                }
+                String columnName = column.getName().getString();
+                if (populateColumnsByName.put(columnName, column)) {
+                    int count = 0;
+                    for (PColumn dupColumn : populateColumnsByName.get(columnName)) {
+                        if (Objects.equal(familyName, dupColumn.getFamilyName())) {
+                            count++;
+                            if (count > 1) {
+                                throw new ColumnAlreadyExistsException(this.schemaName.getString(),
+                                        fullName.getString(), columnName);
+                            }
+                        }
+                    }
+                }
+                byte[] cq = column.getColumnQualifierBytes();
+                String cf = column.getFamilyName() != null ?
+                        column.getFamilyName().getString() : null;
+                if (cf != null && cq != null) {
+                    KVColumnFamilyQualifier info = new KVColumnFamilyQualifier(cf, cq);
+                    if (populateKvColumnsByQualifiers.get(info) != null) {
+                        throw new ColumnAlreadyExistsException(this.schemaName.getString(),
+                                fullName.getString(), columnName);
+                    }
+                    populateKvColumnsByQualifiers.put(info, column);
+                }
+            }
+            estimatedSize += SizedUtil.sizeOfMap(allColumns.length, SizedUtil.POINTER_SIZE,
+                    SizedUtil.sizeOfArrayList(1)); // for multi-map
+            estimatedSize += SizedUtil.sizeOfMap(numPKColumns) +
+                    SizedUtil.sizeOfMap(allColumns.length);
+
+            RowKeySchemaBuilder builder = new RowKeySchemaBuilder(numPKColumns);
+            // Two pass so that column order in column families matches overall column order
+            // and to ensure that column family order is constant
+            int maxExpectedSize = allColumns.length - numPKColumns;
+            // Maintain iteration order so that column families are ordered as they are listed
+            Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
+            PColumn rowTimestampCol = null;
+            boolean hasColsRequiringUpgrade = false;
+            for (PColumn column : allColumns) {
+                PName familyName = column.getFamilyName();
+                if (familyName == null) {
+                    hasColsRequiringUpgrade |=
+                            (column.getSortOrder() == SortOrder.DESC
+                                    && (!column.getDataType().isFixedWidth()
+                                    || column.getDataType() == PChar.INSTANCE
+                                    || column.getDataType() == PFloat.INSTANCE
+                                    || column.getDataType() == PDouble.INSTANCE
+                                    || column.getDataType() == PBinary.INSTANCE) )
+                                    || (column.getSortOrder() == SortOrder.ASC
+                                        && column.getDataType() == PBinary.INSTANCE
+                                        && column.getMaxLength() != null
+                                        && column.getMaxLength() > 1);
+                    pkColumns.add(column);
+                    if (column.isRowTimestamp()) {
+                        rowTimestampCol = column;
+                    }
+                }
+                if (familyName == null) {
+                    estimatedSize += column.getEstimatedSize(); // PK columns
+                    builder.addField(column, column.isNullable(), column.getSortOrder());
+                } else {
+                    List<PColumn> columnsInFamily = familyMap.get(familyName);
+                    if (columnsInFamily == null) {
+                        columnsInFamily = Lists.newArrayListWithExpectedSize(maxExpectedSize);
+                        familyMap.put(familyName, columnsInFamily);
+                    }
+                    columnsInFamily.add(column);
+                }
+            }
+            int rowTimestampColPos;
+            if (rowTimestampCol != null) {
+                rowTimestampColPos = pkColumns.indexOf(rowTimestampCol);
+            } else {
+                rowTimestampColPos = -1;
+            }
+
+            Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
+            PColumnFamily[] families = new PColumnFamily[familyMap.size()];
+            ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
+            ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
+                    .orderedBy(Bytes.BYTES_COMPARATOR);
+            for (int i = 0; i < families.length; i++) {
+                Map.Entry<PName,List<PColumn>> entry = iterator.next();
+                PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());
+                families[i] = family;
+                familyByString.put(family.getName().getString(), family);
+                familyByBytes.put(family.getName().getBytes(), family);
+                estimatedSize += family.getEstimatedSize();
+            }
+            estimatedSize += SizedUtil.sizeOfArrayList(families.length);
+            estimatedSize += SizedUtil.sizeOfMap(families.length) * 2;
+            for (PTable index : this.indexes) {
+                estimatedSize += index.getEstimatedSize();
+            }
+
+            estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
+            for (PName physicalName : this.physicalNames) {
+                estimatedSize += physicalName.getEstimatedSize();
+            }
+            // Populate the derived fields and return the builder
+            return this.setName(fullName)
+                    .setKey(new PTableKey(this.tenantId, fullName.getString()))
+                    .setParentName(this.parentTableName == null ? null :
+                            PNameFactory.newName(SchemaUtil.getTableName(
+                                    this.parentSchemaName != null ?
+                                            this.parentSchemaName.getString() : null,
+                                    this.parentTableName.getString())))
+                    .setColumnsByName(populateColumnsByName)
+                    .setKvColumnsByQualifiers(populateKvColumnsByQualifiers)
+                    .setAllColumns(ImmutableList.copyOf(allColumns))
+                    .setHasColumnsRequiringUpgrade(hasColsRequiringUpgrade
+                            | this.hasColumnsRequiringUpgrade)
+                    .setPkColumns(ImmutableList.copyOf(pkColumns))
+                    .setRowTimestampColPos(rowTimestampColPos)
+                    // after hasDescVarLengthColumns is calculated
+                    .setRowKeySchema(builder.rowKeyOrderOptimizable(
+                            this.rowKeyOrderOptimizable || !this.hasColumnsRequiringUpgrade)
+                            .build())
+                    .setFamilies(ImmutableList.copyOf(families))
+                    .setFamilyByBytes(familyByBytes.build())
+                    .setFamilyByString(familyByString.build())
+                    .setEstimatedSize(estimatedSize + this.rowKeySchema.getEstimatedSize());
+        }
+
+        public PTableImpl build() throws SQLException {
+            // Note that we call initDerivedAttributes to populate derivable attributes if
+            // this.columns is set in the PTableImpl.Builder object
+            return (this.columns == null) ? new PTableImpl(this) :
+                    new PTableImpl(this.initDerivedAttributes());
+        }
+
     }
 
-    public PTableImpl(long timeStamp) { // For delete marker
-        this(timeStamp, false);
+    @VisibleForTesting
+    PTableImpl() {
+        this(new PTableImpl.Builder()
+                .setIndexes(Collections.emptyList())
+                .setPhysicalNames(Collections.emptyList())
+                .setRowKeySchema(RowKeySchema.EMPTY_SCHEMA));
     }
 
-    public PTableImpl(long timeStamp, boolean isIndex) { // For index delete marker
-        if (isIndex) {
-            this.type = PTableType.INDEX;
-            this.state = PIndexState.INACTIVE;
-        } else {
-            this.type = PTableType.TABLE;
-        }
-        this.timeStamp = timeStamp;
-        this.pkColumns = this.allColumns = Collections.emptyList();
-        this.families = Collections.emptyList();
-        this.familyByBytes = Collections.emptyMap();
-        this.familyByString = Collections.emptyMap();
-        this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
-        this.indexes = Collections.emptyList();
-        this.physicalNames = Collections.emptyList();;
+    // Private constructor used by the builder
+    private PTableImpl(Builder builder) {
+        this.key = builder.key;
+        this.name = builder.name;
+        this.schemaName = builder.schemaName;
+        this.tableName = builder.tableName;
+        this.tenantId = builder.tenantId;
+        this.type = builder.type;
+        this.state = builder.state;
+        this.sequenceNumber = builder.sequenceNumber;
+        this.timeStamp = builder.timeStamp;
+        this.indexDisableTimestamp = builder.indexDisableTimestamp;
+        this.pkColumns = builder.pkColumns;
+        this.allColumns = builder.allColumns;
+        this.excludedColumns = builder.excludedColumns;
+        this.families = builder.families;
+        this.familyByBytes = builder.familyByBytes;
+        this.familyByString = builder.familyByString;
+        this.columnsByName = builder.columnsByName;
+        this.kvColumnsByQualifiers = builder.kvColumnsByQualifiers;
+        this.pkName = builder.pkName;
+        this.bucketNum = builder.bucketNum;
+        this.rowKeySchema = builder.rowKeySchema;
+        this.indexes = builder.indexes;
+        this.parentName = builder.parentName;
+        this.parentSchemaName = builder.parentSchemaName;
+        this.parentTableName = builder.parentTableName;
+        this.physicalNames = builder.physicalNames;
+        this.isImmutableRows = builder.isImmutableRows;
+        this.indexMaintainer = builder.indexMaintainer;
+        this.indexMaintainersPtr = builder.indexMaintainersPtr;
+        this.defaultFamilyName = builder.defaultFamilyName;
+        this.viewStatement = builder.viewStatement;
+        this.disableWAL = builder.disableWAL;
+        this.multiTenant = builder.multiTenant;
+        this.storeNulls = builder.storeNulls;
+        this.transactionProvider = builder.transactionProvider;
+        this.viewType = builder.viewType;
+        this.viewIndexType = builder.viewIndexType;
+        this.viewIndexId = builder.viewIndexId;
+        this.estimatedSize = builder.estimatedSize;
+        this.indexType = builder.indexType;
+        this.baseColumnCount = builder.baseColumnCount;
+        this.rowKeyOrderOptimizable = builder.rowKeyOrderOptimizable;
+        this.hasColumnsRequiringUpgrade = builder.hasColumnsRequiringUpgrade;
+        this.rowTimestampColPos = builder.rowTimestampColPos;
+        this.updateCacheFrequency = builder.updateCacheFrequency;
+        this.isNamespaceMapped = builder.isNamespaceMapped;
+        this.autoPartitionSeqName = builder.autoPartitionSeqName;
+        this.isAppendOnlySchema = builder.isAppendOnlySchema;
+        this.immutableStorageScheme = builder.immutableStorageScheme;
+        this.qualifierEncodingScheme = builder.qualifierEncodingScheme;
+        this.encodedCQCounter = builder.encodedCQCounter;
+        this.useStatsForParallelization = builder.useStatsForParallelization;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -267,153 +764,65 @@ public class PTableImpl implements PTable {
         return table.getBucketNum() == null ? table.getColumns() : table.getColumns().subList(1, table.getColumns().size());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes) throws SQLException {
-        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), timeStamp,
-                table.getSequenceNumber(), getColumnsToClone(table), table.getDefaultFamilyName(), table.getType(),
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), indexes);
-    }
-
-    public static PTable makePTable(PTable index, PName indexName, String viewStatement, long updateCacheFrequency,
-            PName tenantId) throws SQLException {
-        return Objects.equal(viewStatement, index.getViewStatement()) ? index
-                : new PTableImpl(index, index.rowKeyOrderOptimizable(), index.getIndexState(), index.getTimeStamp(),
-                        index.getSequenceNumber(), index.getColumns(), index.getDefaultFamilyName(), index.getType(),
-                        index.getBaseColumnCount(), index.getSchemaName(), indexName,
-                        viewStatement, updateCacheFrequency, tenantId,
-                        index.getIndexes());
-    }
-    
-    public static PTableImpl makePTable(PTable table, Collection<PColumn> columns) throws SQLException {
-        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), columns, table.getDefaultFamilyName(), table.getType(),
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
+    /**
+     * Get a PTableImpl.Builder from an existing PTable and set the builder columns
+     * @param table Original PTable
+     * @param columns Columns to set in the builder for the new PTable to be constructed
+     * @return PTable builder object based on an existing PTable
+     */
+    public static PTableImpl.Builder builderWithColumns(PTable table, Collection<PColumn> columns) {
+        return builderFromExisting(table).setColumns(columns);
     }
 
     /**
-     * Used to create a PTable for views or view indexes, the basePTable is for attributes we inherit from the physical table
+     * Get a PTableImpl.Builder from an existing PTable
+     * @param table Original PTable
      */
-    public static PTableImpl makePTable(PTable view, PTable baseTable, Collection<PColumn> columns, long timestamp, int baseTableColumnCount, Collection<PColumn> excludedColumns) throws SQLException {
-        // if a TableProperty is not valid on a view we set it to the base table value
-        // if a TableProperty is valid on a view and is not mutable on a view we set it to the base table value
-        // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view 
-        return new PTableImpl(
-            view.getTenantId(), view.getSchemaName(), view.getTableName(), view.getType(), view.getIndexState(), timestamp,
-            view.getSequenceNumber(), view.getPKName(), view.getBucketNum(), columns, view.getParentSchemaName(), view.getParentTableName(),
-            view.getIndexes(), baseTable.isImmutableRows(), view.getPhysicalNames(), view.getDefaultFamilyName(), view.getViewStatement(),
-            baseTable.isWALDisabled(), baseTable.isMultiTenant(), baseTable.getStoreNulls(), view.getViewType(),
-            view.getViewIndexType(), view.getViewIndexId(), view.getIndexType(),
-            baseTableColumnCount, view.rowKeyOrderOptimizable(), baseTable.getTransactionProvider(), view.getUpdateCacheFrequency(),
-            view.getIndexDisableTimestamp(), view.isNamespaceMapped(), baseTable.getAutoPartitionSeqName(), baseTable.isAppendOnlySchema(),
-            baseTable.getImmutableStorageScheme(), baseTable.getEncodingScheme(), view.getEncodedCQCounter(), view.useStatsForParallelization(), excludedColumns);
-    }
-    
-    public static PTableImpl makePTable(PTable table, PTableType type, Collection<PColumn> columns) throws SQLException {
-        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), columns, table.getDefaultFamilyName(), type,
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
-    }
-
-    public static PTableImpl makePTable(PTable table, Collection<PColumn> columns, PName defaultFamily)
-            throws SQLException {
-        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), columns, defaultFamily, table.getType(),
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
-    }
-
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns)
-            throws SQLException {
-        return new PTableImpl(table, table.rowKeyOrderOptimizable(), table.getIndexState(), timeStamp,
-                sequenceNumber, columns, table.getDefaultFamilyName(), table.getType(),
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
-    }
-
-    public static PTableImpl makePTable(PTable table, PIndexState state) throws SQLException {
-        return new PTableImpl(table, table.rowKeyOrderOptimizable(), state, table.getTimeStamp(),
-                table.getSequenceNumber(), getColumnsToClone(table), table.getDefaultFamilyName(), table.getType(),
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
-    }
-
-    public static PTableImpl makePTable(PTable table, boolean rowKeyOrderOptimizable) throws SQLException {
-        return new PTableImpl(table, rowKeyOrderOptimizable, table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), getColumnsToClone(table), table.getDefaultFamilyName(), table.getType(),
-                table.getBaseColumnCount(), table.getSchemaName(), table.getTableName(), table.getViewStatement(),
-                table.getUpdateCacheFrequency(), table.getTenantId(), table.getIndexes());
+    private static PTableImpl.Builder builderFromExisting(PTable table) {
+        return new PTableImpl.Builder()
+                .setType(table.getType())
+                .setState(table.getIndexState())
+                .setTimeStamp(table.getTimeStamp())
+                .setIndexDisableTimestamp(table.getIndexDisableTimestamp())
+                .setSequenceNumber(table.getSequenceNumber())
+                .setImmutableRows(table.isImmutableRows())
+                .setViewStatement(table.getViewStatement())
+                .setDisableWAL(table.isWALDisabled())
+                .setMultiTenant(table.isMultiTenant())
+                .setStoreNulls(table.getStoreNulls())
+                .setViewType(table.getViewType())
+                .setViewIndexType(table.getViewIndexType())
+                .setViewIndexId(table.getViewIndexId())
+                .setIndexType(table.getIndexType())
+                .setTransactionProvider(table.getTransactionProvider())
+                .setUpdateCacheFrequency(table.getUpdateCacheFrequency())
+                .setNamespaceMapped(table.isNamespaceMapped())
+                .setAutoPartitionSeqName(table.getAutoPartitionSeqName())
+                .setAppendOnlySchema(table.isAppendOnlySchema())
+                .setImmutableStorageScheme(table.getImmutableStorageScheme() == null ?
+                        ImmutableStorageScheme.ONE_CELL_PER_COLUMN : table.getImmutableStorageScheme())
+                .setQualifierEncodingScheme(table.getEncodingScheme() == null ?
+                        QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : table.getEncodingScheme())
+                .setBaseColumnCount(table.getBaseColumnCount())
+                .setEncodedCQCounter(table.getEncodedCQCounter())
+                .setUseStatsForParallelization(table.useStatsForParallelization())
+                .setExcludedColumns(table.getExcludedColumns() == null ?
+                        ImmutableList.of() : ImmutableList.copyOf(table.getExcludedColumns()))
+                .setTenantId(table.getTenantId())
+                .setSchemaName(table.getSchemaName())
+                .setTableName(table.getTableName())
+                .setPkName(table.getPKName())
+                .setDefaultFamilyName(table.getDefaultFamilyName())
+                .setRowKeyOrderOptimizable(table.rowKeyOrderOptimizable())
+                .setBucketNum(table.getBucketNum())
+                .setIndexes(table.getIndexes() == null ?
+                        Collections.emptyList() : table.getIndexes())
+                .setParentSchemaName(table.getParentSchemaName())
+                .setParentTableName(table.getParentTableName())
+                .setPhysicalNames(table.getPhysicalNames() == null ?
+                        ImmutableList.of() : ImmutableList.copyOf(table.getPhysicalNames()));
     }
 
-    public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
-            PIndexState state, long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum,
-            Collection<PColumn> columns, PName dataSchemaName, PName dataTableName, List<PTable> indexes,
-            boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression,
-            boolean disableWAL, boolean multiTenant, boolean storeNulls, ViewType viewType, PDataType viewIndexType, Long viewIndexId,
-            IndexType indexType, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider,
-            long updateCacheFrequency, long indexDisableTimestamp, boolean isNamespaceMapped,
-            String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme,
-            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter,
-            Boolean useStatsForParallelization) throws SQLException {
-        return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName,
-                bucketNum, columns, dataSchemaName, dataTableName, indexes, isImmutableRows, physicalNames,
-                defaultFamilyName, viewExpression, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId,
-                indexType, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, rowKeyOrderOptimizable, transactionProvider,
-                updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName,
-                isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedCQCounter,
-                useStatsForParallelization, null);
-    }
-
-    public static PTableImpl makePTable(PName tenantId, PName schemaName, PName tableName, PTableType type,
-            PIndexState state, long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum,
-            Collection<PColumn> columns, PName dataSchemaName, PName dataTableName, List<PTable> indexes,
-            boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression,
-            boolean disableWAL, boolean multiTenant, boolean storeNulls, ViewType viewType, PDataType viewIndexType, Long viewIndexId,
-            IndexType indexType, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider,
-            long updateCacheFrequency, int baseColumnCount, long indexDisableTimestamp, boolean isNamespaceMapped,
-            String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme,
-            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter,
-            Boolean useStatsForParallelization) throws SQLException {
-        return new PTableImpl(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName,
-                bucketNum, columns, dataSchemaName, dataTableName, indexes, isImmutableRows, physicalNames,
-                defaultFamilyName, viewExpression, disableWAL, multiTenant, storeNulls, viewType,viewIndexType,  viewIndexId,
-                indexType, baseColumnCount, rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency,
-                indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme,
-                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization, null);
-    }
-
-    private PTableImpl(PTable table, boolean rowKeyOrderOptimizable, PIndexState state, long timeStamp,
-            long sequenceNumber, Collection<PColumn> columns, PName defaultFamily, PTableType type,
-            int baseTableColumnCount, PName schemaName, PName tableName, String viewStatement,
-            long updateCacheFrequency, PName tenantId, List<PTable> indexes) throws SQLException {
-        init(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, table.getPKName(),
-                table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(), indexes,
-                table.isImmutableRows(), table.getPhysicalNames(), defaultFamily, viewStatement, table.isWALDisabled(),
-                table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexType(), table.getViewIndexId(),
-                table.getIndexType(), baseTableColumnCount, rowKeyOrderOptimizable, table.getTransactionProvider(),
-                updateCacheFrequency, table.getIndexDisableTimestamp(), table.isNamespaceMapped(),
-                table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(),
-                table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization(), null);
-    }
-
-    private PTableImpl(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state,
-            long timeStamp, long sequenceNumber, PName pkName, Integer bucketNum, Collection<PColumn> columns,
-            PName parentSchemaName, PName parentTableName, List<PTable> indexes, boolean isImmutableRows,
-            List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL, boolean multiTenant,
-            boolean storeNulls, ViewType viewType, PDataType viewIndexType, Long viewIndexId, IndexType indexType,
-            int baseColumnCount, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider, long updateCacheFrequency,
-            long indexDisableTimestamp, boolean isNamespaceMapped, String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme, 
-            QualifierEncodingScheme qualifierEncodingScheme, EncodedCQCounter encodedCQCounter,
-            Boolean useStatsForParallelization, Collection<PColumn> excludedColumns)
-            throws SQLException {
-        init(tenantId, schemaName, tableName, type, state, timeStamp, sequenceNumber, pkName, bucketNum, columns,
-                parentSchemaName, parentTableName, indexes, isImmutableRows, physicalNames, defaultFamilyName,
-                viewExpression, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
-                transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoPartitionSeqName, isAppendOnlySchema, storageScheme, 
-                qualifierEncodingScheme, encodedCQCounter, useStatsForParallelization, excludedColumns);
-    }
-    
     @Override
     public long getUpdateCacheFrequency() {
         return updateCacheFrequency;
@@ -434,208 +843,14 @@ public class PTableImpl implements PTable {
         return viewType;
     }
 
-
     @Override
     public int getEstimatedSize() {
         return estimatedSize;
     }
 
-    private void init(PName tenantId, PName schemaName, PName tableName, PTableType type, PIndexState state, long timeStamp, long sequenceNumber,
-            PName pkName, Integer bucketNum, Collection<PColumn> columns, PName parentSchemaName, PName parentTableName,
-            List<PTable> indexes, boolean isImmutableRows, List<PName> physicalNames, PName defaultFamilyName, String viewExpression, boolean disableWAL,
-            boolean multiTenant, boolean storeNulls, ViewType viewType,PDataType viewIndexType,  Long viewIndexId,
-            IndexType indexType , int baseColumnCount, boolean rowKeyOrderOptimizable, TransactionFactory.Provider transactionProvider, long updateCacheFrequency, long indexDisableTimestamp, 
-            boolean isNamespaceMapped, String autoPartitionSeqName, boolean isAppendOnlySchema, ImmutableStorageScheme storageScheme, QualifierEncodingScheme qualifierEncodingScheme, 
-            EncodedCQCounter encodedCQCounter, Boolean useStatsForParallelization, Collection<PColumn> excludedColumns) throws SQLException {
-        Preconditions.checkNotNull(schemaName);
-        Preconditions.checkArgument(tenantId==null || tenantId.getBytes().length > 0); // tenantId should be null or not empty
-        int estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE + 4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
-              PNameFactory.getEstimatedSize(tenantId) +
-              PNameFactory.getEstimatedSize(schemaName) +
-              PNameFactory.getEstimatedSize(tableName) +
-              PNameFactory.getEstimatedSize(pkName) +
-              PNameFactory.getEstimatedSize(parentTableName) +
-              PNameFactory.getEstimatedSize(defaultFamilyName);
-        this.tenantId = tenantId;
-        this.schemaName = schemaName;
-        this.tableName = tableName;
-        this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName.getString(), tableName.getString()));
-        this.key = new PTableKey(tenantId, name.getString());
-        this.type = type;
-        this.state = state;
-        this.timeStamp = timeStamp;
-        this.indexDisableTimestamp = indexDisableTimestamp;
-        this.sequenceNumber = sequenceNumber;
-        this.pkName = pkName;
-        this.isImmutableRows = isImmutableRows;
-        this.defaultFamilyName = defaultFamilyName;
-        this.viewStatement = viewExpression;
-        this.disableWAL = disableWAL;
-        this.multiTenant = multiTenant;
-        this.storeNulls = storeNulls;
-        this.viewType = viewType;
-        this.viewIndexType = viewIndexType;
-        this.viewIndexId = viewIndexId;
-        this.indexType = indexType;
-        this.transactionProvider = transactionProvider;
-        this.rowKeyOrderOptimizable = rowKeyOrderOptimizable;
-        this.updateCacheFrequency = updateCacheFrequency;
-        this.isNamespaceMapped = isNamespaceMapped;
-        this.autoPartitionSeqName = autoPartitionSeqName;
-        this.isAppendOnlySchema = isAppendOnlySchema;
-        // null check for backward compatibility and sanity. If any of the two below is null, then it means the table is a non-encoded table.
-        this.immutableStorageScheme = storageScheme == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : storageScheme;
-        this.qualifierEncodingScheme = qualifierEncodingScheme == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : qualifierEncodingScheme;
-        List<PColumn> pkColumns;
-        PColumn[] allColumns;
-        
-        this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
-        this.kvColumnsByQualifiers = Maps.newHashMapWithExpectedSize(columns.size());
-        int numPKColumns = 0;
-        if (bucketNum != null) {
-            // Add salt column to allColumns and pkColumns, but don't add to
-            // columnsByName, since it should not be addressable via name.
-            allColumns = new PColumn[columns.size()+1];
-            allColumns[SALTING_COLUMN.getPosition()] = SALTING_COLUMN;
-            pkColumns = Lists.newArrayListWithExpectedSize(columns.size()+1);
-            ++numPKColumns;
-        } else {
-            allColumns = new PColumn[columns.size()];
-            pkColumns = Lists.newArrayListWithExpectedSize(columns.size());
-        }
-        // Must do this as with the new method of storing diffs, we just care about ordinal position
-        // relative order and not the true ordinal value itself.
-        List<PColumn> sortedColumns = Lists.newArrayList(columns);
-        Collections.sort(sortedColumns, new Comparator<PColumn>() {
-            @Override
-            public int compare(PColumn o1, PColumn o2) {
-                return Integer.valueOf(o1.getPosition()).compareTo(o2.getPosition());
-            }
-        });
-
-        int position = 0;
-        if (bucketNum != null) {
-            position = 1;
-        }
-        for (PColumn column : sortedColumns) {
-            allColumns[position] = column;
-            position++;
-            PName familyName = column.getFamilyName();
-            if (familyName == null) {
-                ++numPKColumns;
-            }
-            String columnName = column.getName().getString();
-            if (columnsByName.put(columnName, column)) {
-                int count = 0;
-                for (PColumn dupColumn : columnsByName.get(columnName)) {
-                    if (Objects.equal(familyName, dupColumn.getFamilyName())) {
-                        count++;
-                        if (count > 1) {
-                            throw new ColumnAlreadyExistsException(schemaName.getString(), name.getString(), columnName);
-                        }
-                    }
-                }
-            }
-            byte[] cq = column.getColumnQualifierBytes();
-            String cf = column.getFamilyName() != null ? column.getFamilyName().getString() : null;
-            if (cf != null && cq != null) {
-                KVColumnFamilyQualifier info = new KVColumnFamilyQualifier(cf, cq);
-                if (kvColumnsByQualifiers.get(info) != null) {
-                    throw new ColumnAlreadyExistsException(schemaName.getString(),
-                            name.getString(), columnName);
-                }
-                kvColumnsByQualifiers.put(info, column);
-            }
-        }
-        estimatedSize += SizedUtil.sizeOfMap(allColumns.length, SizedUtil.POINTER_SIZE, SizedUtil.sizeOfArrayList(1)); // for multi-map
-
-        this.bucketNum = bucketNum;
-        this.allColumns = ImmutableList.copyOf(allColumns);
-        estimatedSize += SizedUtil.sizeOfMap(numPKColumns) + SizedUtil.sizeOfMap(allColumns.length);
-
-        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(numPKColumns);
-        // Two pass so that column order in column families matches overall column order
-        // and to ensure that column family order is constant
-        int maxExpectedSize = allColumns.length - numPKColumns;
-        // Maintain iteration order so that column families are ordered as they are listed
-        Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
-        PColumn rowTimestampCol = null;
-        for (PColumn column : allColumns) {
-            PName familyName = column.getFamilyName();
-            if (familyName == null) {
-                hasColumnsRequiringUpgrade |= 
-                        ( column.getSortOrder() == SortOrder.DESC 
-                            && (!column.getDataType().isFixedWidth() 
-                                || column.getDataType() == PChar.INSTANCE 
-                                || column.getDataType() == PFloat.INSTANCE 
-                                || column.getDataType() == PDouble.INSTANCE 
-                                || column.getDataType() == PBinary.INSTANCE) )
-                        || (column.getSortOrder() == SortOrder.ASC && column.getDataType() == PBinary.INSTANCE && column.getMaxLength() != null && column.getMaxLength() > 1);
-                pkColumns.add(column);
-                if (column.isRowTimestamp()) {
-                    rowTimestampCol = column;
-                }
-            }
-            if (familyName == null) {
-                estimatedSize += column.getEstimatedSize(); // PK columns
-                builder.addField(column, column.isNullable(), column.getSortOrder());
-            } else {
-                List<PColumn> columnsInFamily = familyMap.get(familyName);
-                if (columnsInFamily == null) {
-                    columnsInFamily = Lists.newArrayListWithExpectedSize(maxExpectedSize);
-                    familyMap.put(familyName, columnsInFamily);
-                }
-                columnsInFamily.add(column);
-            }
-        }
-        this.pkColumns = ImmutableList.copyOf(pkColumns);
-        if (rowTimestampCol != null) {
-            this.rowTimestampColPos = this.pkColumns.indexOf(rowTimestampCol);
-        } else {
-            this.rowTimestampColPos = -1;
-        }
-        
-        builder.rowKeyOrderOptimizable(this.rowKeyOrderOptimizable()); // after hasDescVarLengthColumns is calculated
-        this.rowKeySchema = builder.build();
-        estimatedSize += rowKeySchema.getEstimatedSize();
-        Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
-        PColumnFamily[] families = new PColumnFamily[familyMap.size()];
-        ImmutableMap.Builder<String, PColumnFamily> familyByString = ImmutableMap.builder();
-        ImmutableSortedMap.Builder<byte[], PColumnFamily> familyByBytes = ImmutableSortedMap
-                .orderedBy(Bytes.BYTES_COMPARATOR);
-        for (int i = 0; i < families.length; i++) {
-            Map.Entry<PName,List<PColumn>> entry = iterator.next();
-            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());
-            families[i] = family;
-            familyByString.put(family.getName().getString(), family);
-            familyByBytes.put(family.getName().getBytes(), family);
-            estimatedSize += family.getEstimatedSize();
-        }
-        this.families = ImmutableList.copyOf(families);
-        this.familyByBytes = familyByBytes.build();
-        this.familyByString = familyByString.build();
-        estimatedSize += SizedUtil.sizeOfArrayList(families.length);
-        estimatedSize += SizedUtil.sizeOfMap(families.length) * 2;
-        this.indexes = indexes == null ? Collections.<PTable>emptyList() : indexes;
-        for (PTable index : this.indexes) {
-            estimatedSize += index.getEstimatedSize();
-        }
-
-        this.parentSchemaName = parentSchemaName;
-        this.parentTableName = parentTableName;
-        this.parentName = parentTableName == null ? null : PNameFactory.newName(SchemaUtil.getTableName(
-            parentSchemaName!=null ? parentSchemaName.getString() : null, parentTableName.getString()));
-        estimatedSize += PNameFactory.getEstimatedSize(this.parentName);
-
-        this.physicalNames = physicalNames == null ? ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames);
-        for (PName name : this.physicalNames) {
-            estimatedSize += name.getEstimatedSize();
-        }
-        this.estimatedSize = estimatedSize;
-        this.baseColumnCount = baseColumnCount;
-        this.encodedCQCounter = encodedCQCounter;
-        this.useStatsForParallelization = useStatsForParallelization;
-        this.excludedColumns = excludedColumns == null ? ImmutableList.<PColumn>of() : ImmutableList.copyOf(excludedColumns);
+    public static void checkTenantId(PName tenantId) {
+        // tenantId should be null or not empty
+        Preconditions.checkArgument(tenantId == null || tenantId.getBytes().length > 0);
     }
 
     @Override
@@ -1338,9 +1553,9 @@ public class PTableImpl implements PTable {
         if (table.hasIsNamespaceMapped()) {
             isNamespaceMapped = table.getIsNamespaceMapped();
         }
-        String autoParititonSeqName = null;
+        String autoPartitionSeqName = null;
         if (table.hasAutoParititonSeqName()) {
-            autoParititonSeqName = table.getAutoParititonSeqName();
+            autoPartitionSeqName = table.getAutoParititonSeqName();
         }
         boolean isAppendOnlySchema = false;
         if (table.hasIsAppendOnlySchema()) {
@@ -1356,7 +1571,7 @@ public class PTableImpl implements PTable {
         if (table.hasEncodingScheme()) {
             qualifierEncodingScheme = QualifierEncodingScheme.fromSerializedValue(table.getEncodingScheme().toByteArray()[0]);
         }
-        EncodedCQCounter encodedColumnQualifierCounter = null;
+        EncodedCQCounter encodedColumnQualifierCounter;
         if ((!EncodedColumnsUtil.usesEncodedColumnNames(qualifierEncodingScheme) || tableType == PTableType.VIEW)) {
             encodedColumnQualifierCounter = PTable.EncodedCQCounter.NULL_COUNTER;
         }
@@ -1373,14 +1588,50 @@ public class PTableImpl implements PTable {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
         try {
-            PTableImpl result = new PTableImpl();
-            result.init(tenantId, schemaName, tableName, tableType, indexState, timeStamp, sequenceNumber, pkName,
-                (bucketNum == NO_SALTING) ? null : bucketNum, columns, parentSchemaName, parentTableName, indexes,
-                        isImmutableRows, physicalNames, defaultFamilyName, viewStatement, disableWAL,
-                        multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType, baseColumnCount, rowKeyOrderOptimizable,
-                        transactionProvider, updateCacheFrequency, indexDisableTimestamp, isNamespaceMapped, autoParititonSeqName, 
-                        isAppendOnlySchema, storageScheme, qualifierEncodingScheme, encodedColumnQualifierCounter, useStatsForParallelization, null);
-            return result;
+            return new PTableImpl.Builder()
+                    .setType(tableType)
+                    .setState(indexState)
+                    .setTimeStamp(timeStamp)
+                    .setIndexDisableTimestamp(indexDisableTimestamp)
+                    .setSequenceNumber(sequenceNumber)
+                    .setImmutableRows(isImmutableRows)
+                    .setViewStatement(viewStatement)
+                    .setDisableWAL(disableWAL)
+                    .setMultiTenant(multiTenant)
+                    .setStoreNulls(storeNulls)
+                    .setViewType(viewType)
+                    .setViewIndexType(viewIndexType)
+                    .setViewIndexId(viewIndexId)
+                    .setIndexType(indexType)
+                    .setTransactionProvider(transactionProvider)
+                    .setUpdateCacheFrequency(updateCacheFrequency)
+                    .setNamespaceMapped(isNamespaceMapped)
+                    .setAutoPartitionSeqName(autoPartitionSeqName)
+                    .setAppendOnlySchema(isAppendOnlySchema)
+                    // null check for backward compatibility and sanity. If any of the two below is null,
+                    // then it means the table is a non-encoded table.
+                    .setImmutableStorageScheme(storageScheme == null ?
+                            ImmutableStorageScheme.ONE_CELL_PER_COLUMN : storageScheme)
+                    .setQualifierEncodingScheme(qualifierEncodingScheme == null ?
+                            QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : qualifierEncodingScheme)
+                    .setBaseColumnCount(baseColumnCount)
+                    .setEncodedCQCounter(encodedColumnQualifierCounter)
+                    .setUseStatsForParallelization(useStatsForParallelization)
+                    .setExcludedColumns(ImmutableList.of())
+                    .setTenantId(tenantId)
+                    .setSchemaName(schemaName)
+                    .setTableName(tableName)
+                    .setPkName(pkName)
+                    .setDefaultFamilyName(defaultFamilyName)
+                    .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
+                    .setBucketNum((bucketNum == NO_SALTING) ? null : bucketNum)
+                    .setIndexes(indexes == null ? Collections.emptyList() : indexes)
+                    .setParentSchemaName(parentSchemaName)
+                    .setParentTableName(parentTableName)
+                    .setPhysicalNames(physicalNames == null ?
+                            ImmutableList.of() : ImmutableList.copyOf(physicalNames))
+                    .setColumns(columns)
+                    .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
         }
