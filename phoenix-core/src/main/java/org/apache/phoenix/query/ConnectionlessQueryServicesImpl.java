@@ -18,6 +18,7 @@
 package org.apache.phoenix.query;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -319,7 +320,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columnsToBeAdded) throws SQLException {
         List<PColumn> columns = Lists.newArrayList(table.getColumns());
         columns.addAll(columnsToBeAdded);
-        return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, PTableImpl.makePTable(table, columns));
+        return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0,
+                PTableImpl.builderWithColumns(table, columns).build());
     }
 
     @Override
@@ -456,7 +458,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         String indexTableName = SchemaUtil.getTableName(schemaName, indexName);
         PName tenantId = tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes);
         PTable index = metaData.getTableRef(new PTableKey(tenantId, indexTableName)).getTable();
-        index = PTableImpl.makePTable(index,newState == PIndexState.USABLE ? PIndexState.ACTIVE : newState == PIndexState.UNUSABLE ? PIndexState.INACTIVE : newState);
+        index = PTableImpl.builderWithColumns(index, getColumnsToClone(index))
+                .setState(newState == PIndexState.USABLE ? PIndexState.ACTIVE :
+                        newState == PIndexState.UNUSABLE ? PIndexState.INACTIVE : newState)
+                .build();
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, index);
     }
 

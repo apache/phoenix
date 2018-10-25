@@ -78,6 +78,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
@@ -101,6 +102,7 @@ import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
@@ -216,6 +218,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ParentTableNotFoundException;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -690,7 +693,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     }
                     indexes.add(latestIndex);
                 }
-                table = PTableImpl.makePTable(table, table.getTimeStamp(), indexes);
+                table = PTableImpl.builderWithColumns(table, getColumnsToClone(table))
+                        .setIndexes(indexes == null ? Collections.emptyList() : indexes)
+                        .build();
             }
         }
         
@@ -940,11 +945,31 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         int baseTableColumnCount =
                 isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
                         : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+
+        // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
+        // inherited from the physical base table.
+        // if a TableProperty is not valid on a view we set it to the base table value
+        // if a TableProperty is valid on a view and is not mutable on a view we set it to the base table value
+        // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view
         // TODO Implement PHOENIX-4763 to set the view properties correctly instead of just
         // setting them same as the base table
-        PTableImpl pTable =
-                PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTableTimestamp,
-                    baseTableColumnCount, excludedColumns);
+        PTableImpl pTable = PTableImpl.builderWithColumns(table, columnsToAdd)
+                .setImmutableRows(baseTable.isImmutableRows())
+                .setDisableWAL(baseTable.isWALDisabled())
+                .setMultiTenant(baseTable.isMultiTenant())
+                .setStoreNulls(baseTable.getStoreNulls())
+                .setTransactionProvider(baseTable.getTransactionProvider())
+                .setAutoPartitionSeqName(baseTable.getAutoPartitionSeqName())
+                .setAppendOnlySchema(baseTable.isAppendOnlySchema())
+                .setImmutableStorageScheme(baseTable.getImmutableStorageScheme() == null ?
+                        ImmutableStorageScheme.ONE_CELL_PER_COLUMN : baseTable.getImmutableStorageScheme())
+                .setQualifierEncodingScheme(baseTable.getEncodingScheme() == null ?
+                        QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : baseTable.getEncodingScheme())
+                .setBaseColumnCount(baseTableColumnCount)
+                .setTimeStamp(maxTableTimestamp)
+                .setExcludedColumns(excludedColumns == null ?
+                        ImmutableList.of() : ImmutableList.copyOf(excludedColumns))
+                .build();
         return WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
     }
 
@@ -1490,11 +1515,48 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
-        return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum,
-                pkName, saltBucketNum, columns, parentSchemaName, parentTableName, indexes, isImmutableRows, physicalTables, defaultFamilyName,
-                viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType,
-                rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency, baseColumnCount,
-                indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, storageScheme, encodingScheme, cqCounter, useStatsForParallelization);
+        return new PTableImpl.Builder()
+                .setType(tableType)
+                .setState(indexState)
+                .setTimeStamp(timeStamp)
+                .setIndexDisableTimestamp(indexDisableTimestamp)
+                .setSequenceNumber(tableSeqNum)
+                .setImmutableRows(isImmutableRows)
+                .setViewStatement(viewStatement)
+                .setDisableWAL(disableWAL)
+                .setMultiTenant(multiTenant)
+                .setStoreNulls(storeNulls)
+                .setViewType(viewType)
+                .setViewIndexType(viewIndexType)
+                .setViewIndexId(viewIndexId)
+                .setIndexType(indexType)
+                .setTransactionProvider(transactionProvider)
+                .setUpdateCacheFrequency(updateCacheFrequency)
+                .setNamespaceMapped(isNamespaceMapped)
+                .setAutoPartitionSeqName(autoPartitionSeq)
+                .setAppendOnlySchema(isAppendOnlySchema)
+                .setImmutableStorageScheme(storageScheme == null ?
+                        ImmutableStorageScheme.ONE_CELL_PER_COLUMN : storageScheme)
+                .setQualifierEncodingScheme(encodingScheme == null ?
+                        QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : encodingScheme)
+                .setBaseColumnCount(baseColumnCount)
+                .setEncodedCQCounter(cqCounter)
+                .setUseStatsForParallelization(useStatsForParallelization)
+                .setExcludedColumns(ImmutableList.of())
+                .setTenantId(tenantId)
+                .setSchemaName(schemaName)
+                .setTableName(tableName)
+                .setPkName(pkName)
+                .setDefaultFamilyName(defaultFamilyName)
+                .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
+                .setBucketNum(saltBucketNum)
+                .setIndexes(indexes == null ? Collections.emptyList() : indexes)
+                .setParentSchemaName(parentSchemaName)
+                .setParentTableName(parentTableName)
+                .setPhysicalNames(physicalTables == null ?
+                        ImmutableList.of() : ImmutableList.copyOf(physicalTables))
+                .setColumns(columns)
+                .build();
     }
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexType) {
         Cell viewIndexIdKv = tableKeyValues[VIEW_INDEX_ID_INDEX];
@@ -1744,7 +1806,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private static PTable newDeletedTableMarker(long timestamp) {
-        return new PTableImpl(timestamp);
+        try {
+            return new PTableImpl.Builder()
+                    .setType(PTableType.TABLE)
+                    .setTimeStamp(timestamp)
+                    .setPkColumns(Collections.emptyList())
+                    .setAllColumns(Collections.emptyList())
+                    .setFamilyAttributes(Collections.emptyList())
+                    .setRowKeySchema(RowKeySchema.EMPTY_SCHEMA)
+                    .setIndexes(Collections.emptyList())
+                    .setPhysicalNames(Collections.emptyList())
+                    .build();
+        } catch (SQLException e) {
+            // Should never happen
+            return null;
+        }
     }
 
     private static PFunction newDeletedFunctionMarker(long timestamp) {

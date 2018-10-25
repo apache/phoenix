@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -701,9 +702,11 @@ public class UpsertCompiler {
                     }
                     // Build table from projectedColumns
                     // Hack to add default column family to be used on server in case no value column is projected.
-                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns,
-                            PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)));  
-                    
+                    PTable projectedTable = PTableImpl.builderWithColumns(table, projectedColumns)
+                            .setExcludedColumns(ImmutableList.of())
+                            .setDefaultFamilyName(PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)))
+                            .setColumns(projectedColumns)
+                            .build();
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
                     StatementContext statementContext = queryPlan.getContext();
@@ -856,7 +859,8 @@ public class UpsertCompiler {
                     }
                     updateExpressions.add(updateExpression);
                 }
-                PTable onDupKeyTable = PTableImpl.makePTable(table, updateColumns);
+                PTable onDupKeyTable = PTableImpl.builderWithColumns(table, updateColumns)
+                        .build();
                 onDupKeyBytesToBe = PhoenixIndexBuilder.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
             }
         }

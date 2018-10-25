@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -26,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
@@ -160,15 +163,13 @@ public class TupleProjectionCompiler {
                     sourceColumnRef.getColumn().isNullable(), sourceColumnRef, sourceColumnRef.getColumn().getColumnQualifierBytes());
             projectedColumns.add(column);
         }
-        
-        return PTableImpl.makePTable(table.getTenantId(), table.getSchemaName(), table.getTableName(),
-                PTableType.PROJECTED, table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(),
-                table.getPKName(), table.getBucketNum(), projectedColumns, table.getParentSchemaName(),
-                table.getParentTableName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName> emptyList(),
-                table.getDefaultFamilyName(), table.getViewStatement(), table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
-                table.getViewIndexType(), table.getViewIndexId(),
-                table.getIndexType(), table.rowKeyOrderOptimizable(), table.getTransactionProvider(), table.getUpdateCacheFrequency(), 
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
+        return PTableImpl.builderWithColumns(table, projectedColumns)
+                .setType(PTableType.PROJECTED)
+                .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
+                .setExcludedColumns(ImmutableList.of())
+                .setPhysicalNames(ImmutableList.of())
+                .setColumns(projectedColumns)
+                .build();
     }
     
     public static PTable createProjectedTable(TableRef tableRef, List<ColumnRef> sourceColumnRefs, boolean retainPKColumns) throws SQLException {
@@ -192,14 +193,39 @@ public class TupleProjectionCompiler {
         if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
             cqCounter = EncodedCQCounter.copy(table.getEncodedCQCounter());
         }
-        
-        return PTableImpl.makePTable(table.getTenantId(), PROJECTED_TABLE_SCHEMA, table.getName(), PTableType.PROJECTED,
-                null, table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                table.getBucketNum(), projectedColumns, null, null,
-                Collections.<PTable> emptyList(), table.isImmutableRows(), Collections.<PName> emptyList(), null, null,
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
-                table.getViewIndexType(), table.getViewIndexId(), null, table.rowKeyOrderOptimizable(), table.getTransactionProvider(),
-                table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), cqCounter, table.useStatsForParallelization());
+        return new PTableImpl.Builder()
+                .setType(PTableType.PROJECTED)
+                .setTimeStamp(table.getTimeStamp())
+                .setIndexDisableTimestamp(table.getIndexDisableTimestamp())
+                .setSequenceNumber(table.getSequenceNumber())
+                .setImmutableRows(table.isImmutableRows())
+                .setDisableWAL(table.isWALDisabled())
+                .setMultiTenant(table.isMultiTenant())
+                .setStoreNulls(table.getStoreNulls())
+                .setViewType(table.getViewType())
+                .setViewIndexType(table.getViewIndexType())
+                .setViewIndexId(table.getViewIndexId())
+                .setTransactionProvider(table.getTransactionProvider())
+                .setUpdateCacheFrequency(table.getUpdateCacheFrequency())
+                .setNamespaceMapped(table.isNamespaceMapped())
+                .setAutoPartitionSeqName(table.getAutoPartitionSeqName())
+                .setAppendOnlySchema(table.isAppendOnlySchema())
+                .setImmutableStorageScheme(table.getImmutableStorageScheme())
+                .setQualifierEncodingScheme(table.getEncodingScheme())
+                .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
+                .setEncodedCQCounter(cqCounter)
+                .setUseStatsForParallelization(table.useStatsForParallelization())
+                .setExcludedColumns(ImmutableList.of())
+                .setTenantId(table.getTenantId())
+                .setSchemaName(PROJECTED_TABLE_SCHEMA)
+                .setTableName(table.getTableName())
+                .setPkName(table.getPKName())
+                .setRowKeyOrderOptimizable(table.rowKeyOrderOptimizable())
+                .setBucketNum(table.getBucketNum())
+                .setIndexes(Collections.emptyList())
+                .setPhysicalNames(ImmutableList.of())
+                .setColumns(projectedColumns)
+                .build();
     }
 
     // For extracting column references from single select statement
