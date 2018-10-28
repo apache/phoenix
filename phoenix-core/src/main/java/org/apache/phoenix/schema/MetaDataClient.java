@@ -22,6 +22,7 @@ import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
+import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -3036,6 +3037,20 @@ public class MetaDataClient {
     }
     MutationState dropTable(String schemaName, String tableName, String parentTableName, PTableType tableType,
             boolean ifExists, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
+        // Checking the parent table whether exists
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try {
+            PTable ptable = connection.getTable(new PTableKey(connection.getTenantId(), fullTableName));
+            if (parentTableName != null &&!parentTableName.equals(ptable.getParentTableName().getString())) {
+                throw new SQLExceptionInfo.Builder(PARENT_TABLE_NOT_FOUND)
+                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+            }
+        } catch (TableNotFoundException e) {
+            if (!ifExists) {
+                throw e;
+            }
+        }
+
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
         PName tenantId = connection.getTenantId();
