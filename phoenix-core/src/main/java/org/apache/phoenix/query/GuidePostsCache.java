@@ -20,10 +20,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -39,12 +42,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.cache.Weigher;
+
 
 /**
  * "Client-side" cache for storing {@link GuidePostsInfo} for a column family. Intended to decouple
@@ -55,20 +58,31 @@ public class GuidePostsCache {
 
     private final ConnectionQueryServices queryServices;
     private final LoadingCache<GuidePostsKey, GuidePostsInfo> cache;
+    private final ExecutorService executor;
 
     public GuidePostsCache(ConnectionQueryServices queryServices, Configuration config) {
         this.queryServices = Objects.requireNonNull(queryServices);
+
+        // The size of the thread pool used for refreshing cached table stats
+        final int statsCacheThreadPoolSize = config.getInt(
+                QueryServices.STATS_CACHE_THREAD_POOL_SIZE,
+                QueryServicesOptions.DEFAULT_STATS_CACHE_THREAD_POOL_SIZE);
+
+        executor = Executors.newFixedThreadPool(statsCacheThreadPoolSize);
+
         // Number of millis to expire cache values after write
         final long statsUpdateFrequency = config.getLong(
                 QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
                 QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
-        // Maximum number of entries (tables) to store in the cache at one time
+
+        // Maximum total weight (size in bytes) of stats entries
         final long maxTableStatsCacheSize = config.getLong(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
+
         cache = CacheBuilder.newBuilder()
-                // Expire entries a given amount of time after they were written
-                .expireAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)
+                // Refresh entries a given amount of time after they were written
+                .refreshAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)
                 // Maximum total weight (size in bytes) of stats entries
                 .maximumWeight(maxTableStatsCacheSize)
                 // Defer actual size to the PTableStats.getEstimatedSize()
@@ -80,19 +94,27 @@ public class GuidePostsCache {
                 // Log removals at TRACE for debugging
                 .removalListener(new PhoenixStatsCacheRemovalListener())
                 // Automatically load the cache when entries are missing
-                .build(new StatsLoader());
+                .build(new PhoenixStatsCacheLoader(new StatsLoaderImpl(), executor));
     }
 
     /**
-     * {@link CacheLoader} implementation for the Phoenix Table Stats cache.
+     * {@link PhoenixStatsLoader} implementation for the Stats Loader.
      */
-    protected class StatsLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
+    protected class StatsLoaderImpl implements PhoenixStatsLoader {
         @Override
-        public GuidePostsInfo load(GuidePostsKey statsKey) throws Exception {
+        public boolean needsLoad() {
+            // Whenever it's called, we try to load stats from stats table
+            // no matter it has been updated or not.
+            return true;
+        }
+
+        @Override
+        public GuidePostsInfo loadStats(GuidePostsKey statsKey, GuidePostsInfo prevGuidepostInfo) throws Exception {
             @SuppressWarnings("deprecation")
-            Table statsHTable = queryServices.getTable(SchemaUtil.getPhysicalName(
+            TableName tableName = SchemaUtil.getPhysicalName(
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
-                            queryServices.getProps()).getName());
+                    queryServices.getProps());
+            Table statsHTable = queryServices.getTable(tableName.getName());
             try {
                 GuidePostsInfo guidePostsInfo = StatisticsUtil.readStatistics(statsHTable, statsKey,
                         HConstants.LATEST_TIMESTAMP);
@@ -100,18 +122,18 @@ public class GuidePostsCache {
                 return guidePostsInfo;
             } catch (TableNotFoundException e) {
                 // On a fresh install, stats might not yet be created, don't warn about this.
-                logger.debug("Unable to locate Phoenix stats table", e);
-                return GuidePostsInfo.NO_GUIDEPOST;
+                logger.debug("Unable to locate Phoenix stats table: " + tableName.toString(), e);
+                return prevGuidepostInfo;
             } catch (IOException e) {
-                logger.warn("Unable to read from stats table", e);
+                logger.warn("Unable to read from stats table: " + tableName.toString(), e);
                 // Just cache empty stats. We'll try again after some time anyway.
-                return GuidePostsInfo.NO_GUIDEPOST;
+                return prevGuidepostInfo;
             } finally {
                 try {
                     statsHTable.close();
                 } catch (IOException e) {
                     // Log, but continue. We have our stats anyway now.
-                    logger.warn("Unable to close stats table", e);
+                    logger.warn("Unable to close stats table: " + tableName.toString(), e);
                 }
             }
         }
@@ -122,8 +144,8 @@ public class GuidePostsCache {
         void traceStatsUpdate(GuidePostsKey key, GuidePostsInfo info) {
             if (logger.isTraceEnabled()) {
                 logger.trace("Updating local TableStats cache (id={}) for {}, size={}bytes",
-                      new Object[] {Objects.hashCode(GuidePostsCache.this), key,
-                      info.getEstimatedSize()});
+                        new Object[] {Objects.hashCode(GuidePostsCache.this), key,
+                                info.getEstimatedSize()});
             }
         }
     }
