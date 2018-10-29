@@ -35,7 +35,10 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -445,5 +448,53 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
         rs.close();
         stmt.close();
+    }
+
+    /**
+     * This test case validates the import using CsvBulkLoadTool in
+     * SingleCellArrayWithOffsets table.
+     * PHOENIX-4872
+     */
+
+    @Test
+    public void testImportInSingleCellArrayWithOffsetsTable() throws Exception {
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE IMMUTABLE TABLE S.TABLE12 (ID INTEGER NOT NULL PRIMARY KEY," +
+                " CF0.NAME VARCHAR, CF0.T DATE, CF1.T2 DATE, CF2.T3 DATE) " +
+                "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS");
+        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+        PTable table = phxConn.getTable(new PTableKey(null, "S.TABLE12"));
+
+        assertEquals(PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                table.getImmutableStorageScheme());
+
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/inputSCAWO.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,Name 1,1970/01/01,1970/02/01,1970/03/01");
+        printWriter.println("2,Name 2,1970/01/02,1970/02/02,1970/03/02");
+        printWriter.println("3,Name 1,1970/01/01,1970/02/03,1970/03/01");
+        printWriter.println("4,Name 2,1970/01/02,1970/02/04,1970/03/02");
+        printWriter.println("5,Name 1,1970/01/01,1970/02/05,1970/03/01");
+        printWriter.println("6,Name 2,1970/01/02,1970/02/06,1970/03/02");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/inputSCAWO.csv",
+                "--table", "table12",
+                "--schema", "s",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT COUNT(1) FROM S.TABLE12");
+        assertTrue(rs.next());
+        assertEquals(6, rs.getInt(1));
+
+        rs.close();
+        stmt.close();
+
     }
 }
