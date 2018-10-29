@@ -240,12 +240,12 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                         columnIndex++;
                     }
                 }
-                byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
-                byte[] emptyKeyValue = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
-                byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
-                columnIndexes.put(cfn, new Integer(columnIndex));
-                columnIndex++;
             }
+            byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
+            byte[] emptyKeyValue = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
+            byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
+            columnIndexes.put(cfn, new Integer(columnIndex));
+            columnIndex++;
         }
     }
 
