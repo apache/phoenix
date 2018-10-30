@@ -46,7 +46,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -55,8 +54,8 @@ import org.junit.Test;
  * a ConcurrentHashMap. We can use a HashSet to determine when instances of ConnectionInfo
  * collide and when they do not.
  */
-public class SecureUserConnectionsTest {
-    private static final Log LOG = LogFactory.getLog(SecureUserConnectionsTest.class); 
+public class SecureUserConnectionsIT {
+    private static final Log LOG = LogFactory.getLog(SecureUserConnectionsIT.class);
     private static final int KDC_START_ATTEMPTS = 10;
 
     private static final File TEMP_DIR = new File(getClassTempDir());
@@ -141,7 +140,7 @@ public class SecureUserConnectionsTest {
         StringBuilder sb = new StringBuilder(32);
         sb.append(System.getProperty("user.dir")).append(File.separator);
         sb.append("target").append(File.separator);
-        sb.append(SecureUserConnectionsTest.class.getSimpleName());
+        sb.append(SecureUserConnectionsIT.class.getSimpleName());
         return sb.toString();
     }
 
