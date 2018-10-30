@@ -19,6 +19,8 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -675,14 +677,11 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         }
     }
 
-
-
     @Test
     public void testIndexAlterPhoenixProperty() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String testTable = generateUniqueName();
-
 
         String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar)";
         Statement stmt = conn.createStatement();
@@ -703,6 +702,123 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         assertEquals(20,rs.getInt(1));
     }
 
+    @Test
+    public void testCreateIndexSetUpdateCacheFreqFails() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String testTable = generateUniqueName();
+
+        String ddl = "CREATE TABLE " + testTable  + " (k varchar primary key, v1 varchar)";
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
+        String indexName = "IDX_" + generateUniqueName();
+
+        ddl = "CREATE INDEX " + indexName + " ON " + testTable  + " (v1) " +
+                "UPDATE_CACHE_FREQUENCY=10000";
+        try {
+            stmt.execute(ddl);
+            fail("Should fail trying to set UPDATE_CACHE_FREQUENCY when creating an index");
+        } catch (SQLException sqlE) {
+            assertEquals("Unexpected error occurred",
+                    CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX.getErrorCode(), sqlE.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testIndexGetsUpdateCacheFreqFromBaseTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String testTable = generateUniqueName();
+
+        long updateCacheFreq = 10000;
+        String ddl = "CREATE TABLE " + testTable  + " (k varchar primary key, v1 varchar) " +
+                "UPDATE_CACHE_FREQUENCY=" + updateCacheFreq;
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
+
+        String localIndex = "LOCAL_" + generateUniqueName();
+        String globalIndex = "GLOBAL_" + generateUniqueName();
+
+        ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + globalIndex + " ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+
+        // Check that local and global index both have the propagated UPDATE_CACHE_FREQUENCY value
+        assertUpdateCacheFreq(conn, testTable, updateCacheFreq);
+        assertUpdateCacheFreq(conn, localIndex, updateCacheFreq);
+        assertUpdateCacheFreq(conn, globalIndex, updateCacheFreq);
+    }
+
+    @Test
+    public void testAlterTablePropagatesUpdateCacheFreqToIndexes() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String testTable = generateUniqueName();
+
+        String ddl = "CREATE TABLE " + testTable  + " (k varchar primary key, v1 varchar) ";
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
+
+        String localIndex = "LOCAL_" + generateUniqueName();
+        String globalIndex = "GLOBAL_" + generateUniqueName();
+
+        ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + globalIndex + " ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+
+        assertUpdateCacheFreq(conn, testTable, DEFAULT_UPDATE_CACHE_FREQUENCY);
+        assertUpdateCacheFreq(conn, localIndex, DEFAULT_UPDATE_CACHE_FREQUENCY);
+        assertUpdateCacheFreq(conn, globalIndex, DEFAULT_UPDATE_CACHE_FREQUENCY);
+
+        // Alter UPDATE_CACHE_FREQUENCY on the base table
+        long updateCacheFreq = 10000;
+        ddl = "ALTER TABLE " + testTable + " SET UPDATE_CACHE_FREQUENCY=" + updateCacheFreq;
+        stmt.execute(ddl);
+
+        // Check that local and global index both have the propagated UPDATE_CACHE_FREQUENCY value
+        assertUpdateCacheFreq(conn, testTable, updateCacheFreq);
+        assertUpdateCacheFreq(conn, localIndex, updateCacheFreq);
+        assertUpdateCacheFreq(conn, globalIndex, updateCacheFreq);
+    }
+
+    @Test
+    public void testIndexAlterUpdateCacheFreqFails() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String testTable = generateUniqueName();
+
+        String ddl = "CREATE TABLE " + testTable  + " (k varchar primary key, v1 varchar)";
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
+
+        String localIndex = "LOCAL_" + generateUniqueName();
+        String globalIndex = "GLOBAL_" + generateUniqueName();
+
+        ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + globalIndex + " ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+
+        try {
+            stmt.execute("ALTER INDEX " + localIndex + " ON " + testTable +
+                    " ACTIVE SET UPDATE_CACHE_FREQUENCY=NEVER");
+            fail("Should fail trying to alter UPDATE_CACHE_FREQUENCY on index");
+        } catch (SQLException sqlE) {
+            assertEquals("Unexpected error occurred",
+                    CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX.getErrorCode(), sqlE.getErrorCode());
+        }
+
+        try {
+            stmt.execute("ALTER INDEX " + globalIndex + " ON " + testTable +
+                    " ACTIVE SET UPDATE_CACHE_FREQUENCY=NEVER");
+            fail("Should fail trying to alter UPDATE_CACHE_FREQUENCY on index");
+        } catch (SQLException sqlE) {
+            assertEquals("Unexpected error occurred",
+                    CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX.getErrorCode(), sqlE.getErrorCode());
+        }
+    }
 
     @Test
     public void testIndexAlterHBaseProperty() throws Exception {
@@ -718,15 +834,34 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         ddl = "CREATE INDEX " + indexName + " ON " + testTable  + " (v1) ";
         stmt.execute(ddl);
 
-        conn.createStatement().execute("ALTER INDEX "+indexName+" ON " + testTable +" ACTIVE SET DISABLE_WAL=false");
-        asssertIsWALDisabled(conn,indexName,false);
         conn.createStatement().execute("ALTER INDEX "+indexName+" ON " + testTable +" ACTIVE SET DISABLE_WAL=true");
         asssertIsWALDisabled(conn,indexName,true);
+        conn.createStatement().execute("ALTER INDEX "+indexName+" ON " + testTable +" ACTIVE SET DISABLE_WAL=false");
+        asssertIsWALDisabled(conn,indexName,false);
     }
 
     private static void asssertIsWALDisabled(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         assertEquals(expectedValue, pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isWALDisabled());
+    }
+
+    /**
+     * Helper method to assert the value of UPDATE_CACHE_FREQUENCY for a table/index/view
+     * @param conn Phoenix connection
+     * @param name table/view/index name
+     * @param expectedUpdateCacheFreq expected value of UPDATE_CACHE_FREQUENCY
+     * @throws SQLException
+     */
+    public static void assertUpdateCacheFreq(Connection conn, String name,
+            long expectedUpdateCacheFreq) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery(
+                "select UPDATE_CACHE_FREQUENCY from SYSTEM.\"CATALOG\" where TABLE_NAME='" +
+                        name + "'");
+        assertTrue(rs.next());
+        assertEquals("Mismatch found for " + name, expectedUpdateCacheFreq, rs.getLong(1));
+        assertEquals("Mismatch in UPDATE_CACHE_FREQUENCY for PTable of " + name,
+                expectedUpdateCacheFreq, PhoenixRuntime.getTableNoCache(conn, name)
+                        .getUpdateCacheFrequency());
     }
 
 }
