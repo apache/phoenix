@@ -19,6 +19,7 @@ package org.apache.phoenix.rpc;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
@@ -73,7 +74,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
                 String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
                 Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
-                helpTestUpdateCache(fullTableName, new int[] {1, 1});
+                helpTestUpdateCache(fullTableName, new int[] {1, 1}, false);
             }
         }
     }
@@ -84,14 +85,14 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA);
-        helpTestUpdateCache(fullTableName, new int[] {1, 3});
+        helpTestUpdateCache(fullTableName, new int[] {1, 3}, false);
     }
 	
     @Test
     public void testUpdateCacheForNonTxnSystemTable() throws Exception {
         String fullTableName = "\""+ QueryConstants.SYSTEM_SCHEMA_NAME + "\""+ QueryConstants.NAME_SEPARATOR + generateUniqueName();
         setupSystemTable(fullTableName);
-        helpTestUpdateCache(fullTableName, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
     }
     
     @Test
@@ -104,7 +105,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
             "alter table " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=NEVER");
         }
-        helpTestUpdateCache(fullTableName, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
     }
     
     @Test
@@ -114,7 +115,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=always");
         }
-        helpTestUpdateCache(fullTableName, new int[] {1, 3});
+        helpTestUpdateCache(fullTableName, new int[] {1, 3}, false);
     }
     
     @Test
@@ -124,9 +125,9 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=" + 10000);
         }
-        helpTestUpdateCache(fullTableName, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
         Thread.sleep(10000);
-        helpTestUpdateCache(fullTableName, new int[] {1, 0});
+        helpTestUpdateCache(fullTableName, new int[] {1, 0}, false);
     }
     
     @Test
@@ -136,14 +137,55 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=never");
         }
-        helpTestUpdateCache(fullTableName, new int[] {0, 0});
+        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=ALWAYS");
         }
-        helpTestUpdateCache(fullTableName, new int[] {1, 3});
+        helpTestUpdateCache(fullTableName, new int[] {1, 3}, false);
+    }
+
+    @Test
+    public void testUpdateCacheFreqPropagatedToIndexes() throws Exception {
+        String baseTableName = generateUniqueName();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + baseTableName;
+        String localIndex = "LOCAL_" + baseTableName;
+        String globalIndex = "GLOBAL_" + baseTableName;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + fullTableName +
+                    TestUtil.TEST_TABLE_SCHEMA + " UPDATE_CACHE_FREQUENCY=never");
+
+            // Create local and global indexes on the base table
+            conn.createStatement().execute("CREATE LOCAL INDEX " + localIndex
+                    + " on " + fullTableName + " (a.date1, b.varchar_col2)");
+            conn.createStatement().execute("CREATE INDEX " + globalIndex + " on "
+                    + fullTableName + " (a.int_col1, a.long_col1)");
+        }
+
+        // The indexes should have got the UPDATE_CACHE_FREQUENCY value of their base table
+        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
+        helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + localIndex,
+                new int[] {0}, true);
+        helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + globalIndex,
+                new int[] {0}, true);
+
+        // Now alter the UPDATE_CACHE_FREQUENCY value of the base table
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement()
+                    .execute("ALTER TABLE " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=ALWAYS");
+        }
+        // Even the indexes should now have the modified value of UPDATE_CACHE_FREQUENCY
+        // Note that when we query the base table, during query plan generation, we make 2 getTable
+        // requests (to retrieve the base table) for each index of the base table
+        helpTestUpdateCache(fullTableName, new int[] {1, 15}, false);
+        helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + localIndex,
+                new int[] {3}, true);
+        helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + globalIndex,
+                new int[] {3}, true);
     }
     
-	private static void helpTestUpdateCache(String fullTableName, int[] expectedRPCs) throws Exception {
+	private static void helpTestUpdateCache(String fullTableName, int[] expectedRPCs,
+            boolean skipUpsertForIndexes) throws Exception {
 	    String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
 	    String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
 		String selectSql = "SELECT * FROM "+fullTableName;
@@ -154,46 +196,31 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
 		Connection conn = connectionQueryServices.connect(getUrl(), props);
 		try {
 			conn.setAutoCommit(false);
-	        String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
-	        PreparedStatement stmt = conn.prepareStatement(upsert);
-			// upsert three rows
-	        TestUtil.setRowKeyColumns(stmt, 1);
-			stmt.execute();
-			TestUtil.setRowKeyColumns(stmt, 2);
-			stmt.execute();
-			TestUtil.setRowKeyColumns(stmt, 3);
-			stmt.execute();
-			conn.commit();
-            int numUpsertRpcs = expectedRPCs[0];
-			// verify only 0 or 1 rpc to fetch table metadata, 
-            verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName) isNull(),
-                eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
-            reset(connectionQueryServices);
-            
-            ResultSet rs = conn.createStatement().executeQuery(selectSql);
-			TestUtil.validateRowKeyColumns(rs, 1);
-			TestUtil.validateRowKeyColumns(rs, 2);
-			TestUtil.validateRowKeyColumns(rs, 3);
-	        assertFalse(rs.next());
-	        
-	        rs = conn.createStatement().executeQuery(selectSql);
-	        TestUtil.validateRowKeyColumns(rs, 1);
-	        TestUtil.validateRowKeyColumns(rs, 2);
-	        TestUtil.validateRowKeyColumns(rs, 3);
-	        assertFalse(rs.next());
-	        
-	        rs = conn.createStatement().executeQuery(selectSql);
-	        TestUtil.validateRowKeyColumns(rs, 1);
-	        TestUtil.validateRowKeyColumns(rs, 2);
-	        TestUtil.validateRowKeyColumns(rs, 3);
-	        assertFalse(rs.next());
-	        
+            if (!skipUpsertForIndexes) {
+                String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+                PreparedStatement stmt = conn.prepareStatement(upsert);
+                // upsert three rows
+                for (int i=0; i<3; i++) {
+                    TestUtil.setRowKeyColumns(stmt, i);
+                    stmt.execute();
+                }
+                conn.commit();
+                int numUpsertRpcs = expectedRPCs[0];
+                // verify only 0 or 1 rpc to fetch table metadata,
+                verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName) isNull(),
+                        eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                        anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
+                reset(connectionQueryServices);
+            }
+            validateSelectRowKeyCols(conn, selectSql, skipUpsertForIndexes);
+            validateSelectRowKeyCols(conn, selectSql, skipUpsertForIndexes);
+            validateSelectRowKeyCols(conn, selectSql, skipUpsertForIndexes);
+
 	        // for non-transactional tables without a scn : verify one rpc to getTable occurs *per* query
             // for non-transactional tables with a scn : verify *only* one rpc occurs
             // for transactional tables : verify *only* one rpc occurs
 	        // for non-transactional, system tables : verify no rpc occurs
-            int numRpcs = expectedRPCs[1]; 
+            int numRpcs = skipUpsertForIndexes ? expectedRPCs[0] : expectedRPCs[1];
             verify(connectionQueryServices, times(numRpcs)).getTable((PName) isNull(),
                 eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
                 anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
@@ -202,4 +229,19 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         	conn.close();
         }
 	}
+
+	private static void validateSelectRowKeyCols(Connection conn, String selectSql,
+            boolean skipUpsertForIndexes) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery(selectSql);
+        if (skipUpsertForIndexes) {
+            for (int i=0; i<3; i++) {
+                assertTrue(rs.next());
+            }
+        } else {
+            for (int i=0; i<3; i++) {
+                TestUtil.validateRowKeyColumns(rs, i);
+            }
+        }
+        assertFalse(rs.next());
+    }
 }
