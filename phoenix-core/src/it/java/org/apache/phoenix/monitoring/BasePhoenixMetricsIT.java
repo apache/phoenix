@@ -19,6 +19,7 @@ package org.apache.phoenix.monitoring;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
@@ -53,7 +54,9 @@ public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
+        // Disable system task handling
+        props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         // Phoenix Global client metrics are enabled by default
         // Enable request metric collection at the driver level
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));

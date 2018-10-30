@@ -343,7 +343,8 @@ public class QueryServicesOptions {
 
     // default system task handling interval in milliseconds
     public static final long DEFAULT_TASK_HANDLING_INTERVAL_MS = 60*1000; // 1 min
-    public static final long DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS = 30*60*1000; // 30 minutes
+    public static final long DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS = 30*60*1000; // 30 min
+    public static final long DEFAULT_TASK_HANDLING_INITIAL_DELAY_MS = 10*1000; // 10 sec
 
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {

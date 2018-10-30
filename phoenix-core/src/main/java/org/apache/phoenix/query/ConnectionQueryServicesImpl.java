@@ -1184,7 +1184,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     splits, isNamespaceMapped);
             
             if (!tableExist) {
-                if (isMetaTable && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
+                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
                     // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
                     throw new UpgradeRequiredException();
                 }
