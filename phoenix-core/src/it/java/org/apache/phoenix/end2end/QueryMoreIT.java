@@ -605,15 +605,20 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
             stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM "
                     + fullViewName);
             viewConn.createStatement().execute("UPSERT INTO " + tenantView
-                    + "(DATE_TIME1, TEXT1, TEXT2)  VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'd', '1')");
+                    + "(DATE_TIME1, TEXT1, TEXT2) "
+                    + " VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'd', '1')");
             viewConn.createStatement().execute("UPSERT INTO " + tenantView
-                    + "(DATE_TIME1, TEXT1, TEXT2)  VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'c', '2')");
+                    + "(DATE_TIME1, TEXT1, TEXT2) "
+                    + " VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'c', '2')");
             viewConn.createStatement().execute("UPSERT INTO " + tenantView
-                    + "(DATE_TIME1, TEXT1, TEXT2)  VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'b', '3')");
+                    + "(DATE_TIME1, TEXT1, TEXT2) "
+                    + " VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'b', '3')");
             viewConn.createStatement().execute("UPSERT INTO " + tenantView
-                    + "(DATE_TIME1, TEXT1, TEXT2)  VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'b', '4')");
+                    + "(DATE_TIME1, TEXT1, TEXT2) "
+                    + " VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'b', '4')");
             viewConn.createStatement().execute("UPSERT INTO " + tenantView
-                    + "(DATE_TIME1, TEXT1, TEXT2)  VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'a', '4')");
+                    + "(DATE_TIME1, TEXT1, TEXT2) "
+                    + " VALUES (TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 'a', '4')");
             viewConn.commit();
 
             // query using desc order by so that the index is used
