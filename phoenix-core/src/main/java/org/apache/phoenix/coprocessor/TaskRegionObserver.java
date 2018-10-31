@@ -68,8 +68,7 @@ public class TaskRegionObserver extends BaseRegionObserver {
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
     private long timeMaxInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS;
     @GuardedBy("TaskRegionObserver.class")
-    // initial delay before the first task is handled
-    private static final long  initialDelay = 10000; // 10 secs
+    private long initialDelay;
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -88,6 +87,10 @@ public class TaskRegionObserver extends BaseRegionObserver {
                 config.getLong(
                         QueryServices.TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB,
                         QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        initialDelay =
+                config.getLong(
+                        QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_TASK_HANDLING_INITIAL_DELAY_MS);
     }
 
     @Override
