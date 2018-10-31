@@ -17,12 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
@@ -41,17 +35,17 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.SequenceAllocation;
-import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
+
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 
 public class DelegateConnectionQueryServices extends DelegateQueryServices implements ConnectionQueryServices {
@@ -123,6 +117,12 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
         return getDelegate().dropTable(tabeMetaData, tableType, cascade, skipAddingParentColumns);
+    }
+
+    @Override
+    public MetaDataMutationResult modifyColumn(List<Mutation> tableMetaData, PTable table)
+            throws SQLException {
+        return getDelegate().modifyColumn(tableMetaData, table);
     }
 
     @Override

@@ -97,58 +97,7 @@ import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.optimize.Cost;
-import org.apache.phoenix.parse.AddColumnStatement;
-import org.apache.phoenix.parse.AddJarsStatement;
-import org.apache.phoenix.parse.AliasedNode;
-import org.apache.phoenix.parse.AlterIndexStatement;
-import org.apache.phoenix.parse.AlterSessionStatement;
-import org.apache.phoenix.parse.BindableStatement;
-import org.apache.phoenix.parse.ChangePermsStatement;
-import org.apache.phoenix.parse.CloseStatement;
-import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.CreateFunctionStatement;
-import org.apache.phoenix.parse.CreateIndexStatement;
-import org.apache.phoenix.parse.CreateSchemaStatement;
-import org.apache.phoenix.parse.CreateSequenceStatement;
-import org.apache.phoenix.parse.CreateTableStatement;
-import org.apache.phoenix.parse.CursorName;
-import org.apache.phoenix.parse.DeclareCursorStatement;
-import org.apache.phoenix.parse.DeleteJarStatement;
-import org.apache.phoenix.parse.DeleteStatement;
-import org.apache.phoenix.parse.DropColumnStatement;
-import org.apache.phoenix.parse.DropFunctionStatement;
-import org.apache.phoenix.parse.DropIndexStatement;
-import org.apache.phoenix.parse.DropSchemaStatement;
-import org.apache.phoenix.parse.DropSequenceStatement;
-import org.apache.phoenix.parse.DropTableStatement;
-import org.apache.phoenix.parse.ExecuteUpgradeStatement;
-import org.apache.phoenix.parse.ExplainStatement;
-import org.apache.phoenix.parse.FetchStatement;
-import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.IndexKeyConstraint;
-import org.apache.phoenix.parse.LimitNode;
-import org.apache.phoenix.parse.ListJarsStatement;
-import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.OffsetNode;
-import org.apache.phoenix.parse.OpenStatement;
-import org.apache.phoenix.parse.OrderByNode;
-import org.apache.phoenix.parse.PFunction;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.PrimaryKeyConstraint;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.TableNode;
-import org.apache.phoenix.parse.TraceStatement;
-import org.apache.phoenix.parse.UDFParseNode;
-import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.parse.UpsertStatement;
-import org.apache.phoenix.parse.UseSchemaStatement;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -1435,6 +1384,32 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableModifyColumnStatement extends ModifyColumnStatement implements CompilableStatement {
+
+        ExecutableModifyColumnStatement(NamedTableNode table, PTableType tableType, ColumnDef columnDef, boolean ifNotExists) {
+            super(table, tableType, columnDef, ifNotExists);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ALTER " + getTableType() + " Modify COLUMN"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.modifyColumn(ExecutableModifyColumnStatement.this);
+                }
+            };
+        }
+    }
+
     private static class ExecutableDropColumnStatement extends DropColumnStatement implements CompilableStatement {
 
         ExecutableDropColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnName> columnRefs, boolean ifExists) {
@@ -1561,7 +1536,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {
             return new ExecutableDropColumnStatement(table, tableType, columnNodes, ifExists);
         }
-        
+
+        @Override
+        public ModifyColumnStatement modifyColumn(NamedTableNode table, PTableType tableType,
+                ColumnDef columnDef, boolean ifNotExists) {
+            return new ExecutableModifyColumnStatement(table, tableType, columnDef, ifNotExists);
+        }
+
         @Override
         public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
             return new ExecutableDropTableStatement(tableName, tableType, ifExists, cascade);

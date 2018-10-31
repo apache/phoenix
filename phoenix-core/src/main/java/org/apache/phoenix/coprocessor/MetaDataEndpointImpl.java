@@ -101,6 +101,7 @@ import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 
+import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
@@ -2836,8 +2837,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             invalidateList, locks, clientTimeStamp);
                 // if the update mutation caused tables to be deleted, the mutation code returned
                 // will be MutationCode.TABLE_ALREADY_EXISTS
-                if (result != null
-                        && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+
+                if (result != null && (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS &&
+                        result.getMutationCode() != MutationCode.COLUMN_MODIFIED)) {
                     return result;
                 }
 
@@ -3263,7 +3265,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private enum MutatateColumnType {
-        ADD_COLUMN, DROP_COLUMN
+        ADD_COLUMN, DROP_COLUMN, MODIFY_COLUMN
     }
 
     @Override
@@ -3773,8 +3775,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     ConnectionQueryServices queryServices = connection.getQueryServices();
                     MetaDataMutationResult result =
                             queryServices.dropTable(tableMetaData, PTableType.INDEX, false, true);
-                    if (result.getTableNamesToDelete()!=null && !result.getTableNamesToDelete().isEmpty())
-                        tableNamesToDelete.addAll(result.getTableNamesToDelete());
+                    if (result.getMutatedTableNames()!=null && !result.getMutatedTableNames().isEmpty())
+                        tableNamesToDelete.addAll(result.getMutatedTableNames());
                     if (result.getSharedTablesToDelete()!=null && !result.getSharedTablesToDelete().isEmpty())
                         sharedTablesToDelete.addAll(result.getSharedTablesToDelete());
                     if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
@@ -4652,5 +4654,190 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                                         .getPhysicalHBaseTableName(table.getSchemaName(),
                                                                 table.getTableName(), table.isNamespaceMapped())
                                                         .getBytes());
+    }
+
+    private class TableBuilder {
+        private Region region;
+        private byte[] tableKey;
+        private Integer clientVersion;
+
+        public TableBuilder setRegion(Region region) {
+            this.region = region;
+            return this;
+        }
+
+        public TableBuilder setTableKey(byte[] tableKey) {
+            this.tableKey = tableKey;
+            return this;
+        }
+
+        public TableBuilder setClientVersion(Integer clientVersion) {
+            this.clientVersion = clientVersion;
+            return this;
+        }
+
+        public PTable run() throws Exception {
+            Preconditions.checkNotNull(region);
+            Preconditions.checkNotNull(tableKey);
+            Preconditions.checkNotNull(clientVersion);
+            ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
+            return buildTable(tableKey, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion,
+                    false, false, null);
+        }
+    }
+
+    /**
+     * Indexes table and View will not be modify when the parent tables are modified, so modify has a simple logic in server side.
+     * @param controller
+     * @param request
+     * @param done
+     */
+    @Override
+    public void modifyColumn(RpcController controller, final MetaDataProtos.ModifyColumnRequest request,
+            RpcCallback<MetaDataResponse> done) {
+        try {
+            final List<Mutation> metaData = ProtobufUtil.getMutations(request);
+            final TableBuilder tableBuilder = new TableBuilder();
+            MetaDataMutationResult result = mutateColumn(MutatateColumnType.MODIFY_COLUMN, metaData, new ColumnMutator() {
+
+                @Override
+                public MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
+                        List<Mutation> tableMetadata, Region region,
+                        List<ImmutableBytesPtr> invalidateList, List<RowLock> locks,
+                        long clientTimeStamp) throws IOException, SQLException {
+
+                    Preconditions.checkArgument(rowKeyMetaData.length == 5);
+                    byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+                    byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+                    byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+                    byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+
+                    PColumn column = null;
+                    Cell dataTypeCell = null;
+                    Cell columnSizeCell = null;
+                    Cell decimalDigitCell = null;
+                    List<byte[]> mutatedTableNames = new ArrayList<>();
+                    byte[] familyName = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+
+                    try {
+                        for (Mutation m : metaData) {
+                            byte[][] rkmd = new byte[5][];
+                            int pkCount = getVarChars(m.getRow(), rkmd);
+
+                            // Checking this put is for modifying a column
+                            if (pkCount < COLUMN_NAME_INDEX || !(m instanceof Put)
+                                    || rkmd[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX] == null) {
+                                continue;
+                            }
+
+                            List<Cell> cells;
+                            if (rkmd[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX] != null) {
+                                PColumnFamily family = table.getColumnFamily(rkmd[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+                                column = family.getPColumnForColumnNameBytes(rkmd[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]);
+                                cells = m.getFamilyCellMap().get(column.getFamilyName().getBytes());
+                            } else {
+                                column = table.getPKColumn(new String(rkmd[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
+                                cells = m.getFamilyCellMap().get(familyName);
+                            }
+
+                            for (Cell cell : cells) {
+                                if (Bytes.compareTo(CellUtil.cloneQualifier(cell), PhoenixDatabaseMetaData.DATA_TYPE_BYTES) == 0) {
+                                    dataTypeCell = cell;
+                                } else if (Bytes.compareTo(CellUtil.cloneQualifier(cell), PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES) == 0) {
+                                    columnSizeCell = cell;
+                                } else if (Bytes.compareTo(CellUtil.cloneQualifier(cell), PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES) == 0) {
+                                    decimalDigitCell = cell;
+                                }
+                            }
+                        }
+
+                        // After PHOENIX-3534, we don't store parent table column metadata along with the child metadata,
+                        // so we don't need to propagate changes to the child views.
+
+                        if (!table.getIndexes().isEmpty()) {
+                            PhoenixConnection connection = null;
+                            try {
+                                connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+                            } catch (ClassNotFoundException e) {
+                            }
+
+                            for (PTable index : table.getIndexes()) {
+                                byte[] tenantIdBytes = index.getTenantId() == null ?
+                                                ByteUtil.EMPTY_BYTE_ARRAY :
+                                                index.getTenantId().getBytes();
+                                byte[] schemaNameBytes = index.getSchemaName().getBytes();
+                                byte[] indexName = index.getTableName().getBytes();
+                                byte[] indexKey = SchemaUtil.getTableKey(tenantIdBytes, schemaNameBytes, indexName);
+
+                                IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
+                                ColumnReference coveredColumn = indexMaintainer.getCoveredColumnsOfIndexTable(
+                                                new ColumnReference(column.getFamilyName().getBytes(), column.getColumnQualifierBytes()));
+
+                                // Since the columns of fixed length which in present in primary key of index table will be converted
+                                // to variable length when index tables are created, So we will not process indexed columns.
+
+                                // Modify length/scale of covered columns
+                                if (coveredColumn != null) {
+                                    String indexedColName = IndexUtil.getIndexColumnName(column);
+                                    byte[] columnKey = getColumnKey(indexKey, Bytes.toBytes(indexedColName), coveredColumn.getFamily());
+                                    Put update = new Put(columnKey, clientTimeStamp);
+                                    update.addColumn(familyName, PhoenixDatabaseMetaData.DATA_TYPE_BYTES,
+                                            CellUtil.cloneValue(dataTypeCell));
+                                    if (columnSizeCell != null) {
+                                        update.addColumn(familyName, PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES,
+                                                CellUtil.cloneValue(columnSizeCell));
+                                    }
+                                    if (decimalDigitCell != null) {
+                                        update.addColumn(familyName, PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYTES,
+                                                CellUtil.cloneValue(decimalDigitCell));
+                                    }
+
+                                    byte[] sequencePtr = new byte[PLong.INSTANCE.getByteSize()];
+                                    PLong.INSTANCE.getCodec()
+                                            .encodeLong(index.getSequenceNumber() + 1, sequencePtr, 0);
+                                    update.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                            PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
+                                            clientTimeStamp, sequencePtr);
+
+                                    tableMetadata.add(update);
+                                    invalidateList.add(new ImmutableBytesPtr(indexKey));
+                                    mutatedTableNames.add(SchemaUtil.getTableNameAsBytes(schemaNameBytes, indexName));
+                                    logger.info("Index table: " + index.getTableName().getString() + ", indexed column: "
+                                            + column.getName().getString() + " is modified!");
+                                }
+                            }
+
+                            connection.close();
+                        }
+
+
+                        tableBuilder.setTableKey(key).setClientVersion(request.getClientVersion()).setRegion(region);
+                        long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
+
+                        return new MetaDataMutationResult(MutationCode.COLUMN_MODIFIED, currentTime, null, mutatedTableNames);
+                    } catch (ColumnFamilyNotFoundException e) {
+                        return new MetaDataMutationResult(
+                                MutationCode.COLUMN_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), table, column);
+                    } catch (ColumnNotFoundException e) {
+                        return new MetaDataMutationResult(
+                                MutationCode.COLUMN_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), table, column);
+                    }
+                }
+            }, request.getClientVersion());
+
+            if (result != null) {
+                result.setTable(tableBuilder.run());
+                done.run(MetaDataMutationResult.toProto(result));
+            }
+        } catch (Throwable e) {
+            logger.error("Error when modifying column.");
+            ProtobufUtil.setControllerException(controller, ServerUtil.createIOException("Error when modifying column: ", e));
+        }
+    }
+
+    private static byte[] getColumnKey(byte[] key, byte[] columnName, byte[] columnFamily) {
+        Preconditions.checkArgument( columnName != null);
+        Preconditions.checkArgument( columnFamily != null);
+        return ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY, columnName,  QueryConstants.SEPARATOR_BYTE_ARRAY, columnFamily);
     }
 }

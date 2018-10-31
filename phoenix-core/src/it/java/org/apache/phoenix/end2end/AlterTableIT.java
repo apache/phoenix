@@ -17,43 +17,15 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.closeConnection;
-import static org.apache.phoenix.util.TestUtil.closeStatement;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Properties;
-
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -62,6 +34,8 @@ import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.util.*;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -72,6 +46,17 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+
+import java.math.BigDecimal;
+import java.sql.*;
+import java.sql.Connection;
+import java.util.*;
+
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
+import static org.apache.phoenix.util.TestUtil.*;
+import static org.junit.Assert.*;
 
 /**
  *
@@ -1298,7 +1283,267 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 1);
         }
     }
-	
+
+
+    @Test
+    public void testModifyingRowTimestampColumnNotAllowedViaAlterTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName +
+                    " (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) " + tableDDLOptions);
+            try {
+                conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " modify PK1 BIGINT");
+                fail("Altering table to modify a row_timestamp column should fail");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
+    @Test
+    public void testModifyingPKColumnNotAllowedViaAlterTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName +
+                    " (PK1 DATE NOT NULL PRIMARY KEY, PK2 VARCHAR , KV1 VARCHAR) " + tableDDLOptions);
+            try {
+                conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " modify PK1 BIGINT");
+                fail("Altering table to modify a PK column should fail");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_MODIFY_TIMESTAMP_OR_PK_COLUMN.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
+    @Test
+    public void testDecreasingLengthOfColumn() throws Exception {
+        Properties props = new Properties();
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE TABLE " + tableName +
+                    " (a char(5), b char(5), c varchar(5), d decimal(5,2) CONSTRAINT PK PRIMARY KEY (a))");
+
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " modify b char(2)");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH.getErrorCode(), e.getErrorCode());
+            }
+
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " modify c varchar(2)");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH.getErrorCode(), e.getErrorCode());
+            }
+
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " modify c decimal(2, 1)");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.DISALLOW_DECREASE_COLUMN_LENGTH.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
+    @Test
+    public void testModifyColumnWithIndexTables() throws Exception {
+        String schemaName = generateUniqueName();
+        String baseTableName =  generateUniqueName();
+        String tableName = schemaName + "." + baseTableName;
+        Properties props = new Properties();
+        props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+            conn.createStatement().execute("CREATE TABLE " + tableName +
+                    " (ID CHAR(3) NOT NULL, COL1 VARCHAR(5), COL2 VARCHAR(3), COL3 CHAR(4), COL4 CHAR(4)"
+                    + " CONSTRAINT PKVIEW PRIMARY KEY(ID, COL1)) " + tableDDLOptions);
+            conn.createStatement().execute("CREATE INDEX IDX_COL2 ON "+ tableName + "(COL2) INCLUDE(COL3, COL4)");
+
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES('123','12345','123','1234','1444')");
+
+            //Increasing char length
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL3 CHAR(6)");
+            //Increasing char length of the indexed column
+            //Indexed columns will convert fixed length columns to variable length while creating the index,
+            //but length/scale of field still had been reserved old values.
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL2 CHAR(5)");
+
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES('124','12345','12345','123456','12')");
+
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
+            assertColumnModify("COL3", table.getSchemaName().getString(),
+                    table.getTableName().getString(), 6);
+            assertColumnModify(QueryConstants.DEFAULT_COLUMN_FAMILY + ":" + "COL3", table.getSchemaName().getString(),
+                    "IDX_COL2", 6);
+            //char length of the indexed column will not change
+            assertColumnModify(QueryConstants.DEFAULT_COLUMN_FAMILY + ":" + "COL2", table.getSchemaName().getString(),
+                    "IDX_COL2", 3);
+
+            {
+                // Getting query results by index table
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where COL2='123' and COL3='1234'");
+                assertTrue(rs.next());
+                assertEquals("123", rs.getString(1));
+                assertEquals("12345", rs.getString(2));
+                // The length of column col2 added 2,
+                assertEquals("123  ", rs.getString(3));
+                // The length of column col3 added 2
+                assertEquals("1234  ", rs.getString(4));
+                assertEquals("1444", rs.getString(5));
+                assertFalse(rs.next());
+                rs.close();
+            }
+
+            {
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + schemaName + ".IDX_COL2 where \"0:COL2\"='123'");
+                assertTrue(rs.next());
+                // Col2 as a index column that length of type was changed,
+                // but the result length will not change.
+                assertEquals("123", rs.getString(1));
+                assertEquals("123", rs.getString(2));
+                assertEquals("12345", rs.getString(3));
+                // Col3 as a covered column which the length of type was increased,
+                // the result length has increased too.
+                assertEquals("1234  ", rs.getString(4));
+                assertEquals("1444", rs.getString(5));
+                assertFalse(rs.next());
+                rs.close();
+            }
+        }
+    }
+
+    @Test
+    public void testModifyColumnWithoutIndexTables() throws Exception {
+        String schemaName = generateUniqueName();
+        String baseTableName =  generateUniqueName();
+        String tableName = schemaName + "." + baseTableName;
+        Properties props = new Properties();
+        props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            conn.createStatement().execute(
+                    "CREATE TABLE " + tableName + " " + "("
+                            + " ID CHAR(2) NOT NULL PRIMARY KEY,"
+                            + " COL1 CHAR(1),"
+                            + " COL2 VARCHAR(4),"
+                            + " COL3 DECIMAL(5,3),"
+                            + " COL4 CHAR(5),"
+                            + " COL5 SMALLINT,"
+                            + " COL6 VARCHAR(5),"
+                            + " COL7 DECIMAL(5,3)"
+                            + " ) " + tableDDLOptions);
+
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName
+                    + " VALUES('12', '1', '1234', 12.111, '12345', 1, '12345', 12.111)");
+
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL1 CHAR(5)");
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL2 VARCHAR(10)");
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL3 DECIMAL(8,5)");
+
+            // validate system.catalog
+            assertColumnModify("COL1", table.getSchemaName().getString(),
+                    table.getTableName().getString(), 5);
+            assertColumnModify("COL2", table.getSchemaName().getString(),
+                    table.getTableName().getString(), 10);
+            assertColumnModify("COL3", table.getSchemaName().getString(),
+                    table.getTableName().getString(), 8, 5, PDecimal.INSTANCE);
+
+            // validate client meta cache
+            PTable newTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
+            assertEquals(newTable.getColumns().get(1).getMaxLength().intValue(), 5);
+            assertEquals(newTable.getColumns().get(2).getMaxLength().intValue(), 10);
+            assertEquals(newTable.getColumns().get(3).getMaxLength().intValue(), 8);
+            assertEquals(newTable.getColumns().get(3).getScale().intValue(), 5);
+            assertTrue(newTable.getSequenceNumber() == 3);
+
+            // validate old data
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
+            assertTrue(rs.next());
+            assertEquals("12", rs.getString(1));
+            // increasing length of char type, expected value: '1' -> '1    '
+            assertEquals("1    ", rs.getString(2));
+            // increasing length of varchar type, expected value will not changed.
+            assertEquals("1234", rs.getString(3));
+            // increasing length of big decimal type, expected value will not changed.
+            assertEquals(new BigDecimal("12.111"), rs.getBigDecimal(4));
+            assertEquals("12345", rs.getString(5));
+            assertEquals(1, rs.getInt(6));
+            assertEquals("12345", rs.getString(7));
+            assertEquals(new BigDecimal("12.111"), rs.getBigDecimal(8));
+            assertFalse(rs.next());
+            rs.close();
+
+            conn.createStatement().execute("UPSERT INTO " + tableName
+                    + " VALUES('13', '12345', '1234567890', 231.11111, '12', 1, '00', 1.1)");
+
+            // validate new data
+            rs = conn.createStatement().executeQuery("select * from " + tableName + " where ID = '13' ");
+            assertTrue(rs.next());
+            assertEquals("13", rs.getString(1));
+            assertEquals("12345", rs.getString(2));
+            assertEquals("1234567890", rs.getString(3));
+            assertEquals(new BigDecimal("231.11111"), rs.getBigDecimal(4));
+            assertEquals("12   ", rs.getString(5));
+            assertEquals(1, rs.getInt(6));
+            assertEquals("00", rs.getString(7));
+            assertEquals(new BigDecimal("1.1"), rs.getBigDecimal(8));
+            assertFalse(rs.next());
+            rs.close();
+
+            // test type cast
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL5 integer");
+            assertColumnModify("COL5", table.getSchemaName().getString(),
+                    table.getTableName().getString(), PInteger.INSTANCE);
+
+            // test view
+            String viewBaseName = generateUniqueName();
+            String viewName = SchemaUtil.getTableName(schemaName,  viewBaseName);
+            conn.createStatement().execute("CREATE VIEW " + viewName+ " as select * from " + tableName + " WHERE ID = '12'");
+            conn.createStatement().execute("ALTER TABLE " + tableName + " modify COL2 VARCHAR(20)");
+            PTable view = PhoenixRuntime.getTableNoCache(conn, viewName);
+            assertEquals(view.getColumns().get(2).getMaxLength().intValue(), 20);
+        }
+    }
+
+    private void assertColumnModify(String columnName, String schemaName,
+            String tableName, Integer expectedLenValue, Integer expectedScalaValue, PDataType dataType) throws Exception {
+        String query = "SELECT " + COLUMN_SIZE + ", "+ DECIMAL_DIGITS + "," +  COLUMN_FAMILY + "," + DATA_TYPE  +
+                " FROM \"SYSTEM\".CATALOG WHERE "
+                + TABLE_SCHEM + " = ? AND " + TABLE_NAME + " = ?  AND "
+                + COLUMN_NAME + " = ?";
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            stmt.setString(3, columnName);
+           // stmt.setString(4, QueryConstants.DEFAULT_COLUMN_FAMILY);
+            ResultSet rs = stmt.executeQuery();
+
+            assertTrue(rs.next());
+            if (expectedLenValue != null) {
+                assertEquals(expectedLenValue.intValue(), rs.getInt(1));
+            }
+            if (expectedScalaValue != null) {
+                assertEquals(expectedScalaValue.intValue(), rs.getInt(2));
+            }
+            if (dataType != null) {
+                assertEquals(rs.getInt(4), dataType.getSqlType());
+            }
+            assertFalse(rs.next());
+        }
+    }
+
+    private void assertColumnModify(String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
+        assertColumnModify(columnName, schemaName, tableName, expectedValue, null, null);
+    }
+
+    private void assertColumnModify(String columnName, String schemaName, String tableName, PDataType dataType) throws Exception {
+        assertColumnModify(columnName, schemaName, tableName, null, null, dataType);
+    }
+
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";

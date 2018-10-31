@@ -16,6 +16,15 @@
  * limitations under the License.
  */
 package org.apache.phoenix.query;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.common.collect.*;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.*;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.MAX_VERSIONS;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
@@ -127,8 +136,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
@@ -148,11 +155,10 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessor.*;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.*;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
@@ -160,33 +166,8 @@ import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearTableFromCacheRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearTableFromCacheResponse;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateFunctionRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateSchemaRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropColumnRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropFunctionRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropSchemaRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropTableRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetFunctionsRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetSchemaRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetTableRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.exception.PhoenixIOException;
-import org.apache.phoenix.exception.RetriableUpgradeException;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.exception.UpgradeInProgressException;
-import org.apache.phoenix.exception.UpgradeNotRequiredException;
-import org.apache.phoenix.exception.UpgradeRequiredException;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.*;
+import org.apache.phoenix.exception.*;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -205,81 +186,45 @@ import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
-import org.apache.phoenix.schema.ColumnAlreadyExistsException;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.EmptySequenceCacheException;
-import org.apache.phoenix.schema.FunctionNotFoundException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
-import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PMetaData;
-import org.apache.phoenix.schema.PMetaDataImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PSynchronizedMetaData;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.ReadOnlyTableException;
-import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.SequenceAllocation;
-import org.apache.phoenix.schema.SequenceKey;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
-import org.apache.phoenix.schema.SystemStatsSplitPolicy;
-import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PTinyint;
-import org.apache.phoenix.schema.types.PUnsignedTinyint;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.Closeables;
-import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.JDBCUtil;
-import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixContextExecutor;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PhoenixStopWatch;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.UpgradeUtil;
+import org.apache.phoenix.util.*;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import javax.annotation.concurrent.GuardedBy;
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.ref.WeakReference;
+import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.MAX_VERSIONS;
+import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.*;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.*;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryServicesOptions.*;
+import static org.apache.phoenix.util.UpgradeUtil.*;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -1720,9 +1665,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             PTable table = result.getTable();
             if (dropMetadata) {
                 flushParentPhysicalTable(table);
-                dropTables(result.getTableNamesToDelete());
+                dropTables(result.getMutatedTableNames());
             } else {
-                invalidateTableStats(result.getTableNamesToDelete());
+                invalidateTableStats(result.getMutatedTableNames());
             }
             long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
             if (tableType == PTableType.TABLE) {
@@ -1899,6 +1844,41 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, table.isTransactional());
         tableProps.put(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, table.isImmutableRows());
         ensureViewIndexTableCreated(physicalTableName, tableProps, families, splits, timestamp, isNamespaceMapped);
+    }
+
+    @Override
+    public MetaDataMutationResult modifyColumn(final List<Mutation> tableMetaData, PTable table) throws SQLException {
+        byte[][] rowKeyMetaData = new byte[3][];
+        MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetaData, rowKeyMetaData);
+        byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+        byte[] schemaBytes = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+        byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
+
+        if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
+            return new MetaDataMutationResult(MutationCode.NO_OP, EnvironmentEdgeManager.currentTimeMillis(), table);
+        }
+
+        return metaDataCoprocessorExec(tableKey, new Batch.Call<MetaDataService, MetaDataResponse>() {
+                    @Override
+                    public MetaDataResponse call(MetaDataService instance) throws IOException {
+                        ServerRpcController controller = new ServerRpcController();
+                        BlockingRpcCallback<MetaDataResponse> rpcCallback = new BlockingRpcCallback<MetaDataResponse>();
+                        MetaDataProtos.ModifyColumnRequest.Builder builder = MetaDataProtos.ModifyColumnRequest.newBuilder();
+
+                        for (Mutation m : tableMetaData) {
+                            MutationProto mp = ProtobufUtil.toProto(m);
+                            builder.addTableMetadataMutations(mp.toByteString());
+                        }
+                        builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
+                                PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                        instance.modifyColumn(controller, builder.build(), rpcCallback);
+                        if(controller.getFailedOn() != null) {
+                            throw controller.getFailedOn();
+                        }
+                        return rpcCallback.get();
+                    }
+                });
     }
 
     @Override
@@ -2689,9 +2669,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final ReadOnlyProps props = this.getProps();
             final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
             if (dropMetadata) {
-                dropTables(result.getTableNamesToDelete());
+                dropTables(result.getMutatedTableNames());
             } else {
-                invalidateTableStats(result.getTableNamesToDelete());
+                invalidateTableStats(result.getMutatedTableNames());
             }
             break;
         default:

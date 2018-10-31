@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import java.util.Arrays;
 import java.util.List;
 
 import net.jcip.annotations.Immutable;
@@ -27,9 +28,10 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-
+import org.apache.phoenix.util.StringUtil;
 
 /**
  * 
@@ -121,7 +123,16 @@ public class KeyValueSchema extends ValueSchema {
                         int nBytes = ptr.getLength();
                         b = ensureSize(b, offset, offset + nBytes);
                         System.arraycopy(ptr.get(), ptr.getOffset(), b, offset, nBytes);
-                        offset += nBytes;
+                        if (field.getDataType() == PChar.INSTANCE &&
+                                field.getMaxLength() != null && field.getMaxLength() > 0) {
+                            // Max length of field greater than actual data length after length of fields is increased.(Example for Char)
+                            if (field.getMaxLength() > nBytes){
+                                Arrays.fill(b, offset + nBytes, offset + field.getMaxLength(), StringUtil.SPACE_UTF8);
+                            }
+                            offset += field.getMaxLength();
+                        } else {
+                            offset += nBytes;
+                        }
                     }
                 }
                 index++;

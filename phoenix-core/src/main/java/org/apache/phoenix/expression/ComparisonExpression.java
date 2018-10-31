@@ -28,6 +28,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -327,6 +328,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
             rhsLength = StringUtil.getUnpaddedCharLength(rhsBytes, rhsOffset, rhsLength, rhsSortOrder);
         }
         if (lhsDataType == PChar.INSTANCE) {
+            // Due to length of PChar columns may be modified, in order to the values of filters can match original data,
+            // we make rhsLength equal with lhsLength.
+            rhsLength = lhsLength;
             lhsLength = StringUtil.getUnpaddedCharLength(lhsBytes, lhsOffset, lhsLength, lhsSortOrder);
         }
         
