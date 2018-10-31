@@ -328,6 +328,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String TASK_HANDLING_INTERVAL_MS_ATTRIB = "phoenix.task.handling.interval.ms";
     // The maximum time for a task to stay in table SYSTEM.TASK
     public static final String TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB = "phoenix.task.handling.maxInterval.ms";
+    // The initial delay before the first task from table SYSTEM.TASK is handled
+    public static final String TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB = "phoenix.task.handling.initial.delay.ms";
 
     /**
      * Get executor service used for parallel scans
