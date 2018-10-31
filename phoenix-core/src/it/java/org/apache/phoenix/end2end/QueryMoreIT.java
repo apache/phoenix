@@ -549,7 +549,8 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testRVCOrderByDesc() throws Exception {
+    @Test
+    public void testRVCOnTenantViewThroughGlobalIdxOrderByDesc() throws Exception {
         String fullTableName = generateUniqueName();
         String fullViewName = generateUniqueName();
         String tenantView = generateUniqueName();
@@ -558,24 +559,44 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             Statement stmt = conn.createStatement();
             stmt.execute(
-                    "CREATE TABLE " + fullTableName + "(\n" + "    TENANT_ID CHAR(15) NOT NULL,\n"
-                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_DATE DATE,\n"
-                            + "    CREATED_BY CHAR(15),\n" + "    SYSTEM_MODSTAMP DATE\n"
-                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "       TENANT_ID,"
-                            + "       KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+                    "CREATE TABLE " + fullTableName + "(\n"
+                            + "    TENANT_ID CHAR(15) NOT NULL,\n"
+                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n"
+                            + "    CREATED_DATE DATE,\n"
+                            + "    CREATED_BY CHAR(15),\n"
+                            + "    SYSTEM_MODSTAMP DATE\n"
+                            + "    CONSTRAINT PK PRIMARY KEY (\n"
+                            + "       TENANT_ID,"
+                            + "       KEY_PREFIX\n"
+                            + ")) MULTI_TENANT=TRUE");
 
-            stmt.execute("CREATE VIEW " + fullViewName + "(\n" + "    DATE_TIME1 DATE NOT NULL,\n"
-                    + "    TEXT2 VARCHAR,\n" + "    DOUBLE1 DECIMAL(12, 3),\n"
-                    + "    IS_BOOLEAN BOOLEAN,\n" + "    RELATIONSHIP_ID CHAR(15),\n"
-                    + "    TEXT1 VARCHAR,\n" + "    TEXT_READ_ONLY VARCHAR,\n"
-                    + "    JSON1 VARCHAR,\n" + "    IP_START_ADDRESS VARCHAR,\n"
-                    + "    CONSTRAINT PKVIEW PRIMARY KEY\n" + "    (\n"
-                    + "    DATE_TIME1, TEXT2, TEXT1\n" + ")) AS SELECT * FROM " + fullTableName
-                    + " WHERE KEY_PREFIX = '0CY'");
+            stmt.execute("CREATE VIEW " + fullViewName + "(\n"
+                    + "    DATE_TIME1 DATE NOT NULL,\n"
+                    + "    TEXT2 VARCHAR,\n"
+                    + "    DOUBLE1 DECIMAL(12, 3),\n"
+                    + "    IS_BOOLEAN BOOLEAN,\n"
+                    + "    RELATIONSHIP_ID CHAR(15),\n"
+                    + "    TEXT1 VARCHAR,\n"
+                    + "    TEXT_READ_ONLY VARCHAR,\n"
+                    + "    JSON1 VARCHAR,\n"
+                    + "    IP_START_ADDRESS VARCHAR,\n"
+                    + "    CONSTRAINT PKVIEW PRIMARY KEY\n"
+                    + "    (\n"
+                    + "        DATE_TIME1, TEXT2, TEXT1\n"
+                    + "    )) AS SELECT * FROM " + fullTableName
+                    + "    WHERE KEY_PREFIX = '0CY'");
 
             stmt.execute("CREATE INDEX " + indexName + " " + "ON " + fullViewName
                     + " (TEXT1 DESC, TEXT2)\n"
-                    + "INCLUDE (CREATED_BY, RELATIONSHIP_ID, JSON1, DOUBLE1, IS_BOOLEAN, IP_START_ADDRESS, CREATED_DATE, SYSTEM_MODSTAMP, TEXT_READ_ONLY)");
+                    + "INCLUDE (CREATED_BY,\n"
+                    + "    RELATIONSHIP_ID,\n"
+                    + "    JSON1,\n"
+                    + "    DOUBLE1,\n"
+                    + "    IS_BOOLEAN,\n"
+                    + "    IP_START_ADDRESS,\n"
+                    + "    CREATED_DATE,\n"
+                    + "    SYSTEM_MODSTAMP,\n"
+                    + "    TEXT_READ_ONLY)");
         }
 
         // create and use an tenant specific view to write data

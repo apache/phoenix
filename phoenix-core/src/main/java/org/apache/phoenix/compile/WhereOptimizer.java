@@ -264,7 +264,7 @@ public class WhereOptimizer {
                     // extract the nodes from the where clause
                     // for eg. for the schema A VARCHAR DESC, B VARCHAR ASC and query WHERE (A,B) < ('a','b')
                     // the range (* - a\xFFb) is converted to (~a-*)(*-b)
-                    // so we still need to filter on A
+                    // so we still need to filter on A,B
                     stopExtracting = true;
                 }
                 clipLeftSpan++;
@@ -288,11 +288,12 @@ public class WhereOptimizer {
             // cardinality of this slot is low.
             /*
              *  Stop extracting nodes once we encounter:
-             *  1) An unbound range unless we're forcing a skip scan and havn't encountered
+             *  1) An unbound range unless we're forcing a skip scan and haven't encountered
              *     a multi-column span. Even if we're trying to force a skip scan, we can't
              *     execute it over a multi-column span.
              *  2) A non range key as we can extract the first one, but further ones need
              *     to be evaluated in a filter.
+             *  3) As above a non-contiguous range due to sort order
              */
             stopExtracting |= (hasUnboundedRange && !forcedSkipScan) || (hasRangeKey && forcedRangeScan);
             useSkipScan |= !stopExtracting && !forcedRangeScan && (keyRanges.size() > 1 || hasRangeKey);

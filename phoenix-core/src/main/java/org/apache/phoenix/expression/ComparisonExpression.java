@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.InvertFunction;
+import org.apache.phoenix.expression.rewrite.RowValueConstructorExpressionRewriter;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -132,25 +133,16 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 lhsExpr = new RowValueConstructorExpression(Collections.singletonList(lhsExpr), lhsExpr.isStateless());
             }
 
-            //At this point both sides should be in the same row format
-            //We add the inverts so the filtering can be done properly for mixed sort type RVCs,  The entire RVC has to
-            // be in ASC for the actual compare to work since compare simply does a varbyte compare.  See PHOENIX-4841
-            List<RowValueConstructorExpression> rvcList = Lists.newArrayList((RowValueConstructorExpression)lhsExpr,(RowValueConstructorExpression)rhsExpr);
-            List<RowValueConstructorExpression> newRVCList = Lists.newArrayList();
-            for(RowValueConstructorExpression rvcExpression : rvcList) {
-                List<Expression> replacementChildren = new ArrayList<>(rvcExpression.getChildren().size());
-                for (int i = 0; i < rvcExpression.getChildren().size(); i++) {
-                    Expression child = rvcExpression.getChildren().get(i);
-                    if (child.getSortOrder() == SortOrder.DESC) {
-                        //As The KeySlot visitor has not been setup for InvertFunction need to Use Coerce
-                        child = CoerceExpression.create(child, child.getDataType(),SortOrder.ASC,null);
-                    }
-                    replacementChildren.add(child);
-                }
-                newRVCList.add(rvcExpression.clone(replacementChildren));
-            }
-            lhsExpr = newRVCList.get(0);
-            rhsExpr = newRVCList.get(1);
+            /*
+            At this point both sides should be in the same row format.
+            We add the inverts so the filtering can be done properly for mixed sort type RVCs.
+            The entire RVC has to be in ASC for the actual compare to work since compare simply does
+             a varbyte compare.  See PHOENIX-4841
+            */
+            RowValueConstructorExpressionRewriter rvcRewriter =
+                    RowValueConstructorExpressionRewriter.getSingleton();
+            lhsExpr = rvcRewriter.rewriteAllChildrenAsc((RowValueConstructorExpression) lhsExpr);
+            rhsExpr = rvcRewriter.rewriteAllChildrenAsc((RowValueConstructorExpression) rhsExpr);
 
             children = Arrays.asList(lhsExpr, rhsExpr);
         } else if(lhsExprDataType != null && rhsExprDataType != null && !lhsExprDataType.isComparableTo(rhsExprDataType)) {
