@@ -37,7 +37,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -79,20 +78,29 @@ public class TableSnapshotResultIterator implements ResultIterator {
     RestoreSnapshotHelper.RestoreMetaChanges meta =
         RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs,
             this.rootDir, this.restoreDir, this.snapshotName);
-    List restoredRegions = meta.getRegionsToAdd();
+    List<HRegionInfo> restoredRegions = meta.getRegionsToAdd();
     this.htd = meta.getTableDescriptor();
-    this.regions = new ArrayList(restoredRegions.size());
-    Iterator i$ = restoredRegions.iterator();
+    this.regions = new ArrayList<>(restoredRegions.size());
 
-    while(i$.hasNext()) {
-      HRegionInfo hri = (HRegionInfo)i$.next();
-      if(CellUtil.overlappingKeys(this.scan.getStartRow(), this.scan.getStopRow(),
-          hri.getStartKey(), hri.getEndKey())) {
-        this.regions.add(hri);
+    for (HRegionInfo restoredRegion : restoredRegions) {
+      if (isValidRegion(restoredRegion)) {
+        this.regions.add(restoredRegion);
       }
     }
 
     Collections.sort(this.regions);
+  }
+
+  /**
+   * Exclude offline split parent regions and
+   * regions that don't intersect with provided scan
+   */
+  private boolean isValidRegion(HRegionInfo hri) {
+    if (hri.isOffline() && (hri.isSplit() || hri.isSplitParent())) {
+      return false;
+    }
+    return CellUtil.overlappingKeys(scan.getStartRow(), scan.getStopRow(),
+            hri.getStartKey(), hri.getEndKey());
   }
 
   public boolean initSnapshotScanner() throws SQLException {
