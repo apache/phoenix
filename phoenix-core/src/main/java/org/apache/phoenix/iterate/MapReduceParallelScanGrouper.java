@@ -18,6 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
 import com.google.common.base.Preconditions;
@@ -45,7 +46,7 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 
 	private static final MapReduceParallelScanGrouper INSTANCE = new MapReduceParallelScanGrouper();
 
-  public static MapReduceParallelScanGrouper getInstance() {
+    public static MapReduceParallelScanGrouper getInstance() {
 		return INSTANCE;
 	}
 
@@ -79,18 +80,39 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 		}
 	}
 
+	/**
+	 * Get list of region locations from SnapshotManifest
+	 * BaseResultIterators assume that regions are sorted using RegionInfo.COMPARATOR
+	 */
 	private List<HRegionLocation> getRegionLocationsFromManifest(SnapshotManifest manifest) {
 		List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
 		Preconditions.checkNotNull(regionManifests);
 
-		List<HRegionLocation> regionLocations = Lists.newArrayListWithCapacity(regionManifests.size());
+		List<HRegionInfo> regionInfos = Lists.newArrayListWithCapacity(regionManifests.size());
+		List<HRegionLocation> hRegionLocations = Lists.newArrayListWithCapacity(regionManifests.size());
 
 		for (SnapshotProtos.SnapshotRegionManifest regionManifest : regionManifests) {
-			regionLocations.add(new HRegionLocation(
-					HRegionInfo.convert(regionManifest.getRegionInfo()), null));
+			HRegionInfo regionInfo = HRegionInfo.convert(regionManifest.getRegionInfo());
+			if (isValidRegion(regionInfo)) {
+				regionInfos.add(regionInfo);
+			}
 		}
 
-		return regionLocations;
+		Collections.sort(regionInfos);
+
+		for (HRegionInfo regionInfo : regionInfos) {
+			hRegionLocations.add(new HRegionLocation(regionInfo, null));
+		}
+
+		return hRegionLocations;
+	}
+
+	// Exclude offline split parent regions
+	private boolean isValidRegion(HRegionInfo hri) {
+		if (hri.isOffline() && (hri.isSplit() || hri.isSplitParent())) {
+			return false;
+		}
+		return true;
 	}
 
 	private String getSnapshotName(Configuration conf) {
