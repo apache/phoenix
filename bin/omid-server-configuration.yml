@@ -20,3 +20,6 @@ metrics: !!org.apache.omid.metrics.CodahaleMetricsProvider [
   csvDir: "csvMetrics",
 }
 ]
+
+timestampType: WORLD_TIME
+lowLatency: false

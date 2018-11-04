@@ -125,6 +125,7 @@
                   <include>org.iq80.snappy:snappy</include>
                   <include>org.antlr:antlr*</include>
                   <include>org.apache.tephra:tephra*</include>
+                  <include>org.apache.omid:omid*</include>
                   <include>com.google.code.gson:gson</include>
                   <include>org.jruby.joni:joni</include>
                   <include>org.jruby.jcodings:jcodings</include>

@@ -21,7 +21,23 @@
 # ---------------------------------------------------------------------------------------------------------------------
 # Check if HADOOP_CONF_DIR and HBASE_CONF_DIR are set
 # ---------------------------------------------------------------------------------------------------------------------
+export JVM_FLAGS=-Xmx4096m
+if [ -z ${HADOOP_CONF_DIR+x} ]; then
+    if [ -z ${HADOOP_HOME+x} ]; then
+        echo "WARNING: HADOOP_HOME or HADOOP_CONF_DIR are unset";
+    else
+        export HADOOP_CONF_DIR=${HADOOP_HOME}/conf
+    fi
+else
+    echo "HADOOP_CONF_DIR is set to '$HADOOP_CONF_DIR'";
+fi
 
-if [ -z ${HADOOP_CONF_DIR+x} ]; then echo "WARNING: HADOOP_CONF_DIR is unset"; else echo "HADOOP_CONF_DIR is set to '$HADOOP_CONF_DIR'"; fi
-if [ -z ${HBASE_CONF_DIR+x} ]; then echo "WARNING: HBASE_CONF_DIR is unset"; else echo "HBASE_CONF_DIR is set to '$HBASE_CONF_DIR'"; fi
-
+if [ -z ${HBASE_CONF_DIR+x} ]; then
+    if [ -z ${HBASE_HOME+x} ]; then
+        echo "WARNING: HBASE_HOME or HBASE_CONF_DIR are unset";
+    else
+        export HBASE_CONF_DIR=${HBASE_HOME}/conf
+    fi
+else
+    echo "HBASE_CONF_DIR is set to '$HBASE_CONF_DIR'";
+fi
