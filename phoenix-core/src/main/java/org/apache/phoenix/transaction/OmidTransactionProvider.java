@@ -18,6 +18,7 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.sql.SQLException;
 import java.util.Arrays;
 
@@ -41,11 +42,14 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 
 public class OmidTransactionProvider implements PhoenixTransactionProvider {
+    private static final Logger logger = LoggerFactory.getLogger(OmidTransactionProvider.class);
     private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
     public static final String OMID_TSO_PORT = "phoenix.omid.tso.port";
     public static final String OMID_TSO_CONFLICT_MAP_SIZE = "phoenix.omid.tso.conflict.map.size";
@@ -118,16 +122,31 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         return commitTableClient;
     }
     
+    /**
+     * Find a random free port in localhost for binding.
+     * @return A port number or -1 for failure.
+     */
+    private static int getRandomPort() {
+      try (ServerSocket socket = new ServerSocket(0)) {
+        return socket.getLocalPort();
+      } catch (IOException e) {
+        return -1;
+      }
+    }
+
     @Override
     public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException{
         TSOServerConfig tsoConfig = new TSOServerConfig();
         TSOServer tso;
 
+        int port;
         String portStr = config.get(OMID_TSO_PORT);
-        if (portStr == null) {
-            throw new IllegalArgumentException(OMID_TSO_PORT + " config parameter must be bound");
+        if (portStr == null) { // For testing, we generate a random port.
+            port = getRandomPort();
+            logger.warn("Using random port for " + OMID_TSO_PORT + " of " + port);
+        } else {
+            port = Integer.parseInt(portStr);
         }
-        int  port = Integer.parseInt(portStr);
 
         tsoConfig.setPort(port);
         tsoConfig.setConflictMapSize(config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));
