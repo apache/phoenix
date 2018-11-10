@@ -21,9 +21,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -42,6 +44,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -69,6 +72,12 @@ public class SystemCatalogCreationOnConnectionIT {
     private static final String PHOENIX_SYSTEM_CATALOG = "SYSTEM.CATALOG";
     private static final String EXECUTE_UPGRADE_COMMAND = "EXECUTE UPGRADE";
     private static final String MODIFIED_MAX_VERSIONS ="5";
+    private static final String CREATE_TABLE_STMT = "CREATE TABLE %s"
+            + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2))";
+    private static final String SELECT_STMT = "SELECT * FROM %s";
+    private static final String DELETE_STMT = "DELETE FROM %s";
+    private static final String CREATE_INDEX_STMT = "CREATE INDEX DUMMY_IDX ON %s (K1) INCLUDE (K2)";
+    private static final String UPSERT_STMT = "UPSERT INTO %s VALUES ('A', 'B')";
 
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
       "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
@@ -167,12 +176,8 @@ public class SystemCatalogCreationOnConnectionIT {
         UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           new SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver(ReadOnlyProps.EMPTY_PROPS);
-        try {
-            driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
-            fail("Client should not be able to create SYSTEM.CATALOG since we set the doNotUpgrade property");
-        } catch (Exception e) {
-            assertTrue(e instanceof UpgradeRequiredException);
-        }
+
+        driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
         assertTrue(hbaseTables.size() == 0);
@@ -428,6 +433,70 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(Integer.parseInt(MODIFIED_MAX_VERSIONS), verifyModificationTableMetadata(driver, PHOENIX_SYSTEM_CATALOG));
     }
 
+    // Test the case when an end-user uses the vanilla PhoenixDriver to create a connection and a
+    // requirement for upgrade is detected. In this case, the user should get a connection on which
+    // they are only able to run "EXECUTE UPGRADE"
+    @Test
+    public void testExecuteUpgradeSameConnWithPhoenixDriver() throws Exception {
+        // Register the vanilla PhoenixDriver
+        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        Properties propsDoNotUpgradePropSet = new Properties();
+        // Set doNotUpgradeProperty to true
+        UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
+
+        Connection conn = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet);
+        hbaseTables = getHBaseTables();
+        assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG)
+                || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
+        assertTrue(hbaseTables.size() == 0);
+
+        // Test that we are unable to run any other queries using this connection until we upgrade
+        final String tableName = generateUniqueName();
+        try {
+            conn.createStatement().execute(String.format(CREATE_TABLE_STMT, tableName));
+            fail("CREATE TABLE should have failed with UpgradeRequiredException");
+        } catch (UpgradeRequiredException expected) {
+
+        }
+        try {
+            conn.createStatement().execute(String.format(SELECT_STMT, tableName));
+            fail("SELECT should have failed with UpgradeRequiredException");
+        } catch (UpgradeRequiredException expected) {
+
+        }
+        try {
+            conn.createStatement().execute(String.format(DELETE_STMT, tableName));
+            fail("DELETE should have failed with UpgradeRequiredException");
+        } catch (UpgradeRequiredException expected) {
+
+        }
+        try {
+            conn.createStatement().execute(String.format(CREATE_INDEX_STMT, tableName));
+            fail("CREATE INDEX should have failed with UpgradeRequiredException");
+        } catch (UpgradeRequiredException expected) {
+
+        }
+        try {
+            conn.createStatement().execute(String.format(UPSERT_STMT, tableName));
+            fail("UPSERT VALUES should have failed with UpgradeRequiredException");
+        } catch (UpgradeRequiredException expected) {
+
+        }
+
+        // Now run the upgrade command. All SYSTEM tables should be created
+        conn.createStatement().execute("EXECUTE UPGRADE");
+        hbaseTables = getHBaseTables();
+        assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
+
+        // Now we can run any other query/mutation using this connection object
+        conn.createStatement().execute(String.format(CREATE_TABLE_STMT, tableName));
+        conn.createStatement().execute(String.format(SELECT_STMT, tableName));
+        conn.createStatement().execute(String.format(DELETE_STMT, tableName));
+        conn.createStatement().execute(String.format(CREATE_INDEX_STMT, tableName));
+        conn.createStatement().execute(String.format(UPSERT_STMT, tableName));
+    }
+
     /**
      * Return all created HBase tables
      * @return Set of HBase table name strings
@@ -435,7 +504,7 @@ public class SystemCatalogCreationOnConnectionIT {
      */
     private Set<String> getHBaseTables() throws IOException {
         Set<String> tables = new HashSet<>();
-        for (TableName tn : testUtil.getHBaseAdmin().listTableNames()) {
+        for (TableName tn : testUtil.getAdmin().listTableNames()) {
             tables.add(tn.getNameAsString());
         }
         return tables;
@@ -520,19 +589,17 @@ public class SystemCatalogCreationOnConnectionIT {
         ReadOnlyProps readOnlyProps = new ReadOnlyProps(props);
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           new SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver(readOnlyProps);
-        try {
-            driver.getConnectionQueryServices(getJdbcUrl(), new Properties());
-            fail("Client should not be able to create SYSTEM.CATALOG since we set the isAutoUpgradeEnabled property to false");
-        } catch (Exception e) {
-            assertTrue(e instanceof UpgradeRequiredException);
-        }
+
+        // We should be able to get a connection, however upgradeRequired should be set so that we
+        // are not allowed to run any query/mutation until "EXECUTE UPGRADE" has been run
+        Connection conn = driver.getConnectionQueryServices(getJdbcUrl(), new Properties())
+                .connect(getJdbcUrl(), new Properties());
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
         assertTrue(hbaseTables.size() == 0);
         assertEquals(1, countUpgradeAttempts);
 
-        // We use the same ConnectionQueryServices instance to run "EXECUTE UPGRADE"
-        Connection conn = driver.getConnectionQueryServices(getJdbcUrl(), new Properties()).connect(getJdbcUrl(), new Properties());
+        // We use the same connection to run "EXECUTE UPGRADE"
         try {
             conn.createStatement().execute(EXECUTE_UPGRADE_COMMAND);
         } finally {
