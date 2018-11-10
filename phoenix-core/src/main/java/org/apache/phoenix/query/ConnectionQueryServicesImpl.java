@@ -2938,8 +2938,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     upgradeSystemTables(url, props);
                                 } else {
                                     // We expect the user to manually run the "EXECUTE UPGRADE" command first.
-                                    // This exception will get caught below as a RetriableUpgradeException
-                                    throw new UpgradeRequiredException();
+                                    logger.error("Upgrade is required. Must run 'EXECUTE UPGRADE' "
+                                            + "before any other command");
                                 }
                             }
                             scheduleRenewLeaseTasks();
