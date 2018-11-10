@@ -127,23 +127,13 @@
       <artifactId>phoenix-queryserver-client</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.inject</groupId>
-      <artifactId>guice</artifactId>
-      <version>3.0</version>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-load-balancer</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-tools-hbase1.x</artifactId>
       <version>${omid.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.htrace</groupId>
-      <artifactId>htrace-core</artifactId>
-      <version>3.2.0-incubating</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-load-balancer</artifactId>
     </dependency>
   </dependencies>
 </project>
