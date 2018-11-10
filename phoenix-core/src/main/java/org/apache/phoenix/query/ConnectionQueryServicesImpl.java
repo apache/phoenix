@@ -152,6 +152,7 @@ import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
@@ -958,7 +959,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (!descriptor.hasCoprocessor(SequenceRegionObserver.class.getName())) {
                     descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
                 }
+            } else if (SchemaUtil.isTaskTable(tableName)) {
+                if(!descriptor.hasCoprocessor(TaskRegionObserver.class.getName())) {
+                    descriptor.addCoprocessor(TaskRegionObserver.class.getName(), null, priority, null);
             }
+        }
 
             if (isTransactional) {
                 Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
@@ -1172,7 +1177,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     splits, isNamespaceMapped);
 
             if (!tableExist) {
-                if (isMetaTable && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
+                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
                     // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
                     throw new UpgradeRequiredException();
                 }
@@ -2514,7 +2519,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Keep the TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE properties of new column families
      * in sync with the existing column families. Note that we use the new values for these properties in case they
      * are passed from our alter table command, if not, we use the default column family's value for each property
-     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES}
+     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES}
      * @param allFamiliesProps Map of all column family properties
      * @param table original table
      * @param tableDesc new table descriptor
@@ -2560,7 +2565,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Set the new values for properties that are to be kept in sync amongst those column families of the table which are
      * not referenced in the context of our alter table command, including the local index column family if it exists
-     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES}
+     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES}
      * @param tableDesc original table descriptor
      * @param allFamiliesProps Map of all column family properties
      * @param newTTL new value of TTL
@@ -2582,7 +2587,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Set properties to be kept in sync for global indexes of a table, as well as
      * the physical table corresponding to indexes created on views of a table
-     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_PROPERTIES} and
+     * See {@link MetaDataUtil#SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES} and
      * @param table base table
      * @param tableAndIndexDescriptorMappings old to new table descriptor mappings
      * @param applyPropsToAllIndexesDefaultCF new properties to apply to all index column families
@@ -2812,6 +2817,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
     }
 
+    protected String getTaskDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TASK_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -3038,6 +3047,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate(getMutexDDL());
         } catch (TableAlreadyExistsException e) {}
+        try {
+            metaConnection.createStatement().executeUpdate(getTaskDDL());
+        } catch (TableAlreadyExistsException e) {}
+
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
     }
 
@@ -3496,6 +3509,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 metaConnection.createStatement().executeUpdate(getMutexDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
+            try {
+                metaConnection.createStatement().executeUpdate(getTaskDDL());
+            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
@@ -3733,8 +3749,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // No tables exist matching "SYSTEM\..*", they are all already in "SYSTEM:.*"
             if (tableNames.size() == 0) { return; }
             // Try to move any remaining tables matching "SYSTEM\..*" into "SYSTEM:"
-            if (tableNames.size() > 7) {
-                logger.warn("Expected 7 system tables but found " + tableNames.size() + ":" + tableNames);
+            if (tableNames.size() > 8) {
+                logger.warn("Expected 8 system tables but found " + tableNames.size() + ":" + tableNames);
             }
 
             byte[] mappedSystemTable = SchemaUtil

@@ -141,5 +141,9 @@
       <artifactId>htrace-core</artifactId>
       <version>3.2.0-incubating</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-load-balancer</artifactId>
+    </dependency>
   </dependencies>
 </project>

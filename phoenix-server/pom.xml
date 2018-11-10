@@ -140,6 +140,7 @@
                   <include>com.ibm.icu:icu4j</include>
                   <include>com.ibm.icu:icu4j-charset</include>
                   <include>com.ibm.icu:icu4j-localespi</include>
+                  <include>com.lmax:disruptor</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>

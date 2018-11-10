@@ -60,6 +60,7 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.DelegateIndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
+import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
@@ -133,6 +134,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         } else {
         	throwIndexWriteFailure = Boolean.parseBoolean(value);
         }
+
+        boolean killServer = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_KILL_SERVER, true);
+        if (!killServer) {
+            setDelegate(new LeaveIndexActiveFailurePolicy());
+        } // else, default in constructor is KillServerOnFailurePolicy
     }
 
     /**

@@ -154,6 +154,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
     public static final String INDEX_FAILURE_DISABLE_INDEX = "phoenix.index.failure.disable.index";
     public static final String INDEX_FAILURE_THROW_EXCEPTION_ATTRIB = "phoenix.index.failure.throw.exception";
+    public static final String INDEX_FAILURE_KILL_SERVER = "phoenix.index.failure.unhandled.killserver";
 
     // Index will be partially re-built from index disable time stamp - following overlap time
     @Deprecated
@@ -318,6 +319,14 @@ public interface QueryServices extends SQLCloseable {
     public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
 
 	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
+
+    // The parameters defined for handling task stored in table SYSTEM.TASK
+	// The time interval between periodic scans of table SYSTEM.TASK
+    public static final String TASK_HANDLING_INTERVAL_MS_ATTRIB = "phoenix.task.handling.interval.ms";
+    // The maximum time for a task to stay in table SYSTEM.TASK
+    public static final String TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB = "phoenix.task.handling.maxInterval.ms";
+    // The initial delay before the first task from table SYSTEM.TASK is handled
+    public static final String TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB = "phoenix.task.handling.initial.delay.ms";
 
     /**
      * Get executor service used for parallel scans

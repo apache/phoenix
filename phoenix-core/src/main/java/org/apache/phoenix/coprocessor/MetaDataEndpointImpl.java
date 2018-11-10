@@ -78,6 +78,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
@@ -86,6 +87,7 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -100,6 +102,7 @@ import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -214,6 +217,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ParentTableNotFoundException;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -688,7 +692,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     indexes.add(latestIndex);
                 }
-                table = PTableImpl.makePTable(table, table.getTimeStamp(), indexes);
+                table = PTableImpl.builderWithColumns(table, getColumnsToClone(table))
+                        .setIndexes(indexes == null ? Collections.<PTable>emptyList() : indexes)
+                        .build();
             }
         }
         
@@ -938,11 +944,31 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         int baseTableColumnCount =
                 isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
                         : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+
+        // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
+        // inherited from the physical base table.
+        // if a TableProperty is not valid on a view we set it to the base table value
+        // if a TableProperty is valid on a view and is not mutable on a view we set it to the base table value
+        // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view
         // TODO Implement PHOENIX-4763 to set the view properties correctly instead of just
         // setting them same as the base table
-        PTableImpl pTable =
-                PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTableTimestamp,
-                    baseTableColumnCount, excludedColumns);
+        PTableImpl pTable = PTableImpl.builderWithColumns(table, columnsToAdd)
+                .setImmutableRows(baseTable.isImmutableRows())
+                .setDisableWAL(baseTable.isWALDisabled())
+                .setMultiTenant(baseTable.isMultiTenant())
+                .setStoreNulls(baseTable.getStoreNulls())
+                .setTransactionProvider(baseTable.getTransactionProvider())
+                .setAutoPartitionSeqName(baseTable.getAutoPartitionSeqName())
+                .setAppendOnlySchema(baseTable.isAppendOnlySchema())
+                .setImmutableStorageScheme(baseTable.getImmutableStorageScheme() == null ?
+                        ImmutableStorageScheme.ONE_CELL_PER_COLUMN : baseTable.getImmutableStorageScheme())
+                .setQualifierEncodingScheme(baseTable.getEncodingScheme() == null ?
+                        QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : baseTable.getEncodingScheme())
+                .setBaseColumnCount(baseTableColumnCount)
+                .setTimeStamp(maxTableTimestamp)
+                .setExcludedColumns(excludedColumns == null ?
+                        ImmutableList.<PColumn>of() : ImmutableList.copyOf(excludedColumns))
+                .build();
         return WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
     }
 
@@ -1485,11 +1511,48 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
-        return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum,
-                pkName, saltBucketNum, columns, parentSchemaName, parentTableName, indexes, isImmutableRows, physicalTables, defaultFamilyName,
-                viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexType, viewIndexId, indexType,
-                rowKeyOrderOptimizable, transactionProvider, updateCacheFrequency, baseColumnCount,
-                indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, storageScheme, encodingScheme, cqCounter, useStatsForParallelization);
+        return new PTableImpl.Builder()
+                .setType(tableType)
+                .setState(indexState)
+                .setTimeStamp(timeStamp)
+                .setIndexDisableTimestamp(indexDisableTimestamp)
+                .setSequenceNumber(tableSeqNum)
+                .setImmutableRows(isImmutableRows)
+                .setViewStatement(viewStatement)
+                .setDisableWAL(disableWAL)
+                .setMultiTenant(multiTenant)
+                .setStoreNulls(storeNulls)
+                .setViewType(viewType)
+                .setViewIndexType(viewIndexType)
+                .setViewIndexId(viewIndexId)
+                .setIndexType(indexType)
+                .setTransactionProvider(transactionProvider)
+                .setUpdateCacheFrequency(updateCacheFrequency)
+                .setNamespaceMapped(isNamespaceMapped)
+                .setAutoPartitionSeqName(autoPartitionSeq)
+                .setAppendOnlySchema(isAppendOnlySchema)
+                .setImmutableStorageScheme(storageScheme == null ?
+                        ImmutableStorageScheme.ONE_CELL_PER_COLUMN : storageScheme)
+                .setQualifierEncodingScheme(encodingScheme == null ?
+                        QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : encodingScheme)
+                .setBaseColumnCount(baseColumnCount)
+                .setEncodedCQCounter(cqCounter)
+                .setUseStatsForParallelization(useStatsForParallelization)
+                .setExcludedColumns(ImmutableList.<PColumn>of())
+                .setTenantId(tenantId)
+                .setSchemaName(schemaName)
+                .setTableName(tableName)
+                .setPkName(pkName)
+                .setDefaultFamilyName(defaultFamilyName)
+                .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
+                .setBucketNum(saltBucketNum)
+                .setIndexes(indexes == null ? Collections.<PTable>emptyList() : indexes)
+                .setParentSchemaName(parentSchemaName)
+                .setParentTableName(parentTableName)
+                .setPhysicalNames(physicalTables == null ?
+                        ImmutableList.<PName>of() : ImmutableList.copyOf(physicalTables))
+                .setColumns(columns)
+                .build();
     }
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexType) {
         Cell viewIndexIdKv = tableKeyValues[VIEW_INDEX_ID_INDEX];
@@ -1739,7 +1802,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private static PTable newDeletedTableMarker(long timestamp) {
-        return new PTableImpl(timestamp);
+        try {
+            return new PTableImpl.Builder()
+                    .setType(PTableType.TABLE)
+                    .setTimeStamp(timestamp)
+                    .setPkColumns(Collections.<PColumn>emptyList())
+                    .setAllColumns(Collections.<PColumn>emptyList())
+                    .setFamilyAttributes(Collections.<PColumnFamily>emptyList())
+                    .setRowKeySchema(RowKeySchema.EMPTY_SCHEMA)
+                    .setIndexes(Collections.<PTable>emptyList())
+                    .setPhysicalNames(Collections.<PName>emptyList())
+                    .build();
+        } catch (SQLException e) {
+            // Should never happen
+            return null;
+        }
     }
 
     private static PFunction newDeletedFunctionMarker(long timestamp) {
@@ -1936,7 +2013,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 table = loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP,
                         clientVersion);
             } catch (ParentTableNotFoundException e) {
-                dropChildMetadata(e.getParentSchemaName(), e.getParentTableName(), e.getParentTenantId());
+                dropChildViews(env, e.getParentTenantId(), e.getParentSchemaName(), e.getParentTableName());
             }
             if (table != null) {
                 if (table.getTimeStamp() < clientTimeStamp) {
@@ -1961,7 +2038,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // check if the table was dropped, but had child views that were have not yet
             // been cleaned up by compaction
             if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-                dropChildMetadata(schemaName, tableName, tenantIdBytes);
+                dropChildViews(env, tenantIdBytes, schemaName, tableName);
             }
             
             byte[] parentTableKey = null;
@@ -2328,19 +2405,31 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
 
-    private void dropChildMetadata(byte[] schemaName, byte[] tableName, byte[] tenantIdBytes)
+    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes, byte[] schemaName, byte[] tableName)
             throws IOException, SQLException, ClassNotFoundException {
-        TableViewFinderResult childViewsResult = new TableViewFinderResult();
-        findAllChildViews(tenantIdBytes, schemaName, tableName, childViewsResult);
+        Table hTable =
+                ServerUtil.getHTableForCoprocessorScan(env,
+                        SchemaUtil.getPhysicalTableName(
+                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                                env.getConfiguration()).getName());
+        TableViewFinderResult childViewsResult = ViewFinder.findRelatedViews(hTable, tenantIdBytes, schemaName, tableName,
+                PTable.LinkType.CHILD_TABLE, HConstants.LATEST_TIMESTAMP);
+
         if (childViewsResult.hasLinks()) {
+
             for (TableInfo viewInfo : childViewsResult.getLinks()) {
                 byte[] viewTenantId = viewInfo.getTenantId();
                 byte[] viewSchemaName = viewInfo.getSchemaName();
                 byte[] viewName = viewInfo.getTableName();
+                if (logger.isDebugEnabled()) {
+                    logger.debug("dropChildViews :" + Bytes.toString(schemaName) + "." + Bytes.toString(tableName) +
+                            " -> " + Bytes.toString(viewSchemaName) + "." + Bytes.toString(viewName) +
+                            "with tenant id :" + Bytes.toString(viewTenantId));
+                }
                 Properties props = new Properties();
                 if (viewTenantId != null && viewTenantId.length != 0)
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration())
+                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(props, env.getConfiguration())
                         .unwrap(PhoenixConnection.class)) {
                     MetaDataClient client = new MetaDataClient(connection);
                     org.apache.phoenix.parse.TableName viewTableName = org.apache.phoenix.parse.TableName
@@ -2351,7 +2440,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
         }
     }
-
     private boolean execeededIndexQuota(PTableType tableType, PTable parentTable) {
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
     }
@@ -2514,6 +2602,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     throw new IllegalStateException(msg);
                 }
+
                 // drop rows from catalog on this region
                 mutateRowsWithLocks(region, localMutations, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
                         HConstants.NO_NONCE);
@@ -2631,7 +2720,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
 
-            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            if (tableType == PTableType.TABLE || tableType == PTableType.VIEW || tableType == PTableType.SYSTEM) {
                 // check to see if the table has any child views
                 try (Table hTable =
                         env.getTable(SchemaUtil.getPhysicalTableName(
@@ -2640,10 +2729,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     boolean hasChildViews =
                             ViewFinder.hasChildViews(hTable, tenantId, schemaName, tableName,
                                 clientTimeStamp);
-                    if (hasChildViews && !isCascade) {
-                        // DROP without CASCADE on tables with child views is not permitted
-                        return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                EnvironmentEdgeManager.currentTimeMillis(), null);
+                    if (hasChildViews) {
+                        if (!isCascade) {
+                            // DROP without CASCADE on tables with child views is not permitted
+                            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                    EnvironmentEdgeManager.currentTimeMillis(), null);
+                        }
+                        try {
+                            PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+                            TaskRegionObserver.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS, Bytes.toString(tenantId),
+                                Bytes.toString(schemaName), Bytes.toString(tableName), this.accessCheckEnabled);
+                        } catch (Throwable t) {
+                            logger.error("Adding a task to drop child views failed!", t);
+                        }
                     }
                 }
             }
