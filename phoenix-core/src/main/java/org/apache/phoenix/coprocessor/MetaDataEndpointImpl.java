@@ -2035,8 +2035,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
             }
             
-            // check if the table was dropped, but had child views that were have not yet
-            // been cleaned up by compaction
+            // check if the table was dropped, but had child views that were have not yet been cleaned up
             if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
                 dropChildViews(env, tenantIdBytes, schemaName, tableName);
             }
@@ -2434,8 +2433,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     MetaDataClient client = new MetaDataClient(connection);
                     org.apache.phoenix.parse.TableName viewTableName = org.apache.phoenix.parse.TableName
                             .create(Bytes.toString(viewSchemaName), Bytes.toString(viewName));
-                    client.dropTable(
-                            new DropTableStatement(viewTableName, PTableType.VIEW, false, true, true));
+                    try {
+                        client.dropTable(
+                                new DropTableStatement(viewTableName, PTableType.VIEW, false, true, true));
+                    }
+                    catch (TableNotFoundException e) {
+                        logger.info("Ignoring view "+viewTableName+" as it has already been dropped");
+                    }
                 }
             }
         }
