@@ -504,7 +504,7 @@ public class SystemCatalogCreationOnConnectionIT {
      */
     private Set<String> getHBaseTables() throws IOException {
         Set<String> tables = new HashSet<>();
-        for (TableName tn : testUtil.getAdmin().listTableNames()) {
+        for (TableName tn : testUtil.getHBaseAdmin().listTableNames()) {
             tables.add(tn.getNameAsString());
         }
         return tables;
