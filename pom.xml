@@ -101,7 +101,7 @@
     <avatica.version>1.12.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.15.0-incubating</tephra.version>
-    <omid.version>1.0.0.0</omid.version>
+    <omid.version>1.0.0</omid.version>
     <spark.version>2.3.2</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
@@ -123,7 +123,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>4</numForkedUT>
-    <numForkedIT>4</numForkedIT>
+    <numForkedIT>8</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
