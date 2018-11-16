@@ -111,7 +111,8 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connInfo) {
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connInfo, int port) {
+        config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, port);
         int retryTimeOut = config.getInt(TxConstants.Service.CFG_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC, 
                 TxConstants.Service.DEFAULT_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC);
         ZKClientService zkClient = ZKClientServices.delegate(

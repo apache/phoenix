@@ -120,18 +120,9 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
     
     @Override
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException{
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException{
         TSOServerConfig tsoConfig = new TSOServerConfig();
         TSOServer tso;
-
-        int port;
-        String portStr = config.get(OMID_TSO_PORT);
-        if (portStr == null) {
-            // setup default test configs for Omid
-            port = TransactionUtil.getRandomPort();
-        } else {
-            port = Integer.parseInt(portStr);
-        }
 
         tsoConfig.setPort(port);
         tsoConfig.setConflictMapSize(config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));

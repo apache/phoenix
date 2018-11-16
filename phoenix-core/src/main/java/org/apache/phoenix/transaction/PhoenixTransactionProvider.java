@@ -50,7 +50,7 @@ public interface PhoenixTransactionProvider {
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException;
 
     public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) throws SQLException;
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException;
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException;
     public Class<? extends RegionObserver> getCoprocessor();
     public Class<? extends RegionObserver> getGCCoprocessor();
 
