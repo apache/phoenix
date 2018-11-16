@@ -41,6 +41,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.inject.Guice;
 import com.google.inject.Injector;
@@ -123,11 +124,14 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         TSOServerConfig tsoConfig = new TSOServerConfig();
         TSOServer tso;
 
+        int port;
         String portStr = config.get(OMID_TSO_PORT);
         if (portStr == null) {
-            throw new IllegalArgumentException(OMID_TSO_PORT + " config parameter must be bound");
+            // setup default test configs for Omid
+            port = TransactionUtil.getRandomPort();
+        } else {
+            port = Integer.parseInt(portStr);
         }
-        int  port = Integer.parseInt(portStr);
 
         tsoConfig.setPort(port);
         tsoConfig.setConflictMapSize(config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));

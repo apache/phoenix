@@ -22,10 +22,9 @@ import static org.apache.phoenix.query.QueryServicesOptions.withDefaults;
 
 import org.apache.curator.shaded.com.google.common.io.Files;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-import org.apache.phoenix.transaction.OmidTransactionProvider;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.apache.tephra.TxConstants;
 
 
@@ -129,12 +128,10 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .set(TxConstants.Manager.CFG_DO_PERSIST, false)
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times")
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1)
-                .set(TxConstants.Service.CFG_DATA_TX_BIND_PORT, TestUtil.getRandomPort())
+                .set(TxConstants.Service.CFG_DATA_TX_BIND_PORT, TransactionUtil.getRandomPort())
                 .set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, Files.createTempDir().getAbsolutePath())
                 .set(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS)
                 .set(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L)
-                // setup default test configs for Omid
-                .set(OmidTransactionProvider.OMID_TSO_PORT, TestUtil.getRandomPort())
                 ;
     }
     

@@ -18,6 +18,7 @@
 package org.apache.phoenix.util;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -152,4 +153,17 @@ public class TransactionUtil {
         }
         return mutation;
 	}
+
+    /**
+     * Find a random free port in localhost for binding.
+     * @return A port number or -1 for failure.
+     */
+    public static int getRandomPort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            socket.setReuseAddress(true);
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            return -1;
+        }
+    }
 }
