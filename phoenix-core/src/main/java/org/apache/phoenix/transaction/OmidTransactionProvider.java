@@ -72,7 +72,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo) throws  SQLException{
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException{
         return new OmidTransactionService();
     }
 

@@ -89,16 +89,17 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
         }
 
         int timeOut = config.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
+        int retryTimeOut = config.getInt(TxConstants.Service.CFG_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC, 
+                TxConstants.Service.DEFAULT_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC);
         // Create instance of the tephra zookeeper client
         ZKClientService zkClientService  = ZKClientServices.delegate(
             ZKClients.reWatchOnExpire(
                 ZKClients.retryOnFailure(
                      new TephraZKClientService(zkQuorumServersString, timeOut, null,
                              ArrayListMultimap.<String, byte[]>create()), 
-                         RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
+                         RetryStrategies.exponentialDelay(500, retryTimeOut, TimeUnit.MILLISECONDS))
                      )
                 );
-        //txZKClientService.startAndWait();
         ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(zkClientService);
         PooledClientProvider pooledClientProvider = new PooledClientProvider(
                 config, zkDiscoveryService);
@@ -110,7 +111,10 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connInfo) {
+    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connInfo, int port) {
+        config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, port);
+        int retryTimeOut = config.getInt(TxConstants.Service.CFG_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC, 
+                TxConstants.Service.DEFAULT_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC);
         ZKClientService zkClient = ZKClientServices.delegate(
           ZKClients.reWatchOnExpire(
             ZKClients.retryOnFailure(
@@ -118,17 +122,16 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
                 .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT,
                         HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
                 .build(),
-              RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
+              RetryStrategies.exponentialDelay(500, retryTimeOut, TimeUnit.MILLISECONDS)
             )
           )
         );
 
-        //zkClient.startAndWait();
         DiscoveryService discovery = new ZKDiscoveryService(zkClient);
-        TransactionManager txManager = new TransactionManager(config, new HDFSTransactionStateStorage(config, new SnapshotCodecProvider(config), new TxMetricsCollector()), new TxMetricsCollector());
+        TransactionManager txManager = new TransactionManager(config, new HDFSTransactionStateStorage(config, 
+                new SnapshotCodecProvider(config), new TxMetricsCollector()), new TxMetricsCollector());
         TransactionService txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
         TephraTransactionService service = new TephraTransactionService(zkClient, txService);
-        //txService.startAndWait();            
         service.start();
         return service;
     }
