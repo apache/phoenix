@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosName;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
@@ -47,6 +48,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests ConnectionQueryServices caching when Kerberos authentication is enabled. It's not
@@ -54,6 +56,7 @@ import org.junit.Test;
  * a ConcurrentHashMap. We can use a HashSet to determine when instances of ConnectionInfo
  * collide and when they do not.
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class SecureUserConnectionsIT {
     private static final Log LOG = LogFactory.getLog(SecureUserConnectionsIT.class);
     private static final int KDC_START_ATTEMPTS = 10;
