@@ -599,7 +599,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDropColumnsWithImutability() throws Exception {
-
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
