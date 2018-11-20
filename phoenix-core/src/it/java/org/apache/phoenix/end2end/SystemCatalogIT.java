@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -31,10 +32,12 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -44,11 +47,12 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemCatalogIT extends BaseTest {
     private HBaseTestingUtility testUtil = null;
-    
+
 	@BeforeClass
 	public static void doSetup() throws Exception {
 		Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
 		serverProps.put(QueryServices.SYSTEM_CATALOG_SPLITTABLE, "false");
+        serverProps.put(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK, "true");
 		Map<String, String> clientProps = Collections.emptyMap();
 		setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
 				new ReadOnlyProps(clientProps.entrySet().iterator()));
@@ -87,7 +91,8 @@ public class SystemCatalogIT extends BaseTest {
             Statement stmt = conn.createStatement();) {
             stmt.execute("DROP TABLE IF EXISTS " + tableName);
             stmt.execute("CREATE TABLE " + tableName
-                + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT=true");
+                    + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR CONSTRAINT PK " +
+                    "PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT=true");
             try (Connection tenant1Conn = getTenantConnection("tenant1")) {
                 String view1DDL = "CREATE VIEW " + tableName + "_view AS SELECT * FROM " + tableName;
                 tenant1Conn.createStatement().execute(view1DDL);
@@ -97,12 +102,39 @@ public class SystemCatalogIT extends BaseTest {
     }
 
     private String getJdbcUrl() {
-        return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
+        return "jdbc:phoenix:localhost:" + getUtility().getZkCluster().getClientPort() + ":/hbase";
     }
 
     private Connection getTenantConnection(String tenantId) throws SQLException {
         Properties tenantProps = new Properties();
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getJdbcUrl(), tenantProps);
+    }
+
+    /**
+     * Ensure that we cannot add a column to a base table if QueryServices.BLOCK_METADATA_CHANGES_REQUIRE_PROPAGATION
+     * is true
+     */
+    @Test
+    public void testAddingColumnFails() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getJdbcUrl())) {
+            String fullTableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+            String fullViewName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+            String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, v1 INTEGER " +
+                    "CONSTRAINT pk PRIMARY KEY (k1))";
+            conn.createStatement().execute(ddl);
+
+            ddl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName;
+            conn.createStatement().execute(ddl);
+
+            try {
+                ddl = "ALTER TABLE " + fullTableName + " ADD v2 INTEGER";
+                conn.createStatement().execute(ddl);
+                fail();
+            }
+            catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+        }
     }
 }
