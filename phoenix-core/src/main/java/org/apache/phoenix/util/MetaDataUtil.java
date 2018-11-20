@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
@@ -63,7 +65,10 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -382,16 +387,6 @@ public class MetaDataUtil {
         return false;
     }
 
-    
-    public static ViewType getViewType(List<Mutation> tableMetaData, KeyValueBuilder builder,
-    	      ImmutableBytesWritable value) {
-    	        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
-    	            PhoenixDatabaseMetaData.VIEW_TYPE_BYTES, builder, value)) {
-    	            return ViewType.fromSerializedValue(value.get()[value.getOffset()]);
-    	        }
-    	        return null;
-    	    }
-    
     public static int getSaltBuckets(List<Mutation> tableMetaData, KeyValueBuilder builder,
       ImmutableBytesWritable value) {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
@@ -938,5 +933,20 @@ public class MetaDataUtil {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.INDEX_TYPE_BYTES, builder,
                 value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
         return null;
+    }
+
+    public static PColumn getColumn(int pkCount, byte[][] rowKeyMetaData, PTable table) throws ColumnFamilyNotFoundException, ColumnNotFoundException {
+        PColumn col = null;
+        if (pkCount > FAMILY_NAME_INDEX
+            && rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX].length > 0) {
+            PColumnFamily family =
+                table.getColumnFamily(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+            col =
+                family.getPColumnForColumnNameBytes(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]);
+        } else if (pkCount > COLUMN_NAME_INDEX
+            && rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length > 0) {
+            col = table.getPKColumn(new String(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
+        }
+        return col;
     }
 }

@@ -177,7 +177,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         // Even the indexes should now have the modified value of UPDATE_CACHE_FREQUENCY
         // Note that when we query the base table, during query plan generation, we make 2 getTable
         // requests (to retrieve the base table) for each index of the base table
-        helpTestUpdateCache(fullTableName, new int[] {1, 15}, false);
+        helpTestUpdateCache(fullTableName, new int[] {1, 18}, false);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + localIndex,
                 new int[] {3}, true);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + globalIndex,
@@ -209,7 +209,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
                 // verify only 0 or 1 rpc to fetch table metadata,
                 verify(connectionQueryServices, times(numUpsertRpcs)).getTable((PName) isNull(),
                         eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                        anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
+                        anyLong(), anyLong());
                 reset(connectionQueryServices);
             }
             validateSelectRowKeyCols(conn, selectSql, skipUpsertForIndexes);
@@ -223,7 +223,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             int numRpcs = skipUpsertForIndexes ? expectedRPCs[0] : expectedRPCs[1];
             verify(connectionQueryServices, times(numRpcs)).getTable((PName) isNull(),
                 eq(PVarchar.INSTANCE.toBytes(schemaName)), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                anyLong(), anyLong(), eq(false), eq(false), (PTable)isNull());
+                anyLong(), anyLong());
 		}
         finally {
         	conn.close();

@@ -3704,6 +3704,26 @@ public final class PTableProtos {
      * <code>optional int32 viewIndexIdType = 39 [default = 5];</code>
      */
     int getViewIndexIdType();
+
+    // optional bool viewModifiedUpdateCacheFrequency = 40;
+    /**
+     * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+     */
+    boolean hasViewModifiedUpdateCacheFrequency();
+    /**
+     * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+     */
+    boolean getViewModifiedUpdateCacheFrequency();
+
+    // optional bool viewModifiedUseStatsForParallelization = 41;
+    /**
+     * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+     */
+    boolean hasViewModifiedUseStatsForParallelization();
+    /**
+     * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+     */
+    boolean getViewModifiedUseStatsForParallelization();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3963,6 +3983,16 @@ public final class PTableProtos {
             case 312: {
               bitField1_ |= 0x00000002;
               viewIndexIdType_ = input.readInt32();
+              break;
+            }
+            case 320: {
+              bitField1_ |= 0x00000004;
+              viewModifiedUpdateCacheFrequency_ = input.readBool();
+              break;
+            }
+            case 328: {
+              bitField1_ |= 0x00000008;
+              viewModifiedUseStatsForParallelization_ = input.readBool();
               break;
             }
           }
@@ -4761,6 +4791,38 @@ public final class PTableProtos {
       return viewIndexIdType_;
     }
 
+    // optional bool viewModifiedUpdateCacheFrequency = 40;
+    public static final int VIEWMODIFIEDUPDATECACHEFREQUENCY_FIELD_NUMBER = 40;
+    private boolean viewModifiedUpdateCacheFrequency_;
+    /**
+     * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+     */
+    public boolean hasViewModifiedUpdateCacheFrequency() {
+      return ((bitField1_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+     */
+    public boolean getViewModifiedUpdateCacheFrequency() {
+      return viewModifiedUpdateCacheFrequency_;
+    }
+
+    // optional bool viewModifiedUseStatsForParallelization = 41;
+    public static final int VIEWMODIFIEDUSESTATSFORPARALLELIZATION_FIELD_NUMBER = 41;
+    private boolean viewModifiedUseStatsForParallelization_;
+    /**
+     * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+     */
+    public boolean hasViewModifiedUseStatsForParallelization() {
+      return ((bitField1_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+     */
+    public boolean getViewModifiedUseStatsForParallelization() {
+      return viewModifiedUseStatsForParallelization_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4800,6 +4862,8 @@ public final class PTableProtos {
       useStatsForParallelization_ = false;
       transactionProvider_ = 0;
       viewIndexIdType_ = 5;
+      viewModifiedUpdateCacheFrequency_ = false;
+      viewModifiedUseStatsForParallelization_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4981,6 +5045,12 @@ public final class PTableProtos {
       if (((bitField1_ & 0x00000002) == 0x00000002)) {
         output.writeInt32(39, viewIndexIdType_);
       }
+      if (((bitField1_ & 0x00000004) == 0x00000004)) {
+        output.writeBool(40, viewModifiedUpdateCacheFrequency_);
+      }
+      if (((bitField1_ & 0x00000008) == 0x00000008)) {
+        output.writeBool(41, viewModifiedUseStatsForParallelization_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -5146,6 +5216,14 @@ public final class PTableProtos {
       if (((bitField1_ & 0x00000002) == 0x00000002)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(39, viewIndexIdType_);
+      }
+      if (((bitField1_ & 0x00000004) == 0x00000004)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(40, viewModifiedUpdateCacheFrequency_);
+      }
+      if (((bitField1_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(41, viewModifiedUseStatsForParallelization_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -5348,6 +5426,16 @@ public final class PTableProtos {
         result = result && (getViewIndexIdType()
             == other.getViewIndexIdType());
       }
+      result = result && (hasViewModifiedUpdateCacheFrequency() == other.hasViewModifiedUpdateCacheFrequency());
+      if (hasViewModifiedUpdateCacheFrequency()) {
+        result = result && (getViewModifiedUpdateCacheFrequency()
+            == other.getViewModifiedUpdateCacheFrequency());
+      }
+      result = result && (hasViewModifiedUseStatsForParallelization() == other.hasViewModifiedUseStatsForParallelization());
+      if (hasViewModifiedUseStatsForParallelization()) {
+        result = result && (getViewModifiedUseStatsForParallelization()
+            == other.getViewModifiedUseStatsForParallelization());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -5512,6 +5600,14 @@ public final class PTableProtos {
       if (hasViewIndexIdType()) {
         hash = (37 * hash) + VIEWINDEXIDTYPE_FIELD_NUMBER;
         hash = (53 * hash) + getViewIndexIdType();
+      }
+      if (hasViewModifiedUpdateCacheFrequency()) {
+        hash = (37 * hash) + VIEWMODIFIEDUPDATECACHEFREQUENCY_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getViewModifiedUpdateCacheFrequency());
+      }
+      if (hasViewModifiedUseStatsForParallelization()) {
+        hash = (37 * hash) + VIEWMODIFIEDUSESTATSFORPARALLELIZATION_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getViewModifiedUseStatsForParallelization());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -5713,6 +5809,10 @@ public final class PTableProtos {
         bitField1_ = (bitField1_ & ~0x00000010);
         viewIndexIdType_ = 5;
         bitField1_ = (bitField1_ & ~0x00000020);
+        viewModifiedUpdateCacheFrequency_ = false;
+        bitField1_ = (bitField1_ & ~0x00000040);
+        viewModifiedUseStatsForParallelization_ = false;
+        bitField1_ = (bitField1_ & ~0x00000080);
         return this;
       }
 
@@ -5911,6 +6011,14 @@ public final class PTableProtos {
           to_bitField1_ |= 0x00000002;
         }
         result.viewIndexIdType_ = viewIndexIdType_;
+        if (((from_bitField1_ & 0x00000040) == 0x00000040)) {
+          to_bitField1_ |= 0x00000004;
+        }
+        result.viewModifiedUpdateCacheFrequency_ = viewModifiedUpdateCacheFrequency_;
+        if (((from_bitField1_ & 0x00000080) == 0x00000080)) {
+          to_bitField1_ |= 0x00000008;
+        }
+        result.viewModifiedUseStatsForParallelization_ = viewModifiedUseStatsForParallelization_;
         result.bitField0_ = to_bitField0_;
         result.bitField1_ = to_bitField1_;
         onBuilt();
@@ -6121,6 +6229,12 @@ public final class PTableProtos {
         }
         if (other.hasViewIndexIdType()) {
           setViewIndexIdType(other.getViewIndexIdType());
+        }
+        if (other.hasViewModifiedUpdateCacheFrequency()) {
+          setViewModifiedUpdateCacheFrequency(other.getViewModifiedUpdateCacheFrequency());
+        }
+        if (other.hasViewModifiedUseStatsForParallelization()) {
+          setViewModifiedUseStatsForParallelization(other.getViewModifiedUseStatsForParallelization());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -8267,6 +8381,72 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional bool viewModifiedUpdateCacheFrequency = 40;
+      private boolean viewModifiedUpdateCacheFrequency_ ;
+      /**
+       * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+       */
+      public boolean hasViewModifiedUpdateCacheFrequency() {
+        return ((bitField1_ & 0x00000040) == 0x00000040);
+      }
+      /**
+       * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+       */
+      public boolean getViewModifiedUpdateCacheFrequency() {
+        return viewModifiedUpdateCacheFrequency_;
+      }
+      /**
+       * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+       */
+      public Builder setViewModifiedUpdateCacheFrequency(boolean value) {
+        bitField1_ |= 0x00000040;
+        viewModifiedUpdateCacheFrequency_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool viewModifiedUpdateCacheFrequency = 40;</code>
+       */
+      public Builder clearViewModifiedUpdateCacheFrequency() {
+        bitField1_ = (bitField1_ & ~0x00000040);
+        viewModifiedUpdateCacheFrequency_ = false;
+        onChanged();
+        return this;
+      }
+
+      // optional bool viewModifiedUseStatsForParallelization = 41;
+      private boolean viewModifiedUseStatsForParallelization_ ;
+      /**
+       * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+       */
+      public boolean hasViewModifiedUseStatsForParallelization() {
+        return ((bitField1_ & 0x00000080) == 0x00000080);
+      }
+      /**
+       * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+       */
+      public boolean getViewModifiedUseStatsForParallelization() {
+        return viewModifiedUseStatsForParallelization_;
+      }
+      /**
+       * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+       */
+      public Builder setViewModifiedUseStatsForParallelization(boolean value) {
+        bitField1_ |= 0x00000080;
+        viewModifiedUseStatsForParallelization_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
+       */
+      public Builder clearViewModifiedUseStatsForParallelization() {
+        bitField1_ = (bitField1_ & ~0x00000080);
+        viewModifiedUseStatsForParallelization_ = false;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -8936,7 +9116,7 @@ public final class PTableProtos {
       "es\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n" +
       "\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePostsCount\030" +
       "\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts" +
-      "\"\311\007\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
+      "\"\243\010\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
       "tableNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162" +
       "\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequ" +
       "enceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013p" +
@@ -8960,12 +9140,14 @@ public final class PTableProtos {
       "odedCQCounters\030$ \003(\0132\021.EncodedCQCounter\022" +
       "\"\n\032useStatsForParallelization\030% \001(\010\022\033\n\023t" +
       "ransactionProvider\030& \001(\005\022\032\n\017viewIndexIdT" +
-      "ype\030\' \001(\005:\0015\"6\n\020EncodedCQCounter\022\021\n\tcolF" +
-      "amily\030\001 \002(\t\022\017\n\007counter\030\002 \002(\005*A\n\nPTableTy",
-      "pe\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005IN" +
-      "DEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoenix.co" +
-      "processor.generatedB\014PTableProtosH\001\210\001\001\240\001" +
-      "\001"
+      "ype\030\' \001(\005:\0015\022(\n viewModifiedUpdateCacheF" +
+      "requency\030( \001(\010\022.\n&viewModifiedUseStatsFo",
+      "rParallelization\030) \001(\010\"6\n\020EncodedCQCount" +
+      "er\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007counter\030\002 \002(\005*A" +
+      "\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VI" +
+      "EW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache." +
+      "phoenix.coprocessor.generatedB\014PTablePro" +
+      "tosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8989,7 +9171,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", "ViewIndexIdType", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", "ViewIndexIdType", "ViewModifiedUpdateCacheFrequency", "ViewModifiedUseStatsForParallelization", });
           internal_static_EncodedCQCounter_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_EncodedCQCounter_fieldAccessorTable = new

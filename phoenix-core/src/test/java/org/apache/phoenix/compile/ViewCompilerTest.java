@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -83,19 +84,18 @@ public class ViewCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(ct);
         conn.createStatement().execute("CREATE VIEW s2.v3 AS SELECT * FROM s1.t WHERE v = 'bar'");
         
-        // TODO: should it be an error to remove columns from a VIEW that we're defined there?
-        conn.createStatement().execute("ALTER VIEW s2.v3 DROP COLUMN v");
         try {
-            conn.createStatement().executeQuery("SELECT * FROM s2.v3");
+            conn.createStatement().execute("ALTER VIEW s2.v3 DROP COLUMN v");
             fail();
-        } catch (ColumnNotFoundException e) {
-            
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_DROP_VIEW_REFERENCED_COL.getErrorCode(), e.getErrorCode());
         }
         
-        // No error, as v still exists in t
+        // No error, as v still exists
+        conn.createStatement().executeQuery("SELECT v FROM s2.v3");
         conn.createStatement().execute("CREATE VIEW s2.v4 AS SELECT * FROM s1.t WHERE v = 'bas'");
 
-        // No error, even though view is invalid
+        // Can drop view
         conn.createStatement().execute("DROP VIEW s2.v3");
     }
 

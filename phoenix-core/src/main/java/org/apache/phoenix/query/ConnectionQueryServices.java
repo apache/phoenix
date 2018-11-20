@@ -83,25 +83,27 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * @param tableTimestamp timestamp of table if its present in the client side cache
      * @param clientTimetamp if the client connection has an scn, or of the table is transactional
      *            the txn write pointer
-     * @param skipAddingIndexes if true will the returned PTable will not include any indexes
-     * @param skipAddingParentColumns if true will the returned PTable will not include any columns
-     *            derived from ancestors
-     * @param lockedAncestorTable ancestor table table that is being mutated (as we won't be able to
-     *            resolve this table as its locked)
      * @return PTable for the given tenant id, schema and table name
      */
     public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName,
-            long tableTimestamp, long clientTimetamp, boolean skipAddingIndexes,
-            boolean skipAddingParentColumns, PTable lockedAncestorTable) throws SQLException;
+            long tableTimestamp, long clientTimetamp) throws SQLException;
     public MetaDataMutationResult getFunctions(PName tenantId, List<Pair<byte[], Long>> functionNameAndTimeStampPairs, long clientTimestamp) throws SQLException;
 
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] tableName, PTableType tableType,
-            Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped, boolean allocateIndexId, boolean isDoNotUpgradePropSet) throws SQLException;
-    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException;
+                                              Map<String, Object> tableProps,
+                                              List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
+                                              boolean isNamespaceMapped, boolean allocateIndexId,
+                                              boolean isDoNotUpgradePropSet, PTable parentTable) throws SQLException;
+    public MetaDataMutationResult dropTable(List<Mutation> tableMetadata, PTableType tableType, boolean cascade) throws SQLException;
     public MetaDataMutationResult dropFunction(List<Mutation> tableMetadata, boolean ifExists) throws SQLException;
-    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException;
-    public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata, PTableType tableType) throws SQLException;
+    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData,
+                                            PTable table,
+                                            PTable parentTable,
+                                            Map<String, List<Pair<String, Object>>> properties,
+                                            Set<String> colFamiliesForPColumnsToBeAdded,
+                                            List<PColumn> columns) throws SQLException;
+    public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata,
+                                             PTableType tableType, PTable parentTable) throws SQLException;
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName) throws SQLException;
     public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata, String parentTableName,  Map<String, List<Pair<String,Object>>> stmtProperties,  PTable table) throws SQLException;
 
