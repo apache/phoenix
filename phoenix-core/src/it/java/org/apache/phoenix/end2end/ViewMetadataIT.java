@@ -41,11 +41,15 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.end2end.ViewIT.TestMetaDataRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -64,6 +68,9 @@ import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
 
 public class ViewMetadataIT extends SplitSystemCatalogIT {
+
+    private static RegionCoprocessorEnvironment TaskRegionEnvironment;
+
     @BeforeClass
     public static void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
@@ -72,13 +79,21 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put(QueryServices.PHOENIX_ACLS_ENABLED, "true");
         serverProps.put(PhoenixMetaDataCoprocessorHost.PHOENIX_META_DATA_COPROCESSOR_CONF_KEY,
-            TestMetaDataRegionObserver.class.getName());
+                TestMetaDataRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             splitSystemCatalog();
         }
+
+        TaskRegionEnvironment =
+                (RegionCoprocessorEnvironment)getUtility()
+                        .getRSForFirstRegionInTable(
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .getOnlineRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .get(0).getCoprocessorHost()
+                        .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }
 
     @Test
@@ -232,6 +247,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
         // drop table cascade should succeed
         conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
+        runDropChildViewsTask();
 
         validateViewDoesNotExist(conn, fullViewName1);
         validateViewDoesNotExist(conn, fullViewName2);
@@ -249,6 +265,13 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             fail();
         } catch (SQLException e) {
         }
+    }
+
+    private void runDropChildViewsTask() {
+        // Run DropChildViewsTask to complete the tasks for dropping child views
+        TaskRegionObserver.SelfHealingTask task = new TaskRegionObserver.SelfHealingTask(
+                TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        task.run();
     }
 
     @Test
@@ -278,6 +301,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
         // drop table cascade should succeed
         conn.createStatement().execute("DROP TABLE " + fullTableName1 + " CASCADE");
+        runDropChildViewsTask();
 
         // should be able to reuse the index name 
         ddl = "CREATE INDEX " + indexName + " on " + fullTableName2 + "(v3)";
@@ -305,6 +329,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
         // drop table cascade should succeed
         conn.createStatement().execute("DROP TABLE " + fullTableName1 + " CASCADE");
+        runDropChildViewsTask();
 
         // should be able to reuse the view name 
         ddl = "CREATE VIEW " + fullViewName1 + " (v3 VARCHAR) AS SELECT * FROM " + fullTableName2 + " WHERE k > 5";
@@ -404,6 +429,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
         // drop table cascade should succeed
         conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
+        runDropChildViewsTask();
 
         validateViewDoesNotExist(conn, fullViewName1);
         validateViewDoesNotExist(conn, fullViewName2);
@@ -545,6 +571,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
         // Execute DROP...CASCADE
         conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
+        runDropChildViewsTask();
 
         // Validate Views were deleted - Try and delete child views, should throw TableNotFoundException
         validateViewDoesNotExist(conn, fullViewName1);
@@ -606,20 +633,23 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             conn.createStatement().execute("ALTER VIEW " + fullViewName1 + " DROP COLUMN v1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.CANNOT_DROP_VIEW_REFERENCED_COL.getErrorCode(),
+                    e.getErrorCode());
         }
 
         try {
             conn.createStatement().execute("ALTER VIEW " + fullViewName2 + " DROP COLUMN v1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.CANNOT_DROP_VIEW_REFERENCED_COL.getErrorCode(),
+                    e.getErrorCode());
         }
         try {
             conn.createStatement().execute("ALTER VIEW " + fullViewName2 + " DROP COLUMN v2");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.CANNOT_DROP_VIEW_REFERENCED_COL.getErrorCode(),
+                    e.getErrorCode());
         }
         conn.createStatement().execute("ALTER VIEW " + fullViewName2 + " DROP COLUMN v3");
     }

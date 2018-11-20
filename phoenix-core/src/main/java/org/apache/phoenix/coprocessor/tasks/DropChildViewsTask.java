@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.coprocessor.tasks;
 
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.task.Task;
@@ -47,7 +47,8 @@ public class DropChildViewsTask extends BaseTask {
             if (tenantId != null) {
                 Properties tenantProps = new Properties();
                 tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                pconn = QueryUtil.getConnectionOnServer(tenantProps, env.getConfiguration()).unwrap(PhoenixConnection.class);
+                pconn = QueryUtil.getConnectionOnServer(tenantProps, env.getConfiguration())
+                        .unwrap(PhoenixConnection.class);
             }
             else {
                 pconn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
@@ -56,8 +57,8 @@ public class DropChildViewsTask extends BaseTask {
             MetaDataProtocol.MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
                     taskRecord.getSchemaName(), taskRecord.getTableName(), true);
             if (result.getMutationCode() != MetaDataProtocol.MutationCode.TABLE_ALREADY_EXISTS) {
-                MetaDataEndpointImpl
-                        .dropChildViews(env, taskRecord.getTenantIdBytes(), taskRecord.getSchemaNameBytes(), taskRecord.getTableNameBytes());
+                ViewUtil.dropChildViews(env, taskRecord.getTenantIdBytes(),
+                        taskRecord.getSchemaNameBytes(), taskRecord.getTableNameBytes());
                 return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
             } else if (System.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
                 // skip this task as it has not been expired and its parent table has not been dropped yet
@@ -77,7 +78,7 @@ public class DropChildViewsTask extends BaseTask {
             }
         }
         catch (Throwable t) {
-            LOGGER.warn("Exception while dropping a child view task. " +
+            LOGGER.error("Exception while dropping a child view task. " +
                     taskRecord.getSchemaName()  + "." + taskRecord.getTableName() +
                     " with tenant id " + (taskRecord.getTenantId() == null ? " IS NULL" : taskRecord.getTenantId()) +
                     " and timestamp " + timestamp.toString(), t);

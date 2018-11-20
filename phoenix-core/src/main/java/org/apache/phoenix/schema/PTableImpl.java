@@ -1603,18 +1603,15 @@ public class PTableImpl implements PTable {
         }
         ViewType viewType = null;
         String viewStatement = null;
-        List<PName> physicalNames = Collections.emptyList();
         if (tableType == PTableType.VIEW) {
             viewType = ViewType.fromSerializedValue(table.getViewType().toByteArray()[0]);
         }
         if(table.hasViewStatement()){
             viewStatement = (String) PVarchar.INSTANCE.toObject(table.getViewStatement().toByteArray());
         }
-        if (tableType == PTableType.VIEW || viewIndexId != null) {
-            physicalNames = Lists.newArrayListWithExpectedSize(table.getPhysicalNamesCount());
-            for(int i = 0; i < table.getPhysicalNamesCount(); i++) {
-                physicalNames.add(PNameFactory.newName(table.getPhysicalNames(i).toByteArray()));
-            }
+        List<PName> physicalNames = Lists.newArrayListWithExpectedSize(table.getPhysicalNamesCount());
+        for(int i = 0; i < table.getPhysicalNamesCount(); i++) {
+            physicalNames.add(PNameFactory.newName(table.getPhysicalNames(i).toByteArray()));
         }
         int baseColumnCount = -1;
         if (table.hasBaseColumnCount()) {
@@ -1667,6 +1664,15 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
+        // for older clients just use the value of the properties that are set on the view
+        boolean viewModifiedUpdateCacheFrequency = true;
+        boolean viewModifiedUseStatsForParallelization = true;
+        if (table.hasViewModifiedUpdateCacheFrequency()) {
+            viewModifiedUpdateCacheFrequency = table.getViewModifiedUpdateCacheFrequency();
+        }
+        if (table.hasViewModifiedUseStatsForParallelization()) {
+            viewModifiedUseStatsForParallelization = table.getViewModifiedUseStatsForParallelization();
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -1711,6 +1717,8 @@ public class PTableImpl implements PTable {
                     .setPhysicalNames(physicalNames == null ?
                             ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames))
                     .setColumns(columns)
+                    .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
+                    .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -1784,10 +1792,8 @@ public class PTableImpl implements PTable {
       if(table.getViewStatement()!=null){
         builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
       }
-      if(table.getType() == PTableType.VIEW || table.getViewIndexId() != null){
-        for (int i = 0; i < table.getPhysicalNames().size(); i++) {
-          builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));
-        }
+      for (int i = 0; i < table.getPhysicalNames().size(); i++) {
+        builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));
       }
       builder.setBaseColumnCount(table.getBaseColumnCount());
       builder.setRowKeyOrderOptimizable(table.rowKeyOrderOptimizable());
@@ -1816,6 +1822,8 @@ public class PTableImpl implements PTable {
       if (table.useStatsForParallelization() != null) {
           builder.setUseStatsForParallelization(table.useStatsForParallelization());
       }
+      builder.setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
+      builder.setViewModifiedUseStatsForParallelization(table.hasViewModifiedUseStatsForParallelization());
       return builder.build();
     }
 
