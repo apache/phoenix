@@ -531,6 +531,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private int maxIndexesPerTable;
     private boolean isTablesMappingEnabled;
 
+    // this flag denotes that we will continue to write parent table column metadata while creating
+    // a child view and also block metadata changes that were previously propagated to children
+    // before 4.15, so that we can rollback the upgrade to 4.15 if required
+    private boolean allowSystemCatalogRollback;
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -560,6 +564,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
         this.isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                 new ReadOnlyProps(config.iterator()));
+        this.allowSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
+                QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
 
         logger.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
@@ -1481,6 +1487,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         EncodedCQCounter cqCounter =
                 (!EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme) || tableType == PTableType.VIEW) ? PTable.EncodedCQCounter.NULL_COUNTER
                         : new EncodedCQCounter();
+        boolean isRegularView = (tableType == PTableType.VIEW && viewType!=ViewType.MAPPED);
         while (true) {
           results.clear();
           scanner.next(results);
@@ -1509,7 +1516,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                   addExcludedColumnToTable(columns, colName, famName, colKv.getTimestamp());
               }
           } else {
-              boolean isRegularView = (tableType == PTableType.VIEW && viewType!=ViewType.MAPPED);
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null, baseColumnCount, isRegularView);
           }
         }
@@ -2154,11 +2160,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 ImmutableBytesPtr parentCacheKey = null;
                 PTable parentTable = null;
                 if (parentTableName != null) {
-                    // we lock the parent table when creating an index on a table or a view
-                    if (tableType == PTableType.INDEX) {
+                    // From 4.15 onwards we only need to lock the parent table :
+                    // 1) when creating an index on a table or a view
+                    // 2) if allowSystemCatalogRollback is true we try to lock the parent table to prevent it
+                    // from changing concurrently while a view is being created
+                    if (tableType == PTableType.INDEX || allowSystemCatalogRollback) {
                         result = checkTableKeyInRegion(parentTableKey, region);
                         if (result != null) {
-                            builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_IN_REGION);
+                            logger.error("Unable to lock parentTableKey "+Bytes.toStringBinary(parentTableKey));
+                            // if allowSystemCatalogRollback is true and we can't lock the parentTableKey (because
+                            // SYSTEM.CATALOG already split) return UNALLOWED_TABLE_MUTATION so that the client
+                            // knows the create statement failed
+                            MetaDataProtos.MutationCode code = tableType == PTableType.INDEX ?
+                                    MetaDataProtos.MutationCode.TABLE_NOT_IN_REGION :
+                                    MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION;
+                            builder.setReturnCode(code);
                             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                             done.run(builder.build());
                             return;
@@ -2340,7 +2356,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // 3. Finally write the mutations to create the table
 
                 // From 4.15 the parent->child links are stored in a separate table SYSTEM.CHILD_LINK
-                // TODO remove this after PHOENIX-4763 is implemented
+                // TODO remove this after PHOENIX-4810 is implemented
                 List<Mutation> childLinkMutations = MetaDataUtil.removeChildLinks(tableMetadata);
                 MetaDataResponse response =
                         processRemoteRegionMutations(
@@ -2351,6 +2367,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     return;
                 }
 
+                // When we drop a view we first drop the view metadata and then drop the parent->child linking row
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
                 List<Mutation> remoteMutations = Lists.newArrayListWithExpectedSize(2);
@@ -2639,7 +2656,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     metaDataCache.invalidate(parentCacheKey);
                 }
 
-                // drop parent->child link when dropping a child view
+                // after the view metadata is dropped drop parent->child link
                 MetaDataResponse response =
                         processRemoteRegionMutations(
                             PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
@@ -2924,7 +2941,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                         GlobalCache.getInstance(this.env).getMetaDataCache();
 
-                // The mutations to create a table are written in the following order:
+                // The mutations to add a column are written in the following order:
                 // 1. Update the encoded column qualifier for the parent table if its on a
                 // different region server (for tables that use column qualifier encoding)
                 // if the next step fails we end up wasting a few col qualifiers
@@ -3373,28 +3390,51 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         TableViewFinderResult childViewsResult = new TableViewFinderResult();
                         findAllChildViews(tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
                         if (childViewsResult.hasLinks()) {
-                            /* 
-                             * Dis-allow if:
-                             * 
-                             * 1) The base column count is 0 which means that the metadata hasn't been upgraded yet or
-                             * the upgrade is currently in progress.
-                             * 
-                             * 2) If the request is from a client that is older than 4.5 version of phoenix. 
-                             * Starting from 4.5, metadata requests have the client version included in them. 
-                             * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
-                             * 
-                             * 3) Trying to switch tenancy of a table that has views
-                             */
-                            if (table.getBaseColumnCount() == 0 
+                            // Dis-allow if:
+                            //
+                            // 1) The base column count is 0 which means that the metadata hasn't been upgraded yet or
+                            // the upgrade is currently in progress.
+                            //
+                            // 2) If the request is from a client that is older than 4.5 version of phoenix.
+                            // Starting from 4.5, metadata requests have the client version included in them.
+                            // We don't want to allow clients before 4.5 to add a column to the base table if it
+                            // has views.
+                            //
+                            // 3) Trying to switch tenancy of a table that has views
+                            //
+                            // 4) From 4.15 onwards we allow SYSTEM.CATALOG to split and no longer propagate parent
+                            // metadata changes to child views.
+                            // If the client is on a version older than 4.15 we have to block adding a column to a
+                            // parent able as we no longer lock the parent table on the server side while creating a
+                            // child view to prevent conflicting changes. This is handled on the client side from
+                            // 4.15 onwards.
+                            // Also if QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true, we block adding
+                            // a column to a parent table so that we can rollback the upgrade if required.
+                            if (table.getBaseColumnCount() == 0
                                     || !request.hasClientVersion()
                                     || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {
                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
-                            } else {
-                                        MetaDataMutationResult mutationResult =
-                                                validateColumnForAddToBaseTable(table,
-                                                    tableMetaData, rowKeyMetaData, childViewsResult,
-                                                    clientTimeStamp, request.getClientVersion());
+                            }
+                            else if (request.getClientVersion()< MIN_SPLITTABLE_SYSTEM_CATALOG ) {
+                                logger.error(
+                                    "Unable to add a column as the client is older than "
+                                            + MIN_SPLITTABLE_SYSTEM_CATALOG);
+                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                        EnvironmentEdgeManager.currentTimeMillis(), null);
+                            }
+                            else if (allowSystemCatalogRollback) {
+                                logger.error("Unable to add a column as the "
+                                        + QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK
+                                        + " config is set to true");
+                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+                                        EnvironmentEdgeManager.currentTimeMillis(), null);
+                            }
+                            else {
+                                MetaDataMutationResult mutationResult =
+                                        validateColumnForAddToBaseTable(table,
+                                            tableMetaData, rowKeyMetaData, childViewsResult,
+                                            clientTimeStamp, request.getClientVersion());
                                 // return if validation was not successful
                                 if (mutationResult!=null)
                                     return mutationResult;

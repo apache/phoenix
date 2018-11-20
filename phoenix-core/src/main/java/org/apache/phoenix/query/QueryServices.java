@@ -334,6 +334,23 @@ public interface QueryServices extends SQLCloseable {
     // The initial delay before the first task from table SYSTEM.TASK is handled
     public static final String TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB = "phoenix.task.handling.initial.delay.ms";
 
+    // Before 4.15 when we created a view we included the parent table column metadata in the view
+    // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent
+    // table column metadata along with the child view metadata. When we resolve a child view, we
+    // resolve its ancestors and include their columns.
+    // Also, before 4.15 when we added a column to a base table we would have to propagate the
+    // column metadata to all its child views. After PHOENIX-3534 we no longer propagate metadata
+    // changes from a parent to its children (we just resolve its ancestors and include their columns)
+    // 
+    // The following config is used to continue writing the parent table column metadata while
+    // creating a view and also prevent metadata changes to a parent table/view that needs to be
+    // propagated to its children. This is done to allow rollback of the splittable SYSTEM.CATALOG
+    // feature
+    //
+    // By default this config is false meaning that rolling back the upgrade is not possible
+    public static final String ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK =
+            "phoenix.allow.system.catalog.rollback";
+
     /**
      * Get executor service used for parallel scans
      */

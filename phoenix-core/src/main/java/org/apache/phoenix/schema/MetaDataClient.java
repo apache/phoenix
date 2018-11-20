@@ -1993,6 +1993,10 @@ public class MetaDataClient {
             Map<String,Object> commonFamilyProps) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
+        boolean allowSystemCatalogRollback =
+                connection.getQueryServices().getProps().getBoolean(
+                    QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
+                    QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
         connection.rollback();
         try {
             connection.setAutoCommit(false);
@@ -2023,6 +2027,9 @@ public class MetaDataClient {
             boolean isLocalIndex = indexType == IndexType.LOCAL;
             QualifierEncodingScheme encodingScheme = NON_ENCODED_QUALIFIERS;
             ImmutableStorageScheme immutableStorageScheme = ONE_CELL_PER_COLUMN;
+            int baseTableColumnCount =
+                    tableType == PTableType.VIEW ? parent.getColumns().size()
+                            : QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 isImmutableRows = parent.isImmutableRows();
@@ -2738,6 +2745,7 @@ public class MetaDataClient {
             short nextKeySeq = 0;
 
             List<Mutation> columnMetadata = Lists.newArrayListWithExpectedSize(columns.size());
+            boolean isRegularView = (tableType == PTableType.VIEW && viewType!=ViewType.MAPPED);
             try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE)) {
                 for (Map.Entry<PColumn, PColumn> entry : columns.entrySet()) {
                     PColumn column = entry.getValue();
@@ -2782,9 +2790,19 @@ public class MetaDataClient {
                         }
                     }
                     Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
-                    addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq, saltBucketNum != null);
-                    columnMetadata.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
-                    connection.rollback();
+                    // Prior to PHOENIX-3534 we were sending the parent table column metadata while creating a
+                    // child view, now that we combine columns by resolving the parent table hierarchy we
+                    // don't need to include the parent table columns while creating a view
+                    // If QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true we continue
+                    // to store the parent table column metadata along with the child view metadata
+                    // so that we can rollback the upgrade if required.
+                    if (allowSystemCatalogRollback || !isRegularView
+                            || columnPosition >= baseTableColumnCount) {
+                        addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName,
+                            pkName, keySeq, saltBucketNum != null);
+                        columnMetadata.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                        connection.rollback();
+                    }
                 }
             }
             // add the columns in reverse order since we reverse the list later
@@ -2993,7 +3011,7 @@ public class MetaDataClient {
                                 ImmutableStorageScheme.ONE_CELL_PER_COLUMN : immutableStorageScheme)
                         .setQualifierEncodingScheme(encodingScheme == null ?
                                 QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : encodingScheme)
-                        .setBaseColumnCount(QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT)
+                        .setBaseColumnCount(baseTableColumnCount)
                         .setEncodedCQCounter(cqCounterToBe)
                         .setUseStatsForParallelization(useStatsForParallelizationProp)
                         .setExcludedColumns(ImmutableList.of())
