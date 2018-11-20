@@ -15,9 +15,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.phoenix.coprocessor.TableViewFinderResult;
-import org.apache.phoenix.coprocessor.ViewFinder;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.util.TableViewFinderResult;
+import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PColumn;
@@ -82,13 +81,14 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         System.err.println(rightChildTable);
 
         TableViewFinderResult childViews = new TableViewFinderResult();
-        ViewFinder.findAllRelatives(getTable(linkTable), HConstants.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
-            table.getTableName().getBytes(), PTable.LinkType.CHILD_TABLE, childViews);
+        ViewUtil.findAllRelatives(getTable(linkTable), HConstants.EMPTY_BYTE_ARRAY,
+                table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+                PTable.LinkType.CHILD_TABLE, childViews);
         assertEquals(3, childViews.getLinks().size());
 
         PTable childMostView = PhoenixRuntime.getTable(conn , leftGrandChild.toUpperCase());
         TableViewFinderResult parentViews = new TableViewFinderResult();
-        ViewFinder
+        ViewUtil
             .findAllRelatives(getTable(catalogTable), HConstants.EMPTY_BYTE_ARRAY, childMostView.getSchemaName().getBytes(),
                 childMostView.getTableName().getBytes(), PTable.LinkType.PARENT_TABLE, parentViews);
         // returns back everything but the parent table - should only return back the left_child and not the right child

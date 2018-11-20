@@ -87,9 +87,6 @@ message GetTableRequest {
   required int64 tableTimestamp = 4;
   required int64 clientTimestamp = 5;
   optional int32 clientVersion = 6;	
-  optional bool skipAddingParentColumns = 7;
-  optional bool skipAddingIndexes = 8;
-  optional PTable lockedAncestorTable = 9;
 }
 
 message GetFunctionsRequest {
@@ -111,6 +108,7 @@ message CreateTableRequest {
   repeated bytes tableMetadataMutations = 1;
   optional int32 clientVersion = 2;
   optional bool allocateIndexId = 3;
+  optional PTable parentTable = 4;
 }
 
 // each byte array represents a MutationProto instance
@@ -132,7 +130,6 @@ message DropTableRequest {
   required string tableType = 2;
   optional bool cascade = 3;
   optional int32 clientVersion = 4;
-  optional bool skipAddingParentColumns = 5;
 }
 
 message DropSchemaRequest {
@@ -144,11 +141,13 @@ message DropSchemaRequest {
 message AddColumnRequest {
   repeated bytes tableMetadataMutations = 1;
   optional int32 clientVersion = 2;
+  optional PTable parentTable = 3;
 }
 
 message DropColumnRequest {
   repeated bytes tableMetadataMutations = 1;
   optional int32 clientVersion = 2;
+  optional PTable parentTable = 3;
 }
 
 message DropFunctionRequest {

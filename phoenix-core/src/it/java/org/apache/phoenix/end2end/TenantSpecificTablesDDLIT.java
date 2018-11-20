@@ -46,9 +46,12 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTableType;
@@ -58,11 +61,12 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
-    
+
     @Test
     public void testCreateTenantSpecificTable() throws Exception {
         // ensure we didn't create a physical HBase table for the tenant-specific table
@@ -372,19 +376,25 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             
 			// Drop Parent Table 
 			conn.createStatement().executeUpdate("DROP TABLE " + PARENT_TABLE_NAME + " CASCADE");
-		  
+            TaskRegionObserver.SelfHealingTask task = new TaskRegionObserver.SelfHealingTask
+                    (TaskRegionEnvironment,
+                            QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+            task.run();
+
 			// Validate Tenant Views are dropped
 			connTenant1 = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
 	        validateTenantViewIsDropped(connTenant1);
 			connTenant2 = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, props);
 	        validateTenantViewIsDropped(connTenant2);
 	        
-	        // TODO uncomment after PHOENIX-4764 is implemented
 	        // Validate Tenant Metadata is gone for the Tenant Table TENANT_TABLE_NAME
-//            rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME), new String[] {PTableType.VIEW.getValue().getString()});
-//            assertFalse(rs.next());
-//            rs = meta.getTables(null, "", StringUtil.escapeLike(tenantTable2), new String[] {PTableType.VIEW.getValue().getString()});
-//            assertFalse(rs.next());
+            rs = meta.getTables(null, "",
+                    StringUtil.escapeLike(TENANT_TABLE_NAME),
+                    new String[] {PTableType.VIEW.getValue().getString()});
+            assertFalse(rs.next());
+            rs = meta.getTables(null, "", StringUtil.escapeLike(tenantTable2)
+                    , new String[] {PTableType.VIEW.getValue().getString()});
+            assertFalse(rs.next());
             
             rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID), new String[] {PTableType.VIEW.getValue().getString()});
             assertTrue(rs.next());
@@ -406,6 +416,13 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     }
 
 	private void validateTenantViewIsDropped(Connection connTenant)	throws SQLException {
+        try {
+            PhoenixRuntime.getTableNoCache(connTenant, TENANT_TABLE_NAME);
+            fail("Tenant specific view " + TENANT_TABLE_NAME
+                    + " should have been dropped when parent was dropped");
+        } catch (TableNotFoundException e) {
+            //Expected
+        }
 		// Try and drop tenant view, should throw TableNotFoundException
 		try {
 			String ddl = "DROP VIEW " + TENANT_TABLE_NAME;
