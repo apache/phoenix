@@ -190,6 +190,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
                 "UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR keys, val FROM " + tableName);
             assertEquals((int)Math.pow(2, i), upsertCount);
         }
+        // cleanup after ourselves
+        conn.createStatement().execute("DROP SEQUENCE keys");
         conn.close();
     }
 
