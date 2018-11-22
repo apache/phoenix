@@ -23,35 +23,44 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
-
+@RunWith(Parameterized.class)
 public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
 
-    public UpsertSelectAutoCommitIT() {
+    private final String allowServerSideMutations;
+
+    public UpsertSelectAutoCommitIT(String allowServerSideMutations) {
+        this.allowServerSideMutations = allowServerSideMutations;
+    }
+
+    @Parameters(name="UpsertSelectAutoCommitIT_allowServerSideMutations={0}") // name is used by failsafe as file name in reports
+    public static Object[] data() {
+        return new Object[] {"true", "false"};
     }
 
     @Test
     public void testAutoCommitUpsertSelect() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String atable = generateUniqueName();
@@ -104,7 +113,9 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDynamicUpsertSelect() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String cursorDDL = " CREATE TABLE IF NOT EXISTS " + tableName
             + " (ORGANIZATION_ID VARCHAR(15) NOT NULL, \n"
@@ -161,6 +172,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(512));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE SEQUENCE keys CACHE 1000");
@@ -189,6 +201,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         Properties connectionProperties = new Properties();
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "3");
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "50000");
+        connectionProperties.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         PhoenixConnection connection =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         connection.setAutoCommit(true);
@@ -214,6 +227,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String tableName = generateUniqueName();
