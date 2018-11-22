@@ -40,12 +40,26 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
-
+@RunWith(Parameterized.class)
 public class DeleteIT extends ParallelStatsDisabledIT {
     private static final int NUMBER_OF_ROWS = 20;
     private static final int NTH_ROW_NULL = 5;
-    
+
+    private final String allowServerSideMutations;
+
+    public DeleteIT(String allowServerSideMutations) {
+        this.allowServerSideMutations = allowServerSideMutations;
+    }
+
+    @Parameters(name="DeleteIT_allowServerSideMutations={0}") // name is used by failsafe as file name in reports
+    public static Object[] data() {
+        return new Object[] {"true", "false"};
+    }
+
     private static String initTableValues(Connection conn) throws SQLException {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntIntKeyTest");
@@ -75,7 +89,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
     
     private void testDeleteFilter(boolean autoCommit) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = initTableValues(conn);
 
         assertTableCount(conn, tableName, NUMBER_OF_ROWS);
@@ -102,7 +118,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
 
     private void testDeleteByFilterAndRow(boolean autoCommit) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = initTableValues(conn);
 
         assertTableCount(conn, tableName, NUMBER_OF_ROWS);
@@ -167,7 +185,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
 
     private void testDeleteRange(boolean autoCommit, boolean createIndex, boolean local) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = initTableValues(conn);
         String indexName = generateUniqueName();
         String localIndexName = generateUniqueName();
@@ -298,7 +318,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     private void testDeleteAllFromTableWithIndex(boolean autoCommit, boolean isSalted, boolean localIndex) throws Exception {
         Connection con = null;
         try {
-            con = DriverManager.getConnection(getUrl());
+            Properties props = new Properties();
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
             Statement stm = con.createStatement();
@@ -390,7 +412,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Connection con = null;
         try {
             boolean autoCommit = false;
-            con = DriverManager.getConnection(getUrl());
+            Properties props = new Properties();
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
             Statement stm = con.createStatement();
@@ -465,7 +489,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Connection con = null;
         try {
             boolean autoCommit = false;
-            con = DriverManager.getConnection(getUrl());
+            Properties props = new Properties();
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
             Statement stm = con.createStatement();
@@ -588,7 +614,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     private void testDeleteAllFromTable(boolean autoCommit) throws SQLException {
         Connection con = null;
         try {
-            con = DriverManager.getConnection(getUrl());
+            Properties props = new Properties();
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
             String tableName = generateUniqueName();
@@ -649,7 +677,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
     
     private void testDeleteForTableWithRowTimestampCol(boolean autoCommit, String tableName) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(autoCommit);
             Statement stm = conn.createStatement();
             stm.execute("CREATE TABLE IF NOT EXISTS " + tableName +
@@ -733,7 +763,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                 + "CREATE INDEX IF NOT EXISTS index_column_varchar_id ON " + tableName + "(varchar_id);"
                 + "CREATE INDEX IF NOT EXISTS index_column_double_id ON " + tableName + "(double_id);" + "UPSERT INTO "
                 + tableName + " VALUES (9000000,0.5,'Sample text extra');" ;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             Statement stm = conn.createStatement();
             for (String sql : commands.split(";")) {
@@ -755,7 +787,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 DECIMAL NOT NULL, v1 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
         int numRecords = 1010;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             Statement stmt = conn.createStatement();
             for (int i = 0; i < numRecords ; i++) {
@@ -788,7 +822,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                         + " (pk1 DECIMAL NOT NULL, v1 VARCHAR, v2 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
         String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
         String idx2 = "CREATE INDEX " + indexName2 + " ON " + tableName + "(v1, v2)";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(idx1);
             conn.createStatement().execute(idx2);
