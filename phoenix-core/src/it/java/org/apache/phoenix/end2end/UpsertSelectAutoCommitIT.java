@@ -184,6 +184,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
             int upsertCount = stmt.executeUpdate();
             assertEquals((int)Math.pow(2, i), upsertCount);
         }
+        // cleanup after ourselves
+        conn.createStatement().execute("DROP SEQUENCE keys");
         admin.close();
         conn.close();
     }
