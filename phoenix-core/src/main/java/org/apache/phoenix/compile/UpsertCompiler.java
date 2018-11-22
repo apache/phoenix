@@ -353,6 +353,9 @@ public class UpsertCompiler {
         boolean serverUpsertSelectEnabled =
                 services.getProps().getBoolean(QueryServices.ENABLE_SERVER_UPSERT_SELECT,
                         QueryServicesOptions.DEFAULT_ENABLE_SERVER_UPSERT_SELECT);
+        boolean allowServerMutations =
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS);
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
         boolean useServerTimestampToBe = false;
         
@@ -549,6 +552,7 @@ public class UpsertCompiler {
                         && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
                         && !select.isJoin() && !hasWhereSubquery && table.getRowTimestampColPos() == -1;
             }
+            runOnServer &= allowServerMutations;
             // If we may be able to run on the server, add a hint that favors using the data table
             // if all else is equal.
             // TODO: it'd be nice if we could figure out in advance if the PK is potentially changing,
@@ -1322,7 +1326,7 @@ public class UpsertCompiler {
         public MutationState execute() throws SQLException {
             ResultIterator iterator = queryPlan.iterator();
             if (parallelIteratorFactory == null) {
-                return upsertSelect(new StatementContext(statement), tableRef, projector, iterator, columnIndexes, pkSlotIndexes, useServerTimestamp, false);
+                return upsertSelect(new StatementContext(statement, queryPlan.getContext().getScan()), tableRef, projector, iterator, columnIndexes, pkSlotIndexes, useServerTimestamp, false);
             }
             try {
                 parallelIteratorFactory.setRowProjector(projector);
