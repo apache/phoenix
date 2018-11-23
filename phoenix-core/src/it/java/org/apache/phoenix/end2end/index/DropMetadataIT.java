@@ -18,9 +18,12 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE_SCHEMA_NAME;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.KeepDeletedCells;
@@ -32,6 +35,7 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -59,7 +63,24 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
         String url = QueryUtil.getConnectionUrl(props, config, PRINCIPAL);
         return DriverManager.getConnection(url, props);
     }
-    
+
+    @Test
+    public void testDropIndexTableHasSameNameWithDataTable() {
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + tableName;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createTable = "CREATE TABLE " + tableName + "  (id varchar not null primary key, col integer)";
+            conn.createStatement().execute(createTable);
+            String createIndex = "CREATE INDEX " + indexName + " on " + tableName + "(col)";
+            conn.createStatement().execute(createIndex);
+            String dropIndex = "DROP INDEX " + indexName + " on " + indexName;
+            conn.createStatement().execute(dropIndex);
+            fail("should not execute successfully");
+        } catch (SQLException e) {
+            assertTrue(SQLExceptionCode.PARENT_TABLE_NOT_FOUND.getErrorCode() == e.getErrorCode());
+        }
+    }
+
     @Test
     public void testDropViewKeepsHTable() throws Exception {
         Connection conn = getConnection();

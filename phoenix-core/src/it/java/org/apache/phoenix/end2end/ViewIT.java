@@ -927,55 +927,52 @@ public class ViewIT extends SplitSystemCatalogIT {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS, TBL));
                 builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
-            }
 
-            String view1 = NS + "." + TBL;
-            conn.createStatement().execute(
-                "CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view1 = NS + "." + TBL;
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
-                        conn.createStatement().executeQuery("explain select * from " + view1))
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + view1))
                     .contains(NS + ":" + TBL));
 
-            
+                conn.createStatement().execute("DROP VIEW " + view1);
+            }
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for backward compatibility)
             {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS + "." + TBL));
                 builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
+
+                String view2 = "\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                    "CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil
+                        .getExplainPlan(
+                            conn.createStatement().executeQuery("explain select * from " + view2))
+                        .contains(NS + "." + TBL));
+
+                conn.createStatement().execute("DROP VIEW " + view2);
             }
-
-            String view2 = "\"" + NS + "." + TBL + "\"";
-            conn.createStatement().execute(
-                "CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
-
-            assertTrue(QueryUtil
-                    .getExplainPlan(
-                        conn.createStatement().executeQuery("explain select * from " + view2))
-                    .contains(NS + "." + TBL));
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
             {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS, NS + "." + TBL));
                 builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
-            }
 
-            String view3 = NS + ".\"" + NS + "." + TBL + "\"";
-            conn.createStatement().execute(
-                "CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view3 = NS + ".\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
+                assertTrue(QueryUtil.getExplainPlan(
                         conn.createStatement().executeQuery("explain select * from " + view3))
-                    .contains(NS + ":" + NS + "." + TBL));
-            
-            conn.createStatement().execute("DROP VIEW " + view1);
-            conn.createStatement().execute("DROP VIEW " + view2);
-            conn.createStatement().execute("DROP VIEW " + view3);
+                        .contains(NS + ":" + NS + "." + TBL));
 
+                conn.createStatement().execute("DROP VIEW " + view3);
+            }
             conn.createStatement().execute("DROP SCHEMA " + NS);
         }
     }

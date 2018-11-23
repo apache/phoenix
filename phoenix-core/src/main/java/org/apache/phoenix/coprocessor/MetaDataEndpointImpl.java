@@ -2453,7 +2453,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             .create(Bytes.toString(viewSchemaName), Bytes.toString(viewName));
                     try {
                         client.dropTable(
-                                new DropTableStatement(viewTableName, PTableType.VIEW, false, true, true));
+                                new DropTableStatement(viewTableName, PTableType.VIEW, true, true, true));
                     }
                     catch (TableNotFoundException e) {
                         logger.info("Ignoring view "+viewTableName+" as it has already been dropped");
