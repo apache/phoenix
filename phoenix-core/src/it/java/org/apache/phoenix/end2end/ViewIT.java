@@ -59,6 +59,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -908,60 +909,61 @@ public class ViewIT extends SplitSystemCatalogIT {
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                HBaseAdmin admin =
-                        conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
 
             conn.createStatement().execute("CREATE SCHEMA " + NS);
 
             // test for a view that is in non-default schema
-            HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, TBL));
-            desc.addFamily(new HColumnDescriptor(CF));
-            admin.createTable(desc);
+            {
+                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, TBL));
+                desc.addFamily(new HColumnDescriptor(CF));
+                admin.createTable(desc);
 
-            String view1 = NS + "." + TBL;
-            conn.createStatement().execute(
-                "CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view1 = NS + "." + TBL;
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
+                assertTrue(QueryUtil.getExplainPlan(
                         conn.createStatement().executeQuery("explain select * from " + view1))
-                    .contains(NS + ":" + TBL));
+                        .contains(NS + ":" + TBL));
 
-            
+                conn.createStatement().execute("DROP VIEW " + view1);
+            }
 
-            // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for
-            // backward compatibility)
-            desc = new HTableDescriptor(TableName.valueOf(NS + "." + TBL));
-            desc.addFamily(new HColumnDescriptor(CF));
-            admin.createTable(desc);
+            // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for backward compatibility)
+            {
+                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS + "." + TBL));
+                desc.addFamily(new HColumnDescriptor(CF));
+                admin.createTable(desc);
 
-            String view2 = "\"" + NS + "." + TBL + "\"";
-            conn.createStatement().execute(
-                "CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view2 = "\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
-                        conn.createStatement().executeQuery("explain select * from " + view2))
-                    .contains(NS + "." + TBL));
+                assertTrue(QueryUtil
+                        .getExplainPlan(
+                                conn.createStatement().executeQuery("explain select * from " + view2))
+                        .contains(NS + "." + TBL));
+
+                conn.createStatement().execute("DROP VIEW " + view2);
+            }
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
-            desc = new HTableDescriptor(TableName.valueOf(NS, NS + "." + TBL));
-            desc.addFamily(new HColumnDescriptor(CF));
-            admin.createTable(desc);
+            {
+                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, NS + "." + TBL));
+                desc.addFamily(new HColumnDescriptor(CF));
+                admin.createTable(desc);
 
-            String view3 = NS + ".\"" + NS + "." + TBL + "\"";
-            conn.createStatement().execute(
-                "CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view3 = NS + ".\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
+                assertTrue(QueryUtil.getExplainPlan(
                         conn.createStatement().executeQuery("explain select * from " + view3))
-                    .contains(NS + ":" + NS + "." + TBL));
-            
-            conn.createStatement().execute("DROP VIEW " + view1);
-            conn.createStatement().execute("DROP VIEW " + view2);
-            conn.createStatement().execute("DROP VIEW " + view3);
+                        .contains(NS + ":" + NS + "." + TBL));
 
+                conn.createStatement().execute("DROP VIEW " + view3);
+            }
             conn.createStatement().execute("DROP SCHEMA " + NS);
         }
     }
