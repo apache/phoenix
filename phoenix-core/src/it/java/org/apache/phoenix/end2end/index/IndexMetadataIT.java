@@ -284,9 +284,10 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             try {
                 conn.createStatement().execute("DROP INDEX " + indexName + "1 ON " + diffTableNameInSameSchema);
                 fail("Should have realized index " + indexName + "1 is not on the table");
-            } catch (TableNotFoundException ignore) {
-                
+            } catch (SQLException e) {
+                assertTrue(e.getErrorCode() == SQLExceptionCode.PARENT_TABLE_NOT_FOUND.getErrorCode());
             }
+
             ddl = "DROP TABLE " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
             conn.createStatement().execute(ddl);
             
