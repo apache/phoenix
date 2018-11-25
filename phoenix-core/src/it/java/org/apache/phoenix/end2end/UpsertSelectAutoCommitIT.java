@@ -25,6 +25,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.sql.*;
 import java.util.Properties;
 
@@ -167,25 +168,27 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        conn.createStatement().execute("CREATE SEQUENCE keys CACHE 1000");
         String tableName = generateUniqueName();
+        conn.createStatement().execute("CREATE SEQUENCE "+ tableName + "_seq CACHE 1000");
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + " (pk INTEGER PRIMARY KEY, val INTEGER) UPDATE_CACHE_FREQUENCY=3600000");
 
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR keys,1)");
+            "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR "+ tableName + "_seq, 1)");
         PreparedStatement stmt =
                 conn.prepareStatement("UPSERT INTO " + tableName
-                        + " SELECT NEXT VALUE FOR keys, val FROM " + tableName);
+                        + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM " + tableName);
         Admin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         for (int i=0; i<12; i++) {
-            admin.split(TableName.valueOf(tableName));
+            try {
+                admin.split(TableName.valueOf(tableName));
+            } catch (IOException ignore) {
+                // we don't care if the split sometime cannot be executed
+            }
             int upsertCount = stmt.executeUpdate();
             assertEquals((int)Math.pow(2, i), upsertCount);
         }
-        // cleanup after ourselves
-        conn.createStatement().execute("DROP SEQUENCE keys");
         admin.close();
         conn.close();
     }
@@ -226,17 +229,17 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         String tableName = generateUniqueName();
 
-        conn.createStatement().execute("CREATE SEQUENCE "+ tableName);
+        conn.createStatement().execute("CREATE SEQUENCE "+ tableName + "_seq");
         conn.createStatement().execute(
                 "CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, val INTEGER)");
 
         conn.createStatement().execute(
-                "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR keys,1)");
+                "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR "+ tableName + "_seq, 1)");
         conn.commit();
         for (int i=0; i<6; i++) {
             Statement stmt = conn.createStatement();
             int upsertCount = stmt.executeUpdate(
-                    "UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR keys, val FROM "
+                    "UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM "
                             + tableName);
             conn.commit();
             assertEquals((int)Math.pow(2, i), upsertCount);
