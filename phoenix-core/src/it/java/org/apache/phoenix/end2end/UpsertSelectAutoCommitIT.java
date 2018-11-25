@@ -177,21 +177,19 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        conn.createStatement().execute("CREATE SEQUENCE keys");
         String tableName = generateUniqueName();
+        conn.createStatement().execute("CREATE SEQUENCE " + tableName + "_seq");
         conn.createStatement().execute(
             "CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, val INTEGER)");
 
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR keys,1)");
+            "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR "+ tableName + "_seq, 1)");
         for (int i=0; i<6; i++) {
             Statement stmt = conn.createStatement();
             int upsertCount = stmt.executeUpdate(
-                "UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR keys, val FROM " + tableName);
+                "UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM " + tableName);
             assertEquals((int)Math.pow(2, i), upsertCount);
         }
-        // cleanup after ourselves
-        conn.createStatement().execute("DROP SEQUENCE keys");
         conn.close();
     }
 
