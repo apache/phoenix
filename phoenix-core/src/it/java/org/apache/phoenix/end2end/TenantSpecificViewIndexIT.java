@@ -130,8 +130,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId2), isNamespaceEnabled);
         String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId1), isNamespaceEnabled);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
-        verifySequenceValue(isNamespaceEnabled? tenantId2 : null, sequenceNameA, sequenceSchemaName, -32767);
-        verifySequenceValue(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName, -32767);
+        verifySequenceValue(isNamespaceEnabled? tenantId2 : null, sequenceNameA, sequenceSchemaName, -9223372036854775807L);
+        verifySequenceValue(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName, -9223372036854775807L);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
