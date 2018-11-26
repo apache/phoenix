@@ -23,11 +23,11 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
+import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
-import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.execution.SparkPlan;
 import scala.Option;
 import scala.collection.JavaConverters;
@@ -42,15 +42,28 @@ public class SparkUtil {
     public static final String APP_NAME = "Java Spark Tests";
     public static final String NUM_EXECUTORS = "local[2]";
     public static final String UI_SHOW_CONSOLE_PROGRESS = "spark.ui.showConsoleProgress";
+    public static final String CASE_SENSITIVE_COLUMNS = "spark.sql.caseSensitive";
+
+    private static SparkContext sparkContext = null;
+    private static SQLContext sqlContext = null;
 
     public static SparkContext getSparkContext() {
-        return SparkSession.builder().appName(APP_NAME).master(NUM_EXECUTORS)
-                .config(UI_SHOW_CONSOLE_PROGRESS, false).getOrCreate().sparkContext();
+        if (sparkContext == null) {
+            SparkConf conf = new SparkConf(true);
+            conf.setAppName(APP_NAME);
+            conf.setMaster(NUM_EXECUTORS);
+            conf.set(UI_SHOW_CONSOLE_PROGRESS, "false");
+            conf.set(CASE_SENSITIVE_COLUMNS, "false");
+            sparkContext = new SparkContext(conf);
+        }
+        return sparkContext;
     }
 
     public static SQLContext getSqlContext() {
-        return SparkSession.builder().appName(APP_NAME).master(NUM_EXECUTORS)
-                .config(UI_SHOW_CONSOLE_PROGRESS, false).getOrCreate().sqlContext();
+        if (sqlContext == null) {
+            sqlContext = new SQLContext(getSparkContext());
+        }
+        return sqlContext;
     }
 
     public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder, String url, Configuration config)
@@ -69,15 +82,14 @@ public class SparkUtil {
 
         // create PhoenixRDD using the table name and columns that are required by the query
         // since we don't set the predicate filtering is done after rows are returned from spark
-        Dataset phoenixDataSet =
+        DataFrame phoenixDataSet =
                 new PhoenixRDD(SparkUtil.getSparkContext(), queryBuilder.getFullTableName(),
-                        JavaConverters.collectionAsScalaIterableConverter(queryBuilder.getRequiredColumns()).asScala()
-                                .toSeq(),
+                        JavaConverters.asScalaBufferConverter(queryBuilder.getRequiredColumns()).asScala().toSeq(),
                         Option.apply((String) null), Option.apply(url), config, false,
                         null).toDataFrame(sqlContext);
 
         phoenixDataSet.registerTempTable(queryBuilder.getFullTableName());
-        Dataset<Row> dataset = sqlContext.sql(queryBuilder.build());
+        DataFrame dataset = sqlContext.sql(queryBuilder.build());
         SparkPlan plan = dataset.queryExecution().executedPlan();
         List<Row> rows = dataset.collectAsList();
         queryBuilder.setOrderByClause(prevOrderBy);

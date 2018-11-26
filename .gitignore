@@ -28,3 +28,6 @@ RESULTS/
 CSV_EXPORT/
 .DS_Store
 
+# jenv stuff
+.java-version
+

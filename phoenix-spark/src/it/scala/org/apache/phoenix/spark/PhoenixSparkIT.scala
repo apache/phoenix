@@ -277,7 +277,7 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     df.schema("COL1").dataType shouldEqual StringType
   }
 
-  test("Spark SQL can use Phoenix as a data source with PrunedFilteredScan") {
+  ignore("Spark SQL can use Phoenix as a data source with PrunedFilteredScan") {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
       "zkUrl" -> quorumAddress))
