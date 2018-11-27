@@ -348,6 +348,9 @@ public interface QueryServices extends SQLCloseable {
     // feature
     //
     // By default this config is false meaning that rolling back the upgrade is not possible
+    // If this config is true and you want to rollback the upgrade be sure to run the sql commands in
+    // UpgradeUtil.addParentToChildLink which will recreate the PARENT->CHILD links in SYSTEM.CATALOG. This is needed
+    // as from 4.15 onwards the PARENT->CHILD links are stored in a separate SYSTEM.CHILD_LINK table.
     public static final String ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK =
             "phoenix.allow.system.catalog.rollback";
 

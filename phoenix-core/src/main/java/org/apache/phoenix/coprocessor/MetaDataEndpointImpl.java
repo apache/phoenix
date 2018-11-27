@@ -2692,6 +2692,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
     private MetaDataResponse processRemoteRegionMutations(byte[] systemTableName,
             List<Mutation> remoteMutations, MetaDataProtos.MutationCode mutationCode) throws IOException {
+        if (remoteMutations.isEmpty())
+            return null;
         MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
         try (Table hTable =
                 ServerUtil.getHTableForCoprocessorScan(env,
