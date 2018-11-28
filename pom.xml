@@ -460,16 +460,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
-        <version>3.2</version>
-        <configuration>
-          <reportPlugins>
-            <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-              <version>2.5.2</version>
-            </plugin>
-          </reportPlugins>
-        </configuration>
+        <version>3.7.1</version>
       </plugin>
       <plugin>
         <groupId>org.apache.rat</groupId>
@@ -1068,4 +1059,19 @@
       </properties>
     </profile>
   </profiles>
+
+  <reporting>
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-project-info-reports-plugin</artifactId>
+              <version>3.0.0</version>
+          </plugin>
+          <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>findbugs-maven-plugin</artifactId>
+              <version>3.0.5</version>
+          </plugin>
+      </plugins>
+  </reporting>
 </project>
