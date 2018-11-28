@@ -326,7 +326,6 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-site-plugin</artifactId>
-				<version>3.2</version>
 				<dependencies>
 					<dependency>
 						<groupId>org.apache.maven.doxia</groupId>
@@ -344,15 +343,6 @@
 						<version>1.7</version>
 					</dependency>
 				</dependencies>
-				<configuration>
-					<reportPlugins>
-						<plugin>
-							<groupId>org.codehaus.mojo</groupId>
-							<artifactId>findbugs-maven-plugin</artifactId>
-							<version>2.5.2</version>
-						</plugin>
-					</reportPlugins>
-				</configuration>
 			</plugin>
 
 			<!-- Setup eclipse -->
@@ -412,4 +402,16 @@
 		</plugins>
 	</build>
 
+        <reporting>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-project-info-reports-plugin</artifactId>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>findbugs-maven-plugin</artifactId>
+                </plugin>
+            </plugins>
+        </reporting>
 </project>
