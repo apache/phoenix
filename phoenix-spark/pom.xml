@@ -512,13 +512,14 @@
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <version>3.2.0</version>
+        <version>3.4.4</version>
         <configuration>
           <charset>${project.build.sourceEncoding}</charset>
           <jvmArgs>
             <jvmArg>-Xmx1024m</jvmArg>
           </jvmArgs>
           <scalaVersion>${scala.version}</scalaVersion>
+          <scalaCompatVersion>${scala.binary.version}</scalaCompatVersion>
         </configuration>
         <executions>
           <execution>
