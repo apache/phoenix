@@ -60,7 +60,7 @@
         <executions>
           <execution>
             <id>default-jar</id>
-            <phase>none</phase>
+            <phase>package</phase>
           </execution>
         </executions>
       </plugin>
@@ -80,7 +80,7 @@
           </execution>
         </executions>
         <configuration>
-          <file>${basedir}/target/phoenix-${project.version}-client.jar</file>
+          <file>${basedir}/target/phoenix-client-${project.version}.jar</file>
 	  <pomFile>${basedir}/pom.xml</pomFile>
         </configuration>
       </plugin>
@@ -94,7 +94,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <finalName>phoenix-${project.version}-client</finalName>
+              <finalName>phoenix-client-${project.version}</finalName>
               <shadedArtifactAttached>false</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
