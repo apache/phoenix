@@ -1282,7 +1282,7 @@ public class JoinCompiler {
                 .setMultiTenant(left.isMultiTenant())
                 .setStoreNulls(left.getStoreNulls())
                 .setViewType(left.getViewType())
-                .setViewIndexType(left.getViewIndexType())
+                .setViewIndexIdType(left.getviewIndexIdType())
                 .setViewIndexId(left.getViewIndexId())
                 .setIndexType(left.getIndexType())
                 .setTransactionProvider(left.getTransactionProvider())

@@ -1230,12 +1230,8 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + viewName);
                 conn.createStatement()
                         .execute("ALTER TABLE " + tableName + " set USE_STATS_FOR_PARALLELIZATION=" + useStats);
-                // changing a property on a base table does not change the property on a view
-                validatePropertyOnViewIndex(viewName, viewIndexName, !useStats, conn, tenantConn);
-
-                // need to explicitly change the property on the view
-                conn.createStatement()
-                        .execute("ALTER VIEW " + viewName + " set USE_STATS_FOR_PARALLELIZATION=" + useStats);
+                // changing a property on a base table is propagated to its view
+                // if the view has not previously modified the property
                 validatePropertyOnViewIndex(viewName, viewIndexName, useStats, conn, tenantConn);
             }
         }

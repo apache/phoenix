@@ -32,10 +32,14 @@ import java.util.NavigableMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.ExtendedCell;
+import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TagUtil;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -53,6 +57,7 @@ import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos.AdminServic
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -244,9 +249,54 @@ public class MetaDataUtil {
                     Cell replacementCell = new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
                         cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(),
                         cell.getQualifierOffset(), cell.getQualifierLength(), cell.getTimestamp(),
-                        KeyValue.Type.codeToType(cell.getTypeByte()), newValue, 0, newValue.length);
+                        KeyValue.Type.codeToType(cell.getType().getCode()), newValue, 0, newValue.length);
                     newCells.add(replacementCell);
                 } else {
+                    newCells.add(cell);
+                }
+            }
+            familyCellMap.put(family, newCells);
+        }
+    }
+
+    /**
+     * Iterates over the cells that are mutated by the put operation for the given column family and
+     * column qualifier and conditionally modifies those cells to add a tags list. We only add tags
+     * if the cell value does not match the passed valueArray. If we always want to add tags to
+     * these cells, we can pass in a null valueArray
+     * @param somePut Put operation
+     * @param family column family of the cells
+     * @param qualifier column qualifier of the cells
+     * @param cellBuilder ExtendedCellBuilder object
+     * @param valueArray byte array of values or null
+     * @param tagArray byte array of tags to add to the cells
+     */
+    public static void conditionallyAddTagsToPutCells(Put somePut, byte[] family, byte[] qualifier,
+            ExtendedCellBuilder cellBuilder, byte[] valueArray, byte[] tagArray) {
+        NavigableMap<byte[], List<Cell>> familyCellMap = somePut.getFamilyCellMap();
+        List<Cell> cells = familyCellMap.get(family);
+        List<Cell> newCells = Lists.newArrayList();
+        if (cells != null) {
+            for (Cell cell : cells) {
+                if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                        cell.getQualifierLength(), qualifier, 0, qualifier.length) == 0 &&
+                        (valueArray == null || !CellUtil.matchingValue(cell, valueArray))) {
+                    ExtendedCell extendedCell = cellBuilder
+                            .setRow(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength())
+                            .setFamily(cell.getFamilyArray(), cell.getFamilyOffset(),
+                                    cell.getFamilyLength())
+                            .setQualifier(cell.getQualifierArray(), cell.getQualifierOffset(),
+                                    cell.getQualifierLength())
+                            .setValue(cell.getValueArray(), cell.getValueOffset(),
+                                    cell.getValueLength())
+                            .setTimestamp(cell.getTimestamp())
+                            .setType(cell.getType())
+                            .setTags(TagUtil.concatTags(tagArray, cell))
+                            .build();
+                    // Replace existing cell with a cell that has the custom tags list
+                    newCells.add(extendedCell);
+                } else {
+                    // Add cell as is
                     newCells.add(cell);
                 }
             }
@@ -353,7 +403,7 @@ public class MetaDataUtil {
         }
         return 0;
     }
-    
+
     public static long getParentSequenceNumber(List<Mutation> tableMetaData) {
         return getSequenceNumber(getParentTableHeaderRow(tableMetaData));
     }

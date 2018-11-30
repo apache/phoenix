@@ -736,7 +736,7 @@ public interface PTable extends PMetaDataEntity {
     ViewType getViewType();
     String getViewStatement();
     Long getViewIndexId();
-    PDataType getViewIndexType();
+    PDataType getviewIndexIdType();
     PTableKey getKey();
 
     IndexType getIndexType();
@@ -774,7 +774,9 @@ public interface PTable extends PMetaDataEntity {
     QualifierEncodingScheme getEncodingScheme();
     EncodedCQCounter getEncodedCQCounter();
     Boolean useStatsForParallelization();
-    
+    boolean hasViewModifiedUpdateCacheFrequency();
+    boolean hasViewModifiedUseStatsForParallelization();
+
     /**
      * Class to help track encoded column qualifier counters per column family.
      */
