@@ -92,6 +92,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.Ignore;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -99,13 +100,15 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
+
+@Ignore
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
 
     protected String tableDDLOptions;
     protected String transactionProvider;
     protected boolean columnEncoded;
-    
+
     private static final String FAILED_VIEWNAME = SchemaUtil.getTableName(SCHEMA2, "FAILED_VIEW");
     private static final String SLOW_VIEWNAME_PREFIX = SchemaUtil.getTableName(SCHEMA2, "SLOW_VIEW");
 
@@ -134,7 +137,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             { "OMID", false }, 
             { null, false }, { null, true }}),0);
     }
-    
+
     @BeforeClass
     public static void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
@@ -151,15 +154,15 @@ public class ViewIT extends SplitSystemCatalogIT {
             splitSystemCatalog();
         }
     }
-    
+
     public static class TestMetaDataRegionObserver extends BaseMetaDataEndpointObserver {
-        
+
         @Override
         public void preAlterTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
                 String tableName, TableName physicalTableName, TableName parentPhysicalTableName, PTableType type) throws IOException{
             processTable(tableName);
         }
-        
+
         @Override
         public void preCreateTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
                 String tableName, TableName physicalTableName, TableName parentPhysicalTableName, PTableType tableType,
@@ -198,9 +201,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                 }
             }
         }
-        
+
     }
-    
+
     @Test
     public void testReadOnlyOnUpdatableView() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());

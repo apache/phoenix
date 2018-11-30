@@ -49,15 +49,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexDBWritable;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.*;
 
 import com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Ignore
 public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
   private static final Logger logger = LoggerFactory.getLogger(TableSnapshotReadsMapReduceIT.class);

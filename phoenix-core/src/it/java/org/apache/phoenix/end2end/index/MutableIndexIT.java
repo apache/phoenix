@@ -67,6 +67,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -76,6 +77,7 @@ import com.google.common.primitives.Doubles;
 
 import jline.internal.Log;
 
+@Ignore
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
     

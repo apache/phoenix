@@ -577,7 +577,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                     assertEquals("Mismatch in TTL", expectedTTL, cfd.getTimeToLive());
                 }
                 assertEquals("Mismatch in KEEP_DELETED_CELLS", expectedKeepDeletedCells,
-                        cfd.getKeepDeletedCells());
+                        cfd.getKeepDeletedCellsAsEnum());
                 assertEquals("Mismatch in REPLICATION_SCOPE", expectedReplicationScope,
                         cfd.getScope());
             }
