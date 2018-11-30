@@ -156,7 +156,7 @@ public class DeleteCompiler {
         int offset = (table.getBucketNum() == null ? 0 : 1);
         byte[][] values = new byte[pkColumns.size()][];
         if (isSharedViewIndex) {
-            values[offset++] = table.getViewIndexType().toBytes(table.getViewIndexId());
+            values[offset++] = table.getviewIndexIdType().toBytes(table.getViewIndexId());
         }
         if (isMultiTenant) {
             values[offset++] = tenantIdBytes;

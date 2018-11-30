@@ -26,6 +26,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -101,6 +102,8 @@ import com.google.common.collect.Maps;
  */
 public class PTableImpl implements PTable {
     private static final Integer NO_SALTING = -1;
+    private static final int VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS = 0;
+    private static final int VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS = 1;
 
     private IndexMaintainer indexMaintainer;
     private ImmutableBytesWritable indexMaintainersPtr;
@@ -143,7 +146,7 @@ public class PTableImpl implements PTable {
     private final boolean storeNulls;
     private final TransactionFactory.Provider transactionProvider;
     private final ViewType viewType;
-    private final PDataType viewIndexType;
+    private final PDataType viewIndexIdType;
     private final Long viewIndexId;
     private final int estimatedSize;
     private final IndexType indexType;
@@ -159,6 +162,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
+    private final BitSet viewModifiedPropSet;
 
     public static class Builder {
         private PTableKey key;
@@ -197,7 +201,7 @@ public class PTableImpl implements PTable {
         private boolean storeNulls;
         private TransactionFactory.Provider transactionProvider;
         private ViewType viewType;
-        private PDataType viewIndexType;
+        private PDataType viewIndexIdType;
         private Long viewIndexId;
         private int estimatedSize;
         private IndexType indexType;
@@ -213,6 +217,8 @@ public class PTableImpl implements PTable {
         private QualifierEncodingScheme qualifierEncodingScheme;
         private EncodedCQCounter encodedCQCounter;
         private Boolean useStatsForParallelization;
+        // Used to denote which properties a view has explicitly modified
+        private BitSet viewModifiedPropSet = new BitSet(2);
         // Optionally set columns for the builder, but not for the actual PTable
         private Collection<PColumn> columns;
 
@@ -407,8 +413,8 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setViewIndexType(PDataType viewIndexType) {
-            this.viewIndexType = viewIndexType;
+        public Builder setViewIndexIdType(PDataType viewIndexIdType) {
+            this.viewIndexIdType = viewIndexIdType;
             return this;
         }
 
@@ -484,6 +490,18 @@ public class PTableImpl implements PTable {
 
         public Builder setUseStatsForParallelization(Boolean useStatsForParallelization) {
             this.useStatsForParallelization = useStatsForParallelization;
+            return this;
+        }
+
+        public Builder setViewModifiedUpdateCacheFrequency(boolean modified) {
+            this.viewModifiedPropSet.set(VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS,
+                    modified);
+            return this;
+        }
+
+        public Builder setViewModifiedUseStatsForParallelization(boolean modified) {
+            this.viewModifiedPropSet.set(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS,
+                    modified);
             return this;
         }
 
@@ -741,7 +759,7 @@ public class PTableImpl implements PTable {
         this.storeNulls = builder.storeNulls;
         this.transactionProvider = builder.transactionProvider;
         this.viewType = builder.viewType;
-        this.viewIndexType = builder.viewIndexType;
+        this.viewIndexIdType = builder.viewIndexIdType;
         this.viewIndexId = builder.viewIndexId;
         this.estimatedSize = builder.estimatedSize;
         this.indexType = builder.indexType;
@@ -757,6 +775,7 @@ public class PTableImpl implements PTable {
         this.qualifierEncodingScheme = builder.qualifierEncodingScheme;
         this.encodedCQCounter = builder.encodedCQCounter;
         this.useStatsForParallelization = builder.useStatsForParallelization;
+        this.viewModifiedPropSet = builder.viewModifiedPropSet;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -791,7 +810,7 @@ public class PTableImpl implements PTable {
                 .setMultiTenant(table.isMultiTenant())
                 .setStoreNulls(table.getStoreNulls())
                 .setViewType(table.getViewType())
-                .setViewIndexType(table.getViewIndexType())
+                .setViewIndexIdType(table.getviewIndexIdType())
                 .setViewIndexId(table.getViewIndexId())
                 .setIndexType(table.getIndexType())
                 .setTransactionProvider(table.getTransactionProvider())
@@ -820,7 +839,10 @@ public class PTableImpl implements PTable {
                 .setParentSchemaName(table.getParentSchemaName())
                 .setParentTableName(table.getParentTableName())
                 .setPhysicalNames(table.getPhysicalNames() == null ?
-                        ImmutableList.of() : ImmutableList.copyOf(table.getPhysicalNames()));
+                        ImmutableList.of() : ImmutableList.copyOf(table.getPhysicalNames()))
+                .setViewModifiedUseStatsForParallelization(table
+                        .hasViewModifiedUseStatsForParallelization())
+                .setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
     }
 
     @Override
@@ -1440,8 +1462,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public PDataType getViewIndexType() {
-        return viewIndexType;
+    public PDataType getviewIndexIdType() {
+        return viewIndexIdType;
     }
 
     @Override
@@ -1476,8 +1498,8 @@ public class PTableImpl implements PTable {
         if (table.hasViewIndexId()) {
             viewIndexId = table.getViewIndexId();
         }
-        PDataType viewIndexType = table.hasViewIndexType()
-                ? PDataType.fromTypeId(table.getViewIndexType())
+        PDataType viewIndexIdType = table.hasViewIndexIdType()
+                ? PDataType.fromTypeId(table.getViewIndexIdType())
                 : MetaDataUtil.getLegacyViewIndexIdDataType();
         IndexType indexType = IndexType.getDefault();
         if(table.hasIndexType()){
@@ -1600,7 +1622,7 @@ public class PTableImpl implements PTable {
                     .setMultiTenant(multiTenant)
                     .setStoreNulls(storeNulls)
                     .setViewType(viewType)
-                    .setViewIndexType(viewIndexType)
+                    .setViewIndexIdType(viewIndexIdType)
                     .setViewIndexId(viewIndexId)
                     .setIndexType(indexType)
                     .setTransactionProvider(transactionProvider)
@@ -1651,7 +1673,7 @@ public class PTableImpl implements PTable {
         }
         if(table.getViewIndexId() != null) {
           builder.setViewIndexId(table.getViewIndexId());
-          builder.setViewIndexType(table.getViewIndexType().getSqlType());
+          builder.setViewIndexIdType(table.getviewIndexIdType().getSqlType());
 		}
         if(table.getIndexType() != null) {
             builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
@@ -1829,6 +1851,14 @@ public class PTableImpl implements PTable {
     @Override
     public Boolean useStatsForParallelization() {
         return useStatsForParallelization;
+    }
+
+    @Override public boolean hasViewModifiedUpdateCacheFrequency() {
+        return viewModifiedPropSet.get(VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS);
+    }
+
+    @Override public boolean hasViewModifiedUseStatsForParallelization() {
+        return viewModifiedPropSet.get(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS);
     }
 
     private static final class KVColumnFamilyQualifier {

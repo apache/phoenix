@@ -98,6 +98,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
@@ -1077,7 +1078,7 @@ public class MetaDataClient {
         }
     }
     
-    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
+    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
@@ -1086,19 +1087,20 @@ public class MetaDataClient {
         boolean isAppendOnlySchema = false;
         long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
             QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
+        Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
         if (parent==null) {
 	        Boolean appendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
 	        if (appendOnlySchemaProp != null) {
 	            isAppendOnlySchema = appendOnlySchemaProp;
 	        }
-	        Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
 	        if (updateCacheFrequencyProp != null) {
 	            updateCacheFrequency = updateCacheFrequencyProp;
 	        }
         }
         else {
         	isAppendOnlySchema = parent.isAppendOnlySchema();
-        	updateCacheFrequency = parent.getUpdateCacheFrequency();
+        	updateCacheFrequency = (updateCacheFrequencyProp != null) ?
+                    updateCacheFrequencyProp : parent.getUpdateCacheFrequency();
         }
         // updateCacheFrequency cannot be set to ALWAYS if isAppendOnlySchema is true
         if (isAppendOnlySchema && updateCacheFrequency==0) {
@@ -1138,7 +1140,7 @@ public class MetaDataClient {
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
             }
         }
-        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
+        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
 
         if (table == null || table.getType() == PTableType.VIEW /*|| table.isTransactional()*/) {
             return new MutationState(0, 0, connection);
@@ -1986,7 +1988,7 @@ public class MetaDataClient {
     }
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
-            final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexType,
+            final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
             final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
             IndexType indexType, Date asyncCreatedDate,
             Map<String,Object> tableProps,
@@ -2680,7 +2682,7 @@ public class MetaDataClient {
                         .setDisableWAL(Boolean.TRUE.equals(disableWAL))
                         .setMultiTenant(false)
                         .setStoreNulls(false)
-                        .setViewIndexType(viewIndexType)
+                        .setViewIndexIdType(viewIndexIdType)
                         .setIndexType(indexType)
                         .setUpdateCacheFrequency(0)
                         .setNamespaceMapped(isNamespaceMapped)
@@ -2999,7 +3001,7 @@ public class MetaDataClient {
                         .setMultiTenant(multiTenant)
                         .setStoreNulls(storeNulls)
                         .setViewType(viewType)
-                        .setViewIndexType(viewIndexType)
+                        .setViewIndexIdType(viewIndexIdType)
                         .setViewIndexId(result.getViewIndexId())
                         .setIndexType(indexType)
                         .setTransactionProvider(transactionProvider)
@@ -3029,6 +3031,13 @@ public class MetaDataClient {
                         .setPhysicalNames(physicalNames == null ?
                                 ImmutableList.of() : ImmutableList.copyOf(physicalNames))
                         .setColumns(columns.values())
+                        .setViewModifiedUpdateCacheFrequency(tableType ==  PTableType.VIEW &&
+                                parent != null &&
+                                parent.getUpdateCacheFrequency() != updateCacheFrequency)
+                        .setViewModifiedUseStatsForParallelization(tableType ==  PTableType.VIEW &&
+                                parent != null &&
+                                parent.useStatsForParallelization()
+                                        != useStatsForParallelizationProp)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -4177,7 +4186,7 @@ public class MetaDataClient {
                                         .setType(PTableType.INDEX)
                                         .setTimeStamp(ts)
                                         .setMultiTenant(table.isMultiTenant())
-                                        .setViewIndexType(sharedTableState.getViewIndexType())
+                                        .setViewIndexIdType(sharedTableState.getViewIndexIdType())
                                         .setViewIndexId(sharedTableState.getViewIndexId())
                                         .setNamespaceMapped(table.isNamespaceMapped())
                                         .setAppendOnlySchema(false)

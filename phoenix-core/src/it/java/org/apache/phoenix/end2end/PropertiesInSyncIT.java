@@ -374,8 +374,10 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
             }
         }
         // Now synchronize required properties and verify HBase metadata property values
-        syncTableAndIndexProperties(conn.unwrap(PhoenixConnection.class),
-                conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin());
+        PhoenixConnection upgradeConn = conn.unwrap(PhoenixConnection.class);
+        // Simulate an upgrade by setting the upgrade flag
+        upgradeConn.setRunningUpgrade(true);
+        syncTableAndIndexProperties(upgradeConn, upgradeConn.getQueryServices().getAdmin());
         for (String t: createdTables) {
             verifyHBaseColumnFamilyProperties(t, conn, false, false);
         }
