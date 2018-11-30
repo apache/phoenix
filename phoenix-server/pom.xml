@@ -101,6 +101,7 @@
             </goals>
             <configuration>
                 <finalName>phoenix-server-${project.version}</finalName>
+                <createDependencyReducedPom>false</createDependencyReducedPom>
                 <shadedArtifactAttached>false</shadedArtifactAttached>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
