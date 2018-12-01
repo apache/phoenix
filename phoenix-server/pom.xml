@@ -65,7 +65,7 @@
         <executions>
           <execution>
             <id>default-jar</id>
-            <phase>package</phase>
+            <phase>none</phase>
           </execution>
         </executions>
       </plugin>
@@ -85,7 +85,7 @@
           </execution>
         </executions>
         <configuration>
-          <file>${basedir}/target/phoenix-server-${project.version}.jar</file>
+          <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
  	  <pomFile>${basedir}/pom.xml</pomFile>
         </configuration>
       </plugin>
@@ -100,7 +100,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-                <finalName>phoenix-server-${project.version}</finalName>
+                <finalName>phoenix-${project.version}-server</finalName>
                 <shadedArtifactAttached>false</shadedArtifactAttached>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
