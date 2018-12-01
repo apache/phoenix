@@ -95,7 +95,6 @@
             </goals>
             <configuration>
               <finalName>phoenix-client-${project.version}</finalName>
-              <createDependencyReducedPom>false</createDependencyReducedPom>
               <shadedArtifactAttached>false</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
