@@ -111,10 +111,10 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] { 
                 { false, null, false }, { false, null, true },
-                { false, "TEPHRA", false }, { false, "TEPHRA", true },
+                { false, "TEPHRA", false }, { false, "TEPHRA", true } // ,
                 //{ false, "OMID", false }, { false, "OMID", true },
-                { true, null, false }, { true, null, true },
-                { true, "TEPHRA", false }, { true, "TEPHRA", true },
+//                { true, null, false }, { true, null, true },
+//                { true, "TEPHRA", false }, { true, "TEPHRA", true },
                 //{ true, "OMID", false }, { true, "OMID", true },
                 });
     }
