@@ -92,9 +92,20 @@ public class QueryLogger {
         }
     };
 
-    public static QueryLogger getInstance(PhoenixConnection connection, boolean isSystemTable) {
-        if (connection.getLogLevel() == LogLevel.OFF || isSystemTable || ThreadLocalRandom.current()
-                .nextDouble() > connection.getLogSamplingRate()) { return NO_OP_INSTANCE; }
+    public static QueryLogger createInstance(PhoenixConnection connection, boolean isSystemTable,
+        boolean criticalStatement) {
+        // always log critical statements (DROP,ALTER for now)
+        // do not log anything when loglevel is off.
+        // do not log systemTable statement.
+        // do sampling on other statements based on configured percentage, 1% by default.
+        if (connection.getLogLevel() == LogLevel.OFF) {
+            return NO_OP_INSTANCE;
+        }
+        if ((isSystemTable ||
+            ThreadLocalRandom.current().nextDouble() > connection.getLogSamplingRate()) &&
+            !criticalStatement) {
+            return NO_OP_INSTANCE;
+        }
         return new QueryLogger(connection);
     }
 
