@@ -500,23 +500,23 @@ public class SchemaUtil {
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value, offset, length).toString();
     }
 
-    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {
-        return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
+    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families, boolean isLocalIndex) {
+        return families.isEmpty() ? defaultColumnFamily == null ? (isLocalIndex ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
     }
 
     public static byte[] getEmptyColumnFamily(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
     }
 
     public static String getEmptyColumnFamilyAsString(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY : QueryConstants.DEFAULT_COLUMN_FAMILY) : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
     }
 
     public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR) : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
                 .getName().getBytesPtr();
     }
 
@@ -540,6 +540,12 @@ public class SchemaUtil {
                 || Bytes.compareTo(tableName, SchemaUtil
                         .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true).getName()) == 0;
     }
+
+    public static boolean isTaskTable(byte[] tableName) {
+        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME_BYTES) == 0
+                || Bytes.compareTo(tableName, SchemaUtil
+                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME_BYTES, true).getName()) == 0;
+    }
     
     public static boolean isChildLinkTable(byte[] tableName) {
         return Bytes.compareTo(tableName, SYSTEM_CHILD_LINK_NAME_BYTES) == 0 || Bytes.compareTo(tableName,
@@ -548,6 +554,10 @@ public class SchemaUtil {
 
     public static boolean isSequenceTable(PTable table) {
         return PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME.equals(table.getName().getString());
+    }
+
+    public static boolean isTaskTable(PTable table) {
+        return PhoenixDatabaseMetaData.SYSTEM_TASK_NAME.equals(table.getName().getString());
     }
 
     public static boolean isMetaTable(PTable table) {

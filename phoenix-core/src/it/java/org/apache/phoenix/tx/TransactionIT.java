@@ -35,13 +35,23 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HBaseIOException;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -52,6 +62,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -64,6 +76,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Lists;
+
 @RunWith(Parameterized.class)
 public class TransactionIT  extends ParallelStatsDisabledIT {
     private final String txProvider;
@@ -75,11 +89,116 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="TransactionIT_provider={0}") // name is used by failsafe as file name in reports
-    public static Collection<String[]> data() {
-        return Arrays.asList(new String[][] {     
-                 {"TEPHRA"/*,"OMID"*/}});
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+                 {"TEPHRA"},{"OMID"}}),0);
     }
     
+    @Test
+    public void testFailureToRollbackAfterDelete() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateUniqueName();
+            conn.createStatement().execute(
+                    "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('b')");
+            conn.commit();
+            // Delete a in new transaction
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k='a'");
+            // Forces data to be written to HBase, but not yet committed
+            conn.createStatement().executeQuery("SELECT * FROM " + tableName).next();
+            // Upsert another row so commit below will fail the write (and fail subsequent attempt t o abort)
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('c')");
+            TestUtil.addCoprocessor(conn, tableName, WriteFailingRegionObserver.class);
+            try {
+                conn.commit();
+                fail();
+            } catch (SQLException e) {
+            }
+            // Delete of a shouldn't be visible since commit failed, so all rows should be present
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+    
+    public static class WriteFailingRegionObserver extends SimpleRegionObserver {
+        @Override
+        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+            throw new DoNotRetryIOException();
+        }
+    }
+    
+    @Test
+    public void testWithMixOfTxProviders() throws Exception {
+        // No sense in running the test with every providers, so just run it with the default one
+        if (!TransactionFactory.Provider.valueOf(txProvider).equals(TransactionFactory.Provider.getDefault())) {
+            return;
+        }
+        List<String> tableNames = Lists.newArrayList();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+                if (provider.runTests()) {
+                    String tableName = generateUniqueName();
+                    tableNames.add(tableName);
+                    conn.createStatement().execute(
+                            "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+                }
+            }
+            if (tableNames.size() < 2) {
+                return;
+            }
+            Iterator<String> iterator = tableNames.iterator();
+            String tableName1 = iterator.next();
+            conn.createStatement().execute("UPSERT INTO " + tableName1 + " VALUES('a')");
+            String tableName2 = iterator.next();
+            try {
+                conn.createStatement().execute("UPSERT INTO " + tableName2 + " VALUES('a')");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MIX_TXN_PROVIDERS.getErrorCode(), e.getErrorCode());
+            }
+            
+            conn.rollback();
+            conn.setAutoCommit(true);
+            for (String tableName : tableNames) {
+                conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
+            }
+            for (String tableName : tableNames) {
+                ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertFalse(rs.next());
+            }
+        }
+    }
+    
+    @Test
+    public void testPreventLocalIndexCreation() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+                if (provider.runTests() && provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX)) {
+                    String tableName = generateUniqueName();
+                    conn.createStatement().execute(
+                            "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+                    String indexName = generateUniqueName();
+                    try {
+                        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + "_IDX ON " + tableName + " (v1) INCLUDE(v2)");
+                        fail();
+                    } catch (SQLException e) {
+                        assertEquals(SQLExceptionCode.CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
+                    }
+                }
+            }
+        }
+    }
+
     @Test
     public void testQueryWithSCN() throws Exception {
         String tableName = generateUniqueName();
@@ -102,7 +221,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testReCreateTxnTableAfterDroppingExistingNonTxnTable() throws SQLException {
+    public void testReCreateTxnTableAfterDroppingExistingNonTxnTable() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -110,6 +229,10 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         stmt.execute("DROP TABLE " + tableName);
+        // Must drop metadata as Omid does not allow creating a transactional table from a non transactional one
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        admin.disableTable(TableName.valueOf(tableName));
+        admin.deleteTable(TableName.valueOf(tableName));
         stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true," + tableDDLOptions);
         stmt.execute("CREATE INDEX " + tableName + "_IDX ON " + tableName + " (v1) INCLUDE(v2)");
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).isTransactional());
@@ -205,16 +328,16 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
 
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX " + idx1 + " ON " + nonTxTableName + "1(a.v, b.v) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX " + idx2 + " ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX " + idx1 + " ON " + nonTxTableName + "1(a.v, b.v)");
+        conn.createStatement().execute("CREATE INDEX " + idx2 + " ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v)");
 
         try {
             conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true," + tableDDLOptions);
-            if (TransactionFactory.Provider.OMID.name().equals(txProvider)) {
-                fail("Omid shouldn't allow converting a non transactional table to be transactional");
+            if (TransactionFactory.Provider.valueOf(txProvider).getTransactionProvider().isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
+                fail(txProvider + " should not allow converting a non transactional table to be transactional");
             }
         } catch (SQLException e) { // Should fail for Omid, but not Tephra
-            if (TransactionFactory.Provider.TEPHRA.name().equals(txProvider)) {
+            if (!TransactionFactory.Provider.valueOf(txProvider).getTransactionProvider().isUnsupported(Feature.ALTER_NONTX_TO_TX)) {
                 throw e;
             }
             assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL.getErrorCode(), e.getErrorCode());
@@ -247,7 +370,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         }
         
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
-        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10, " + tableDDLOptions);
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
         for (ColumnFamilyDescriptor colDesc : desc.getColumnFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
@@ -388,16 +511,39 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     public void testSetTTL() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         TransactionFactory.Provider txProvider = TransactionFactory.Provider.valueOf(this.txProvider);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props); Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props); 
+             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             String tableName = generateUniqueName();
-            conn.createStatement().execute("CREATE TABLE " + tableName + 
-                    "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "',TTL=100");
-            assertTTL(admin, tableName, 100);
+            try {
+                conn.createStatement().execute("CREATE TABLE " + tableName + 
+                        "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "',TTL=100");
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    fail();
+                }
+                assertTTL(admin, tableName, 100);
+            } catch (SQLException e) {
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    assertEquals(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
+                } else {
+                    throw e;
+                }
+            }
             tableName = generateUniqueName();
             conn.createStatement().execute("CREATE TABLE " + tableName + 
                     "(K VARCHAR PRIMARY KEY) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + txProvider + "'");
-            conn.createStatement().execute("ALTER TABLE " + tableName + " SET TTL=" + 200);
-            assertTTL(admin, tableName, 200);
+            try {
+                conn.createStatement().execute("ALTER TABLE " + tableName + " SET TTL=" + 200);
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    fail();
+                }
+                assertTTL(admin, tableName, 200);
+            } catch (SQLException e) {
+                if (txProvider.getTransactionProvider().isUnsupported(Feature.SET_TTL)) {
+                    assertEquals(SQLExceptionCode.TTL_UNSUPPORTED_FOR_TXN_TABLE.getErrorCode(), e.getErrorCode());
+                } else {
+                    throw e;
+                }
+            }
         }
     }
 }

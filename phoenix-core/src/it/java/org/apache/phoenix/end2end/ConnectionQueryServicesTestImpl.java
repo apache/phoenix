@@ -35,6 +35,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionService;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.util.TestUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,10 +100,11 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     }
     
     @Override
-    public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) {
+    public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) throws SQLException {
         PhoenixTransactionService txService = txServices[provider.ordinal()];
         if (txService == null) {
-            txService = txServices[provider.ordinal()] = provider.getTransactionProvider().getTransactionService(config, connectionInfo);
+            int port = TestUtil.getRandomPort();
+            txService = txServices[provider.ordinal()] = provider.getTransactionProvider().getTransactionService(config, connectionInfo, port);
         }
         return super.initTransactionClient(provider);
     }

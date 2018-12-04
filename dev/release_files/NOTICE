@@ -285,3 +285,7 @@ stream-lib
   This product also includes code adapted from:
     - software copyright (c) 2014 The Apache Software Foundation., http://lucene.apache.org/solr/
     - software copyright (c) 2014 The Apache Software Foundation., http://mahout.apache.org/
+
+requests-kerberos
+
+  Copyright (c) 2012 Kenneth Reitz

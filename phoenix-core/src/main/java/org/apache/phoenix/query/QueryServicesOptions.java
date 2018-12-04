@@ -341,6 +341,13 @@ public class QueryServicesOptions {
     public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
+    // default system task handling interval in milliseconds
+    public static final long DEFAULT_TASK_HANDLING_INTERVAL_MS = 60*1000; // 1 min
+    public static final long DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS = 30*60*1000; // 30 min
+    public static final long DEFAULT_TASK_HANDLING_INITIAL_DELAY_MS = 10*1000; // 10 sec
+
+    public static final boolean DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK = false;
+
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
       {
@@ -357,6 +364,9 @@ public class QueryServicesOptions {
                                                                                     // encoded
     // RS -> RS calls for upsert select statements are disabled by default
     public static final boolean DEFAULT_ENABLE_SERVER_UPSERT_SELECT = false;
+
+    // By default generally allow server trigger mutations
+    public static final boolean DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS = true;
 
     public static final boolean DEFAULT_COST_BASED_OPTIMIZER_ENABLED = false;
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();

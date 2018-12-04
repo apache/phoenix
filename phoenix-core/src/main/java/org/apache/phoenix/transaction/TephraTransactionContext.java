@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -83,7 +84,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         this.tx = CODEC.decode(txnBytes);
     }
 
-    public TephraTransactionContext(PhoenixConnection connection) {
+    public TephraTransactionContext(PhoenixConnection connection) throws SQLException {
         PhoenixTransactionClient client = connection.getQueryServices().initTransactionClient(getProvider());  
         assert (client instanceof TephraTransactionClient);
         this.txServiceClient = ((TephraTransactionClient)client).getTransactionClient();
@@ -223,6 +224,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                     .setSchemaName(dataTable.getSchemaName().getString())
                     .setTableName(dataTable.getTableName().getString()).build()
                     .buildException();
+        } finally {
+            // The client expects a transaction to be in progress on the txContext while the
+            // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
+            // finished, we start a new one here.
+            // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+            this.begin();
         }
     }
 
@@ -404,8 +411,8 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
     
     @Override
-    public Table getTransactionalTable(Table htable, boolean isImmutable) {
-        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isImmutable ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    public Table getTransactionalTable(Table htable, boolean isConflictFree) {
+        TransactionAwareHTable transactionAwareHTable = new TransactionAwareHTable(htable, isConflictFree ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
         this.addTransactionAware(transactionAwareHTable);
         return transactionAwareHTable;
     }

@@ -23,6 +23,7 @@ import org.joda.time.DateTime
 import org.apache.spark.{SparkConf, SparkContext}
 import scala.collection.mutable.ListBuffer
 import org.apache.hadoop.conf.Configuration
+
 /**
   * Note: If running directly from an IDE, these are the recommended VM parameters:
   * -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
@@ -285,13 +286,13 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     // Make sure we got the right value back
     assert(res.first().getLong(0) == 1L)
 
-    /*
-      NOTE: There doesn't appear to be any way of verifying from the Spark query planner that
-      filtering is being pushed down and done server-side. However, since PhoenixRelation
-      implements PrunedFilteredScan, debugging has shown that both the SELECT columns and WHERE
-      predicates are being passed along to us, which we then forward it to Phoenix.
-      TODO: investigate further to find a way to verify server-side pushdown
-     */
+    val plan = res.queryExecution.sparkPlan
+    // filters should be pushed into phoenix relation
+    assert(plan.toString.contains("PushedFilters: [*IsNotNull(COL1), *IsNotNull(ID), " +
+      "*EqualTo(COL1,test_row_1), *EqualTo(ID,1)]"))
+    // spark should run the filters on the rows returned by Phoenix
+    assert(!plan.toString.matches(".*Filter (((isnotnull(COL1.*) && isnotnull(ID.*)) "
+      + " && (COL1.* = test_row_1)) && (ID.* = 1)).*"))
   }
 
   test("Can persist a dataframe using 'DataFrame.saveToPhoenix'") {

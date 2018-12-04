@@ -19,7 +19,8 @@ package org.apache.phoenix.query;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
-import org.apache.http.annotation.Immutable;
+import net.jcip.annotations.Immutable;
+
 import org.apache.phoenix.iterate.SpoolTooBigToDiskException;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;
@@ -153,6 +154,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
     public static final String INDEX_FAILURE_DISABLE_INDEX = "phoenix.index.failure.disable.index";
     public static final String INDEX_FAILURE_THROW_EXCEPTION_ATTRIB = "phoenix.index.failure.throw.exception";
+    public static final String INDEX_FAILURE_KILL_SERVER = "phoenix.index.failure.unhandled.killserver";
 
     // Index will be partially re-built from index disable time stamp - following overlap time
     @Deprecated
@@ -308,6 +310,9 @@ public interface QueryServices extends SQLCloseable {
     // whether to enable server side RS -> RS calls for upsert select statements
     public static final String ENABLE_SERVER_UPSERT_SELECT ="phoenix.client.enable.server.upsert.select";
 
+    // whether to trigger mutations on the server at all (UPSERT/DELETE or DELETE FROM)
+    public static final String ENABLE_SERVER_SIDE_MUTATIONS ="phoenix.client.enable.server.mutations";
+
     //Update Cache Frequency default config attribute
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";
 
@@ -320,6 +325,34 @@ public interface QueryServices extends SQLCloseable {
     public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
 
 	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
+
+    // The parameters defined for handling task stored in table SYSTEM.TASK
+	// The time interval between periodic scans of table SYSTEM.TASK
+    public static final String TASK_HANDLING_INTERVAL_MS_ATTRIB = "phoenix.task.handling.interval.ms";
+    // The maximum time for a task to stay in table SYSTEM.TASK
+    public static final String TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB = "phoenix.task.handling.maxInterval.ms";
+    // The initial delay before the first task from table SYSTEM.TASK is handled
+    public static final String TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB = "phoenix.task.handling.initial.delay.ms";
+
+    // Before 4.15 when we created a view we included the parent table column metadata in the view
+    // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent
+    // table column metadata along with the child view metadata. When we resolve a child view, we
+    // resolve its ancestors and include their columns.
+    // Also, before 4.15 when we added a column to a base table we would have to propagate the
+    // column metadata to all its child views. After PHOENIX-3534 we no longer propagate metadata
+    // changes from a parent to its children (we just resolve its ancestors and include their columns)
+    // 
+    // The following config is used to continue writing the parent table column metadata while
+    // creating a view and also prevent metadata changes to a parent table/view that needs to be
+    // propagated to its children. This is done to allow rollback of the splittable SYSTEM.CATALOG
+    // feature
+    //
+    // By default this config is false meaning that rolling back the upgrade is not possible
+    // If this config is true and you want to rollback the upgrade be sure to run the sql commands in
+    // UpgradeUtil.addParentToChildLink which will recreate the PARENT->CHILD links in SYSTEM.CATALOG. This is needed
+    // as from 4.15 onwards the PARENT->CHILD links are stored in a separate SYSTEM.CHILD_LINK table.
+    public static final String ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK =
+            "phoenix.allow.system.catalog.rollback";
 
     /**
      * Get executor service used for parallel scans

@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -109,7 +110,6 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -353,6 +353,9 @@ public class UpsertCompiler {
         boolean serverUpsertSelectEnabled =
                 services.getProps().getBoolean(QueryServices.ENABLE_SERVER_UPSERT_SELECT,
                         QueryServicesOptions.DEFAULT_ENABLE_SERVER_UPSERT_SELECT);
+        boolean allowServerMutations =
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS);
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
         boolean useServerTimestampToBe = false;
         
@@ -541,10 +544,15 @@ public class UpsertCompiler {
                 // Disable running upsert select on server side if a table has global mutable secondary indexes on it
                 boolean hasGlobalMutableIndexes = SchemaUtil.hasGlobalIndex(table) && !table.isImmutableRows();
                 boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
-                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit && !table.isTransactional()
+                runOnServer = (sameTable || (serverUpsertSelectEnabled && !hasGlobalMutableIndexes)) && isAutoCommit 
+                        // We can run the upsert select for initial index population on server side for transactional
+                        // tables since the writes do not need to be done transactionally, since we gate the index
+                        // usage on successfully writing all data rows.
+                        && (!table.isTransactional() || table.getType() == PTableType.INDEX)
                         && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
                         && !select.isJoin() && !hasWhereSubquery && table.getRowTimestampColPos() == -1;
             }
+            runOnServer &= allowServerMutations;
             // If we may be able to run on the server, add a hint that favors using the data table
             // if all else is equal.
             // TODO: it'd be nice if we could figure out in advance if the PK is potentially changing,
@@ -698,9 +706,11 @@ public class UpsertCompiler {
                     }
                     // Build table from projectedColumns
                     // Hack to add default column family to be used on server in case no value column is projected.
-                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns,
-                            PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)));  
-                    
+                    PTable projectedTable = PTableImpl.builderWithColumns(table, projectedColumns)
+                            .setExcludedColumns(ImmutableList.of())
+                            .setDefaultFamilyName(PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)))
+                            .setColumns(projectedColumns)
+                            .build();
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
                     StatementContext statementContext = queryPlan.getContext();
@@ -853,7 +863,8 @@ public class UpsertCompiler {
                     }
                     updateExpressions.add(updateExpression);
                 }
-                PTable onDupKeyTable = PTableImpl.makePTable(table, updateColumns);
+                PTable onDupKeyTable = PTableImpl.builderWithColumns(table, updateColumns)
+                        .build();
                 onDupKeyBytesToBe = PhoenixIndexBuilder.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
             }
         }
@@ -1039,12 +1050,15 @@ public class UpsertCompiler {
             byte[] txState = table.isTransactional() ?
                     connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
+            ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
+            if (aggPlan.getTableRef().getTable().isTransactional() 
+                    || (table.getType() == PTableType.INDEX && table.isTransactional())) {
+                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+            }
             if (ptr.getLength() > 0) {
                 byte[] uuidValue = ServerCacheClient.generateId();
                 scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
-                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-                ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
             }
             ResultIterator iterator = aggPlan.iterator();
             try {
@@ -1312,7 +1326,7 @@ public class UpsertCompiler {
         public MutationState execute() throws SQLException {
             ResultIterator iterator = queryPlan.iterator();
             if (parallelIteratorFactory == null) {
-                return upsertSelect(new StatementContext(statement), tableRef, projector, iterator, columnIndexes, pkSlotIndexes, useServerTimestamp, false);
+                return upsertSelect(new StatementContext(statement, queryPlan.getContext().getScan()), tableRef, projector, iterator, columnIndexes, pkSlotIndexes, useServerTimestamp, false);
             }
             try {
                 parallelIteratorFactory.setRowProjector(projector);

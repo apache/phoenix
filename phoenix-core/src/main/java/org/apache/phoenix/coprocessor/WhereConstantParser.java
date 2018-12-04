@@ -94,7 +94,8 @@ public class WhereConstantParser {
                 result.add(column);
             }
         }
-        return PTableImpl.makePTable(view, result);
+        return PTableImpl.builderWithColumns(view, result)
+                .build();
     }
 
     private static PhoenixConnection getConnectionlessConnection() throws SQLException {

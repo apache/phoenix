@@ -82,6 +82,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -102,7 +104,7 @@ import com.google.common.collect.Maps;
 public class ViewIT extends SplitSystemCatalogIT {
 
     protected String tableDDLOptions;
-    protected boolean transactional;
+    protected String transactionProvider;
     protected boolean columnEncoded;
     
     private static final String FAILED_VIEWNAME = SchemaUtil.getTableName(SCHEMA2, "FAILED_VIEW");
@@ -111,12 +113,12 @@ public class ViewIT extends SplitSystemCatalogIT {
     private static volatile CountDownLatch latch1 = null;
     private static volatile CountDownLatch latch2 = null;
 
-    public ViewIT(boolean transactional, boolean columnEncoded) {
+    public ViewIT(String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder();
-        this.transactional = transactional;
+        this.transactionProvider = transactionProvider;
         this.columnEncoded = columnEncoded;
-        if (transactional) {
-            optionBuilder.append(" TRANSACTIONAL=true ");
+        if (transactionProvider != null) {
+            optionBuilder.append(" TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -126,11 +128,12 @@ public class ViewIT extends SplitSystemCatalogIT {
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameters(name="ViewIT_transactional={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { 
-            { true, false }, { true, true },
-            { false, false }, { false, true }});
+    @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
+            { "TEPHRA", false }, { "TEPHRA", true },
+            { "OMID", false }, 
+            { null, false }, { null, true }}),0);
     }
     
     @BeforeClass
@@ -473,9 +476,13 @@ public class ViewIT extends SplitSystemCatalogIT {
         conn.createStatement().execute(tableDdl);
         String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
-        String indexName = generateUniqueName();
-        ddl = "CREATE LOCAL INDEX " + indexName + " on " + fullViewName1 + "(v2)";
-        conn.createStatement().execute(ddl);
+        if (transactionProvider == null ||
+                !TransactionFactory.getTransactionProvider(
+                        TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+            String indexName = generateUniqueName();
+            ddl = "CREATE LOCAL INDEX " + indexName + " on " + fullViewName1 + "(v2)";
+            conn.createStatement().execute(ddl);
+        }
         ddl = "CREATE VIEW " + fullViewName2 + "(v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 10";
         conn.createStatement().execute(ddl);
         
@@ -664,7 +671,11 @@ public class ViewIT extends SplitSystemCatalogIT {
     
     @Test
     public void testViewUsesTableLocalIndex() throws Exception {
-        testViewUsesTableIndex(true);
+        if (transactionProvider == null ||
+                !TransactionFactory.getTransactionProvider(
+                        TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+            testViewUsesTableIndex(true);
+        }
     }
 
     
@@ -734,7 +745,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
-        assertPKs(rs, new String[] {"K3"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3"});
         
         // sanity check upserts into base table and view
         conn.createStatement().executeUpdate("upsert into " + fullTableName + " (k1, k2, v1) values (1, 1, 1)");
@@ -763,12 +774,14 @@ public class ViewIT extends SplitSystemCatalogIT {
         ddl = "CREATE VIEW " + fullViewName + "(v2 VARCHAR, k3 VARCHAR, k4 INTEGER NOT NULL, CONSTRAINT PKVEW PRIMARY KEY (k3, k4)) AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
         conn.createStatement().execute(ddl);
         
+        PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+        
         // assert PK metadata
         ResultSet rs =
                 conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
-        assertPKs(rs, new String[] {"K3", "K4"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
     }
     
     @Test
@@ -788,7 +801,7 @@ public class ViewIT extends SplitSystemCatalogIT {
 
         // assert PK metadata
         ResultSet rs = conn.getMetaData().getPrimaryKeys(null, SCHEMA2, viewName);
-        assertPKs(rs, new String[] {"K3", "K4"});
+        assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
     }
     
     @Test
@@ -914,55 +927,52 @@ public class ViewIT extends SplitSystemCatalogIT {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS, TBL));
                 builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
-            }
 
-            String view1 = NS + "." + TBL;
-            conn.createStatement().execute(
-                "CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view1 = NS + "." + TBL;
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
-                        conn.createStatement().executeQuery("explain select * from " + view1))
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + view1))
                     .contains(NS + ":" + TBL));
 
-            
+                conn.createStatement().execute("DROP VIEW " + view1);
+            }
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for backward compatibility)
             {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS + "." + TBL));
                 builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
+
+                String view2 = "\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                    "CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil
+                        .getExplainPlan(
+                            conn.createStatement().executeQuery("explain select * from " + view2))
+                        .contains(NS + "." + TBL));
+
+                conn.createStatement().execute("DROP VIEW " + view2);
             }
-
-            String view2 = "\"" + NS + "." + TBL + "\"";
-            conn.createStatement().execute(
-                "CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
-
-            assertTrue(QueryUtil
-                    .getExplainPlan(
-                        conn.createStatement().executeQuery("explain select * from " + view2))
-                    .contains(NS + "." + TBL));
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
             {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(NS, NS + "." + TBL));
                 builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
-            }
 
-            String view3 = NS + ".\"" + NS + "." + TBL + "\"";
-            conn.createStatement().execute(
-                "CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+                String view3 = NS + ".\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                        "CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-            assertTrue(QueryUtil
-                    .getExplainPlan(
+                assertTrue(QueryUtil.getExplainPlan(
                         conn.createStatement().executeQuery("explain select * from " + view3))
-                    .contains(NS + ":" + NS + "." + TBL));
-            
-            conn.createStatement().execute("DROP VIEW " + view1);
-            conn.createStatement().execute("DROP VIEW " + view2);
-            conn.createStatement().execute("DROP VIEW " + view3);
+                        .contains(NS + ":" + NS + "." + TBL));
 
+                conn.createStatement().execute("DROP VIEW " + view3);
+            }
             conn.createStatement().execute("DROP SCHEMA " + NS);
         }
     }
@@ -1019,8 +1029,8 @@ public class ViewIT extends SplitSystemCatalogIT {
                         + tableName + " WHERE KEY_PREFIX = 'ab4' ");
 
                 // upsert rows
-                upsertRows(viewName1, tenantConn);
-                upsertRows(viewName2, tenantConn);
+                upsertRows(tableName, viewName1, tenantConn);
+                upsertRows(tableName, viewName2, tenantConn);
 
                 // run queries
                 String[] whereClauses =
@@ -1137,7 +1147,7 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
-    private void upsertRows(String viewName1, Connection tenantConn) throws SQLException {
+    private void upsertRows(String tableName, String viewName1, Connection tenantConn) throws SQLException, IOException {
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1
                 + " (pk1, pk2, col1, col3) VALUES ('testa', 'testb', TO_DATE('2017-10-16 22:00:00', 'yyyy-MM-dd HH:mm:ss'), 10)");
         tenantConn.createStatement().execute("UPSERT INTO " + viewName1

@@ -17,7 +17,10 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
+
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -27,7 +30,6 @@ import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -121,7 +123,11 @@ public class PMetaDataImpl implements PMetaData {
                 }
                 newIndexes.add(table);
                 netGain -= oldParentRef.getEstimatedSize();
-                newParentTable = PTableImpl.makePTable(oldParentRef.getTable(), table.getTimeStamp(), newIndexes);
+                newParentTable = PTableImpl.builderWithColumns(oldParentRef.getTable(),
+                        getColumnsToClone(oldParentRef.getTable()))
+                        .setIndexes(newIndexes)
+                        .setTimeStamp(table.getTimeStamp())
+                        .build();
                 newParentTableRef = tableRefFactory.makePTableRef(newParentTable, this.timeKeeper.getCurrentTime(), parentResolvedTimestamp);
                 netGain += newParentTableRef.getEstimatedSize();
             }
@@ -173,10 +179,14 @@ public class PMetaDataImpl implements PMetaData {
                     PTable index = newIndexes.get(i);
                     if (index.getName().getString().equals(tableName)) {
                         newIndexes.remove(i);
-                        PTable parentTable = PTableImpl.makePTable(
-                                parentTableRef.getTable(),
-                                tableTimeStamp == HConstants.LATEST_TIMESTAMP ? parentTableRef.getTable().getTimeStamp() : tableTimeStamp,
-                                newIndexes);
+                        PTableImpl.Builder parentTableBuilder =
+                                PTableImpl.builderWithColumns(parentTableRef.getTable(),
+                                        getColumnsToClone(parentTableRef.getTable()))
+                                .setIndexes(newIndexes == null ? Collections.emptyList() : newIndexes);
+                        if (tableTimeStamp != HConstants.LATEST_TIMESTAMP) {
+                            parentTableBuilder.setTimeStamp(tableTimeStamp);
+                        }
+                        PTable parentTable = parentTableBuilder.build();
                         metaData.put(parentTable.getKey(), tableRefFactory.makePTableRef(parentTable, this.timeKeeper.getCurrentTime(), parentTableRef.getResolvedTimeStamp()));
                         break;
                     }
@@ -218,8 +228,10 @@ public class PMetaDataImpl implements PMetaData {
                     oldColumn.getTimestamp());
                 columns.add(newColumn);
             }
-            
-            table = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, columns);
+            table = PTableImpl.builderWithColumns(table, columns)
+                    .setTimeStamp(tableTimeStamp)
+                    .setSequenceNumber(tableSeqNum)
+                    .build();
         }
         tables.put(table.getKey(), tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTime));
     }

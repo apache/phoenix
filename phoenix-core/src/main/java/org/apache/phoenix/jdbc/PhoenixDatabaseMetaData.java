@@ -26,6 +26,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
@@ -214,6 +215,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] INDEX_TYPE_BYTES = Bytes.toBytes(INDEX_TYPE);
     public static final String LINK_TYPE = "LINK_TYPE";
     public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
+    public static final String TASK_TYPE = "TASK_TYPE";
+    public static final byte[] TASK_TYPE_BYTES = Bytes.toBytes(TASK_TYPE);
+    public static final String TASK_TS = "TASK_TS";
+    public static final byte[] TASK_TS_BYTES = Bytes.toBytes(TASK_TS);
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
     public static final String VIEW_CONSTANT = "VIEW_CONSTANT";
@@ -378,7 +383,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);
     public static final TableName SYSTEM_LINK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CHILD_LINK_NAME);
 
-    
+    public static final String SYSTEM_TASK_TABLE = "TASK";
+    public static final String SYSTEM_TASK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
+    public static final byte[] SYSTEM_TASK_NAME_BYTES = Bytes.toBytes(SYSTEM_TASK_NAME);
+    public static final TableName SYSTEM_TASK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_NAME);
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
     public static final String QUERY_ID = "QUERY_ID";
@@ -509,6 +517,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
     
+    // While creating the PColumns we don't care about the ordinal positiion so set it to 1
     private static final PColumnImpl TENANT_ID_COLUMN = new PColumnImpl(PNameFactory.newName(TENANT_ID),
             PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
             0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
@@ -596,6 +605,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     private static final PColumnImpl KEY_SEQ_COLUMN = new PColumnImpl(PNameFactory.newName(KEY_SEQ),
             PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
             0, null, false, null, false, false, KEY_SEQ_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl PK_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(PK_NAME),
+        PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+        0, null, false, null, false, false, PK_NAME_BYTES, HConstants.LATEST_TIMESTAMP);
+    public static final String ASC_OR_DESC = "ASC_OR_DESC";
+    public static final byte[] ASC_OR_DESC_BYTES = Bytes.toBytes(ASC_OR_DESC);
+    private static final PColumnImpl ASC_OR_DESC_COLUMN = new PColumnImpl(PNameFactory.newName(ASC_OR_DESC),
+        PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+        0, null, false, null, false, false, ASC_OR_DESC_BYTES, HConstants.LATEST_TIMESTAMP);
     
     private static final List<PColumnImpl> PK_DATUM_LIST = Lists.newArrayList(TENANT_ID_COLUMN, TABLE_SCHEM_COLUMN, TABLE_NAME_COLUMN, COLUMN_NAME_COLUMN);
     
@@ -665,6 +682,43 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                             new KeyValueColumnExpression(KEY_SEQ_COLUMN), false)
                     ), 0, true);
     
+    private static final RowProjector GET_PRIMARY_KEYS_ROW_PROJECTOR =
+            new RowProjector(
+                    Arrays.<ColumnProjector> asList(
+                        new ExpressionProjector(TABLE_CAT, SYSTEM_CATALOG,
+                                new RowKeyColumnExpression(TENANT_ID_COLUMN,
+                                        new RowKeyValueAccessor(PK_DATUM_LIST, 0)),
+                                false),
+                        new ExpressionProjector(TABLE_SCHEM, SYSTEM_CATALOG,
+                                new RowKeyColumnExpression(TABLE_SCHEM_COLUMN,
+                                        new RowKeyValueAccessor(PK_DATUM_LIST, 1)),
+                                false),
+                        new ExpressionProjector(TABLE_NAME, SYSTEM_CATALOG,
+                                new RowKeyColumnExpression(TABLE_NAME_COLUMN,
+                                        new RowKeyValueAccessor(PK_DATUM_LIST, 2)),
+                                false),
+                        new ExpressionProjector(COLUMN_NAME, SYSTEM_CATALOG,
+                                new RowKeyColumnExpression(COLUMN_NAME_COLUMN,
+                                        new RowKeyValueAccessor(PK_DATUM_LIST, 3)),
+                                false),
+                        new ExpressionProjector(KEY_SEQ, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(KEY_SEQ_COLUMN), false),
+                        new ExpressionProjector(PK_NAME, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(PK_NAME_COLUMN), false),
+                        new ExpressionProjector(ASC_OR_DESC, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(ASC_OR_DESC_COLUMN), false),
+                        new ExpressionProjector(DATA_TYPE, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(DATA_TYPE_COLUMN), false),
+                        new ExpressionProjector(TYPE_NAME, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(TYPE_NAME_COLUMN), false),
+                        new ExpressionProjector(COLUMN_SIZE, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(COLUMN_SIZE_COLUMN), false),
+                        new ExpressionProjector(TYPE_ID, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(TYPE_ID_COLUMN), false),
+                        new ExpressionProjector(VIEW_CONSTANT, SYSTEM_CATALOG,
+                                new KeyValueColumnExpression(VIEW_CONSTANT_COLUMN), false)),
+                    0, true);
+    
     private boolean match(String str, String pattern) throws SQLException {
         LiteralExpression strExpr = LiteralExpression.newConstant(str, PVarchar.INSTANCE, SortOrder.ASC);
         LiteralExpression patternExpr = LiteralExpression.newConstant(pattern, PVarchar.INSTANCE, SortOrder.ASC);
@@ -704,11 +758,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             String tableName = rs.getString(TABLE_NAME);
             String tenantId = rs.getString(TABLE_CAT);
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-            PTable table = PhoenixRuntime.getTable(connection, fullTableName);
+            PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
             boolean isSalted = table.getBucketNum()!=null;
             boolean tenantColSkipped = false;
-            for (PColumn column : table.getColumns()) {
-                if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(0))) {
+            List<PColumn> columns = table.getColumns();
+            int startOffset = isSalted ? 1 : 0;
+			columns = Lists.newArrayList(columns.subList(startOffset, columns.size()));
+            for (PColumn column : columns) {
+                if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(startOffset))) {
                     // skip the tenant column
                     tenantColSkipped = true;
                     continue;
@@ -843,7 +900,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
                 int pkPos = table.getPKColumns().indexOf(column);
                 if (pkPos!=-1) {
-                    short keySeq = (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
+                    short keySeq = (short) (pkPos + 1 - startOffset - (tenantColSkipped ? 1 : 0));
                     keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
                 }
                 cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
@@ -1099,33 +1156,88 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     }
 
     @Override
-    public ResultSet getPrimaryKeys(String catalog, String schema, String table) throws SQLException {
-        if (table == null || table.length() == 0) {
+    public ResultSet getPrimaryKeys(String catalog, String schemaName, String tableName)
+            throws SQLException {
+        if (tableName == null || tableName.length() == 0) {
             return emptyResultSet;
         }
-        StringBuilder buf = new StringBuilder("select \n" +
-                TENANT_ID + " " + TABLE_CAT + "," + // use catalog for tenant_id
-                TABLE_SCHEM + "," +
-                TABLE_NAME + " ," +
-                COLUMN_NAME + "," +
-                KEY_SEQ + "," +
-                PK_NAME + "," +
-                "CASE WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC," +
-                ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + "," +
-                SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
-                COLUMN_SIZE + "," +
-                DATA_TYPE + " " + TYPE_ID + "," + // raw type id
-                VIEW_CONSTANT +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
-                " where ");
-        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = '" + StringUtil.escapeStringConstant(schema) + "'" ));
-        buf.append(" and " + TABLE_NAME + " = '" + StringUtil.escapeStringConstant(table) + "'" );
-        buf.append(" and " + COLUMN_NAME + " is not null");
-        buf.append(" and " + COLUMN_FAMILY + " is null");
-        addTenantIdFilter(buf, catalog);
-        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + " ," + COLUMN_NAME);
-        ResultSet rs = connection.createStatement().executeQuery(buf.toString());
-        return rs;
+        List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
+        ResultSet rs = getTables(catalog, schemaName, tableName, null);
+        while (rs.next()) {
+            String tenantId = rs.getString(TABLE_CAT);
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+            boolean isSalted = table.getBucketNum() != null;
+            boolean tenantColSkipped = false;
+            List<PColumn> pkColumns = table.getPKColumns();
+            List<PColumn> sorderPkColumns =
+                    Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
+            // sort the columns by name
+            Collections.sort(sorderPkColumns, new Comparator<PColumn>(){
+                @Override public int compare(PColumn c1, PColumn c2) {
+                    return c1.getName().getString().compareTo(c2.getName().getString());
+                }
+            });
+            
+            for (PColumn column : sorderPkColumns) {
+                String columnName = column.getName().getString();
+                // generate row key
+                // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
+                byte[] rowKey =
+                        SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, null);
+
+                // add one cell for each column info
+                List<Cell> cells = Lists.newArrayListWithCapacity(8);
+                // KEY_SEQ_COLUMN
+                byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+                int pkPos = pkColumns.indexOf(column);
+                if (pkPos != -1) {
+                    short keySeq =
+                            (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
+                    keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
+                }
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
+                // PK_NAME
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, PK_NAME_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, table.getPKName() != null
+                            ? table.getPKName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
+                // ASC_OR_DESC
+                char sortOrder = column.getSortOrder() == SortOrder.ASC ? 'A' : 'D';
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    ASC_OR_DESC_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    Bytes.toBytes(sortOrder)));
+                // DATA_TYPE
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
+                // TYPE_NAME
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    column.getDataType().getSqlTypeNameBytes()));
+                // COLUMN_SIZE
+                cells.add(
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        column.getMaxLength() != null
+                                ? PInteger.INSTANCE.toBytes(column.getMaxLength())
+                                : ByteUtil.EMPTY_BYTE_ARRAY));
+                // TYPE_ID
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
+                // VIEW_CONSTANT
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant() != null
+                            ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY));
+                Collections.sort(cells, new CellComparatorImpl());
+                Tuple tuple = new MultiKeyValueTuple(cells);
+                tuples.add(tuple);
+            }
+        }
+        return new PhoenixResultSet(new MaterializedResultIterator(tuples),
+                GET_PRIMARY_KEYS_ROW_PROJECTOR,
+                new StatementContext(new PhoenixStatement(connection), false));
     }
 
     @Override

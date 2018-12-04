@@ -62,6 +62,7 @@ import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -925,7 +926,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             // set HColumnProperty property when adding a pk column and other key value columns should work
             ddl = "ALTER TABLE "
                     + dataTableFullName
-                    + " ADD k3 DECIMAL PRIMARY KEY, col2 bigint, CF.col3 bigint IN_MEMORY = true, CF.IN_MEMORY=false, CF.REPLICATION_SCOPE = 1";
+                    + " ADD k3 DECIMAL PRIMARY KEY, col2 bigint, CF.col3 bigint IN_MEMORY = true, CF.IN_MEMORY=false, REPLICATION_SCOPE = 1";
             conn.createStatement().execute(ddl);
             // assert that k3 was added as new pk
             ResultSet rs = conn.getMetaData().getPrimaryKeys("", schemaName, dataTableName);
@@ -946,7 +947,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 assertEquals(2, columnFamilies.length);
                 assertEquals("0", columnFamilies[0].getNameAsString());
                 assertEquals(true, columnFamilies[0].isInMemory());
-                assertEquals(0, columnFamilies[0].getScope());
+                assertEquals(1, columnFamilies[0].getScope());
                 assertEquals("CF", columnFamilies[1].getNameAsString());
                 assertEquals(false, columnFamilies[1].isInMemory());
                 assertEquals(1, columnFamilies[1].getScope());
@@ -1074,6 +1075,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
+	    if (!TransactionFactory.Provider.getDefault().runTests()) {
+	        return;
+	    }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(false));
 		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {

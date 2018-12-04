@@ -60,6 +60,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -85,29 +87,23 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private String physicalTableName;
     private final boolean userTableNamespaceMapped;
     private final boolean mutable;
+    private final String transactionProvider;
     private static final int defaultGuidePostWidth = 20;
     
-    protected StatsCollectorIT(boolean mutable, boolean transactional, boolean userTableNamespaceMapped, boolean columnEncoded) {
+    protected StatsCollectorIT(boolean mutable, String transactionProvider, boolean userTableNamespaceMapped, boolean columnEncoded) {
+        this.transactionProvider = transactionProvider;
         StringBuilder sb = new StringBuilder();
-        if (transactional) {
-            sb.append("TRANSACTIONAL=true");
-        }
-        if (!columnEncoded) {
-            if (sb.length()>0) {
-                sb.append(",");
-            }
-            sb.append("COLUMN_ENCODED_BYTES=0");
+        if (columnEncoded) {
+            sb.append("COLUMN_ENCODED_BYTES=4");        
         } else {
-            if (sb.length()>0) {
-                sb.append(",");
-            }
-            sb.append("COLUMN_ENCODED_BYTES=4");
+            sb.append("COLUMN_ENCODED_BYTES=0");
+        }
+        
+        if (transactionProvider != null) {
+            sb.append(",TRANSACTIONAL=true, TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         if (!mutable) {
-            if (sb.length()>0) {
-                sb.append(",");
-            }
-            sb.append("IMMUTABLE_ROWS=true");
+            sb.append(",IMMUTABLE_ROWS=true");
             if (!columnEncoded) {
                 sb.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             }
@@ -187,7 +183,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + fullTableName + " WHERE v2='foo'");
         explainPlan = QueryUtil.getExplainPlan(rs);
         // if we are using the ONE_CELL_PER_COLUMN_FAMILY storage scheme, we will have the single kv even though there are no values for col family v2 
-        String stats = columnEncoded && !mutable  ? "4-CHUNK 1 ROWS 38 BYTES" : "3-CHUNK 0 ROWS 20 BYTES";
+        String stats = columnEncoded && !mutable ? "4-CHUNK 1 ROWS 38 BYTES" : "3-CHUNK 0 ROWS 20 BYTES";
         assertEquals(
                 "CLIENT " + stats + " PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
                 "    SERVER FILTER BY B.V2 = 'foo'\n" + 
@@ -196,7 +192,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
         explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 4-CHUNK 1 ROWS " + (columnEncoded ? "28" : "34") + " BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
+                "CLIENT 4-CHUNK 1 ROWS " + (columnEncoded ? "28" : TransactionFactory.Provider.OMID.name().equals(transactionProvider) ? "38" : "34") + " BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
                 "CLIENT MERGE SORT",
                 explainPlan);
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName + " WHERE k = 'a'");
@@ -535,7 +531,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         List<KeyRange> keyRanges = getAllSplits(conn, fullTableName);
         assertEquals(26, keyRanges.size());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 26-CHUNK 25 ROWS " + (columnEncoded ? ( mutable ? "12530" : "13902" ) : "12420") + " BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
+        assertEquals("CLIENT 26-CHUNK 25 ROWS " + (columnEncoded ? ( mutable ? "12530" : "13902" ) : (TransactionFactory.Provider.OMID.name().equals(transactionProvider)) ? "25044" : "12420") + " BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
                 QueryUtil.getExplainPlan(rs));
 
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
@@ -548,7 +544,8 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute(query);
         keyRanges = getAllSplits(conn, fullTableName);
         boolean oneCellPerColFamliyStorageScheme = !mutable && columnEncoded;
-        assertEquals(oneCellPerColFamliyStorageScheme ? 13 : 12, keyRanges.size());
+        boolean hasShadowCells = TransactionFactory.Provider.OMID.name().equals(transactionProvider);
+        assertEquals(oneCellPerColFamliyStorageScheme ? 13 : hasShadowCells ? 23 : 12, keyRanges.size());
 
         rs = conn
                 .createStatement()
@@ -559,26 +556,26 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue(rs.next());
         assertEquals("A", rs.getString(1));
         assertEquals(24, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 12252 : 13624 ) : 12144, rs.getInt(3));
-        assertEquals(oneCellPerColFamliyStorageScheme ? 12 : 11, rs.getInt(4));
+        assertEquals(columnEncoded ? ( mutable ? 12252 : 13624 ) : hasShadowCells ? 24756 : 12144, rs.getInt(3));
+        assertEquals(oneCellPerColFamliyStorageScheme ? 12 : hasShadowCells ? 22 : 11, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("B", rs.getString(1));
         assertEquals(oneCellPerColFamliyStorageScheme ? 24 : 20, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 5600 : 6972 ) : 5540, rs.getInt(3));
-        assertEquals(oneCellPerColFamliyStorageScheme ? 6 : 5, rs.getInt(4));
+        assertEquals(columnEncoded ? ( mutable ? 5600 : 6972 ) : hasShadowCells ? 11260 : 5540, rs.getInt(3));
+        assertEquals(oneCellPerColFamliyStorageScheme ? 6 : hasShadowCells ? 10 : 5, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("C", rs.getString(1));
         assertEquals(24, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 6724 : 6988 ) : 6652, rs.getInt(3));
-        assertEquals(6, rs.getInt(4));
+        assertEquals(columnEncoded ? ( mutable ? 6724 : 6988 ) : hasShadowCells ? 13520 : 6652, rs.getInt(3));
+        assertEquals(hasShadowCells ? 12 : 6, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("D", rs.getString(1));
         assertEquals(24, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 6724 : 6988 ) : 6652, rs.getInt(3));
-        assertEquals(6, rs.getInt(4));
+        assertEquals(columnEncoded ? ( mutable ? 6724 : 6988 ) : hasShadowCells ? 13520 : 6652, rs.getInt(3));
+        assertEquals(hasShadowCells ? 12 : 6, rs.getInt(4));
 
         assertFalse(rs.next());
         
@@ -618,6 +615,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute(query);
         Random r = new Random();
         int count = 0;
+        boolean hasShadowCells = TransactionFactory.Provider.OMID.name().equals(transactionProvider);
         while (count < 4) {
             int startIndex = r.nextInt(strings.length);
             int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
@@ -633,7 +631,11 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 assertTrue(rs.next());
                 assertEquals("C2", rs.getString(1));
                 assertEquals(rows, rs.getLong(2));
-                assertEquals(c2Bytes, rs.getLong(3));
+                // OMID with the shadow cells it creates will have more bytes, but getting
+                // an exact byte count based on the number or rows is not possible because
+                // it is variable on a row-by-row basis.
+                long sumOfGuidePostsWidth = rs.getLong(3);
+                assertTrue(hasShadowCells ? sumOfGuidePostsWidth > c2Bytes : sumOfGuidePostsWidth == c2Bytes);
                 count++;
             }
         }
@@ -801,13 +803,17 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
 
             // let's check out local index too
-            String localIndex = "LI_" + generateUniqueName();
-            ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + baseTable + " (b) INCLUDE (c) ";
-            conn.createStatement().execute(ddl);
-            // local indexes reside on the same table as base data table
-            statsCollector = getDefaultStatsCollectorForTable(baseTable);
-            statsCollector.init();
-            assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
+            if (transactionProvider == null ||
+                    !TransactionFactory.getTransactionProvider(
+                            TransactionFactory.Provider.valueOf(transactionProvider)).isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+                String localIndex = "LI_" + generateUniqueName();
+                ddl = "CREATE LOCAL INDEX " + localIndex + " ON " + baseTable + " (b) INCLUDE (c) ";
+                conn.createStatement().execute(ddl);
+                // local indexes reside on the same table as base data table
+                statsCollector = getDefaultStatsCollectorForTable(baseTable);
+                statsCollector.init();
+                assertEquals(defaultGuidePostWidth, statsCollector.getGuidePostDepth());
+            }
 
             // now let's create a view and an index on it and see what guide post width is used for
             // it

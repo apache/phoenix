@@ -48,13 +48,15 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -63,22 +65,19 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-@Category(NeedsOwnMiniClusterTest.class)
-public class IndexToolIT extends ParallelStatsEnabledIT {
+public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
-    private final boolean mutable;
     private final boolean useSnapshot;
 
-    public IndexToolIT(boolean transactional, boolean mutable, boolean localIndex,
+    public IndexToolIT(String transactionProvider, boolean mutable, boolean localIndex,
             boolean directApi, boolean useSnapshot) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
+        this.transactional = transactionProvider != null;
         this.directApi = directApi;
-        this.mutable = mutable;
         this.useSnapshot = useSnapshot;
         StringBuilder optionBuilder = new StringBuilder();
         if (!mutable) {
@@ -88,7 +87,7 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             if (!(optionBuilder.length() == 0)) {
                 optionBuilder.append(",");
             }
-            optionBuilder.append(" TRANSACTIONAL=true ");
+            optionBuilder.append(" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
@@ -97,9 +96,13 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
     @BeforeClass
     public static void setup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
+        serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        clientProps.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+        clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
@@ -107,22 +110,28 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
     }
 
     @Parameters(
-            name = "transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}, useSnapshot = {4}")
-    public static Collection<Boolean[]> data() {
-        List<Boolean[]> list = Lists.newArrayListWithExpectedSize(16);
+            name = "transactionProvider={0},mutable={1},localIndex={2},directApi={3},useSnapshot={4}")
+    public static Collection<Object[]> data() {
+        List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
-        for (boolean transactional : Booleans) {
+        for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
-                    for (boolean directApi : Booleans) {
-                        for (boolean useSnapshot : Booleans) {
-                            list.add(new Boolean[] { transactional, mutable, localIndex, directApi, useSnapshot });
+                    if (!localIndex 
+                            || transactionProvider == null 
+                            || !TransactionFactory.getTransactionProvider(
+                                    TransactionFactory.Provider.valueOf(transactionProvider))
+                                .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+                        for (boolean directApi : Booleans) {
+                            for (boolean useSnapshot : Booleans) {
+                                list.add(new Object[] { transactionProvider, mutable, localIndex, directApi, useSnapshot });
+                            }
                         }
                     }
                 }
             }
         }
-        return list;
+        return TestUtil.filterTxParamData(list,0);
     }
 
     @Test

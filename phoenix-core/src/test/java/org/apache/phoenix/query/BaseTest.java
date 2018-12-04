@@ -619,6 +619,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 1000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         return conf;
@@ -1780,15 +1781,15 @@ public abstract class BaseTest {
     
 
     /**
-     *  Split SYSTEM.CATALOG at the given split point 
+     *  Synchronously split table at the given split point
      */
-    protected static void splitRegion(byte[] splitPoint) throws SQLException, IOException, InterruptedException {
+    protected static void splitRegion(TableName fullTableName, byte[] splitPoint) throws SQLException, IOException, InterruptedException {
         Admin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        admin.split(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoint);
+        admin.split(fullTableName, splitPoint);
         // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
-        admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
-        admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME);
+        admin.disableTable(fullTableName);
+        admin.enableTable(fullTableName);
     }
     
     /**
@@ -1817,7 +1818,7 @@ public abstract class BaseTest {
         AssignmentManager am = master.getAssignmentManager();
         // No need to split on the first splitPoint since the end key of region boundaries are exclusive
         for (int i=1; i<splitPoints.size(); ++i) {
-            splitRegion(splitPoints.get(i));
+            splitRegion(fullTableName, splitPoints.get(i));
         }
         HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
         Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);

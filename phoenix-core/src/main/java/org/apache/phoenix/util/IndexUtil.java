@@ -119,6 +119,7 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 
 import com.google.common.collect.Lists;
 
@@ -812,8 +813,11 @@ public class IndexUtil {
 
     public static List<PTable> getClientMaintainedIndexes(PTable table) {
         Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this client-side mechanism
-        (table.isImmutableRows() || table.isTransactional()) ? IndexMaintainer.maintainedGlobalIndexes(table
-                .getIndexes().iterator()) : Collections.<PTable> emptyIterator();
+                (table.isTransactional() && table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) ?
+                         IndexMaintainer.maintainedIndexes(table.getIndexes().iterator()) :
+                             (table.isImmutableRows() || table.isTransactional()) ?
+                                IndexMaintainer.maintainedGlobalIndexes(table.getIndexes().iterator()) :
+                                    Collections.<PTable>emptyIterator();
         return Lists.newArrayList(indexIterator);
     }
     

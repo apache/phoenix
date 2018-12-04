@@ -227,14 +227,38 @@ public class WhereOptimizer {
             
             // Iterate through all spans of this slot
             while (true) {
-                SortOrder sortOrder =  schema.getField(slot.getPKPosition() + slotOffset).getSortOrder();
+                SortOrder sortOrder =
+                        schema.getField(slot.getPKPosition() + slotOffset).getSortOrder();
                 if (prevSortOrder == null)  {
                     prevSortOrder = sortOrder;
                 } else if (prevSortOrder != sortOrder) {
+                    //Consider the Universe of keys to be [0,7]+ on the leading column A
+                    // and [0,7]+ on trailing column B, with a padbyte of 0 for ASC and 7 for DESC
+                    //if our key range for ASC keys is leading [2,*] and trailing [3,*],
+                    //   → [x203 - x777]
+                    //for this particular plan the leading key is descending (ie index desc)
+                    // consider the data
+                    // (3,2) ORDER BY A,B→ x302 → ORDER BY A DESC,B → x472
+                    // (3,3) ORDER BY A,B→ x303 → ORDER BY A DESC,B → x473
+                    // (3,4) ORDER BY A,B→ x304 → ORDER BY A DESC,B → x474
+                    // (2,3) ORDER BY A,B→ x203 → ORDER BY A DESC,B → x573
+                    // (2,7) ORDER BY A,B→ x207 → ORDER BY A DESC,B → x577
+                    // And the logical expression (A,B) > (2,3)
+                    // In the DESC A order the selected values are not contiguous,
+                    // (2,7),(3,2),(3,3),(3,4)
+                    // In the normal ASC order by the values are all contiguous
+                    // Therefore the key cannot be extracted out and a full filter must be applied
+                    // In addition, the boundary of the scan is tricky as the values are not bound
+                    // by (2,3) it is instead bound by (2,7), this should map to, [x000,x577]
+                    // FUTURE: May be able to perform a type of skip scan for this case.
+
                     // If the sort order changes, we must clip the portion with the same sort order
                     // and invert the key ranges and swap the upper and lower bounds.
-                    List<KeyRange> leftRanges = clipLeft(schema, slot.getPKPosition() + slotOffset - clipLeftSpan, clipLeftSpan, keyRanges, ptr);
-                    keyRanges = clipRight(schema, slot.getPKPosition() + slotOffset - 1, keyRanges, leftRanges, ptr);
+                    List<KeyRange> leftRanges = clipLeft(schema, slot.getPKPosition()
+                            + slotOffset - clipLeftSpan, clipLeftSpan, keyRanges, ptr);
+                    keyRanges =
+                            clipRight(schema, slot.getPKPosition() + slotOffset - 1, keyRanges,
+                                    leftRanges, ptr);
                     if (prevSortOrder == SortOrder.DESC) {
                         leftRanges = invertKeyRanges(leftRanges);
                     }
@@ -242,6 +266,13 @@ public class WhereOptimizer {
                     cnf.add(leftRanges);
                     clipLeftSpan = 0;
                     prevSortOrder = sortOrder;
+                    // since we have to clip the portion with the same sort order, we can no longer
+                    // extract the nodes from the where clause
+                    // for eg. for the schema A VARCHAR DESC, B VARCHAR ASC and query
+                    //   WHERE (A,B) < ('a','b')
+                    // the range (* - a\xFFb) is converted to (~a-*)(*-b)
+                    // so we still need to filter on A,B
+                    stopExtracting = true;
                 }
                 clipLeftSpan++;
                 slotOffset++;
@@ -264,11 +295,12 @@ public class WhereOptimizer {
             // cardinality of this slot is low.
             /*
              *  Stop extracting nodes once we encounter:
-             *  1) An unbound range unless we're forcing a skip scan and havn't encountered
+             *  1) An unbound range unless we're forcing a skip scan and haven't encountered
              *     a multi-column span. Even if we're trying to force a skip scan, we can't
              *     execute it over a multi-column span.
              *  2) A non range key as we can extract the first one, but further ones need
              *     to be evaluated in a filter.
+             *  3) As above a non-contiguous range due to sort order
              */
             stopExtracting |= (hasUnboundedRange && !forcedSkipScan) || (hasRangeKey && forcedRangeScan);
             useSkipScan |= !stopExtracting && !forcedRangeScan && (keyRanges.size() > 1 || hasRangeKey);
@@ -2060,10 +2092,20 @@ public class WhereOptimizer {
 
                                 @Override
                                 public SortOrder getSortOrder() {
-                                    // The parts of the RVC have already been converted
-                                    // to ascending, so we don't need to consider the
-                                    // childPart sort order.
-                                    return SortOrder.ASC;
+                                    //See PHOENIX-4969: Clean up and unify code paths for RVCs with
+                                    //  respect to Optimizations for SortOrder
+                                    //Handle the different paths for InList vs Normal Comparison
+                                    //The code paths in InList assume the sortOrder is ASC for
+                                    // their optimizations
+                                    //The code paths for Comparisons on RVC rewrite equality,
+                                    // for the non-equality cases return actual sort order
+                                    //This work around should work
+                                    // but a more general approach can be taken.
+                                    if(rvcElementOp == CompareOp.EQUAL ||
+                                            rvcElementOp == CompareOp.NOT_EQUAL){
+                                        return SortOrder.ASC;
+                                    }
+                                    return childPart.getColumn().getSortOrder();
                                 }
 
                                 @Override

@@ -27,7 +27,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
@@ -87,9 +86,9 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
@@ -438,6 +437,9 @@ public class DeleteCompiler {
         final boolean hasPostProcessing = delete.getLimit() != null;
         final ConnectionQueryServices services = connection.getQueryServices();
         List<QueryPlan> queryPlans;
+        boolean allowServerMutations =
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS);
         NamedTableNode tableNode = delete.getTable();
         String tableName = tableNode.getName().getTableName();
         String schemaName = tableNode.getName().getSchemaName();
@@ -551,7 +553,8 @@ public class DeleteCompiler {
         }
         
         runOnServer &= queryPlans.get(0).getTableRef().getTable().getType() != PTableType.INDEX;
-        
+        runOnServer &= allowServerMutations;
+
         // We need to have all indexed columns available in all immutable indexes in order
         // to generate the delete markers from the query. We also cannot have any filters
         // except for our SkipScanFilter for point lookups.
@@ -615,7 +618,9 @@ public class DeleteCompiler {
                     }
                 });
             }
-            PTable projectedTable = PTableImpl.makePTable(table, PTableType.PROJECTED, adjustedProjectedColumns);
+            PTable projectedTable = PTableImpl.builderWithColumns(table, adjustedProjectedColumns)
+                    .setType(PTableType.PROJECTED)
+                    .build();
             final TableRef projectedTableRef = new TableRef(projectedTable, targetTableRef.getLowerBoundTimeStamp(), targetTableRef.getTimeStamp());
 
             QueryPlan bestPlanToBe = dataPlan;
@@ -975,7 +980,9 @@ public class DeleteCompiler {
     private static boolean isMaintainedOnClient(PTable table) {
         // Test for not being local (rather than being GLOBAL) so that this doesn't fail
         // when tested with our projected table.
-        return table.getIndexType() != IndexType.LOCAL && (table.isImmutableRows() || table.isTransactional());
+        return (table.getIndexType() != IndexType.LOCAL && (table.isTransactional() || table.isImmutableRows())) ||
+               (table.getIndexType() == IndexType.LOCAL && (table.isTransactional() &&
+                table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER) ) );
     }
     
 }

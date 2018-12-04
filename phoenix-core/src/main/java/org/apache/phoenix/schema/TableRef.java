@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Objects;
 
 import org.apache.phoenix.compile.TupleProjectionCompiler;
@@ -28,7 +30,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 
 public class TableRef {
-    public static final TableRef EMPTY_TABLE_REF = new TableRef(new PTableImpl());
+    public static final TableRef EMPTY_TABLE_REF = createEmptyTableRef();
     
     private PTable table;
     private long upperBoundTimeStamp;
@@ -36,6 +38,19 @@ public class TableRef {
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
     private final long currentTime;
+
+    private static TableRef createEmptyTableRef() {
+        try {
+            return new TableRef(new PTableImpl.Builder()
+                    .setIndexes(Collections.emptyList())
+                    .setPhysicalNames(Collections.emptyList())
+                    .setRowKeySchema(RowKeySchema.EMPTY_SCHEMA)
+                    .build());
+        } catch (SQLException e) {
+            // Should never happen
+            return null;
+        }
+    }
 
     public TableRef(TableRef tableRef) {
         this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);

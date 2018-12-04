@@ -36,6 +36,7 @@ import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.SnapshotDescription;
@@ -47,14 +48,21 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexDBWritable;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
+
+  private static final Logger logger = LoggerFactory.getLogger(TableSnapshotReadsMapReduceIT.class);
+
   private final static String SNAPSHOT_NAME = "FOO";
   private static final String FIELD1 = "FIELD1";
   private static final String FIELD2 = "FIELD2";
@@ -66,6 +74,9 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private static List<List<Object>> result;
   private long timestamp;
   private String tableName;
+  private Job job;
+  private Path tmpDir;
+  private Configuration conf;
 
   @BeforeClass
   public static void doSetup() throws Exception {
@@ -73,8 +84,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
-  @Test
-  public void testMapReduceSnapshots() throws Exception {
+  @Before
+  public void before() throws SQLException, IOException {
     // create table
     Connection conn = DriverManager.getConnection(getUrl());
     tableName = generateUniqueName();
@@ -82,58 +93,43 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     conn.commit();
 
     // configure Phoenix M/R job to read snapshot
-    final Configuration conf = getUtility().getConfiguration();
-    Job job = Job.getInstance(conf);
-    Path tmpDir = getUtility().getRandomDir();
+    conf = getUtility().getConfiguration();
+    job = Job.getInstance(conf);
+    tmpDir = getUtility().getRandomDir();
+  }
 
-    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,SNAPSHOT_NAME,tableName,tmpDir, null, FIELD1, FIELD2, FIELD3);
+  @Test
+  public void testMapReduceSnapshots() throws Exception {
+    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,
+            SNAPSHOT_NAME, tableName, tmpDir, null, FIELD1, FIELD2, FIELD3);
+    configureJob(job, tableName, null, null, false);
+  }
 
-    // configure and test job
-    configureJob(job, tableName, null, null);
+  @Test
+  public void testMapReduceSnapshotsMultiRegion() throws Exception {
+    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,
+            SNAPSHOT_NAME, tableName, tmpDir, null, FIELD1, FIELD2, FIELD3);
+    configureJob(job, tableName, null, null, true);
   }
 
   @Test
   public void testMapReduceSnapshotsWithCondition() throws Exception {
-    // create table
-    Connection conn = DriverManager.getConnection(getUrl());
-    tableName = generateUniqueName();
-    conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
-    conn.commit();
-
-    // configure Phoenix M/R job to read snapshot
-    final Configuration conf = getUtility().getConfiguration();
-    Job job = Job.getInstance(conf);
-    Path tmpDir = getUtility().getRandomDir();
-    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,SNAPSHOT_NAME,tableName,tmpDir, FIELD3 + " > 0001", FIELD1, FIELD2, FIELD3);
-
-    // configure and test job
-    configureJob(job, tableName, null, "FIELD3 > 0001");
-
+    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,
+            SNAPSHOT_NAME, tableName, tmpDir, FIELD3 + " > 0001", FIELD1, FIELD2, FIELD3);
+    configureJob(job, tableName, null, "FIELD3 > 0001", false);
   }
 
   @Test
   public void testMapReduceSnapshotWithLimit() throws Exception {
-    // create table
-    Connection conn = DriverManager.getConnection(getUrl());
-    tableName = generateUniqueName();
-    conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
-    conn.commit();
-
-    // configure Phoenix M/R job to read snapshot
-    final Configuration conf = getUtility().getConfiguration();
-    Job job = Job.getInstance(conf);
-    Path tmpDir = getUtility().getRandomDir();
-    // Running limit with order by on non pk column
     String inputQuery = "SELECT * FROM " + tableName + " ORDER BY FIELD2 LIMIT 1";
-    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,SNAPSHOT_NAME,tableName,tmpDir,inputQuery);
-
-    // configure and test job
-    configureJob(job, tableName, inputQuery, null);
+    PhoenixMapReduceUtil.setInput(job,PhoenixIndexDBWritable.class,
+            SNAPSHOT_NAME, tableName, tmpDir, inputQuery);
+    configureJob(job, tableName, inputQuery, null, false);
   }
 
-  private void configureJob(Job job, String tableName, String inputQuery, String condition) throws Exception {
+  private void configureJob(Job job, String tableName, String inputQuery, String condition, boolean shouldSplit) throws Exception {
     try {
-      upsertAndSnapshot(tableName);
+      upsertAndSnapshot(tableName, shouldSplit);
       result = new ArrayList<>();
 
       job.setMapperClass(TableSnapshotMapper.class);
@@ -151,6 +147,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       if (condition != null) {
         selectQuery.append(" WHERE " + condition);
       }
+
       if (inputQuery == null)
         inputQuery = selectQuery.toString();
 
@@ -176,12 +173,13 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private void upsertData(String tableName) throws SQLException {
     Connection conn = DriverManager.getConnection(getUrl());
     PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
-    upsertData(stmt, "CCCC", "SSDD", 0001);
-    upsertData(stmt, "CCCC", "HDHG", 0005);
-    upsertData(stmt, "BBBB", "JSHJ", 0002);
-    upsertData(stmt, "AAAA", "JHHD", 0003);
+    upsertData(stmt, "AAAA", "JHHD", 37);
+    upsertData(stmt, "BBBB", "JSHJ", 224);
+    upsertData(stmt, "CCCC", "SSDD", 15);
+    upsertData(stmt, "PPPP", "AJDG", 53);
+    upsertData(stmt, "SSSS", "HSDG", 59);
+    upsertData(stmt, "XXXX", "HDPP", 22);
     conn.commit();
-    timestamp = System.currentTimeMillis();
   }
 
   private void upsertData(PreparedStatement stmt, String field1, String field2, int field3) throws SQLException {
@@ -191,31 +189,52 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     stmt.execute();
   }
 
-  public void upsertAndSnapshot(String tableName) throws Exception {
+  private void upsertAndSnapshot(String tableName, boolean shouldSplit) throws Exception {
     upsertData(tableName);
 
+    TableName hbaseTableName = TableName.valueOf(tableName);
     Connection conn = DriverManager.getConnection(getUrl());
     Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-    admin.snapshot(SNAPSHOT_NAME, TableName.valueOf(tableName));
-    // call flush to create new files in the region
-    admin.flush(TableName.valueOf(tableName));
+
+    if (shouldSplit) {
+      splitTableSync(admin, hbaseTableName, "BBBB".getBytes(), 2);
+    }
+
+    admin.snapshot(SNAPSHOT_NAME, hbaseTableName);
 
     List<SnapshotDescription> snapshots = admin.listSnapshots();
     Assert.assertEquals(tableName, snapshots.get(0).getTable());
 
+    // Capture the snapshot timestamp to use as SCN while reading the table later
+    // Assigning the timestamp value here will make tests less flaky
+    timestamp = System.currentTimeMillis();
+
     // upsert data after snapshot
     PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
-    upsertData(stmt, "DDDD", "SNFB", 0004);
+    upsertData(stmt, "DDDD", "SNFB", 45);
     conn.commit();
   }
 
-    public void deleteSnapshot(String tableName) throws Exception {
+  private void splitTableSync(Admin admin, TableName hbaseTableName,
+                              byte[] splitPoint , int expectedRegions) throws IOException, InterruptedException {
+    admin.split(hbaseTableName, splitPoint);
+    for (int i = 0; i < 100; i++) {
+      List<HRegionInfo> hRegionInfoList = admin.getTableRegions(hbaseTableName);
+      if (hRegionInfoList.size() >= expectedRegions) {
+        break;
+      }
+      logger.info("Sleeping for 1000 ms while waiting for " + hbaseTableName.getNameAsString() + " to split");
+      Thread.sleep(1000);
+    }
+  }
+
+  private void deleteSnapshot(String tableName) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Admin admin =
                         conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             admin.deleteSnapshot(SNAPSHOT_NAME);
         }
-    }
+  }
 
   public static class TableSnapshotMapper extends Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, NullWritable> {
 

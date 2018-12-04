@@ -24,14 +24,14 @@ import org.junit.runners.Parameterized.Parameters;
 
 public class GlobalMutableNonTxIndexIT extends BaseIndexIT {
 
-    public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
-        super(localIndex, mutable, transactional, columnEncoded);
+    public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
+        super(localIndex, mutable, transactionProvider, columnEncoded);
     }
 
-    @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactional={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false, true, false, false }, { false, true, false, true }
+    @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+                { false, true, null, false }, { false, true, null, true }
            });
     }
 

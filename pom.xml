@@ -99,7 +99,7 @@
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.12.0</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
-    <tephra.version>0.14.0-incubating</tephra.version>
+    <tephra.version>0.15.0-incubating</tephra.version>
     <spark.version>2.3.0</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
@@ -122,7 +122,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
-    <numForkedIT>4</numForkedIT>
+    <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
@@ -460,16 +460,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
-        <version>3.2</version>
-        <configuration>
-          <reportPlugins>
-            <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-              <version>2.5.2</version>
-            </plugin>
-          </reportPlugins>
-        </configuration>
+        <version>3.7.1</version>
       </plugin>
       <plugin>
         <groupId>org.apache.rat</groupId>
@@ -495,12 +486,14 @@
             <!-- Argparse is bundled to work around system Python version
                  issues, compatibile with ALv2 -->
             <exclude>bin/argparse-1.4.0/argparse.py</exclude>
-            <exclude>python/ci/**</exclude>
-            <exclude>python/phoenixdb/avatica/proto/*</exclude>
-            <exclude>python/*.rst</exclude>
-            <exclude>python/doc/*.rst</exclude>
-            <exclude>python/doc/conf.py</exclude>
-            <exclude>python/doc/Makefile</exclude>
+            <!-- Not our code -->
+            <exclude>python/requests-kerberos/**</exclude>
+            <exclude>python/phoenixdb/phoenixdb/avatica/proto/*</exclude>
+            <exclude>python/phoenixdb/*.rst</exclude>
+            <exclude>python/phoenixdb/ci/**</exclude>
+            <exclude>python/phoenixdb/doc/*.rst</exclude>
+            <exclude>python/phoenixdb/doc/conf.py</exclude>
+            <exclude>python/phoenixdb/doc/Makefile</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -1066,4 +1059,19 @@
       </properties>
     </profile>
   </profiles>
+
+  <reporting>
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-project-info-reports-plugin</artifactId>
+              <version>3.0.0</version>
+          </plugin>
+          <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>findbugs-maven-plugin</artifactId>
+              <version>3.0.5</version>
+          </plugin>
+      </plugins>
+  </reporting>
 </project>

@@ -53,6 +53,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixMRJobUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil.MR_SCHEDULER_TYPE;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -97,14 +98,17 @@ public class PhoenixMRJobSubmitter {
             + PhoenixDatabaseMetaData.DATA_TABLE_NAME + ", "
             + PhoenixDatabaseMetaData.TABLE_SCHEM + ", "
             + PhoenixDatabaseMetaData.TABLE_NAME + ", "
-            + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE 
+            + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + ", "
+            + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP
             + " FROM "
             + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + ".\"" + PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE + "\""
-            + " (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") "
+            + " (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ", "
+            +  PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +  PLong.INSTANCE.getSqlTypeName() + ") "
             + " WHERE "
             + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL and "
             + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL  and "
-            + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " IS NOT NULL and "
+            + "(" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " IS NOT NULL OR "
+            + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " IS NOT NULL ) and "
             + PhoenixDatabaseMetaData.TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue() + "' and "
             + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + PIndexState.BUILDING.getSerializedValue() + "'";
     
@@ -202,9 +206,13 @@ public class PhoenixMRJobSubmitter {
     }
 
     public Map<String, PhoenixAsyncIndex> getCandidateJobs() throws SQLException {
+        Connection con = DriverManager.getConnection("jdbc:phoenix:" + zkQuorum);
+        return getCandidateJobs(con);
+    }
+
+    public Map<String, PhoenixAsyncIndex> getCandidateJobs(Connection con) throws SQLException {
         Properties props = new Properties();
         UpgradeUtil.doNotUpgradeOnFirstConnection(props);
-        Connection con = DriverManager.getConnection("jdbc:phoenix:" + zkQuorum);
         Statement s = con.createStatement();
         ResultSet rs = s.executeQuery(CANDIDATE_INDEX_INFO_QUERY);
         Map<String, PhoenixAsyncIndex> candidateIndexes = new HashMap<String, PhoenixAsyncIndex>();

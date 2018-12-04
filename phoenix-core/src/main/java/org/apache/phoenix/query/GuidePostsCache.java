@@ -16,6 +16,10 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
+import static org.apache.phoenix.query.QueryServices.STATS_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
@@ -66,6 +70,8 @@ public class GuidePostsCache {
         final long maxTableStatsCacheSize = config.getLong(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
+		final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
+				&& config.getBoolean(STATS_ENABLED_ATTRIB, true);
         cache = CacheBuilder.newBuilder()
                 // Expire entries a given amount of time after they were written
                 .expireAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)
@@ -80,7 +86,7 @@ public class GuidePostsCache {
                 // Log removals at TRACE for debugging
                 .removalListener(new PhoenixStatsCacheRemovalListener())
                 // Automatically load the cache when entries are missing
-                .build(new StatsLoader());
+                .build(isStatsEnabled ? new StatsLoader() : new EmptyStatsLoader());
     }
 
     /**
@@ -127,6 +133,16 @@ public class GuidePostsCache {
             }
         }
     }
+
+    /**
+     * Empty stats loader if stats are disabled
+     */
+	protected class EmptyStatsLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
+		@Override
+		public GuidePostsInfo load(GuidePostsKey statsKey) throws Exception {
+			return GuidePostsInfo.NO_GUIDEPOST;
+		}
+	}
 
     /**
      * Returns the underlying cache. Try to use the provided methods instead of accessing the cache

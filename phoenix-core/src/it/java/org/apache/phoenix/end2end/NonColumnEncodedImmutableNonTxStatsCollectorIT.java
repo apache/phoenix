@@ -25,14 +25,14 @@ import org.junit.runners.Parameterized.Parameters;
 
 public class NonColumnEncodedImmutableNonTxStatsCollectorIT extends StatsCollectorIT {
 
-    public NonColumnEncodedImmutableNonTxStatsCollectorIT(boolean mutable, boolean transactional,
+    public NonColumnEncodedImmutableNonTxStatsCollectorIT(boolean mutable, String transactionProvider,
             boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
+        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
     }
 
-    @Parameters(name = "mutable = {0}, transactional = {1}, isUserTableNamespaceMapped = {2}, columnEncoded = {3}")
-    public static Collection<Boolean[]> data() {
+    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
+    public static Collection<Object[]> data() {
         return Arrays.asList(
-            new Boolean[][] { { false, false, false, false }, { false, false, true, false } });
+            new Object[][] { { false, null, false, false }, { false, null, true, false } });
     }
 }

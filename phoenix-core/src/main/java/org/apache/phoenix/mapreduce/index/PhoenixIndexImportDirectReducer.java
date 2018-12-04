@@ -36,22 +36,11 @@ public class PhoenixIndexImportDirectReducer extends
         Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
 
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
-    private Configuration configuration;
-
-    /**
-     * Called once at the start of the task.
-     */
-    @Override
-    protected void setup(Context context) throws IOException, InterruptedException {
-        configuration = context.getConfiguration();
-    }
 
     @Override
-    protected void reduce(ImmutableBytesWritable arg0, Iterable<IntWritable> arg1,
-            Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable>.Context arg2)
-            throws IOException, InterruptedException {
+    protected void cleanup(Context context) throws IOException, InterruptedException{
         try {
-            IndexToolUtil.updateIndexState(configuration, PIndexState.ACTIVE);
+            IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
         } catch (SQLException e) {
             LOG.error(" Failed to update the status to Active");
             throw new RuntimeException(e.getMessage());

@@ -48,8 +48,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
-import org.apache.phoenix.cache.IndexMetaDataCache;
-import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -299,7 +297,8 @@ public class MutationState implements SQLCloseable {
     public Table getHTable(PTable table) throws SQLException {
         Table htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
-            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows());
+            // We're only using this table for reading, so we want it wrapped even if it's an index
+            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows() || table.getType() == PTableType.INDEX);
         }
         return htable;
     }
@@ -564,8 +563,7 @@ public class MutationState implements SQLCloseable {
                         MultiRowMutationState multiRowMutationState = mutations.remove(key);
                         if (multiRowMutationState != null) {
                             final List<Mutation> deleteMutations = Lists.newArrayList();
-                            generateMutations(tableRef, mutationTimestamp, serverTimestamp, multiRowMutationState,
-                                    deleteMutations, null);
+                            generateMutations(key, mutationTimestamp, serverTimestamp, multiRowMutationState, deleteMutations, null);
                             if (indexMutations == null) {
                                 indexMutations = deleteMutations;
                             } else {
@@ -968,7 +966,12 @@ public class MutationState implements SQLCloseable {
                                 uncommittedPhysicalNames.add(table.getPhysicalName().getString());
                                 phoenixTransactionContext.markDMLFence(table);
                             }
-                            hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, !tableInfo.isDataTable());
+                            // Only pass true for last argument if the index is being written to on it's own (i.e. initial
+                            // index population), not if it's being written to for normal maintenance due to writes to
+                            // the data table. This case is different because the initial index population does not need
+                            // to be done transactionally since the index is only made active after all writes have
+                            // occurred successfully.
+                            hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, tableInfo.isDataTable() && table.getType() == PTableType.INDEX);
                         }
                         numMutations = mutationList.size();
                         GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);

@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -79,20 +80,29 @@ public class TableSnapshotResultIterator implements ResultIterator {
     RestoreSnapshotHelper.RestoreMetaChanges meta =
         RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs,
             this.rootDir, this.restoreDir, this.snapshotName);
-    List restoredRegions = meta.getRegionsToAdd();
+    List<RegionInfo> restoredRegions = meta.getRegionsToAdd();
     this.htd = meta.getTableDescriptor();
-    this.regions = new ArrayList(restoredRegions.size());
-    Iterator i$ = restoredRegions.iterator();
+    this.regions = new ArrayList<>(restoredRegions.size());
 
-    while(i$.hasNext()) {
-      RegionInfo hri = (RegionInfo)i$.next();
-      if(CellUtil.overlappingKeys(this.scan.getStartRow(), this.scan.getStopRow(),
-          hri.getStartKey(), hri.getEndKey())) {
-        this.regions.add(hri);
+    for (RegionInfo restoredRegion : restoredRegions) {
+      if (isValidRegion(restoredRegion)) {
+        this.regions.add(restoredRegion);
       }
     }
 
-    Collections.sort(this.regions,RegionInfo.COMPARATOR);
+    this.regions.sort(RegionInfo.COMPARATOR);
+  }
+
+  /**
+   * Exclude offline split parent regions and
+   * regions that don't intersect with provided scan
+   */
+  private boolean isValidRegion(RegionInfo hri) {
+    if (hri.isOffline() && (hri.isSplit() || hri.isSplitParent())) {
+      return false;
+    }
+    return PrivateCellUtil.overlappingKeys(scan.getStartRow(), scan.getStopRow(),
+            hri.getStartKey(), hri.getEndKey());
   }
 
   public boolean initSnapshotScanner() throws SQLException {

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
@@ -30,6 +31,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
@@ -181,12 +183,33 @@ public class LiteralResultIteratorPlanTest {
                 HConstants.LATEST_TIMESTAMP));
         }
         try {
-            PTable pTable = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, PTableType.SUBQUERY, null,
-                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, null, null, columns, null, null,
-                    Collections.<PTable> emptyList(), false, Collections.<PName> emptyList(), null, null, false, false,
-                    false, null, null, null, null, true, null, 0, 0L, false, null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, EncodedCQCounter.NULL_COUNTER, true);
+            PTable pTable = new PTableImpl.Builder()
+                    .setType(PTableType.SUBQUERY)
+                    .setTimeStamp(MetaDataProtocol.MIN_TABLE_TIMESTAMP)
+                    .setIndexDisableTimestamp(0L)
+                    .setSequenceNumber(PTable.INITIAL_SEQ_NUM)
+                    .setImmutableRows(false)
+                    .setDisableWAL(false)
+                    .setMultiTenant(false)
+                    .setStoreNulls(false)
+                    .setUpdateCacheFrequency(0)
+                    .setNamespaceMapped(false)
+                    .setAppendOnlySchema(false)
+                    .setImmutableStorageScheme(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)
+                    .setQualifierEncodingScheme(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)
+                    .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
+                    .setEncodedCQCounter(EncodedCQCounter.NULL_COUNTER)
+                    .setUseStatsForParallelization(true)
+                    .setExcludedColumns(ImmutableList.of())
+                    .setSchemaName(PName.EMPTY_NAME)
+                    .setTableName(PName.EMPTY_NAME)
+                    .setRowKeyOrderOptimizable(true)
+                    .setIndexes(Collections.emptyList())
+                    .setPhysicalNames(ImmutableList.of())
+                    .setColumns(columns)
+                    .build();
             TableRef sourceTable = new TableRef(pTable);
-            List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
+            List<ColumnRef> sourceColumnRefs = Lists.newArrayList();
             for (PColumn column : sourceTable.getTable().getColumns()) {
                 sourceColumnRefs.add(new ColumnRef(sourceTable, column.getPosition()));
             }
