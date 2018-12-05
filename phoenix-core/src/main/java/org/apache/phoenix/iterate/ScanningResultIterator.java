@@ -117,7 +117,7 @@ public class ScanningResultIterator implements ResultIterator {
                     scanMetricsMap.get(RPC_RETRIES_METRIC_NAME));
             changeMetric(scanMetricsHolder.getCountOfRemoteRPCRetries(),
                     scanMetricsMap.get(REMOTE_RPC_RETRIES_METRIC_NAME));
-            changeMetric(scanMetricsHolder.getCountOfRowsFiltered(),
+            changeMetric(scanMetricsHolder.getCountOfRowsScanned(),
                     scanMetricsMap.get(COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME));
             changeMetric(scanMetricsHolder.getCountOfRowsFiltered(),
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
