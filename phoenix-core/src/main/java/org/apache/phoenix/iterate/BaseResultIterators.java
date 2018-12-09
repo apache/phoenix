@@ -158,6 +158,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private boolean hasGuidePosts;
     private Scan scan;
     private final boolean useStatsForParallelization;
+    private final int gpsMovingWindowSize;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
     private final QueryPlan dataPlan;
     
@@ -502,6 +503,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         initializeScan(plan, perScanLimit, offset, scan);
         this.useStatsForParallelization = PhoenixConfigurationUtil.getStatsForParallelizationProp(context.getConnection(), table);
+        this.gpsMovingWindowSize = PhoenixConfigurationUtil.getGuidePostsMovingWindowSize(context.getConnection());
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -885,20 +887,20 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
-        PTable table = getTable();
-        boolean isSalted = table.getBucketNum() != null;
-        boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
         GuidePostsInfo gps = getGuidePosts();
-        // case when stats wasn't collected
+        // Case when stats wasn't collected
         hasGuidePosts = gps != GuidePostsInfo.NO_GUIDEPOST;
         // Case when stats collection did run but there possibly wasn't enough data. In such a
-        // case we generate an empty guide post with the byte estimate being set as guide post
-        // width. 
+        // case we generate an empty guide post with the byte estimate being set as guide post width.
         boolean emptyGuidePost = gps.isEmptyGuidePost();
         byte[] startRegionBoundaryKey = startKey;
         byte[] stopRegionBoundaryKey = stopKey;
         int columnsInCommon = 0;
         ScanRanges prefixScanRanges = ScanRanges.EVERYTHING;
+
+        PTable table = getTable();
+        boolean isSalted = table.getBucketNum() != null;
+        boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
         boolean traverseAllRegions = isSalted || isLocalIndex;
         if (isLocalIndex) {
             // TODO: when implementing PHOENIX-4585, we should change this to an assert
@@ -951,6 +953,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         DataInput input = null;
         PrefixByteDecoder decoder = null;
         int guideIndex = 0;
+        int guideIndexInMovingWindow = 0;
+        int gpsMovingWindowSize = 0;
+        List<ImmutableBytesWritable> gpsMovingWindow = null;
         GuidePostEstimate estimates = new GuidePostEstimate();
         boolean gpsForFirstRegion = false;
         boolean intersectWithGuidePosts = true;
@@ -958,7 +963,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // gps that are in the scan range. We'll use this if we find
         // no gps in range.
         long fallbackTs = Long.MAX_VALUE;
-        // Determination of whether of not we found a guidepost in
+        // Determination of whether or not we found a guidepost in
         // every region between the start and stop key. If not, then
         // we cannot definitively say at what time the guideposts
         // were collected.
@@ -972,32 +977,84 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 decoder = new PrefixByteDecoder(gps.getMaxLength());
                 firstRegionStartKey = new ImmutableBytesWritable(regionLocations.get(regionIndex).getRegionInfo().getStartKey());
                 try {
-                    int c;
-                    // Continue walking guideposts until we get past the currentKey
-                    while ((c=currentKey.compareTo(currentGuidePost = PrefixByteCodec.decode(decoder, input))) >= 0) {
-                        // Detect if we found a guidepost that might be in the first region. This
-                        // is for the case where the start key may be past the only guidepost in
-                        // the first region.
-                        if (!gpsForFirstRegion && firstRegionStartKey.compareTo(currentGuidePost) <= 0) {
-                            gpsForFirstRegion = true;
+                    if (firstRegionStartKey.getLength() > 0 && this.gpsMovingWindowSize > 0) {
+                        // Continuously decode and load guide posts in batches (moving window). For each moving window,
+                        // firstly compare the searching key with the last element to see whether the searching key is
+                        // in the current window. If it isn't, perform binary search in the window; otherwise, move to
+                        // the next window and repeat the above steps until it finds the start key of the first region
+                        // in the scan ranges or its insertion position.
+                        int gpsScanned = 0;
+                        while (gpsScanned < gpsSize) {
+                            gpsMovingWindowSize = Math.min(gpsSize - gpsScanned, this.gpsMovingWindowSize);
+                            gpsMovingWindow = Lists.newArrayListWithExpectedSize(gpsMovingWindowSize);
+                            for (int i = 0; i < gpsMovingWindowSize; i++) {
+                                gpsMovingWindow.add(new ImmutableBytesWritable(
+                                        PrefixByteCodec.decode(decoder, input).copyBytes()));
+                            }
+
+                            int ret = firstRegionStartKey.compareTo(gpsMovingWindow.get(gpsMovingWindowSize - 1));
+                            if (ret <= 0) {
+                                // The start key of the first region must be in the current moving window
+                                if (ret < 0) {
+                                    // Found the start key of the first region in the scan ranges or its insertion position
+                                    guideIndexInMovingWindow =
+                                            Collections.binarySearch(gpsMovingWindow, firstRegionStartKey);
+                                    if (guideIndexInMovingWindow < 0) {
+                                        // The guide post at the insertion position is the first guide post of the region
+                                        guideIndexInMovingWindow = -1 - guideIndexInMovingWindow;
+                                    }
+                                }
+                                else {
+                                    guideIndexInMovingWindow += (gpsMovingWindowSize - 1);
+                                }
+
+                                guideIndex += guideIndexInMovingWindow;
+                                break;
+                            }
+
+                            // The start key exceeds the current moving window, continue the searching.
+                            guideIndex += guideIndexInMovingWindow;
+                            gpsScanned += gpsMovingWindowSize;
                         }
-                        // While we have gps in the region (but outside of start/stop key), track
-                        // the min ts as a fallback for the time at which stas were calculated.
-                        if (gpsForFirstRegion) {
-                            fallbackTs =
-                                    Math.min(fallbackTs,
-                                        gps.getGuidePostTimestamps()[guideIndex]);
+                    }
+
+                    if (guideIndex >= gpsSize) {
+                        intersectWithGuidePosts = false;
+                    }
+                    else {
+                        int c = 0;
+                        currentGuidePost = guideIndexInMovingWindow < gpsMovingWindowSize ?
+                                gpsMovingWindow.get(guideIndexInMovingWindow++) : PrefixByteCodec.decode(decoder, input);
+                        // Continue walking guideposts until we get past the currentKey
+                        while ((c = currentKey.compareTo(currentGuidePost)) >= 0) {
+                            // Detect if we found a guidepost that might be in the first region. This
+                            // is for the case where the start key may be past the only guidepost in
+                            // the first region.
+                            if (!gpsForFirstRegion
+                                    && firstRegionStartKey.compareTo(currentGuidePost) <= 0) {
+                                gpsForFirstRegion = true;
+                            }
+                            // While we have gps in the region (but outside of start/stop key), track
+                            // the min ts as a fallback for the time at which stas were calculated.
+                            if (gpsForFirstRegion) {
+                                fallbackTs =
+                                        Math.min(fallbackTs, gps.getGuidePostTimestamps()[guideIndex]);
+                            }
+                            // Special case for gp == startKey in which case we want to
+                            // count this gp (if it's in range) though we go past it.
+                            delayAddingEst = (c == 0);
+
+                            guideIndex++;
+                            currentGuidePost = guideIndexInMovingWindow < gpsMovingWindowSize ?
+                                    gpsMovingWindow.get(guideIndexInMovingWindow++) : PrefixByteCodec.decode(decoder, input);
                         }
-                        // Special case for gp == startKey in which case we want to
-                        // count this gp (if it's in range) though we go past it.
-                        delayAddingEst = (c == 0);
-                        guideIndex++;
                     }
                 } catch (EOFException e) {
                     // expected. Thrown when we have decoded all guide posts.
                     intersectWithGuidePosts = false;
                 }
             }
+
             byte[] endRegionKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
             byte[] currentKeyBytes = currentKey.copyBytes();
             intersectWithGuidePosts &= guideIndex < gpsSize;
@@ -1012,6 +1069,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 } else {
                     endKey = regionBoundaries.get(regionIndex);
                 }
+
                 if (isLocalIndex) {
                     // Only attempt further pruning if the prefix range is using
                     // a skip scan since we've already pruned the range of regions
@@ -1030,12 +1088,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     }
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), regionInfo.getEndKey());
                 }
+
                 byte[] initialKeyBytes = currentKeyBytes;
                 int gpsComparedToEndKey = -1;
                 boolean everNotDelayed = false;
                 while (intersectWithGuidePosts && (endKey.length == 0 || (gpsComparedToEndKey=currentGuidePost.compareTo(endKey)) <= 0)) {
-                    Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
-                        false);
+                    Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset, false);
                     if (newScan != null) {
                         ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
                             regionInfo.getStartKey(), regionInfo.getEndKey(),
@@ -1057,7 +1115,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePostBytes;
                     try {
-                        currentGuidePost = PrefixByteCodec.decode(decoder, input);
+                        currentGuidePost = guideIndexInMovingWindow < gpsMovingWindowSize ?
+                                gpsMovingWindow.get(guideIndexInMovingWindow++) : PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();
                         guideIndex++;
                     } catch (EOFException e) {
@@ -1065,7 +1124,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         intersectWithGuidePosts = false;
                     }
                 }
+
                 boolean gpsInThisRegion = initialKeyBytes != currentKeyBytes;
+
                 if (!useStatsForParallelization) {
                     /*
                      * If we are not using stats for generating parallel scans, we need to reset the
@@ -1073,8 +1134,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                      */
                     currentKeyBytes = initialKeyBytes;
                 }
+
                 Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
-                if(newScan != null) {
+                if (newScan != null) {
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                         regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
                     // Boundary case of no GP in region after delaying adding of estimates
@@ -1087,29 +1149,33 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     delayAddingEst = false;
                 }
                 scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+
                 currentKeyBytes = endKey;
+
                 // We have a guide post in the region if the above loop was entered
                 // or if the current key is less than the region end key (since the loop
                 // may not have been entered if our scan end key is smaller than the
                 // first guide post in that region).
                 boolean gpsAfterStopKey = false;
                 gpsAvailableForAllRegions &= 
-                    ( gpsInThisRegion && everNotDelayed) || // GP in this region
+                    ( gpsInThisRegion && everNotDelayed ) || // GP in this region
                     ( regionIndex == startRegionIndex && gpsForFirstRegion ) || // GP in first region (before start key)
                     ( gpsAfterStopKey = ( regionIndex == stopIndex && intersectWithGuidePosts && // GP in last region (after stop key)
-                            ( endRegionKey.length == 0 || // then check if gp is in the region
-                            currentGuidePost.compareTo(endRegionKey) < 0)  ) );            
+                            ( endRegionKey.length == 0 || currentGuidePost.compareTo(endRegionKey) < 0 ) ) );
                 if (gpsAfterStopKey) {
                     // If gp after stop key, but still in last region, track min ts as fallback 
                     fallbackTs =
                             Math.min(fallbackTs,
                                 gps.getGuidePostTimestamps()[guideIndex]);
                 }
+
                 regionIndex++;
             }
+
             if (!scans.isEmpty()) { // Add any remaining scans
                 parallelScans.add(scans);
             }
+
             Long pageLimit = getUnfilteredPageLimit(scan);
             if (scanRanges.isPointLookup() || pageLimit != null) {
                 // If run in parallel, the limit is pushed to each parallel scan so must be accounted for in all of them

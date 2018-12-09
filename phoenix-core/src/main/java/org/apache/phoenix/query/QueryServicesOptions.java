@@ -99,6 +99,7 @@ import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENC
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_MOVING_WINDOW_SIZE;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -246,6 +247,7 @@ public class QueryServicesOptions {
     public static final long DEFAULT_STATS_MAX_CACHE_SIZE = 256 * 1024 * 1024;
     // Allow stats collection to be initiated by client multiple times immediately
     public static final int DEFAULT_MIN_STATS_UPDATE_FREQ_MS = 0;
+    public static final int DEFAULT_STATS_GUIDEPOST_MOVING_WINDOW_SIZE = 256;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 
@@ -333,7 +335,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
     public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
     public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
-    
+
     //Security defaults
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
@@ -453,7 +455,7 @@ public class QueryServicesOptions {
             .setIfUnset(TRACING_THREAD_POOL_SIZE, DEFAULT_TRACING_THREAD_POOL_SIZE)
             .setIfUnset(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
             .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
-            .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
+            .setIfUnset(STATS_GUIDEPOST_MOVING_WINDOW_SIZE, DEFAULT_STATS_GUIDEPOST_MOVING_WINDOW_SIZE)
             .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
             .setIfUnset(COST_BASED_OPTIMIZER_ENABLED, DEFAULT_COST_BASED_OPTIMIZER_ENABLED)
             .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED)
@@ -657,6 +659,10 @@ public class QueryServicesOptions {
         return config.getBoolean(TRACING_ENABLED, DEFAULT_TRACING_ENABLED);
     }
 
+    public int getStatsGuidePostMovingWindowSize() {
+        return config.getInt(STATS_GUIDEPOST_MOVING_WINDOW_SIZE, DEFAULT_STATS_GUIDEPOST_MOVING_WINDOW_SIZE);
+    }
+
     public QueryServicesOptions setTracingEnabled(boolean enable) {
         config.setBoolean(TRACING_ENABLED, enable);
         return this;
@@ -731,6 +737,10 @@ public class QueryServicesOptions {
         return set(STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
     }
 
+    public QueryServicesOptions setStatsGuidePostMovingWindowSize(int movingWindowSize) {
+        return set(STATS_GUIDEPOST_MOVING_WINDOW_SIZE, movingWindowSize);
+    }
+
     public QueryServicesOptions setMinStatsUpdateFrequencyMs(int frequencyMs) {
         return set(MIN_STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
     }
@@ -768,7 +778,6 @@ public class QueryServicesOptions {
     public QueryServicesOptions setDelayInMillisForSchemaChangeCheck(long delayInMillis) {
         config.setLong(DELAY_FOR_SCHEMA_UPDATE_CHECK, delayInMillis);
         return this;
-
     }
 
     public QueryServicesOptions setUseByteBasedRegex(boolean flag) {
@@ -840,7 +849,6 @@ public class QueryServicesOptions {
         config.setLong(INDEX_REBUILD_TASK_INITIAL_DELAY, waitTime);
         return this;
     }
-
 
     public QueryServicesOptions setSequenceCacheSize(long sequenceCacheSize) {
         config.setLong(SEQUENCE_CACHE_SIZE_ATTRIB, sequenceCacheSize);

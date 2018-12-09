@@ -20,6 +20,8 @@ package org.apache.phoenix.mapreduce.util;
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_MOVING_WINDOW_SIZE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_MOVING_WINDOW_SIZE;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -669,6 +671,16 @@ public final class PhoenixConfigurationUtil {
 	    return conn.getQueryServices().getConfiguration()
 	            .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
 	}
+
+    public static int getGuidePostsMovingWindowSize(PhoenixConnection conn) {
+        return conn.getQueryServices().getConfiguration()
+                .getInt(STATS_GUIDEPOST_MOVING_WINDOW_SIZE, DEFAULT_STATS_GUIDEPOST_MOVING_WINDOW_SIZE);
+    }
+
+    public static void setGuidePostsMovingWindowSize(PhoenixConnection conn, int movingWindowSize) {
+        conn.getQueryServices().getConfiguration()
+                .setInt(STATS_GUIDEPOST_MOVING_WINDOW_SIZE, movingWindowSize);
+    }
 
     public static void setTenantId(Configuration configuration, String tenantId){
         Preconditions.checkNotNull(configuration);
