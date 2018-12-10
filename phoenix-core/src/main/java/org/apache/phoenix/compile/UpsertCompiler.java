@@ -366,6 +366,8 @@ public class UpsertCompiler {
         // Cannot update:
         // - read-only VIEW
         // - transactional table with a connection having an SCN
+        // - mutable table with indexes and SCN set
+        // - tables with ROW_TIMESTAMP columns
         if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
             throw new ReadOnlyTableException(schemaName,tableName);
         } else if (connection.isBuildingIndex() && table.getType() != PTableType.INDEX) {
@@ -374,8 +376,25 @@ public class UpsertCompiler {
             .setTableName(tableName)
             .build().buildException();
         } else if (table.isTransactional() && connection.getSCN() != null) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE).setSchemaName(schemaName)
-            .setTableName(tableName).build().buildException();
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode
+                    .CANNOT_SPECIFY_SCN_FOR_TXN_TABLE)
+                    .setSchemaName(schemaName)
+                    .setTableName(tableName).build().buildException();
+        } else if (!table.isImmutableRows() && connection.getSCN() != null
+                && !table.getIndexes().isEmpty() && !connection.isRunningUpgrade()
+                && !connection.isBuildingIndex()) {
+            throw new SQLExceptionInfo
+                    .Builder(SQLExceptionCode
+                    .CANNOT_UPSERT_WITH_SCN_FOR_MUTABLE_TABLE_WITH_INDEXES)
+                    .setSchemaName(schemaName)
+                    .setTableName(tableName).build().buildException();
+        } else if(connection.getSCN() != null && !connection.isRunningUpgrade()
+                && !connection.isBuildingIndex() && table.getRowTimestampColPos() >= 0) {
+            throw new SQLExceptionInfo
+                    .Builder(SQLExceptionCode
+                    .CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN)
+                    .setSchemaName(schemaName)
+                    .setTableName(tableName).build().buildException();
         }
         boolean isSalted = table.getBucketNum() != null;
         isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
