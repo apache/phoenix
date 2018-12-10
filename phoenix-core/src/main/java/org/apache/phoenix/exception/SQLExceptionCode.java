@@ -289,7 +289,8 @@ public enum SQLExceptionCode {
     TRANSACTION_FAILED(1077, "44A08", "Transaction Failure "),
     CANNOT_CREATE_TXN_TABLE_IF_TXNS_DISABLED(1078, "44A09", "Cannot create a transactional table if transactions are disabled."),
     CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED(1079, "44A10", "Cannot alter table to be transactional table if transactions are disabled."),
-    CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP(1080, "44A11", "Cannot create a transactional table if transactions are disabled."),
+    CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP(1080, "44A11", "Cannot create a transactional" +
+            " table with ROW_TIMESTAMP column."),
     CANNOT_ALTER_TO_BE_TXN_WITH_ROW_TIMESTAMP(1081, "44A12", "Cannot alter table to be transactional table if transactions are disabled."),
     TX_MUST_BE_ENABLED_TO_SET_TX_CONTEXT(1082, "44A13", "Cannot set transaction context if transactions are disabled."),
     TX_MUST_BE_ENABLED_TO_SET_AUTO_FLUSH(1083, "44A14", "Cannot set auto flush if transactions are disabled."),
@@ -461,7 +462,15 @@ public enum SQLExceptionCode {
     MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
     MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes"), 
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
-    HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found");
+    HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
+
+    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN(901,"43M12",
+            "Cannot use a connection with SCN set to upsert data for " +
+                    "table with ROW_TIMESTAMP column."),
+    CANNOT_UPSERT_WITH_SCN_FOR_MUTABLE_TABLE_WITH_INDEXES(903,"43M14",
+            "Cannot use a connection with SCN set to " +
+                    "upsert data for a mutable table with indexes.");
+
 
     private final int errorCode;
     private final String sqlState;
