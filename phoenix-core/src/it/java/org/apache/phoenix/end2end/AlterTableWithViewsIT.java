@@ -73,6 +73,8 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
@@ -174,41 +176,53 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             conn.createStatement().execute(generateDDL("UPDATE_CACHE_FREQUENCY=2", ddlFormat));
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
-            
-            viewConn.createStatement().execute("ALTER VIEW " + viewOfTable2 + " SET UPDATE_CACHE_FREQUENCY = 1");
-            
-            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-            PTable table = phoenixConn.getTable(new PTableKey(null, tableName));
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-            assertFalse(table.isImmutableRows());
-            assertEquals(2, table.getUpdateCacheFrequency());
+
+            // Initially all property values should be the same for the base table and its views
+            PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
             PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
+            PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            assertFalse(table.isImmutableRows());
             assertFalse(viewTable1.isImmutableRows());
+            assertFalse(viewTable2.isImmutableRows());
+            assertEquals(2, table.getUpdateCacheFrequency());
             assertEquals(2, viewTable1.getUpdateCacheFrequency());
+            assertEquals(2, viewTable2.getUpdateCacheFrequency());
+            assertNull(table.useStatsForParallelization());
+            assertNull(viewTable1.useStatsForParallelization());
+            assertNull(viewTable2.useStatsForParallelization());
+
+            // Alter a property value for one of the views
+            viewConn.createStatement().execute("ALTER VIEW " + viewOfTable2
+                    + " SET UPDATE_CACHE_FREQUENCY=1, USE_STATS_FOR_PARALLELIZATION=false");
             // query the view to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable2);
-            PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
-            assertFalse(viewTable2.isImmutableRows());
+            viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
             assertEquals(1, viewTable2.getUpdateCacheFrequency());
-            
-            conn.createStatement().execute("ALTER TABLE " + tableName + " SET IMMUTABLE_ROWS=true, UPDATE_CACHE_FREQUENCY=3");
+            assertFalse(viewTable2.useStatsForParallelization());
+
+            // Alter a property value for the base table. So the view for which this property was
+            // not modified earlier should get the base table's altered property value
+            conn.createStatement().execute("ALTER TABLE " + tableName
+                    + " SET IMMUTABLE_ROWS=true, UPDATE_CACHE_FREQUENCY=3, "
+                    + "USE_STATS_FOR_PARALLELIZATION=true");
             // query the views to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable1);
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable2);
-            
-            phoenixConn = conn.unwrap(PhoenixConnection.class);
-            table = phoenixConn.getTable(new PTableKey(null, tableName));
-            assertTrue(table.isImmutableRows());
-            assertEquals(3, table.getUpdateCacheFrequency());
-            
+            table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName));
             viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
-            assertTrue(viewTable1.isImmutableRows());
-            assertEquals(2, viewTable1.getUpdateCacheFrequency());
-            
             viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            assertTrue(table.isImmutableRows());
+            assertTrue(viewTable1.isImmutableRows());
             assertTrue(viewTable2.isImmutableRows());
-            // update cache frequency is not propagated to the view since it was altered on the view
+            assertEquals(3, table.getUpdateCacheFrequency());
+            // The updated property value in the base table is reflected in this view
+            assertEquals(3, viewTable1.getUpdateCacheFrequency());
+            // The update property is not propagated to this view since it was altered on the view
             assertEquals(1, viewTable2.getUpdateCacheFrequency());
+            assertTrue(table.useStatsForParallelization());
+            assertTrue(viewTable1.useStatsForParallelization());
+            assertFalse(viewTable2.useStatsForParallelization());
 
             long gpw = 1000000;
             conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POSTS_WIDTH=" + gpw);
@@ -233,6 +247,67 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             rs.getLong(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH);
             assertTrue(rs.wasNull());
         } 
+    }
+
+    @Test
+    public void testCreateViewWithPropsMaintainsOwnProps() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection viewConn = isMultiTenant ?
+                        DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+            String tableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String viewOfTable1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+            String viewOfTable2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+
+            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                    + " %s ID char(1) NOT NULL," + " COL1 integer NOT NULL, COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)) %s ";
+            conn.createStatement().execute(generateDDL("UPDATE_CACHE_FREQUENCY=2", ddlFormat));
+
+            viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1
+                    + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "
+                    + tableName + " UPDATE_CACHE_FREQUENCY=7");
+            viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2
+                    + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "
+                    + tableName + " USE_STATS_FOR_PARALLELIZATION=true");
+            PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
+
+            // Initially, property values not specified during view creation should be the same for
+            // the base table and its views those specified should have corresponding values
+            PTable table = conn.unwrap(PhoenixConnection.class)
+                    .getTable(new PTableKey(null, tableName));
+            PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class)
+                    .getTable(new PTableKey(tenantId, viewOfTable1));
+            PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class)
+                    .getTable(new PTableKey(tenantId, viewOfTable2));
+            assertEquals(2, table.getUpdateCacheFrequency());
+            assertEquals(7, viewTable1.getUpdateCacheFrequency());
+            assertEquals(2, viewTable2.getUpdateCacheFrequency());
+            assertNull(table.useStatsForParallelization());
+            assertNull(viewTable1.useStatsForParallelization());
+            assertTrue(viewTable2.useStatsForParallelization());
+
+            // Alter a property value for the base table. So the view for which this property was
+            // not explicitly set or modified earlier should get the base table's new property value
+            conn.createStatement().execute("ALTER TABLE " + tableName
+                    + " SET UPDATE_CACHE_FREQUENCY=3, USE_STATS_FOR_PARALLELIZATION=false");
+            // query the views to force the table cache to be updated
+            viewConn.createStatement().execute("SELECT * FROM " + viewOfTable1);
+            viewConn.createStatement().execute("SELECT * FROM " + viewOfTable2);
+            table = conn.unwrap(PhoenixConnection.class)
+                    .getTable(new PTableKey(null, tableName));
+            viewTable1 = viewConn.unwrap(PhoenixConnection.class)
+                    .getTable(new PTableKey(tenantId, viewOfTable1));
+            viewTable2 = viewConn.unwrap(PhoenixConnection.class)
+                    .getTable(new PTableKey(tenantId, viewOfTable2));
+            assertEquals(3, table.getUpdateCacheFrequency());
+            // The updated property value is only propagated to the view in which we did not specify
+            // a value for the property during view creation or alter its value later on
+            assertEquals(7, viewTable1.getUpdateCacheFrequency());
+            assertEquals(3, viewTable2.getUpdateCacheFrequency());
+            assertFalse(table.useStatsForParallelization());
+            assertFalse(viewTable1.useStatsForParallelization());
+            assertTrue(viewTable2.useStatsForParallelization());
+        }
     }
     
     @Test

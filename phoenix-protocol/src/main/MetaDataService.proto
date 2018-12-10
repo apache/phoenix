@@ -61,7 +61,7 @@ message SharedTableState {
   repeated PColumn columns = 4;  
   repeated bytes physicalNames = 5;
   required int64 viewIndexId = 6;
-  optional int32 viewIndexType = 7 [default = 5];
+  optional int32 viewIndexIdType = 7 [default = 5];
 }
 
 message MetaDataResponse {
@@ -77,7 +77,7 @@ message MetaDataResponse {
   optional PSchema schema = 10;
   optional int64 autoPartitionNum = 11;
   optional int64 viewIndexId = 12;
-  optional int32 viewIndexType = 13 [default = 5];
+  optional int32 viewIndexIdType = 13 [default = 5];
 }
 
 message GetTableRequest {
