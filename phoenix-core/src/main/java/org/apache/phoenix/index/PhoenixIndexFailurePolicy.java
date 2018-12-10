@@ -320,7 +320,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             for (PTable index : indexes) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     localIndex = index;
-                    localIndexNames.put(new ImmutableBytesWritable(index.getViewIndexType().toBytes(
+                    localIndexNames.put(new ImmutableBytesWritable(index.getviewIndexIdType().toBytes(
                             index.getViewIndexId())), index.getName().getString());
                 }
             }

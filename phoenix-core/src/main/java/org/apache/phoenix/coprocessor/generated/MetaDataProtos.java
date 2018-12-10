@@ -379,15 +379,15 @@ public final class MetaDataProtos {
      */
     long getViewIndexId();
 
-    // optional int32 viewIndexType = 7 [default = 5];
+    // optional int32 viewIndexIdType = 7 [default = 5];
     /**
-     * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
      */
-    boolean hasViewIndexType();
+    boolean hasViewIndexIdType();
     /**
-     * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
      */
-    int getViewIndexType();
+    int getViewIndexIdType();
   }
   /**
    * Protobuf type {@code SharedTableState}
@@ -478,7 +478,7 @@ public final class MetaDataProtos {
             }
             case 56: {
               bitField0_ |= 0x00000010;
-              viewIndexType_ = input.readInt32();
+              viewIndexIdType_ = input.readInt32();
               break;
             }
           }
@@ -650,20 +650,20 @@ public final class MetaDataProtos {
       return viewIndexId_;
     }
 
-    // optional int32 viewIndexType = 7 [default = 5];
-    public static final int VIEWINDEXTYPE_FIELD_NUMBER = 7;
-    private int viewIndexType_;
+    // optional int32 viewIndexIdType = 7 [default = 5];
+    public static final int VIEWINDEXIDTYPE_FIELD_NUMBER = 7;
+    private int viewIndexIdType_;
     /**
-     * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
      */
-    public boolean hasViewIndexType() {
+    public boolean hasViewIndexIdType() {
       return ((bitField0_ & 0x00000010) == 0x00000010);
     }
     /**
-     * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
      */
-    public int getViewIndexType() {
-      return viewIndexType_;
+    public int getViewIndexIdType() {
+      return viewIndexIdType_;
     }
 
     private void initFields() {
@@ -673,7 +673,7 @@ public final class MetaDataProtos {
       columns_ = java.util.Collections.emptyList();
       physicalNames_ = java.util.Collections.emptyList();
       viewIndexId_ = 0L;
-      viewIndexType_ = 5;
+      viewIndexIdType_ = 5;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -724,7 +724,7 @@ public final class MetaDataProtos {
         output.writeInt64(6, viewIndexId_);
       }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
-        output.writeInt32(7, viewIndexType_);
+        output.writeInt32(7, viewIndexIdType_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -766,7 +766,7 @@ public final class MetaDataProtos {
       }
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeInt32Size(7, viewIndexType_);
+          .computeInt32Size(7, viewIndexIdType_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -815,10 +815,10 @@ public final class MetaDataProtos {
         result = result && (getViewIndexId()
             == other.getViewIndexId());
       }
-      result = result && (hasViewIndexType() == other.hasViewIndexType());
-      if (hasViewIndexType()) {
-        result = result && (getViewIndexType()
-            == other.getViewIndexType());
+      result = result && (hasViewIndexIdType() == other.hasViewIndexIdType());
+      if (hasViewIndexIdType()) {
+        result = result && (getViewIndexIdType()
+            == other.getViewIndexIdType());
       }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
@@ -857,9 +857,9 @@ public final class MetaDataProtos {
         hash = (37 * hash) + VIEWINDEXID_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getViewIndexId());
       }
-      if (hasViewIndexType()) {
-        hash = (37 * hash) + VIEWINDEXTYPE_FIELD_NUMBER;
-        hash = (53 * hash) + getViewIndexType();
+      if (hasViewIndexIdType()) {
+        hash = (37 * hash) + VIEWINDEXIDTYPE_FIELD_NUMBER;
+        hash = (53 * hash) + getViewIndexIdType();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -987,7 +987,7 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000010);
         viewIndexId_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000020);
-        viewIndexType_ = 5;
+        viewIndexIdType_ = 5;
         bitField0_ = (bitField0_ & ~0x00000040);
         return this;
       }
@@ -1050,7 +1050,7 @@ public final class MetaDataProtos {
         if (((from_bitField0_ & 0x00000040) == 0x00000040)) {
           to_bitField0_ |= 0x00000010;
         }
-        result.viewIndexType_ = viewIndexType_;
+        result.viewIndexIdType_ = viewIndexIdType_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -1115,8 +1115,8 @@ public final class MetaDataProtos {
         if (other.hasViewIndexId()) {
           setViewIndexId(other.getViewIndexId());
         }
-        if (other.hasViewIndexType()) {
-          setViewIndexType(other.getViewIndexType());
+        if (other.hasViewIndexIdType()) {
+          setViewIndexIdType(other.getViewIndexIdType());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -1616,35 +1616,35 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // optional int32 viewIndexType = 7 [default = 5];
-      private int viewIndexType_ = 5;
+      // optional int32 viewIndexIdType = 7 [default = 5];
+      private int viewIndexIdType_ = 5;
       /**
-       * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
        */
-      public boolean hasViewIndexType() {
+      public boolean hasViewIndexIdType() {
         return ((bitField0_ & 0x00000040) == 0x00000040);
       }
       /**
-       * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
        */
-      public int getViewIndexType() {
-        return viewIndexType_;
+      public int getViewIndexIdType() {
+        return viewIndexIdType_;
       }
       /**
-       * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
        */
-      public Builder setViewIndexType(int value) {
+      public Builder setViewIndexIdType(int value) {
         bitField0_ |= 0x00000040;
-        viewIndexType_ = value;
+        viewIndexIdType_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>optional int32 viewIndexType = 7 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 7 [default = 5];</code>
        */
-      public Builder clearViewIndexType() {
+      public Builder clearViewIndexIdType() {
         bitField0_ = (bitField0_ & ~0x00000040);
-        viewIndexType_ = 5;
+        viewIndexIdType_ = 5;
         onChanged();
         return this;
       }
@@ -1825,15 +1825,15 @@ public final class MetaDataProtos {
      */
     long getViewIndexId();
 
-    // optional int32 viewIndexType = 13 [default = 5];
+    // optional int32 viewIndexIdType = 13 [default = 5];
     /**
-     * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
      */
-    boolean hasViewIndexType();
+    boolean hasViewIndexIdType();
     /**
-     * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
      */
-    int getViewIndexType();
+    int getViewIndexIdType();
   }
   /**
    * Protobuf type {@code MetaDataResponse}
@@ -1979,7 +1979,7 @@ public final class MetaDataProtos {
             }
             case 104: {
               bitField0_ |= 0x00000200;
-              viewIndexType_ = input.readInt32();
+              viewIndexIdType_ = input.readInt32();
               break;
             }
           }
@@ -2282,20 +2282,20 @@ public final class MetaDataProtos {
       return viewIndexId_;
     }
 
-    // optional int32 viewIndexType = 13 [default = 5];
-    public static final int VIEWINDEXTYPE_FIELD_NUMBER = 13;
-    private int viewIndexType_;
+    // optional int32 viewIndexIdType = 13 [default = 5];
+    public static final int VIEWINDEXIDTYPE_FIELD_NUMBER = 13;
+    private int viewIndexIdType_;
     /**
-     * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
      */
-    public boolean hasViewIndexType() {
+    public boolean hasViewIndexIdType() {
       return ((bitField0_ & 0x00000200) == 0x00000200);
     }
     /**
-     * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+     * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
      */
-    public int getViewIndexType() {
-      return viewIndexType_;
+    public int getViewIndexIdType() {
+      return viewIndexIdType_;
     }
 
     private void initFields() {
@@ -2311,7 +2311,7 @@ public final class MetaDataProtos {
       schema_ = org.apache.phoenix.coprocessor.generated.PSchemaProtos.PSchema.getDefaultInstance();
       autoPartitionNum_ = 0L;
       viewIndexId_ = 0L;
-      viewIndexType_ = 5;
+      viewIndexIdType_ = 5;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -2386,7 +2386,7 @@ public final class MetaDataProtos {
         output.writeInt64(12, viewIndexId_);
       }
       if (((bitField0_ & 0x00000200) == 0x00000200)) {
-        output.writeInt32(13, viewIndexType_);
+        output.writeInt32(13, viewIndexIdType_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -2452,7 +2452,7 @@ public final class MetaDataProtos {
       }
       if (((bitField0_ & 0x00000200) == 0x00000200)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeInt32Size(13, viewIndexType_);
+          .computeInt32Size(13, viewIndexIdType_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -2528,10 +2528,10 @@ public final class MetaDataProtos {
         result = result && (getViewIndexId()
             == other.getViewIndexId());
       }
-      result = result && (hasViewIndexType() == other.hasViewIndexType());
-      if (hasViewIndexType()) {
-        result = result && (getViewIndexType()
-            == other.getViewIndexType());
+      result = result && (hasViewIndexIdType() == other.hasViewIndexIdType());
+      if (hasViewIndexIdType()) {
+        result = result && (getViewIndexIdType()
+            == other.getViewIndexIdType());
       }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
@@ -2594,9 +2594,9 @@ public final class MetaDataProtos {
         hash = (37 * hash) + VIEWINDEXID_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getViewIndexId());
       }
-      if (hasViewIndexType()) {
-        hash = (37 * hash) + VIEWINDEXTYPE_FIELD_NUMBER;
-        hash = (53 * hash) + getViewIndexType();
+      if (hasViewIndexIdType()) {
+        hash = (37 * hash) + VIEWINDEXIDTYPE_FIELD_NUMBER;
+        hash = (53 * hash) + getViewIndexIdType();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -2751,7 +2751,7 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000400);
         viewIndexId_ = 0L;
         bitField0_ = (bitField0_ & ~0x00000800);
-        viewIndexType_ = 5;
+        viewIndexIdType_ = 5;
         bitField0_ = (bitField0_ & ~0x00001000);
         return this;
       }
@@ -2851,7 +2851,7 @@ public final class MetaDataProtos {
         if (((from_bitField0_ & 0x00001000) == 0x00001000)) {
           to_bitField0_ |= 0x00000200;
         }
-        result.viewIndexType_ = viewIndexType_;
+        result.viewIndexIdType_ = viewIndexIdType_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -2957,8 +2957,8 @@ public final class MetaDataProtos {
         if (other.hasViewIndexId()) {
           setViewIndexId(other.getViewIndexId());
         }
-        if (other.hasViewIndexType()) {
-          setViewIndexType(other.getViewIndexType());
+        if (other.hasViewIndexIdType()) {
+          setViewIndexIdType(other.getViewIndexIdType());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -4040,35 +4040,35 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // optional int32 viewIndexType = 13 [default = 5];
-      private int viewIndexType_ = 5;
+      // optional int32 viewIndexIdType = 13 [default = 5];
+      private int viewIndexIdType_ = 5;
       /**
-       * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
        */
-      public boolean hasViewIndexType() {
+      public boolean hasViewIndexIdType() {
         return ((bitField0_ & 0x00001000) == 0x00001000);
       }
       /**
-       * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
        */
-      public int getViewIndexType() {
-        return viewIndexType_;
+      public int getViewIndexIdType() {
+        return viewIndexIdType_;
       }
       /**
-       * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
        */
-      public Builder setViewIndexType(int value) {
+      public Builder setViewIndexIdType(int value) {
         bitField0_ |= 0x00001000;
-        viewIndexType_ = value;
+        viewIndexIdType_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>optional int32 viewIndexType = 13 [default = 5];</code>
+       * <code>optional int32 viewIndexIdType = 13 [default = 5];</code>
        */
-      public Builder clearViewIndexType() {
+      public Builder clearViewIndexIdType() {
         bitField0_ = (bitField0_ & ~0x00001000);
-        viewIndexType_ = 5;
+        viewIndexIdType_ = 5;
         onChanged();
         return this;
       }
@@ -17827,105 +17827,105 @@ public final class MetaDataProtos {
   static {
     java.lang.String[] descriptorData = {
       "\n\025MetaDataService.proto\032\014PTable.proto\032\017P" +
-      "Function.proto\032\rPSchema.proto\"\254\001\n\020Shared" +
+      "Function.proto\032\rPSchema.proto\"\256\001\n\020Shared" +
       "TableState\022\020\n\010tenantId\030\001 \001(\014\022\022\n\nschemaNa" +
       "me\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\031\n\007columns\030\004" +
       " \003(\0132\010.PColumn\022\025\n\rphysicalNames\030\005 \003(\014\022\023\n" +
-      "\013viewIndexId\030\006 \002(\003\022\030\n\rviewIndexType\030\007 \001(" +
-      "\005:\0015\"\353\002\n\020MetaDataResponse\022!\n\nreturnCode\030" +
-      "\001 \001(\0162\r.MutationCode\022\024\n\014mutationTime\030\002 \001" +
-      "(\003\022\026\n\005table\030\003 \001(\0132\007.PTable\022\026\n\016tablesToDe" +
-      "lete\030\004 \003(\014\022\022\n\ncolumnName\030\005 \001(\014\022\022\n\nfamily",
-      "Name\030\006 \001(\014\022\024\n\014functionName\030\007 \001(\014\022\034\n\010func" +
-      "tion\030\010 \003(\0132\n.PFunction\022/\n\024sharedTablesTo" +
-      "Delete\030\t \003(\0132\021.SharedTableState\022\030\n\006schem" +
-      "a\030\n \001(\0132\010.PSchema\022\030\n\020autoPartitionNum\030\013 " +
-      "\001(\003\022\023\n\013viewIndexId\030\014 \001(\003\022\030\n\rviewIndexTyp" +
-      "e\030\r \001(\005:\0015\"\364\001\n\017GetTableRequest\022\020\n\010tenant" +
-      "Id\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableNam" +
-      "e\030\003 \002(\014\022\026\n\016tableTimestamp\030\004 \002(\003\022\027\n\017clien" +
-      "tTimestamp\030\005 \002(\003\022\025\n\rclientVersion\030\006 \001(\005\022" +
-      "\037\n\027skipAddingParentColumns\030\007 \001(\010\022\031\n\021skip",
-      "AddingIndexes\030\010 \001(\010\022$\n\023lockedAncestorTab" +
-      "le\030\t \001(\0132\007.PTable\"\212\001\n\023GetFunctionsReques" +
-      "t\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctionNames\030\002 \003" +
-      "(\014\022\032\n\022functionTimestamps\030\003 \003(\003\022\027\n\017client" +
-      "Timestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"V" +
-      "\n\020GetSchemaRequest\022\022\n\nschemaName\030\001 \002(\t\022\027" +
-      "\n\017clientTimestamp\030\002 \002(\003\022\025\n\rclientVersion" +
-      "\030\003 \002(\005\"d\n\022CreateTableRequest\022\036\n\026tableMet" +
+      "\013viewIndexId\030\006 \002(\003\022\032\n\017viewIndexIdType\030\007 " +
+      "\001(\005:\0015\"\355\002\n\020MetaDataResponse\022!\n\nreturnCod" +
+      "e\030\001 \001(\0162\r.MutationCode\022\024\n\014mutationTime\030\002" +
+      " \001(\003\022\026\n\005table\030\003 \001(\0132\007.PTable\022\026\n\016tablesTo" +
+      "Delete\030\004 \003(\014\022\022\n\ncolumnName\030\005 \001(\014\022\022\n\nfami",
+      "lyName\030\006 \001(\014\022\024\n\014functionName\030\007 \001(\014\022\034\n\010fu" +
+      "nction\030\010 \003(\0132\n.PFunction\022/\n\024sharedTables" +
+      "ToDelete\030\t \003(\0132\021.SharedTableState\022\030\n\006sch" +
+      "ema\030\n \001(\0132\010.PSchema\022\030\n\020autoPartitionNum\030" +
+      "\013 \001(\003\022\023\n\013viewIndexId\030\014 \001(\003\022\032\n\017viewIndexI" +
+      "dType\030\r \001(\005:\0015\"\364\001\n\017GetTableRequest\022\020\n\010te" +
+      "nantId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttabl" +
+      "eName\030\003 \002(\014\022\026\n\016tableTimestamp\030\004 \002(\003\022\027\n\017c" +
+      "lientTimestamp\030\005 \002(\003\022\025\n\rclientVersion\030\006 " +
+      "\001(\005\022\037\n\027skipAddingParentColumns\030\007 \001(\010\022\031\n\021",
+      "skipAddingIndexes\030\010 \001(\010\022$\n\023lockedAncesto" +
+      "rTable\030\t \001(\0132\007.PTable\"\212\001\n\023GetFunctionsRe" +
+      "quest\022\020\n\010tenantId\030\001 \002(\014\022\025\n\rfunctionNames" +
+      "\030\002 \003(\014\022\032\n\022functionTimestamps\030\003 \003(\003\022\027\n\017cl" +
+      "ientTimestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001" +
+      "(\005\"V\n\020GetSchemaRequest\022\022\n\nschemaName\030\001 \002" +
+      "(\t\022\027\n\017clientTimestamp\030\002 \002(\003\022\025\n\rclientVer" +
+      "sion\030\003 \002(\005\"d\n\022CreateTableRequest\022\036\n\026tabl" +
+      "eMetadataMutations\030\001 \003(\014\022\025\n\rclientVersio" +
+      "n\030\002 \001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r\n\025Crea",
+      "teFunctionRequest\022\036\n\026tableMetadataMutati" +
+      "ons\030\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007replace\030" +
+      "\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023CreateSc" +
+      "hemaRequest\022\036\n\026tableMetadataMutations\030\001 " +
+      "\003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion" +
+      "\030\003 \002(\005\"\216\001\n\020DropTableRequest\022\036\n\026tableMeta" +
+      "dataMutations\030\001 \003(\014\022\021\n\ttableType\030\002 \002(\t\022\017" +
+      "\n\007cascade\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\022\037" +
+      "\n\027skipAddingParentColumns\030\005 \001(\010\"_\n\021DropS" +
+      "chemaRequest\022\037\n\027schemaMetadataMutations\030",
+      "\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersi" +
+      "on\030\003 \002(\005\"I\n\020AddColumnRequest\022\036\n\026tableMet" +
       "adataMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 " +
-      "\001(\005\022\027\n\017allocateIndexId\030\003 \001(\010\"r\n\025CreateFu",
-      "nctionRequest\022\036\n\026tableMetadataMutations\030" +
-      "\001 \003(\014\022\021\n\ttemporary\030\002 \002(\010\022\017\n\007replace\030\003 \001(" +
-      "\010\022\025\n\rclientVersion\030\004 \001(\005\"`\n\023CreateSchema" +
-      "Request\022\036\n\026tableMetadataMutations\030\001 \003(\014\022" +
-      "\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion\030\003 \002" +
-      "(\005\"\216\001\n\020DropTableRequest\022\036\n\026tableMetadata" +
-      "Mutations\030\001 \003(\014\022\021\n\ttableType\030\002 \002(\t\022\017\n\007ca" +
-      "scade\030\003 \001(\010\022\025\n\rclientVersion\030\004 \001(\005\022\037\n\027sk" +
-      "ipAddingParentColumns\030\005 \001(\010\"_\n\021DropSchem" +
-      "aRequest\022\037\n\027schemaMetadataMutations\030\001 \003(",
-      "\014\022\022\n\nschemaName\030\002 \002(\t\022\025\n\rclientVersion\030\003" +
-      " \002(\005\"I\n\020AddColumnRequest\022\036\n\026tableMetadat" +
+      "\001(\005\"J\n\021DropColumnRequest\022\036\n\026tableMetadat" +
       "aMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"" +
-      "J\n\021DropColumnRequest\022\036\n\026tableMetadataMut" +
-      "ations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"^\n\023D" +
-      "ropFunctionRequest\022\036\n\026tableMetadataMutat" +
-      "ions\030\001 \003(\014\022\020\n\010ifExists\030\002 \001(\010\022\025\n\rclientVe" +
-      "rsion\030\003 \001(\005\"P\n\027UpdateIndexStateRequest\022\036" +
-      "\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rclient" +
-      "Version\030\002 \001(\005\"*\n\021ClearCacheRequest\022\025\n\rcl",
-      "ientVersion\030\001 \001(\005\"*\n\022ClearCacheResponse\022" +
-      "\024\n\014unfreedBytes\030\001 \001(\003\"*\n\021GetVersionReque" +
-      "st\022\025\n\rclientVersion\030\001 \001(\005\"E\n\022GetVersionR" +
-      "esponse\022\017\n\007version\030\001 \002(\003\022\036\n\026systemCatalo" +
-      "gTimestamp\030\002 \001(\003\"\205\001\n\032ClearTableFromCache" +
-      "Request\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030" +
-      "\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTimest" +
-      "amp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033Clea" +
-      "rTableFromCacheResponse*\271\005\n\014MutationCode" +
-      "\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_",
-      "FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_" +
-      "ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUT" +
-      "ATION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021NEWE" +
-      "R_TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_MUTAT" +
-      "ION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_TABLE" +
-      "_NOT_FOUND\020\t\022\033\n\027FUNCTION_ALREADY_EXISTS\020" +
-      "\n\022\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NEWER_FUNCT" +
-      "ION_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_REGION\020\r\022" +
-      "\031\n\025SCHEMA_ALREADY_EXISTS\020\016\022\026\n\022NEWER_SCHE" +
-      "MA_FOUND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024SCHE",
-      "MA_NOT_IN_REGION\020\021\022\032\n\026TABLES_EXIST_ON_SC" +
-      "HEMA\020\022\022\035\n\031UNALLOWED_SCHEMA_MUTATION\020\023\022%\n" +
-      "!AUTO_PARTITION_SEQUENCE_NOT_FOUND\020\024\022#\n\037" +
-      "CANNOT_COERCE_AUTO_PARTITION_ID\020\025\022\024\n\020TOO" +
-      "_MANY_INDEXES\020\026\022\037\n\033UNABLE_TO_CREATE_CHIL" +
-      "D_LINK\020\027\022!\n\035UNABLE_TO_UPDATE_PARENT_TABL" +
-      "E\020\0302\345\006\n\017MetaDataService\022/\n\010getTable\022\020.Ge" +
-      "tTableRequest\032\021.MetaDataResponse\0227\n\014getF" +
-      "unctions\022\024.GetFunctionsRequest\032\021.MetaDat" +
-      "aResponse\0221\n\tgetSchema\022\021.GetSchemaReques",
-      "t\032\021.MetaDataResponse\0225\n\013createTable\022\023.Cr" +
-      "eateTableRequest\032\021.MetaDataResponse\022;\n\016c" +
-      "reateFunction\022\026.CreateFunctionRequest\032\021." +
-      "MetaDataResponse\0227\n\014createSchema\022\024.Creat" +
-      "eSchemaRequest\032\021.MetaDataResponse\0221\n\tdro" +
-      "pTable\022\021.DropTableRequest\032\021.MetaDataResp" +
-      "onse\0223\n\ndropSchema\022\022.DropSchemaRequest\032\021" +
-      ".MetaDataResponse\0227\n\014dropFunction\022\024.Drop" +
-      "FunctionRequest\032\021.MetaDataResponse\0221\n\tad" +
-      "dColumn\022\021.AddColumnRequest\032\021.MetaDataRes",
-      "ponse\0223\n\ndropColumn\022\022.DropColumnRequest\032" +
-      "\021.MetaDataResponse\022?\n\020updateIndexState\022\030" +
-      ".UpdateIndexStateRequest\032\021.MetaDataRespo" +
-      "nse\0225\n\nclearCache\022\022.ClearCacheRequest\032\023." +
-      "ClearCacheResponse\0225\n\ngetVersion\022\022.GetVe" +
-      "rsionRequest\032\023.GetVersionResponse\022P\n\023cle" +
-      "arTableFromCache\022\033.ClearTableFromCacheRe" +
-      "quest\032\034.ClearTableFromCacheResponseBB\n(o" +
-      "rg.apache.phoenix.coprocessor.generatedB" +
-      "\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "^\n\023DropFunctionRequest\022\036\n\026tableMetadataM" +
+      "utations\030\001 \003(\014\022\020\n\010ifExists\030\002 \001(\010\022\025\n\rclie" +
+      "ntVersion\030\003 \001(\005\"P\n\027UpdateIndexStateReque" +
+      "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rcl" +
+      "ientVersion\030\002 \001(\005\"*\n\021ClearCacheRequest\022\025",
+      "\n\rclientVersion\030\001 \001(\005\"*\n\022ClearCacheRespo" +
+      "nse\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n\021GetVersionR" +
+      "equest\022\025\n\rclientVersion\030\001 \001(\005\"E\n\022GetVers" +
+      "ionResponse\022\017\n\007version\030\001 \002(\003\022\036\n\026systemCa" +
+      "talogTimestamp\030\002 \001(\003\"\205\001\n\032ClearTableFromC" +
+      "acheRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaN" +
+      "ame\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTi" +
+      "mestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033" +
+      "ClearTableFromCacheResponse*\271\005\n\014Mutation" +
+      "Code\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_",
+      "NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COL" +
+      "UMN_ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE" +
+      "_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021" +
+      "NEWER_TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_M" +
+      "UTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_T" +
+      "ABLE_NOT_FOUND\020\t\022\033\n\027FUNCTION_ALREADY_EXI" +
+      "STS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NEWER_F" +
+      "UNCTION_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_REGIO" +
+      "N\020\r\022\031\n\025SCHEMA_ALREADY_EXISTS\020\016\022\026\n\022NEWER_" +
+      "SCHEMA_FOUND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024",
+      "SCHEMA_NOT_IN_REGION\020\021\022\032\n\026TABLES_EXIST_O" +
+      "N_SCHEMA\020\022\022\035\n\031UNALLOWED_SCHEMA_MUTATION\020" +
+      "\023\022%\n!AUTO_PARTITION_SEQUENCE_NOT_FOUND\020\024" +
+      "\022#\n\037CANNOT_COERCE_AUTO_PARTITION_ID\020\025\022\024\n" +
+      "\020TOO_MANY_INDEXES\020\026\022\037\n\033UNABLE_TO_CREATE_" +
+      "CHILD_LINK\020\027\022!\n\035UNABLE_TO_UPDATE_PARENT_" +
+      "TABLE\020\0302\345\006\n\017MetaDataService\022/\n\010getTable\022" +
+      "\020.GetTableRequest\032\021.MetaDataResponse\0227\n\014" +
+      "getFunctions\022\024.GetFunctionsRequest\032\021.Met" +
+      "aDataResponse\0221\n\tgetSchema\022\021.GetSchemaRe",
+      "quest\032\021.MetaDataResponse\0225\n\013createTable\022" +
+      "\023.CreateTableRequest\032\021.MetaDataResponse\022" +
+      ";\n\016createFunction\022\026.CreateFunctionReques" +
+      "t\032\021.MetaDataResponse\0227\n\014createSchema\022\024.C" +
+      "reateSchemaRequest\032\021.MetaDataResponse\0221\n" +
+      "\tdropTable\022\021.DropTableRequest\032\021.MetaData" +
+      "Response\0223\n\ndropSchema\022\022.DropSchemaReque" +
+      "st\032\021.MetaDataResponse\0227\n\014dropFunction\022\024." +
+      "DropFunctionRequest\032\021.MetaDataResponse\0221" +
+      "\n\taddColumn\022\021.AddColumnRequest\032\021.MetaDat",
+      "aResponse\0223\n\ndropColumn\022\022.DropColumnRequ" +
+      "est\032\021.MetaDataResponse\022?\n\020updateIndexSta" +
+      "te\022\030.UpdateIndexStateRequest\032\021.MetaDataR" +
+      "esponse\0225\n\nclearCache\022\022.ClearCacheReques" +
+      "t\032\023.ClearCacheResponse\0225\n\ngetVersion\022\022.G" +
+      "etVersionRequest\032\023.GetVersionResponse\022P\n" +
+      "\023clearTableFromCache\022\033.ClearTableFromCac" +
+      "heRequest\032\034.ClearTableFromCacheResponseB" +
+      "B\n(org.apache.phoenix.coprocessor.genera" +
+      "tedB\016MetaDataProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -17937,13 +17937,13 @@ public final class MetaDataProtos {
           internal_static_SharedTableState_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_SharedTableState_descriptor,
-              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "Columns", "PhysicalNames", "ViewIndexId", "ViewIndexType", });
+              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "Columns", "PhysicalNames", "ViewIndexId", "ViewIndexIdType", });
           internal_static_MetaDataResponse_descriptor =
             getDescriptor().getMessageTypes().get(1);
           internal_static_MetaDataResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_MetaDataResponse_descriptor,
-              new java.lang.String[] { "ReturnCode", "MutationTime", "Table", "TablesToDelete", "ColumnName", "FamilyName", "FunctionName", "Function", "SharedTablesToDelete", "Schema", "AutoPartitionNum", "ViewIndexId", "ViewIndexType", });
+              new java.lang.String[] { "ReturnCode", "MutationTime", "Table", "TablesToDelete", "ColumnName", "FamilyName", "FunctionName", "Function", "SharedTablesToDelete", "Schema", "AutoPartitionNum", "ViewIndexId", "ViewIndexIdType", });
           internal_static_GetTableRequest_descriptor =
             getDescriptor().getMessageTypes().get(2);
           internal_static_GetTableRequest_fieldAccessorTable = new

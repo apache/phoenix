@@ -19,11 +19,14 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -32,13 +35,21 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
+import java.util.Arrays;
+
+import static org.apache.hadoop.hbase.HConstants.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 
 public class MetaDataUtilTest {
+
+    private static final byte[] ROW = Bytes.toBytes("row");
+    private static final byte[] QUALIFIER = Bytes.toBytes("qual");
+    private static final byte[] ORIGINAL_VALUE = Bytes.toBytes("generic-value");
+    private static final byte[] DUMMY_TAGS = Bytes.toBytes("tags");
 
     @Test
     public void testEncode() {
@@ -65,21 +76,63 @@ public class MetaDataUtilTest {
 
     @Test
     public void testMutatingAPut() throws Exception {
-        String version = VersionInfo.getVersion();
-        KeyValueBuilder builder = KeyValueBuilder.get(version);
-        byte[] row = Bytes.toBytes("row");
-        byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-        byte[] qualifier = Bytes.toBytes("qual");
-        byte[] value = Bytes.toBytes("generic-value");
-        KeyValue kv = builder.buildPut(wrap(row), wrap(family), wrap(qualifier), wrap(value));
-        Put put = new Put(row);
-        KeyValueBuilder.addQuietly(put, builder, kv);
+        Put put = generateOriginalPut();
         byte[] newValue = Bytes.toBytes("new-value");
-        Cell cell = put.get(family, qualifier).get(0);
-        assertEquals(Bytes.toString(value), Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
-        MetaDataUtil.mutatePutValue(put, family, qualifier, newValue);
-        cell = put.get(family, qualifier).get(0);
-        assertEquals(Bytes.toString(newValue), Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
+        Cell cell = put.get(TABLE_FAMILY_BYTES, QUALIFIER).get(0);
+        assertEquals(Bytes.toString(ORIGINAL_VALUE),
+                Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
+        MetaDataUtil.mutatePutValue(put, TABLE_FAMILY_BYTES, QUALIFIER, newValue);
+        cell = put.get(TABLE_FAMILY_BYTES, QUALIFIER).get(0);
+        assertEquals(Bytes.toString(newValue),
+                Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
+    }
+
+    @Test
+    public void testTaggingAPutWrongQualifier() throws Exception {
+        Put put = generateOriginalPut();
+        Cell initialCell = put.get(TABLE_FAMILY_BYTES, QUALIFIER).get(0);
+
+        // Different qualifier, so no tags should be set
+        MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, EMPTY_BYTE_ARRAY,
+                EMPTY_BYTE_ARRAY, DUMMY_TAGS);
+        Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+        assertEquals(initialCell, newCell);
+        assertNull(Tag.carryForwardTags(newCell));
+    }
+
+    @Test
+    public void testTaggingAPutUnconditionally() throws Exception {
+        Put put = generateOriginalPut();
+
+        // valueArray is null so we always set tags
+        MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, QUALIFIER,
+                null, DUMMY_TAGS);
+        Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+        assertTrue(Arrays.equals(DUMMY_TAGS, CellUtil.getTagArray(newCell)));
+    }
+
+    @Test
+    public void testSkipTaggingAPutDueToSameCellValue() throws Exception {
+        Put put = generateOriginalPut();
+        Cell initialCell = put.get(TABLE_FAMILY_BYTES, QUALIFIER).get(0);
+
+        // valueArray is set as the value stored in the cell, so we skip tagging the cell
+        MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, QUALIFIER,
+                ORIGINAL_VALUE, DUMMY_TAGS);
+        Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+        assertEquals(initialCell, newCell);
+        assertNull(Tag.carryForwardTags(newCell));
+    }
+
+    @Test
+    public void testTaggingAPutDueToDifferentCellValue() throws Exception {
+        Put put = generateOriginalPut();
+
+        // valueArray is set to a value different than the one in the cell, so we tag the cell
+        MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, QUALIFIER,
+                EMPTY_BYTE_ARRAY, DUMMY_TAGS);
+        Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+        assertTrue(Arrays.equals(DUMMY_TAGS, CellUtil.getTagArray(newCell)));
     }
 
     /**
@@ -90,31 +143,28 @@ public class MetaDataUtilTest {
   public void testGetMutationKeyValue() throws Exception {
     String version = VersionInfo.getVersion();
     KeyValueBuilder builder = KeyValueBuilder.get(version);
-    byte[] row = Bytes.toBytes("row");
-    byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-    byte[] qualifier = Bytes.toBytes("qual");
-    byte[] value = Bytes.toBytes("generic-value");
-    KeyValue kv = builder.buildPut(wrap(row), wrap(family), wrap(qualifier), wrap(value));
-    Put put = new Put(row);
+    KeyValue kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(QUALIFIER),
+            wrap(ORIGINAL_VALUE));
+    Put put = new Put(ROW);
     KeyValueBuilder.addQuietly(put, builder, kv);
 
     // read back out the value
     ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-    assertTrue(MetaDataUtil.getMutationValue(put, qualifier, builder, ptr));
+    assertTrue(MetaDataUtil.getMutationValue(put, QUALIFIER, builder, ptr));
     assertEquals("Value returned doesn't match stored value for " + builder.getClass().getName()
         + "!", 0,
-      ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
+      ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(ORIGINAL_VALUE)));
 
     // try again, this time with the clientkeyvalue builder
     if (builder != GenericKeyValueBuilder.INSTANCE) {
         builder = GenericKeyValueBuilder.INSTANCE;
-        value = Bytes.toBytes("client-value");
-        kv = builder.buildPut(wrap(row), wrap(family), wrap(qualifier), wrap(value));
-        put = new Put(row);
+        byte[] value = Bytes.toBytes("client-value");
+        kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(QUALIFIER), wrap(value));
+        put = new Put(ROW);
         KeyValueBuilder.addQuietly(put, builder, kv);
     
         // read back out the value
-        assertTrue(MetaDataUtil.getMutationValue(put, qualifier, builder, ptr));
+        assertTrue(MetaDataUtil.getMutationValue(put, QUALIFIER, builder, ptr));
         assertEquals("Value returned doesn't match stored value for " + builder.getClass().getName()
             + "!", 0,
           ByteUtil.BYTES_PTR_COMPARATOR.compare(ptr, wrap(value)));
@@ -159,5 +209,16 @@ public class MetaDataUtilTest {
                 MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
         assertEquals(expectedPhoenixVersion, phoenixVersion);
     }
+
+    private Put generateOriginalPut() {
+        String version = VersionInfo.getVersion();
+        KeyValueBuilder builder = KeyValueBuilder.get(version);
+        KeyValue kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(QUALIFIER),
+                wrap(ORIGINAL_VALUE));
+        Put put = new Put(ROW);
+        KeyValueBuilder.addQuietly(put, builder, kv);
+        return put;
+    }
+
 }
 
