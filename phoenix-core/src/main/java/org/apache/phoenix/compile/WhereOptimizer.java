@@ -69,7 +69,6 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -179,7 +178,7 @@ public class WhereOptimizer {
         // Add unique index ID for shared indexes on views. This ensures
         // that different indexes don't interleave.
         if (hasViewIndex) {
-            byte[] viewIndexBytes = table.getViewIndexType().toBytes(table.getViewIndexId());
+            byte[] viewIndexBytes = table.getviewIndexIdType().toBytes(table.getViewIndexId());
             KeyRange indexIdKeyRange = KeyRange.getKeyRange(viewIndexBytes);
             cnf.add(Collections.singletonList(indexIdKeyRange));
             pkPos++;

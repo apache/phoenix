@@ -62,7 +62,7 @@ message IndexMaintainer {
   repeated ColumnInfo indexedColumnInfo = 19;
   required int32 encodingScheme = 20;
   required int32 immutableStorageScheme = 21;
-  optional int32 viewIndexType = 22 ;
+  optional int32 viewIndexIdType = 22 ;
 }
 
 message AddServerCacheRequest {

@@ -218,8 +218,8 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public PDataType getViewIndexType() {
-        return delegate.getViewIndexType();
+    public PDataType getviewIndexIdType() {
+        return delegate.getviewIndexIdType();
     }
 
     @Override
@@ -331,5 +331,13 @@ public class DelegateTable implements PTable {
     @Override
     public Boolean useStatsForParallelization() {
         return delegate.useStatsForParallelization();
+    }
+
+    @Override public boolean hasViewModifiedUpdateCacheFrequency() {
+        return delegate.hasViewModifiedUpdateCacheFrequency();
+    }
+
+    @Override public boolean hasViewModifiedUseStatsForParallelization() {
+        return delegate.hasViewModifiedUseStatsForParallelization();
     }
 }
