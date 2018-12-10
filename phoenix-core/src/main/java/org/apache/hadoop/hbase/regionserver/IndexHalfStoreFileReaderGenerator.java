@@ -59,7 +59,6 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.RepairUtil;
 
@@ -157,7 +156,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 for (PTable index : indexes) {
                     if (index.getIndexType() == IndexType.LOCAL) {
                         IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, conn);
-                        indexMaintainers.put(new ImmutableBytesWritable(index.getViewIndexType().toBytes(index.getViewIndexId())),
+                        indexMaintainers.put(new ImmutableBytesWritable(index.getviewIndexIdType().toBytes(index.getViewIndexId())),
                             indexMaintainer);
                     }
                 }

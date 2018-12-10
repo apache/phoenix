@@ -33,12 +33,14 @@ import java.util.NavigableMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
@@ -258,6 +260,48 @@ public class MetaDataUtil {
         }
     }
 
+    /**
+     * Iterates over the cells that are mutated by the put operation for the given column family and
+     * column qualifier and conditionally modifies those cells to add a tags list. We only add tags
+     * if the cell value does not match the passed valueArray. If we always want to add tags to
+     * these cells, we can pass in a null valueArray
+     * @param somePut Put operation
+     * @param family column family of the cells
+     * @param qualifier column qualifier of the cells
+     * @param valueArray byte array of values or null
+     * @param tagArray byte array of tags to add to the cells
+     */
+    public static void conditionallyAddTagsToPutCells(Put somePut, byte[] family, byte[] qualifier,
+            byte[] valueArray, byte[] tagArray) {
+        NavigableMap<byte[], List<Cell>> familyCellMap = somePut.getFamilyCellMap();
+        List<Cell> cells = familyCellMap.get(family);
+        List<Cell> newCells = Lists.newArrayList();
+        if (cells != null) {
+            for (Cell cell : cells) {
+                if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                        cell.getQualifierLength(), qualifier, 0, qualifier.length) == 0 &&
+                        (valueArray == null || !CellUtil.matchingValue(cell, valueArray))) {
+                    final byte[] combinedTags =
+                            ByteUtil.concat(CellUtil.getTagArray(cell), tagArray);
+                    Cell newCell = CellUtil.createCell(
+                            CellUtil.cloneRow(cell),
+                            CellUtil.cloneFamily(cell),
+                            CellUtil.cloneQualifier(cell),
+                            cell.getTimestamp(),
+                            KeyValue.Type.codeToType(cell.getTypeByte()),
+                            CellUtil.cloneValue(cell),
+                            combinedTags);
+                    // Replace existing cell with a cell that has the custom tags list
+                    newCells.add(newCell);
+                } else {
+                    // Add cell as is
+                    newCells.add(cell);
+                }
+            }
+            familyCellMap.put(family, newCells);
+        }
+    }
+
     public static Put cloneDeleteToPutAndAddColumn(Delete delete, byte[] family, byte[] qualifier, byte[] value) {
         NavigableMap<byte[], List<Cell>> familyCellMap = delete.getFamilyCellMap();
         List<Cell> cells = familyCellMap.get(family);
@@ -357,7 +401,7 @@ public class MetaDataUtil {
         }
         return 0;
     }
-    
+
     public static long getParentSequenceNumber(List<Mutation> tableMetaData) {
         return getSequenceNumber(getParentTableHeaderRow(tableMetaData));
     }

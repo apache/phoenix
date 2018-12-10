@@ -87,7 +87,6 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -464,6 +463,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     // index for link type key value that is used to store linking rows
     private static final int LINK_TYPE_INDEX = 0;
+    // Used to add a tag to a cell when a view modifies a table property to indicate that this
+    // property should not be derived from the base table
+    private static final byte[] VIEW_MODIFIED_PROPERTY_BYTES = Bytes.toBytes(1);
 
     private static final KeyValue CLASS_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, CLASS_NAME_BYTES);
     private static final KeyValue JAR_PATH_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, JAR_PATH_BYTES);
@@ -786,11 +788,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
         // now go up from child to parent all the way to the base table:
         PTable baseTable = null;
+        PTable immediateParent = null;
         long maxTableTimestamp = -1;
         int numPKCols = table.getPKColumns().size();
         for (int i = 0; i < ancestorList.size(); i++) {
             TableInfo parentTableInfo = ancestorList.get(i);
-            PTable pTable = null;
+            PTable pTable;
             String fullParentTableName = SchemaUtil.getTableName(parentTableInfo.getSchemaName(),
                 parentTableInfo.getTableName());
             PName parentTenantId =
@@ -815,6 +818,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (pTable == null) {
                 throw new ParentTableNotFoundException(parentTableInfo, fullTableName);
             } else {
+                if (immediateParent == null) {
+                    immediateParent = pTable;
+                }
                 // only combine columns for view indexes (and not local indexes on regular tables
                 // which also have a viewIndexId)
                 if (i == 0 && hasIndexId && pTable.getType() != PTableType.VIEW) {
@@ -951,13 +957,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
                         : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
 
+        // Inherit view-modifiable properties from the parent table/view if the current view has
+        // not previously modified this property
+        Long updateCacheFreq = (table.getType() != PTableType.VIEW ||
+                table.hasViewModifiedUpdateCacheFrequency()) ?
+                table.getUpdateCacheFrequency() : immediateParent.getUpdateCacheFrequency();
+        Boolean useStatsForParallelization = (table.getType() != PTableType.VIEW ||
+                table.hasViewModifiedUseStatsForParallelization()) ?
+                table.useStatsForParallelization() : immediateParent.useStatsForParallelization();
         // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
         // inherited from the physical base table.
         // if a TableProperty is not valid on a view we set it to the base table value
         // if a TableProperty is valid on a view and is not mutable on a view we set it to the base table value
-        // if a TableProperty is valid on a view and is mutable on a view we use the value set on the view
-        // TODO Implement PHOENIX-4763 to set the view properties correctly instead of just
-        // setting them same as the base table
+        // if a TableProperty is valid on a view and is mutable on a view, we use the value set
+        // on the view if the view had previously modified the property, otherwise we propagate the
+        // value from the base table (see PHOENIX-4763)
         PTableImpl pTable = PTableImpl.builderWithColumns(table, columnsToAdd)
                 .setImmutableRows(baseTable.isImmutableRows())
                 .setDisableWAL(baseTable.isWALDisabled())
@@ -974,6 +988,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 .setTimeStamp(maxTableTimestamp)
                 .setExcludedColumns(excludedColumns == null ?
                         ImmutableList.<PColumn>of() : ImmutableList.copyOf(excludedColumns))
+                .setUpdateCacheFrequency(updateCacheFreq)
+                .setUseStatsForParallelization(useStatsForParallelization)
                 .build();
         return WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
     }
@@ -1436,8 +1452,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
         Cell viewTypeKv = tableKeyValues[VIEW_TYPE_INDEX];
         ViewType viewType = viewTypeKv == null ? null : ViewType.fromSerializedValue(viewTypeKv.getValueArray()[viewTypeKv.getValueOffset()]);
-        PDataType viewIndexType = getViewIndexType(tableKeyValues);
-        Long viewIndexId = getViewIndexId(tableKeyValues, viewIndexType);
+        PDataType viewIndexIdType = getViewIndexIdType(tableKeyValues);
+        Long viewIndexId = getViewIndexId(tableKeyValues, viewIndexIdType);
         Cell indexTypeKv = tableKeyValues[INDEX_TYPE_INDEX];
         IndexType indexType = indexTypeKv == null ? null : IndexType.fromSerializedValue(indexTypeKv.getValueArray()[indexTypeKv.getValueOffset()]);
         Cell baseColumnCountKv = tableKeyValues[BASE_COLUMN_COUNT_INDEX];
@@ -1449,6 +1465,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         long updateCacheFrequency = updateCacheFrequencyKv == null ? 0 :
             PLong.INSTANCE.getCodec().decodeLong(updateCacheFrequencyKv.getValueArray(),
                     updateCacheFrequencyKv.getValueOffset(), SortOrder.getDefault());
+
+        // Check the cell tag to see whether the view has modified this property
+        final byte[] tagUpdateCacheFreq = (updateCacheFrequencyKv == null) ?
+                HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(updateCacheFrequencyKv);
+        boolean viewModifiedUpdateCacheFrequency = (PTableType.VIEW.equals(tableType)) &&
+                Bytes.contains(tagUpdateCacheFreq, VIEW_MODIFIED_PROPERTY_BYTES);
         Cell indexDisableTimestampKv = tableKeyValues[INDEX_DISABLE_TIMESTAMP];
         long indexDisableTimestamp = indexDisableTimestampKv == null ? 0L : PLong.INSTANCE.getCodec().decodeLong(indexDisableTimestampKv.getValueArray(),
                 indexDisableTimestampKv.getValueOffset(), SortOrder.getDefault());
@@ -1474,6 +1496,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     encodingSchemeKv.getValueOffset(), encodingSchemeKv.getValueLength()));
         Cell useStatsForParallelizationKv = tableKeyValues[USE_STATS_FOR_PARALLELIZATION_INDEX];
         Boolean useStatsForParallelization = useStatsForParallelizationKv == null ? null : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(), useStatsForParallelizationKv.getValueOffset(), useStatsForParallelizationKv.getValueLength()));
+
+        // Check the cell tag to see whether the view has modified this property
+        final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
+                HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(useStatsForParallelizationKv);
+        boolean viewModifiedUseStatsForParallelization = (PTableType.VIEW.equals(tableType)) &&
+                Bytes.contains(tagUseStatsForParallelization, VIEW_MODIFIED_PROPERTY_BYTES);
         
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = Lists.newArrayList();
@@ -1529,7 +1557,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 .setMultiTenant(multiTenant)
                 .setStoreNulls(storeNulls)
                 .setViewType(viewType)
-                .setViewIndexType(viewIndexType)
+                .setViewIndexIdType(viewIndexIdType)
                 .setViewIndexId(viewIndexId)
                 .setIndexType(indexType)
                 .setTransactionProvider(transactionProvider)
@@ -1557,28 +1585,30 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 .setParentTableName(parentTableName)
                 .setPhysicalNames(physicalTables == null ?
                         ImmutableList.<PName>of() : ImmutableList.copyOf(physicalTables))
+                .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
+                .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
                 .setColumns(columns)
                 .build();
     }
-    private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexType) {
+    private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
         Cell viewIndexIdKv = tableKeyValues[VIEW_INDEX_ID_INDEX];
         return viewIndexIdKv == null ? null :
-                decodeViewIndexId(viewIndexIdKv, viewIndexType);
+                decodeViewIndexId(viewIndexIdKv, viewIndexIdType);
     }
 
     /**
      * Returns viewIndexId based on its underlying data type
      *
-     * @param tableKeyValues
-     * @param viewIndexType
+     * @param viewIndexIdKv
+     * @param viewIndexIdType
      * @return
      */
-    private Long decodeViewIndexId(Cell viewIndexIdKv, PDataType viewIndexType) {
-        return viewIndexType.getCodec().decodeLong(viewIndexIdKv.getValueArray(),
+    private Long decodeViewIndexId(Cell viewIndexIdKv, PDataType viewIndexIdType) {
+        return viewIndexIdType.getCodec().decodeLong(viewIndexIdKv.getValueArray(),
                 viewIndexIdKv.getValueOffset(), SortOrder.getDefault());
     }
 
-    private PDataType getViewIndexType(Cell[] tableKeyValues) {
+    private PDataType getViewIndexIdType(Cell[] tableKeyValues) {
         Cell dataTypeKv = tableKeyValues[VIEW_INDEX_ID_DATA_TYPE_INDEX];
         return dataTypeKv == null ?
                 MetaDataUtil.getLegacyViewIndexIdDataType() :
@@ -2349,6 +2379,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     return;
                 }
 
+                if (tableType == PTableType.VIEW) {
+                    // Pass in the parent's PTable so that we only tag cells corresponding to the
+                    // view's property in case they are different from the parent
+                    addTagsToPutsForViewAlteredProperties(tableMetadata, parentTable);
+                }
+
                 // When we drop a view we first drop the view metadata and then drop the parent->child linking row
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
@@ -2406,7 +2442,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                 if (indexId != null) {
                    builder.setViewIndexId(indexId);
-                   builder.setViewIndexType(PLong.INSTANCE.getSqlType());
+                   builder.setViewIndexIdType(PLong.INSTANCE.getSqlType());
                 }
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
@@ -3514,19 +3550,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         }
                     }
                     tableMetaData.addAll(additionalTableMetadataMutations);
-                    if (type == PTableType.VIEW
-                                && EncodedColumnsUtil.usesEncodedColumnNames(table) && addingCol
+                    if (type == PTableType.VIEW) {
+                        if (EncodedColumnsUtil.usesEncodedColumnNames(table) && addingCol
                                 && !table.isAppendOnlySchema()) {
-                                // When adding a column to a view that uses encoded column name
-                                // scheme, we need to modify the CQ counters stored in the view's
-                                // physical table. So to make sure clients get the latest PTable, we
-                                // need to invalidate the cache entry.
-                                // If the table uses APPEND_ONLY_SCHEMA we use the position of the
-                                // column as the encoded column qualifier and so we don't need to
-                                // update the CQ counter in the view physical table (see
-                                // PHOENIX-4737)
-                                invalidateList.add(new ImmutableBytesPtr(
-                                        MetaDataUtil.getPhysicalTableRowForView(table)));
+                            // When adding a column to a view that uses encoded column name
+                            // scheme, we need to modify the CQ counters stored in the view's
+                            // physical table. So to make sure clients get the latest PTable, we
+                            // need to invalidate the cache entry.
+                            // If the table uses APPEND_ONLY_SCHEMA we use the position of the
+                            // column as the encoded column qualifier and so we don't need to
+                            // update the CQ counter in the view physical table (see
+                            // PHOENIX-4737)
+                            invalidateList.add(new ImmutableBytesPtr(
+                                    MetaDataUtil.getPhysicalTableRowForView(table)));
+                        }
+                        // Pass in null as the parent PTable, since we always want to tag the cells
+                        // in this case, irrespective of the property values of the parent
+                        addTagsToPutsForViewAlteredProperties(tableMetaData, null);
                     }
                     return null;
                 }
@@ -3538,6 +3578,44 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             logger.error("Add column failed: ", e);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException("Error when adding column: ", e));
+        }
+    }
+
+    /**
+     * See PHOENIX-4763. If we are modifying any table-level properties that are mutable on a view,
+     * we mark these cells in SYSTEM.CATALOG with tags to indicate that this view property should
+     * not be kept in-sync with the base table and so we shouldn't propagate the base table's
+     * property value when resolving the view
+     * @param tableMetaData list of mutations on the view
+     * @param parent PTable of the parent or null
+     */
+    private void addTagsToPutsForViewAlteredProperties(List<Mutation> tableMetaData,
+            PTable parent) {
+        byte[] parentUpdateCacheFreqBytes = null;
+        byte[] parentUseStatsForParallelizationBytes = null;
+        if (parent != null) {
+            parentUpdateCacheFreqBytes = new byte[PLong.INSTANCE.getByteSize()];
+            PLong.INSTANCE.getCodec().encodeLong(parent.getUpdateCacheFrequency(),
+                    parentUpdateCacheFreqBytes, 0);
+            if (parent.useStatsForParallelization() != null) {
+                parentUseStatsForParallelizationBytes =
+                        PBoolean.INSTANCE.toBytes(parent.useStatsForParallelization());
+            }
+        }
+        for (Mutation m: tableMetaData) {
+            if (m instanceof Put) {
+                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
+                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES,
+                        parentUpdateCacheFreqBytes,
+                        VIEW_MODIFIED_PROPERTY_BYTES);
+                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
+                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES,
+                        parentUseStatsForParallelizationBytes,
+                        VIEW_MODIFIED_PROPERTY_BYTES);
+            }
+
         }
     }
 
