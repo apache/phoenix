@@ -19,6 +19,7 @@ import java.util.Properties
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.util.PhoenixRuntime
+import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}
 
@@ -50,7 +51,7 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfter 
   final val TenantId = "theTenant"
 
   var conn: Connection = _
-  var sc: SparkContext = _
+  var spark: SparkSession = _
 
   lazy val hbaseConfiguration = {
     val conf = PhoenixSparkITHelper.getTestClusterConfig
@@ -99,12 +100,17 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfter 
       .setMaster("local[2]") // 2 threads, some parallelism
       .set("spark.ui.showConsoleProgress", "false") // Disable printing stage progress
 
-    sc = new SparkContext(conf)
+    spark = SparkSession
+      .builder()
+      .appName("PhoenixSparkIT")
+      .master("local[2]") // 2 threads, some parallelism
+      .config("spark.ui.showConsoleProgress", "false")
+      .getOrCreate()
   }
 
   override def afterAll() {
     conn.close()
-    sc.stop()
+    spark.stop()
     PhoenixSparkITHelper.cleanUpAfterTest()
     PhoenixSparkITHelper.doTeardown
   }
