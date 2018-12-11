@@ -20,7 +20,7 @@ import org.apache.phoenix.util.ColumnInfo
 import org.joda.time.DateTime
 import scala.collection.{mutable, immutable}
 
-
+@deprecated("Use the DataSource V2 API implementation (see PhoenixDataSource)")
 class PhoenixRecordWritable(columnMetaDataList: List[ColumnInfo]) extends DBWritable {
   val upsertValues = mutable.ArrayBuffer[Any]()
   val resultMap = mutable.Map[String, AnyRef]()
