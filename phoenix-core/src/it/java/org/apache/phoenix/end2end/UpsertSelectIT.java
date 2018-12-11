@@ -45,13 +45,19 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -720,6 +726,200 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         conn.close();
 
+    }
+
+    private class MyClock extends EnvironmentEdge {
+        long initialTime;
+        long delta;
+
+        public MyClock(long delta) {
+            initialTime = System.currentTimeMillis() + delta;
+            this.delta = delta;
+        }
+
+        @Override
+        public long currentTime() {
+            return System.currentTimeMillis() + delta;
+        }
+
+        public long initialTime() {
+            return initialTime;
+        }
+    }
+
+    private void populateTable(String tableName, MyClock clock1, MyClock clock2) throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("create table " + tableName +
+                " (id varchar(10) not null primary key, val varchar(10), ts timestamp)");
+
+        EnvironmentEdgeManager.injectEdge(clock1);
+        conn.createStatement().execute("upsert into " + tableName + " values ('aaa', 'abc', current_date())");
+        conn.createStatement().execute("upsert into " + tableName + " values ('bbb', 'bcd', current_date())");
+        conn.createStatement().execute("upsert into " + tableName + " values ('ccc', 'cde', current_date())");
+        conn.commit();
+
+        EnvironmentEdgeManager.injectEdge(clock2);
+        conn.createStatement().execute("upsert into " + tableName + " values ('ddd', 'fgh', current_date())");
+        conn.commit();
+        conn.close();
+
+        Properties props = new Properties();
+        props.setProperty("CurrentSCN", Long.toString(clock1.initialTime()));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
+        assertFalse(rs.next());
+        conn.close();
+
+        props.setProperty("CurrentSCN", Long.toString(clock2.initialTime()));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("select * from " + tableName);
+
+        assertTrue(rs.next());
+        assertEquals("aaa",rs.getString(1));
+        assertEquals("abc",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertTrue(rs.next());
+        assertEquals("bbb",rs.getString(1));
+        assertEquals("bcd",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertTrue(rs.next());
+        assertEquals("ccc",rs.getString(1));
+        assertEquals("cde",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertFalse(rs.next());
+        conn.close();
+
+        props.setProperty("CurrentSCN", Long.toString(clock2.currentTime()));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("select * from " + tableName);
+
+        assertTrue(rs.next());
+        assertEquals("aaa",rs.getString(1));
+        assertEquals("abc",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertTrue(rs.next());
+        assertEquals("bbb",rs.getString(1));
+        assertEquals("bcd",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertTrue(rs.next());
+        assertEquals("ccc",rs.getString(1));
+        assertEquals("cde",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertTrue(rs.next());
+        assertEquals("ddd",rs.getString(1));
+        assertEquals("fgh",rs.getString(2));
+        assertNotNull(rs.getDate(3));
+
+        assertFalse(rs.next());
+        conn.close();
+    }
+
+    @Test
+    public void testUpsertSelectIntoTable() throws Exception {
+        EnvironmentEdgeManager.reset();
+        String dstTableName = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("create table " + dstTableName +
+                " (id varchar(10) not null primary key, val varchar(10))");
+        conn.close();
+
+        MyClock clock1 = new MyClock(100000);
+        MyClock clock2 = new MyClock(200000);
+        String srcTableName = generateUniqueName();
+        populateTable(srcTableName, clock1, clock2);
+
+        MyClock clock3 = new MyClock(300000);
+        EnvironmentEdgeManager.injectEdge(clock3);
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into " + dstTableName + " (id, val) select id, val from " + srcTableName);
+        conn.commit();
+        conn.close();
+
+        props.setProperty("CurrentSCN", Long.toString(clock3.initialTime() - 1));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select * from " + dstTableName);
+        assertFalse(rs.next());
+        conn.close();
+
+        props.setProperty("CurrentSCN", Long.toString(clock3.currentTime()));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("select * from " + dstTableName);
+
+        assertTrue(rs.next());
+        assertEquals("aaa",rs.getString(1));
+        assertEquals("abc",rs.getString(2));
+
+        assertTrue(rs.next());
+        assertEquals("bbb",rs.getString(1));
+        assertEquals("bcd",rs.getString(2));
+
+        assertTrue(rs.next());
+        assertEquals("ccc",rs.getString(1));
+        assertEquals("cde",rs.getString(2));
+
+        assertTrue(rs.next());
+        assertEquals("ddd",rs.getString(1));
+        assertEquals("fgh",rs.getString(2));
+
+        assertFalse(rs.next());
+        conn.close();
+        EnvironmentEdgeManager.reset();
+    }
+
+    @Test
+    public void testUpsertSelectIntoIndex() throws Exception {
+        EnvironmentEdgeManager.reset();
+        MyClock clock1 = new MyClock(100000);
+        MyClock clock2 = new MyClock(200000);
+        String tableName = generateUniqueName();
+        populateTable(tableName, clock1, clock2);
+
+        MyClock clock3 = new MyClock(300000);
+        EnvironmentEdgeManager.injectEdge(clock3);
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        String indexName = generateUniqueName();
+        conn.createStatement().execute("create index " + indexName + " on " + tableName + " (val) include (ts)");
+        conn.close();
+
+        conn = DriverManager.getConnection(getUrl());
+        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
+        Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                .getTable(pIndexTable.getPhysicalName().getBytes());
+
+        Scan scan = new Scan();
+        scan.setTimeRange (0L, clock3.currentTime());
+        ResultScanner scanner = table.getScanner(scan);
+        assertTrue(scanner.next() != null);
+
+        scan = new Scan();
+        scan.setTimeRange (0L, clock3.initialTime());
+        scanner = table.getScanner(scan);
+        assertTrue(scanner.next() != null);
+
+        scan = new Scan();
+        scan.setTimeRange (0L, clock2.initialTime());
+        scanner = table.getScanner(scan);
+        assertTrue(scanner.next() != null);
+
+        scan = new Scan();
+        scan.setTimeRange (0L, clock1.initialTime());
+        scanner = table.getScanner(scan);
+        assertTrue(scanner.next() == null);
+        conn.close();
+        EnvironmentEdgeManager.reset();
     }
     
     @Test
