@@ -16,6 +16,7 @@ package org.apache.phoenix.spark
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
+@deprecated("Use the DataSource V2 API implementation (see PhoenixDataSource)")
 class SparkSqlContextFunctions(@transient val sqlContext: SQLContext) extends Serializable {
 
   /*

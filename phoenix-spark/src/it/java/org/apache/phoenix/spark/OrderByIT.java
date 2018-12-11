@@ -16,12 +16,13 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseOrderByIT;
+import org.apache.phoenix.spark.datasource.v2.PhoenixDataSource;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryBuilder;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.junit.Ignore;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -30,28 +31,6 @@ import scala.Option;
 import scala.collection.JavaConverters;
 
 public class OrderByIT extends BaseOrderByIT {
-
-    @Ignore(" || operator not supported in order by Spark 1.6 ")
-    @Test
-    @Override
-    public void testDescMultiOrderByExpr() throws Exception {
-        super.testDescMultiOrderByExpr();
-    }
-
-    @Ignore("NULLS FIRST|LAST not supported in Spark 1.6")
-    @Test
-    @Override
-    public void testNullsLastWithDesc() throws Exception {
-        super.testNullsLastWithDesc();
-    }
-
-    @Ignore("NULLS FIRST|LAST not supported in Spark 1.6")
-    @Test
-    @Override
-    public void testOrderByReverseOptimizationWithNullsLast() throws Exception {
-        super.testOrderByReverseOptimizationWithNullsLast();
-    }
-
 
     @Override
     protected ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
@@ -128,25 +107,20 @@ public class OrderByIT extends BaseOrderByIT {
 
             // create two PhoenixRDDs  using the table names and columns that are required for the JOIN query
             List<String> table1Columns = Lists.newArrayList("A_STRING", "CF1.A", "CF1.B", "COL1", "CF2.C", "CF2.D");
-            SQLContext sqlContext = SparkUtil.getSqlContext();
-            DataFrame phoenixDataSet =
-                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName1,
-                            JavaConverters.asScalaBufferConverter(table1Columns).asScala().toSeq(),
-                            Option.apply((String) null), Option.apply(getUrl()), config, false,
-                            null).toDataFrame(sqlContext);
-            phoenixDataSet.registerTempTable(tableName1);
-            List<String> table2Columns = Lists.newArrayList("A_STRING", "COL1");
-            phoenixDataSet =
-                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName2,
-                            JavaConverters.asScalaBufferConverter(table2Columns).asScala().toSeq(),
-                            Option.apply((String) null), Option.apply(getUrl()), config, false,
-                            null).toDataFrame(sqlContext);
-            phoenixDataSet.registerTempTable(tableName2);
+            SQLContext sqlContext = SparkUtil.getSparkSession().sqlContext();
+            Dataset phoenixDataSet = SparkUtil.getSparkSession().read().format("phoenix")
+                    .option(DataSourceOptions.TABLE_KEY, tableName1)
+                    .option(PhoenixDataSource.ZOOKEEPER_URL, getUrl()).load();
+            phoenixDataSet.createOrReplaceTempView(tableName1);
+            phoenixDataSet = SparkUtil.getSparkSession().read().format("phoenix")
+                    .option(DataSourceOptions.TABLE_KEY, tableName2)
+                    .option(PhoenixDataSource.ZOOKEEPER_URL, getUrl()).load();
+            phoenixDataSet.createOrReplaceTempView(tableName2);
 
             String query =
                     "SELECT T1.* FROM " + tableName1 + " T1 JOIN " + tableName2
                             + " T2 ON T1.A_STRING = T2.A_STRING ORDER BY T1.`CF1.B`";
-            DataFrame dataset =
+            Dataset<Row> dataset =
                     sqlContext.sql(query);
             List<Row> rows = dataset.collectAsList();
             ResultSet rs = new SparkResultSet(rows, dataset.columns());
@@ -175,8 +149,8 @@ public class OrderByIT extends BaseOrderByIT {
             assertFalse(rs.next());
 
             query =
-                    "select t1.a_string, t2.col1 from " + tableName1 + " t1 join " + tableName2
-                            + " t2 on t1.a_string = t2.a_string order by t2.col1";
+                    "SELECT T1.A_STRING, T2.COL1 FROM " + tableName1 + " T1 JOIN " + tableName2
+                            + " T2 ON T1.A_STRING = T2.A_STRING ORDER BY T2.COL1";
             dataset =  sqlContext.sql(query);
             rows = dataset.collectAsList();
             rs = new SparkResultSet(rows, dataset.columns());
@@ -193,7 +167,6 @@ public class OrderByIT extends BaseOrderByIT {
         }
     }
 
-    @Ignore("Not passing on CDH 4.15")
     @Test
     public void testOrderByWithUnionAll() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -249,26 +222,20 @@ public class OrderByIT extends BaseOrderByIT {
             conn.commit();
 
 
-            List<String> table1Columns = Lists.newArrayList("A_STRING", "CF1.A", "CF1.B", "COL1", "CF2.C", "CF2.D");
-            SQLContext sqlContext = SparkUtil.getSqlContext();
-            DataFrame phoenixDataSet =
-                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName1,
-                            JavaConverters.asScalaBufferConverter(table1Columns).asScala().toSeq(),
-                            Option.apply((String) null), Option.apply(getUrl()), config, false,
-                            null).toDataFrame(sqlContext);
-            phoenixDataSet.registerTempTable(tableName1);
-            List<String> table2Columns = Lists.newArrayList("A_STRING", "COL1");
-            phoenixDataSet =
-                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName2,
-                            JavaConverters.asScalaBufferConverter(table2Columns).asScala().toSeq(),
-                            Option.apply((String) null), Option.apply(getUrl()), config, false,
-                            null).toDataFrame(sqlContext);
-            phoenixDataSet.registerTempTable(tableName2);
+            SQLContext sqlContext = SparkUtil.getSparkSession().sqlContext();
+            Dataset phoenixDataSet = SparkUtil.getSparkSession().read().format("phoenix")
+                    .option(DataSourceOptions.TABLE_KEY, tableName1)
+                    .option(PhoenixDataSource.ZOOKEEPER_URL, getUrl()).load();
+            phoenixDataSet.createOrReplaceTempView(tableName1);
+            phoenixDataSet = SparkUtil.getSparkSession().read().format("phoenix")
+                    .option(DataSourceOptions.TABLE_KEY, tableName2)
+                    .option(PhoenixDataSource.ZOOKEEPER_URL, getUrl()).load();
+            phoenixDataSet.createOrReplaceTempView(tableName2);
 
             String query =
                     "select a_string, `cf2.d` from " + tableName1 + " union all select * from "
                             + tableName2 + " order by `cf2.d`";
-            DataFrame dataset =
+            Dataset<Row> dataset =
                     sqlContext.sql(query);
             List<Row> rows = dataset.collectAsList();
             ResultSet rs = new SparkResultSet(rows, dataset.columns());
@@ -330,15 +297,12 @@ public class OrderByIT extends BaseOrderByIT {
             stmt.execute();
             conn.commit();
 
-            SQLContext sqlContext = SparkUtil.getSqlContext();
-            DataFrame phoenixDataSet =
-                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName,
-                            JavaConverters.asScalaBufferConverter(Lists.newArrayList("col1", "col2", "col4")).asScala().toSeq(),
-                            Option.apply((String) null), Option.apply(getUrl()), config, false,
-                            null).toDataFrame(sqlContext);
-
-            phoenixDataSet.registerTempTable(tableName);
-            DataFrame dataset =
+            SQLContext sqlContext = SparkUtil.getSparkSession().sqlContext();
+            Dataset phoenixDataSet = SparkUtil.getSparkSession().read().format("phoenix")
+                    .option(DataSourceOptions.TABLE_KEY, tableName)
+                    .option(PhoenixDataSource.ZOOKEEPER_URL, getUrl()).load();
+            phoenixDataSet.createOrReplaceTempView(tableName);
+            Dataset<Row> dataset =
                     sqlContext.sql("SELECT col1+col2, col4, a_string FROM " + tableName
                             + " ORDER BY col1+col2, col4");
             List<Row> rows = dataset.collectAsList();
@@ -395,19 +359,12 @@ public class OrderByIT extends BaseOrderByIT {
             conn.commit();
 
 
-            List<String> columns =
-                    Lists.newArrayList("A_STRING", "CF1.A", "CF1.B", "COL1", "CF2.C", "CF2.D",
-                        "COL2");
-
-            SQLContext sqlContext = SparkUtil.getSqlContext();
-            DataFrame phoenixDataSet =
-                    new PhoenixRDD(SparkUtil.getSparkContext(), tableName,
-                            JavaConverters.asScalaBufferConverter(columns).asScala().toSeq(),
-                            Option.apply((String) null), Option.apply(url), config, false, null)
-                                    .toDataFrame(sqlContext);
-
-            phoenixDataSet.registerTempTable(tableName);
-            DataFrame dataset =
+            SQLContext sqlContext = SparkUtil.getSparkSession().sqlContext();
+            Dataset phoenixDataSet = SparkUtil.getSparkSession().read().format("phoenix")
+                    .option(DataSourceOptions.TABLE_KEY, tableName)
+                    .option(PhoenixDataSource.ZOOKEEPER_URL, getUrl()).load();
+            phoenixDataSet.createOrReplaceTempView(tableName);
+            Dataset<Row> dataset =
                     sqlContext.sql("SELECT A_STRING, `CF1.A`, `CF1.B`, COL1, `CF2.C`, `CF2.D`, COL2 from "
                             + tableName + " ORDER BY `CF1.A`,`CF2.C`");
             List<Row> rows = dataset.collectAsList();

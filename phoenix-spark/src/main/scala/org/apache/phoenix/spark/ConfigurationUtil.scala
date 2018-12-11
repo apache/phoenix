@@ -21,6 +21,7 @@ import org.apache.phoenix.util.{ColumnInfo, PhoenixRuntime}
 
 import scala.collection.JavaConversions._
 
+@deprecated("Use the DataSource V2 API implementation (see PhoenixDataSource)")
 object ConfigurationUtil extends Serializable {
 
   def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], tenantId: Option[String] = None, conf: Option[Configuration] = None): Configuration = {

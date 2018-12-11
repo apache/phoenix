@@ -64,8 +64,7 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
   /*****************/
 
   test("Can read from tenant-specific table as DataFrame") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.phoenixTableAsDataFrame(
+    val df = spark.sqlContext.phoenixTableAsDataFrame(
       TenantTable,
       Seq(OrgIdCol, TenantOnlyCol),
       zkUrl = Some(quorumAddress),
@@ -78,7 +77,7 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
   }
 
   test("Can read from tenant-specific table as RDD") {
-    val rdd = sc.phoenixTableAsRDD(
+    val rdd = spark.sparkContext.phoenixTableAsRDD(
       TenantTable,
       Seq(OrgIdCol, TenantOnlyCol),
       zkUrl = Some(quorumAddress),
@@ -95,23 +94,23 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
   /*****************/
 
   test("Can write a DataFrame using 'DataFrame.saveToPhoenix' to tenant-specific view") {
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = spark.sqlContext
     import sqlContext.implicits._
 
-    val df = sc.parallelize(TestDataSet).toDF(OrgIdCol, TenantOnlyCol)
+    val df = spark.sparkContext.parallelize(TestDataSet).toDF(OrgIdCol, TenantOnlyCol)
     df.saveToPhoenix(TenantTable, zkUrl = Some(quorumAddress), tenantId = Some(TenantId))
 
     verifyResults
   }
 
   test("Can write a DataFrame using 'DataFrame.write' to tenant-specific view") {
-    val sqlContext = new SQLContext(sc)
+    val sqlContext = spark.sqlContext
     import sqlContext.implicits._
 
-    val df = sc.parallelize(TestDataSet).toDF(OrgIdCol, TenantOnlyCol)
+    val df = spark.sparkContext.parallelize(TestDataSet).toDF(OrgIdCol, TenantOnlyCol)
 
     df.write
-      .format("org.apache.phoenix.spark")
+      .format("phoenix")
       .mode("overwrite")
       .option("table", TenantTable)
       .option(PhoenixRuntime.TENANT_ID_ATTRIB, TenantId)
@@ -122,8 +121,7 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
   }
 
   test("Can write an RDD to Phoenix tenant-specific view") {
-    val sqlContext = new SQLContext(sc)
-    sc
+    spark.sparkContext
       .parallelize(TestDataSet)
       .saveToPhoenix(
         TenantTable,
