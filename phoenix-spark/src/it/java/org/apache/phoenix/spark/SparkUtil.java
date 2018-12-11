@@ -22,13 +22,14 @@ import com.google.common.base.Joiner;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.spark.datasource.v2.PhoenixDataSource;
 import org.apache.phoenix.util.QueryBuilder;
-import org.apache.spark.SparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.execution.SparkPlan;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import scala.Option;
 import scala.collection.JavaConverters;
 
@@ -43,19 +44,14 @@ public class SparkUtil {
     public static final String NUM_EXECUTORS = "local[2]";
     public static final String UI_SHOW_CONSOLE_PROGRESS = "spark.ui.showConsoleProgress";
 
-    public static SparkContext getSparkContext() {
+    public static SparkSession getSparkSession() {
         return SparkSession.builder().appName(APP_NAME).master(NUM_EXECUTORS)
-                .config(UI_SHOW_CONSOLE_PROGRESS, false).getOrCreate().sparkContext();
-    }
-
-    public static SQLContext getSqlContext() {
-        return SparkSession.builder().appName(APP_NAME).master(NUM_EXECUTORS)
-                .config(UI_SHOW_CONSOLE_PROGRESS, false).getOrCreate().sqlContext();
+                .config(UI_SHOW_CONSOLE_PROGRESS, false).getOrCreate();
     }
 
     public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder, String url, Configuration config)
             throws SQLException {
-        SQLContext sqlContext = SparkUtil.getSqlContext();
+        SQLContext sqlContext = getSparkSession().sqlContext();
 
         boolean forceRowKeyOrder =
                 conn.unwrap(PhoenixConnection.class).getQueryServices().getProps()
@@ -69,14 +65,11 @@ public class SparkUtil {
 
         // create PhoenixRDD using the table name and columns that are required by the query
         // since we don't set the predicate filtering is done after rows are returned from spark
-        Dataset phoenixDataSet =
-                new PhoenixRDD(SparkUtil.getSparkContext(), queryBuilder.getFullTableName(),
-                        JavaConverters.collectionAsScalaIterableConverter(queryBuilder.getRequiredColumns()).asScala()
-                                .toSeq(),
-                        Option.apply((String) null), Option.apply(url), config, false,
-                        null).toDataFrame(sqlContext);
+        Dataset phoenixDataSet = getSparkSession().read().format("phoenix")
+                .option(DataSourceOptions.TABLE_KEY, queryBuilder.getFullTableName())
+                .option(PhoenixDataSource.ZOOKEEPER_URL, url).load();
 
-        phoenixDataSet.registerTempTable(queryBuilder.getFullTableName());
+        phoenixDataSet.createOrReplaceTempView(queryBuilder.getFullTableName());
         Dataset<Row> dataset = sqlContext.sql(queryBuilder.build());
         SparkPlan plan = dataset.queryExecution().executedPlan();
         List<Row> rows = dataset.collectAsList();

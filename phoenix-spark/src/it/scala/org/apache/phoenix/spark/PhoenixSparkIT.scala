@@ -13,16 +13,16 @@
  */
 package org.apache.phoenix.spark
 
+import java.sql.DriverManager
 import java.util.Date
 
 import org.apache.phoenix.schema.types.PVarchar
+import org.apache.phoenix.spark.datasource.v2.PhoenixDataSource
 import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext, SaveMode}
-import org.joda.time.DateTime
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.{Row, SaveMode}
+
 import scala.collection.mutable.ListBuffer
-import org.apache.hadoop.conf.Configuration
 
 /**
   * Note: If running directly from an IDE, these are the recommended VM parameters:
@@ -30,13 +30,20 @@ import org.apache.hadoop.conf.Configuration
   */
 class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
-  test("Can persist data with case senstive columns (like in avro schema) using 'DataFrame.saveToPhoenix'") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.createDataFrame(
+  test("Can persist data with case sensitive columns (like in avro schema)") {
+    val df = spark.createDataFrame(
       Seq(
         (1, 1, "test_child_1"),
-        (2, 1, "test_child_2"))).toDF("ID", "TABLE3_ID", "t2col1")
-    df.saveToPhoenix("TABLE3", zkUrl = Some(quorumAddress),skipNormalizingIdentifier=true)
+        (2, 1, "test_child_2"))).
+    // column names are case sensitive
+      toDF("ID", "TABLE3_ID", "t2col1")
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "TABLE3",
+        PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress, PhoenixDataSource.SKIP_NORMALIZING_IDENTIFIER -> "true"))
+      .mode(SaveMode.Overwrite)
+      .save()
+
 
     // Verify results
     val stmt = conn.createStatement()
@@ -50,7 +57,29 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     stmt.close()
 
     results.toList shouldEqual checkResults
+  }
 
+  // INSERT is not support using DataSource v2 api yet
+  ignore("Can use write data using spark SQL INSERT") {
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE3", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
+    df1.createOrReplaceTempView("TABLE3")
+
+    // Insert data
+    spark.sql("INSERT INTO TABLE3 VALUES(10, 10, 10)")
+    spark.sql("INSERT INTO TABLE3 VALUES(20, 20, 20)")
+
+    // Verify results
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM TABLE3 WHERE ID>=10")
+    val expectedResults = List((10, 10, "10"), (20, 20, "20"))
+    val results = ListBuffer[(Long, Long, String)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getLong(2), rs.getString(3)))
+    }
+    stmt.close()
+
+    results.toList shouldEqual expectedResults
   }
   
   test("Can convert Phoenix schema") {
@@ -58,29 +87,25 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
       new ColumnInfo("varcharColumn", PVarchar.INSTANCE.getSqlType)
     )
 
-    val rdd = new PhoenixRDD(sc, "MyTable", Array("Foo", "Bar"),
-      conf = hbaseConfiguration)
+    val catalystSchema = SparkSchemaUtil.phoenixSchemaToCatalystSchema(phoenixSchema)
 
-    val catalystSchema = rdd.phoenixSchemaToCatalystSchema(phoenixSchema)
-
-    val expected = List(StructField("varcharColumn", StringType, nullable = true))
+    val expected = new StructType(List(StructField("varcharColumn", StringType, nullable = true)).toArray)
 
     catalystSchema shouldEqual expected
   }
 
   test("Can create schema RDD and execute query") {
-    val sqlContext = new SQLContext(sc)
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
+    df1.createOrReplaceTempView("sql_table_1")
 
-    df1.registerTempTable("sql_table_1")
+    val df2 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE2", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
-    val df2 = sqlContext.phoenixTableAsDataFrame("TABLE2", Array("ID", "TABLE1_ID"),
-      conf = hbaseConfiguration)
+    df2.createOrReplaceTempView("sql_table_2")
 
-    df2.registerTempTable("sql_table_2")
-
-    val sqlRdd = sqlContext.sql(
+    val sqlRdd = spark.sql(
       """
         |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
         |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
@@ -91,18 +116,49 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     count shouldEqual 6L
   }
 
+  ignore("Ordering by pk columns should not require sorting") {
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
+    df1.createOrReplaceTempView("TABLE1")
+
+    val sqlRdd = spark.sql("SELECT * FROM TABLE1 ORDER BY ID, COL1")
+    val plan = sqlRdd.queryExecution.sparkPlan
+    // verify the spark plan doesn't have a sort
+    assert(!plan.toString.contains("Sort"))
+
+    val expectedResults = Array(Row.fromSeq(Seq(1, "test_row_1")), Row.fromSeq(Seq(2, "test_row_2")))
+    val actual = sqlRdd.collect()
+
+    actual shouldEqual expectedResults
+  }
+
+  test("Verify correct number of partitions are created") {
+    val conn = DriverManager.getConnection(PhoenixSparkITHelper.getUrl)
+    val ddl = "CREATE TABLE SPLIT_TABLE (id VARCHAR NOT NULL PRIMARY KEY, val VARCHAR) split on ('e','j','o')"
+    conn.createStatement.execute(ddl)
+    val keys = Array("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
+      "t", "u", "v", "w", "x", "y", "z")
+    for (key <- keys) {
+      conn.createStatement.execute("UPSERT INTO SPLIT_TABLE VALUES('" + key + "', '" + key + "')")
+    }
+    conn.commit()
+
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "SPLIT_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
+    df1.createOrReplaceTempView("SPLIT_TABLE")
+    val sqlRdd = spark.sql("SELECT * FROM SPLIT_TABLE")
+    val numPartitions = sqlRdd.rdd.partitions.size
+
+    numPartitions shouldEqual 4
+  }
+
   test("Can create schema RDD and execute query on case sensitive table (no config)") {
-    val sqlContext = new SQLContext(sc)
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> SchemaUtil.getEscapedArgument("table4"), PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
+    df1.createOrReplaceTempView("table4")
 
-    val df1 = sqlContext.phoenixTableAsDataFrame(
-      SchemaUtil.getEscapedArgument("table3"),
-      Array("id", "col1"),
-      zkUrl = Some(quorumAddress))
-
-    df1.registerTempTable("table3")
-
-    val sqlRdd = sqlContext.sql("SELECT * FROM table3")
+    val sqlRdd = spark.sql("SELECT id FROM table4")
 
     val count = sqlRdd.count()
 
@@ -110,20 +166,17 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can create schema RDD and execute constrained query") {
-    val sqlContext = new SQLContext(sc)
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("TABLE1", Array("ID", "COL1"),
-      conf = hbaseConfiguration)
+    df1.createOrReplaceTempView("sql_table_1")
 
-    df1.registerTempTable("sql_table_1")
+    val df2 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE2", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load.filter("ID = 1")
 
-    val df2 = sqlContext.phoenixTableAsDataFrame("TABLE2", Array("ID", "TABLE1_ID"),
-      predicate = Some("\"ID\" = 1"),
-      conf = hbaseConfiguration)
+    df2.createOrReplaceTempView("sql_table_2")
 
-    df2.registerTempTable("sql_table_2")
-
-    val sqlRdd = sqlContext.sql(
+    val sqlRdd = spark.sql(
       """
         |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
         |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
@@ -135,17 +188,12 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can create schema RDD with predicate that will never match") {
-    val sqlContext = new SQLContext(sc)
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load.filter("ID = -1")
 
-    val df1 = sqlContext.phoenixTableAsDataFrame(
-      SchemaUtil.getEscapedArgument("table3"),
-      Array("id", "col1"),
-      predicate = Some("\"id\" = -1"),
-      conf = hbaseConfiguration)
+    df1.createOrReplaceTempView("table3")
 
-    df1.registerTempTable("table3")
-
-    val sqlRdd = sqlContext.sql("SELECT * FROM table3")
+    val sqlRdd = spark.sql("SELECT * FROM table3")
 
     val count = sqlRdd.count()
 
@@ -153,21 +201,17 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can create schema RDD with complex predicate") {
-    val sqlContext = new SQLContext(sc)
+    val predicate = "ID > 0 AND TIMESERIES_KEY BETWEEN " +
+      "CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND " +
+      "CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)"
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> "DATE_PREDICATE_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .load
+      .filter(predicate)
 
-    val df1 = sqlContext.phoenixTableAsDataFrame(
-      "DATE_PREDICATE_TEST_TABLE",
-      Array("ID", "TIMESERIES_KEY"),
-      predicate = Some(
-        """
-          |ID > 0 AND TIMESERIES_KEY BETWEEN
-          |CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND
-          |CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)""".stripMargin),
-      conf = hbaseConfiguration)
+    df1.createOrReplaceTempView("date_predicate_test_table")
 
-    df1.registerTempTable("date_predicate_test_table")
-
-    val sqlRdd = df1.sqlContext.sql("SELECT * FROM date_predicate_test_table")
+    val sqlRdd = spark.sqlContext.sql("SELECT * FROM date_predicate_test_table")
 
     val count = sqlRdd.count()
 
@@ -175,14 +219,12 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can query an array table") {
-    val sqlContext = new SQLContext(sc)
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "ARRAY_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("ARRAY_TEST_TABLE", Array("ID", "VCARRAY"),
-      conf = hbaseConfiguration)
+    df1.createOrReplaceTempView("ARRAY_TEST_TABLE")
 
-    df1.registerTempTable("ARRAY_TEST_TABLE")
-
-    val sqlRdd = sqlContext.sql("SELECT * FROM ARRAY_TEST_TABLE")
+    val sqlRdd = spark.sql("SELECT * FROM ARRAY_TEST_TABLE")
 
     val count = sqlRdd.count()
 
@@ -195,12 +237,12 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can read a table as an RDD") {
-    val rdd1 = sc.phoenixTableAsRDD("ARRAY_TEST_TABLE", Seq("ID", "VCARRAY"),
-      conf = hbaseConfiguration)
+    val rdd1 = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "ARRAY_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
     val count = rdd1.count()
 
-    val arrayValues = rdd1.take(1)(0)("VCARRAY")
+    val arrayValues = rdd1.take(1)(0)(1)
 
     arrayValues should equal(Array("String1", "String2", "String3"))
 
@@ -208,24 +250,30 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can save to phoenix table") {
-    val sqlContext = new SQLContext(sc)
+    val dataSet = List(Row(1L, "1", 1), Row(2L, "2", 2), Row(3L, "3", 3))
 
-    val dataSet = List((1L, "1", 1), (2L, "2", 2), (3L, "3", 3))
+    val schema = StructType(
+      Seq(StructField("ID", LongType, nullable = false),
+        StructField("COL1", StringType),
+        StructField("COL2", IntegerType)))
 
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        "OUTPUT_TEST_TABLE",
-        Seq("ID", "COL1", "COL2"),
-        hbaseConfiguration
-      )
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "OUTPUT_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
 
     // Load the results back
     val stmt = conn.createStatement()
     val rs = stmt.executeQuery("SELECT ID, COL1, COL2 FROM OUTPUT_TEST_TABLE")
-    val results = ListBuffer[(Long, String, Int)]()
+    val results = ListBuffer[Row]()
     while (rs.next()) {
-      results.append((rs.getLong(1), rs.getString(2), rs.getInt(3)))
+      results.append(Row(rs.getLong(1), rs.getString(2), rs.getInt(3)))
     }
 
     // Verify they match
@@ -234,18 +282,29 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     }
   }
 
-  test("Can save Java and Joda dates to Phoenix (no config)") {
-    val dt = new DateTime()
-    val date = new Date()
+  test("Can save dates to Phoenix using java.sql.Date") {
+    val date = java.sql.Date.valueOf("2016-09-30")
 
-    val dataSet = List((1L, "1", 1, dt), (2L, "2", 2, date))
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        "OUTPUT_TEST_TABLE",
-        Seq("ID", "COL1", "COL2", "COL3"),
-        zkUrl = Some(quorumAddress)
-      )
+    // Since we are creating a Row we have to use java.sql.date
+    // java.util.date or joda.DateTime is not supported
+    val dataSet = Seq(Row(1L, "1", 1, date), Row(2L, "2", 2, date))
+
+    val schema = StructType(
+      Seq(StructField("ID", LongType, nullable = false),
+        StructField("COL1", StringType),
+        StructField("COL2", IntegerType),
+        StructField("COL3", DateType)))
+
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "OUTPUT_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
 
     // Load the results back
     val stmt = conn.createStatement()
@@ -256,94 +315,56 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     }
 
     // Verify the epochs are equal
-    results(0).getTime shouldEqual dt.getMillis
+    results(0).getTime shouldEqual date.getTime
     results(1).getTime shouldEqual date.getTime
   }
 
   test("Can infer schema without defining columns") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.phoenixTableAsDataFrame("TABLE2", Seq(), conf = hbaseConfiguration)
+    val df = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE2", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load()
     df.schema("ID").dataType shouldEqual LongType
     df.schema("TABLE1_ID").dataType shouldEqual LongType
     df.schema("t2col1").dataType shouldEqual StringType
   }
 
   test("Spark SQL can use Phoenix as a data source with no schema specified") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
-      "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
     df.count() shouldEqual 2
     df.schema("ID").dataType shouldEqual LongType
     df.schema("COL1").dataType shouldEqual StringType
   }
 
-  test("Spark SQL can use Phoenix as a data source with PrunedFilteredScan") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
-      "zkUrl" -> quorumAddress))
+  test("Datasource v2 pushes down filters") {
+    val df = spark.sqlContext.read.format("phoenix")
+      .options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
     val res = df.filter(df("COL1") === "test_row_1" && df("ID") === 1L).select(df("ID"))
 
     // Make sure we got the right value back
     assert(res.first().getLong(0) == 1L)
 
     val plan = res.queryExecution.sparkPlan
-    // filters should be pushed into phoenix relation
-    assert(plan.toString.contains("PushedFilters: [*IsNotNull(COL1), *IsNotNull(ID), " +
-      "*EqualTo(COL1,test_row_1), *EqualTo(ID,1)]"))
-    // spark should run the filters on the rows returned by Phoenix
-    assert(!plan.toString.matches(".*Filter (((isnotnull(COL1.*) && isnotnull(ID.*)) "
-      + " && (COL1.* = test_row_1)) && (ID.* = 1)).*"))
+    // filters should be pushed into scan
+    assert(".*ScanV2 phoenix.*Filters.*ID.*COL1.*".r.findFirstIn(plan.toString).isDefined)
+    // spark should not do post scan filtering
+    assert(".*Filter .*ID.*COL1.*".r.findFirstIn(plan.toString).isEmpty)
   }
 
-  test("Can persist a dataframe using 'DataFrame.saveToPhoenix'") {
+  test("Can persist a dataframe") {
     // Load from TABLE1
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
-      "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read.format("phoenix").options( Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load
 
     // Save to TABLE1_COPY
-    df.saveToPhoenix("TABLE1_COPY", zkUrl = Some(quorumAddress))
-
-    // Verify results
-    val stmt = conn.createStatement()
-    val rs = stmt.executeQuery("SELECT * FROM TABLE1_COPY")
-
-    val checkResults = List((1L, "test_row_1"), (2, "test_row_2"))
-    val results = ListBuffer[(Long, String)]()
-    while (rs.next()) {
-      results.append((rs.getLong(1), rs.getString(2)))
-    }
-    stmt.close()
-
-    results.toList shouldEqual checkResults
-  }
-
-  test("Can persist a dataframe using 'DataFrame.save()") {
-    // Clear TABLE1_COPY
-    var stmt = conn.createStatement()
-    stmt.executeUpdate("DELETE FROM TABLE1_COPY")
-    stmt.close()
-
-    // Load TABLE1, save as TABLE1_COPY
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext
-      .read
-      .format("org.apache.phoenix.spark")
-      .option("table", "TABLE1")
-      .option("zkUrl", quorumAddress)
-      .load()
-
-    // Save to TABLE21_COPY
     df
       .write
-      .format("org.apache.phoenix.spark")
+      .format("phoenix")
       .mode(SaveMode.Overwrite)
       .option("table", "TABLE1_COPY")
-      .option("zkUrl", quorumAddress)
+      .option(PhoenixDataSource.ZOOKEEPER_URL, quorumAddress)
       .save()
 
     // Verify results
-    stmt = conn.createStatement()
+    val stmt = conn.createStatement()
     val rs = stmt.executeQuery("SELECT * FROM TABLE1_COPY")
 
     val checkResults = List((1L, "test_row_1"), (2, "test_row_2"))
@@ -357,15 +378,22 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can save arrays back to phoenix") {
-    val dataSet = List((2L, Array("String1", "String2", "String3")))
+    val dataSet = List(Row(2L, Array("String1", "String2", "String3")))
+    val schema = StructType(Seq(
+      StructField("ID", LongType, nullable = false),
+      StructField("VCARRAY", ArrayType(StringType, true))
+    ))
 
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        "ARRAY_TEST_TABLE",
-        Seq("ID", "VCARRAY"),
-        zkUrl = Some(quorumAddress)
-      )
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "ARRAY_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
 
     // Load the results back
     val stmt = conn.createStatement()
@@ -374,38 +402,33 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     val sqlArray = rs.getArray(1).getArray().asInstanceOf[Array[String]]
 
     // Verify the arrays are equal
-    sqlArray shouldEqual dataSet(0)._2
+    sqlArray shouldEqual dataSet(0).get(1)
   }
 
   test("Can read from table with schema and escaped table name") {
     // Manually escape
-    val rdd1 = sc.phoenixTableAsRDD(
-      "CUSTOM_ENTITY.\"z02\"",
-      Seq("ID"),
-      conf = hbaseConfiguration)
+    val df1 = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> "CUSTOM_ENTITY.\"z02\"", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load()
 
-    var count = rdd1.count()
+    var count = df1.count()
 
     count shouldEqual 1L
 
     // Use SchemaUtil
-    val rdd2 = sc.phoenixTableAsRDD(
-      SchemaUtil.getEscapedFullTableName("CUSTOM_ENTITY.z02"),
-      Seq("ID"),
-      conf = hbaseConfiguration)
+    val df2 = spark.sqlContext.read.format("phoenix")
+      .options(
+        Map("table" -> SchemaUtil.getEscapedFullTableName("CUSTOM_ENTITY.z02"), PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .load()
 
-    count = rdd2.count()
+    count = df2.count()
 
     count shouldEqual 1L
-
   }
 
   test("Ensure DataFrame field normalization (PHOENIX-2196)") {
-    val rdd1 = sc
+    val rdd1 = spark.sparkContext
       .parallelize(Seq((1L, 1L, "One"), (2L, 2L, "Two")))
       .map(p => Row(p._1, p._2, p._3))
-
-    val sqlContext = new SQLContext(sc)
 
     val schema = StructType(Seq(
       StructField("id", LongType, nullable = false),
@@ -413,18 +436,20 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
       StructField("\"t2col1\"", StringType, nullable = true)
     ))
 
-    val df = sqlContext.createDataFrame(rdd1, schema)
+    val df = spark.sqlContext.createDataFrame(rdd1, schema)
 
-    df.saveToPhoenix("TABLE2", zkUrl = Some(quorumAddress))
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "TABLE2", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
   }
 
   test("Ensure Dataframe supports LIKE and IN filters (PHOENIX-2328)") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
-      "zkUrl" -> quorumAddress))
-
+    val df = spark.sqlContext.read.format("phoenix").options(Map("table" -> "TABLE1", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load()
     // Prefix match
     val res1 = df.filter("COL1 like 'test_row_%'")
+    val plan = res1.groupBy().count().queryExecution.sparkPlan
     res1.count() shouldEqual 2
 
     // Suffix match
@@ -463,14 +488,14 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can load decimal types with accurate precision and scale (PHOENIX-2288)") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_DECIMAL", "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> "TEST_DECIMAL", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load()
     assert(df.select("COL1").first().getDecimal(0) == BigDecimal("123.456789").bigDecimal)
   }
 
-  test("Can load small and tiny integeger types (PHOENIX-2426)") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TEST_SMALL_TINY", "zkUrl" -> quorumAddress))
+  test("Can load small and tiny integer types (PHOENIX-2426)") {
+    val df = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> "TEST_SMALL_TINY", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress)).load()
     assert(df.select("COL1").first().getShort(0).toInt == 32767)
     assert(df.select("COL2").first().getByte(0).toInt == 127)
   }
@@ -478,21 +503,19 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   test("Can save arrays from custom dataframes back to phoenix") {
     val dataSet = List(Row(2L, Array("String1", "String2", "String3"), Array(1, 2, 3)))
 
-    val sqlContext = new SQLContext(sc)
-
     val schema = StructType(
       Seq(StructField("ID", LongType, nullable = false),
         StructField("VCARRAY", ArrayType(StringType)),
         StructField("INTARRAY", ArrayType(IntegerType))))
 
-    val rowRDD = sc.parallelize(dataSet)
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
 
     // Apply the schema to the RDD.
-    val df = sqlContext.createDataFrame(rowRDD, schema)
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
 
     df.write
-      .format("org.apache.phoenix.spark")
-      .options(Map("table" -> "ARRAYBUFFER_TEST_TABLE", "zkUrl" -> quorumAddress))
+      .format("phoenix")
+      .options(Map("table" -> "ARRAYBUFFER_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
       .mode(SaveMode.Overwrite)
       .save()
 
@@ -509,15 +532,23 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can save arrays of AnyVal type back to phoenix") {
-    val dataSet = List((2L, Array(1, 2, 3), Array(1L, 2L, 3L)))
+    val dataSet = List(Row(2L, Array(1, 2, 3), Array(1L, 2L, 3L)))
 
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        "ARRAY_ANYVAL_TEST_TABLE",
-        Seq("ID", "INTARRAY", "BIGINTARRAY"),
-        zkUrl = Some(quorumAddress)
-      )
+    val schema = StructType(
+      Seq(StructField("ID", LongType, nullable = false),
+        StructField("INTARRAY", ArrayType(IntegerType)),
+        StructField("BIGINTARRAY", ArrayType(LongType))))
+
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "ARRAY_ANYVAL_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
 
     // Load the results back
     val stmt = conn.createStatement()
@@ -527,20 +558,27 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     val longArray = rs.getArray(2).getArray().asInstanceOf[Array[Long]]
 
     // Verify the arrays are equal
-    intArray shouldEqual dataSet(0)._2
-    longArray shouldEqual dataSet(0)._3
+    intArray shouldEqual dataSet(0).get(1)
+    longArray shouldEqual dataSet(0).get(2)
   }
 
   test("Can save arrays of Byte type back to phoenix") {
-    val dataSet = List((2L, Array(1.toByte, 2.toByte, 3.toByte)))
+    val dataSet = List(Row(2L, Array(1.toByte, 2.toByte, 3.toByte)))
 
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        "ARRAY_BYTE_TEST_TABLE",
-        Seq("ID", "BYTEARRAY"),
-        zkUrl = Some(quorumAddress)
-      )
+    val schema = StructType(
+      Seq(StructField("ID", LongType, nullable = false),
+        StructField("BYTEARRAY", ArrayType(ByteType))))
+
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "ARRAY_BYTE_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
 
     // Load the results back
     val stmt = conn.createStatement()
@@ -549,19 +587,28 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     val byteArray = rs.getArray(1).getArray().asInstanceOf[Array[Byte]]
 
     // Verify the arrays are equal
-    byteArray shouldEqual dataSet(0)._2
+    byteArray shouldEqual dataSet(0).get(1)
   }
 
   test("Can save binary types back to phoenix") {
-    val dataSet = List((2L, Array[Byte](1), Array[Byte](1, 2, 3), Array[Array[Byte]](Array[Byte](1), Array[Byte](2))))
+    val dataSet = List(Row(2L, Array[Byte](1), Array[Byte](1, 2, 3), Array[Array[Byte]](Array[Byte](1), Array[Byte](2))))
 
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        "VARBINARY_TEST_TABLE",
-        Seq("ID", "BIN", "VARBIN", "BINARRAY"),
-        zkUrl = Some(quorumAddress)
-      )
+    val schema = StructType(
+      Seq(StructField("ID", LongType, false),
+        StructField("BIN", BinaryType),
+        StructField("VARBIN", BinaryType),
+        StructField("BINARRAY", ArrayType(BinaryType))))
+
+    val rowRDD = spark.sparkContext.parallelize(dataSet)
+
+    // Apply the schema to the RDD.
+    val df = spark.sqlContext.createDataFrame(rowRDD, schema)
+
+    df.write
+      .format("phoenix")
+      .options(Map("table" -> "VARBINARY_TEST_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
 
     // Load the results back
     val stmt = conn.createStatement()
@@ -572,16 +619,15 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     val varByteArray = rs.getArray("BINARRAY").getArray().asInstanceOf[Array[Array[Byte]]]
 
     // Verify the arrays are equal
-    byte shouldEqual dataSet(0)._2
-    varByte shouldEqual dataSet(0)._3
-    varByteArray shouldEqual dataSet(0)._4
+    byte shouldEqual dataSet(0).get(1)
+    varByte shouldEqual dataSet(0).get(2)
+    varByteArray shouldEqual dataSet(0).get(3)
   }
 
   test("Can load Phoenix DATE columns through DataFrame API") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.read
-      .format("org.apache.phoenix.spark")
-      .options(Map("table" -> "DATE_TEST", "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read
+      .format("phoenix")
+      .options(Map("table" -> "DATE_TEST", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
       .load
     val dt = df.select("COL1").first().getDate(0).getTime
     val epoch = new Date().getTime
@@ -595,37 +641,37 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Filter operation doesn't work for column names containing a white space (PHOENIX-2547)") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> SchemaUtil.getEscapedArgument("space"),
-      "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> SchemaUtil.getEscapedArgument("space"), PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .load
     val res = df.filter(df.col("first name").equalTo("xyz"))
     // Make sure we got the right value back
     assert(res.collectAsList().size() == 1L)
   }
 
   test("Spark Phoenix cannot recognize Phoenix view fields (PHOENIX-2290)") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> SchemaUtil.getEscapedArgument("small"),
-      "zkUrl" -> quorumAddress))
-    df.registerTempTable("temp")
+    val df = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> SchemaUtil.getEscapedArgument("small"), PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .load
+    df.createOrReplaceTempView("temp")
 
     // limitation: filter / where expressions are not allowed with "double quotes", instead of that pass it as column expressions
     // reason: if the expression contains "double quotes" then spark sql parser, ignoring evaluating .. giving to next level to handle
 
-    val res1 = sqlContext.sql("select * from temp where salary = '10000' ")
+    val res1 = spark.sql("select * from temp where salary = '10000' ")
     assert(res1.collectAsList().size() == 1L)
 
-    val res2 = sqlContext.sql("select * from temp where \"salary\" = '10000' ")
+    val res2 = spark.sql("select * from temp where \"salary\" = '10000' ")
     assert(res2.collectAsList().size() == 0L)
 
-    val res3 = sqlContext.sql("select * from temp where salary > '10000' ")
+    val res3 = spark.sql("select * from temp where salary > '10000' ")
     assert(res3.collectAsList().size() == 2L)
   }
 
   test("Queries with small case column-names return empty result-set when working with Spark Datasource Plugin (PHOENIX-2336)") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> SchemaUtil.getEscapedArgument("small"),
-      "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read.format("phoenix")
+      .options(Map("table" -> SchemaUtil.getEscapedArgument("small"), PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .load
 
     // limitation: filter / where expressions are not allowed with "double quotes", instead of that pass it as column expressions
     // reason: if the expression contains "double quotes" then spark sql parser, ignoring evaluating .. giving to next level to handle
@@ -644,10 +690,9 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can coerce Phoenix DATE columns to TIMESTAMP through DataFrame API") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.read
-      .format("org.apache.phoenix.spark")
-      .options(Map("table" -> "DATE_TEST", "zkUrl" -> quorumAddress, "dateAsTimestamp" -> "true"))
+    val df = spark.sqlContext.read
+      .format("phoenix")
+      .options(Map("table" -> "DATE_TEST", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress, "dateAsTimestamp" -> "true"))
       .load
     val dtRes = df.select("COL1").first()
     val ts = dtRes.getTimestamp(0).getTime
@@ -657,10 +702,9 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("Can load Phoenix Time columns through DataFrame API") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.read
-      .format("org.apache.phoenix.spark")
-      .options(Map("table" -> "TIME_TEST", "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read
+      .format("phoenix")
+      .options(Map("table" -> "TIME_TEST", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
       .load
     val time = df.select("COL1").first().getTimestamp(0).getTime
     val epoch = new Date().getTime
@@ -668,13 +712,14 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
   }
 
   test("can read all Phoenix data types") {
-    val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "GIGANTIC_TABLE",
-      "zkUrl" -> quorumAddress))
+    val df = spark.sqlContext.read
+      .format("phoenix")
+      .options(Map("table" -> "GIGANTIC_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
+      .load
 
     df.write
-      .format("org.apache.phoenix.spark")
-      .options(Map("table" -> "OUTPUT_GIGANTIC_TABLE", "zkUrl" -> quorumAddress))
+      .format("phoenix")
+      .options(Map("table" -> "OUTPUT_GIGANTIC_TABLE", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
       .mode(SaveMode.Overwrite)
       .save()
 

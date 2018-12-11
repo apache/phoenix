@@ -20,6 +20,7 @@ package org.apache.phoenix.spark
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider}
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
+@deprecated("Use the DataSource V2 API implementation (see PhoenixDataSource)")
 class DefaultSource extends RelationProvider with CreatableRelationProvider {
 
   // Override 'RelationProvider.createRelation', this enables DataFrame.load()
