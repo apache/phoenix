@@ -194,7 +194,7 @@ public abstract class BaseSaltedTableIT extends ParallelStatsDisabledIT  {
                 .setSelectColumns(
                         Lists.newArrayList("A_INTEGER", "A_STRING", "A_ID", "B_STRING", "B_INTEGER"))
                 .setFullTableName(tableName)
-                .setWhereClause("a_integer = 1 AND a_string >= 'ab' AND a_string < 'de' AND a_id = '123'");
+                .setWhereClause("A_INTEGER = 1 AND A_STRING >= 'ab' AND A_STRING < 'de' AND A_ID = '123'");
             rs = executeQuery(conn, queryBuilder);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
@@ -205,7 +205,7 @@ public abstract class BaseSaltedTableIT extends ParallelStatsDisabledIT  {
             assertFalse(rs.next());
 
             // all single slots with one value.
-            queryBuilder.setWhereClause("a_integer = 1 AND a_string = 'ab' AND a_id = '123'");
+            queryBuilder.setWhereClause("A_INTEGER = 1 AND A_STRING = 'ab' AND A_ID = '123'");
             rs = executeQuery(conn, queryBuilder);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
@@ -216,7 +216,7 @@ public abstract class BaseSaltedTableIT extends ParallelStatsDisabledIT  {
             assertFalse(rs.next());
 
             // all single slots with multiple values.
-            queryBuilder.setWhereClause("a_integer in (2, 4) AND a_string = 'abc' AND a_id = '123'");
+            queryBuilder.setWhereClause("A_INTEGER in (2, 4) AND A_STRING = 'abc' AND A_ID = '123'");
             rs = executeQuery(conn, queryBuilder);
 
             assertTrue(rs.next());
