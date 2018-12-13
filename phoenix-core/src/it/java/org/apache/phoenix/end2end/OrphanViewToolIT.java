@@ -27,9 +27,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.LineNumberReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -206,9 +206,13 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
     }
 
     private void verifyLineCount(String fileName, long lineCount) throws IOException {
-        if (Files.lines(Paths.get(fileName)).count() != lineCount)
-            LOG.debug(Files.lines(Paths.get(fileName)).count() + " != " + lineCount);
-        assertTrue(Files.lines(Paths.get(fileName)).count() == lineCount);
+        LineNumberReader reader = new LineNumberReader(new FileReader(fileName));
+        while (reader.readLine() != null) {
+        }
+        int count = reader.getLineNumber();
+        if (count != lineCount)
+            LOG.debug(count + " != " + lineCount);
+        assertTrue(count == lineCount);
     }
 
     private void verifyCountQuery(Connection connection, String query, String schemaName, long count)
@@ -238,7 +242,6 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         }
     }
 
-
     private void verifyNoChildLink(Connection connection, String viewSchemaName) throws Exception {
         // Verify that there there is no link in the system child link table
         verifyCountQuery(connection, countChildLinksQuery, viewSchemaName, 0);
@@ -264,6 +267,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
                 schemaName == null ? "IS NULL" : "= '" + schemaName + "'"));
         connection.commit();
     }
+
     @Test
     public void testDeleteBaseTableRows() throws Exception {
         String baseTableName = generateUniqueName();
@@ -438,7 +442,8 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         }
     }
 
-    public static String[] getArgValues(boolean clean, boolean identify, boolean outputPath, boolean inputPath) {
+    public static String[] getArgValues(boolean clean, boolean identify, boolean outputPath, boolean inputPath)
+            throws InterruptedException{
         final List<String> args = Lists.newArrayList();
         if (outputPath) {
             args.add("-op");
@@ -454,8 +459,10 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         if (identify) {
             args.add("-i");
         }
+        final long ageMs = 2000;
+        Thread.sleep(ageMs);
         args.add("-a");
-        args.add("0");
+        args.add(Long.toString(ageMs));
         return args.toArray(new String[0]);
     }
 
