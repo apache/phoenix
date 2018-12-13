@@ -21,7 +21,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
@@ -71,6 +70,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,6 +79,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class OrphanViewTool extends Configured implements Tool {
+    private static final String SYSTEM_CHILD_LINK_NAME = SYSTEM_CATALOG_NAME;
     private static final Logger LOG = LoggerFactory.getLogger(OrphanViewTool.class);
     // Query all the views that are not "MAPPED" views
     private static final String viewQuery = "SELECT " +
@@ -394,26 +395,48 @@ public class OrphanViewTool extends Configured implements Tool {
     }
 
     private void gracefullyDropView(PhoenixConnection phoenixConnection, Configuration configuration,
-                          Key key) throws Exception {
-        PhoenixConnection tenantConnection;
-        if (key.getTenantId() != null) {
-            Properties tenantProps = new Properties();
-            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, key.getTenantId());
-            tenantConnection = ConnectionUtil.getInputConnection(configuration, tenantProps).
-                    unwrap(PhoenixConnection.class);
-        } else {
-            tenantConnection = phoenixConnection;
-        }
-
-        MetaDataClient client = new MetaDataClient(tenantConnection);
-        org.apache.phoenix.parse.TableName pTableName = org.apache.phoenix.parse.TableName
-                .create(key.getSchemaName(), key.getTableName());
+                                    Key key) throws Exception {
+        PhoenixConnection tenantConnection = null;
+        boolean newConn = false;
         try {
-            client.dropTable(
-                    new DropTableStatement(pTableName, PTableType.VIEW, false, true, true));
+            if (key.getTenantId() != null) {
+                Properties tenantProps = new Properties();
+                tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, key.getTenantId());
+                tenantConnection = ConnectionUtil.getInputConnection(configuration, tenantProps).
+                        unwrap(PhoenixConnection.class);
+                newConn = true;
+            } else {
+                tenantConnection = phoenixConnection;
+            }
+            String fullViewName = SchemaUtil.getTableName(key.getSchemaName(), key.getTableName());
+            String dropTable = String.format("DROP VIEW IF EXISTS %s CASCADE", fullViewName);
+            try {
+                tenantConnection.createStatement().execute(dropTable);
+                tenantConnection.commit();
+            }
+            catch (TableNotFoundException e) {
+                LOG.info("Ignoring view " + fullViewName + " as it has already been dropped");
+            }
+        } finally {
+            if (newConn) {
+                tryClosingConnection(tenantConnection);
+            }
         }
-        catch (TableNotFoundException e) {
-            LOG.info("Ignoring view " + pTableName + " as it has already been dropped");
+    }
+
+    /**
+     * Try closing a connection if it is not null
+     * @param connection connection object
+     * @throws RuntimeException if closing the connection fails
+     */
+    private void tryClosingConnection(Connection connection) {
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } catch (SQLException sqlE) {
+            LOG.error("Failed to close connection: ", sqlE);
+            throw new RuntimeException("Failed to close connection with exception: ", sqlE);
         }
     }
 
@@ -812,17 +835,6 @@ public class OrphanViewTool extends Configured implements Tool {
             } catch (IllegalStateException e) {
                 printHelpAndExit(e.getMessage(), getOptions());
             }
-
-            Properties props = new Properties();
-            long scn = System.currentTimeMillis() - ageMs;
-            props.setProperty("CurrentSCN", Long.toString(scn));
-            connection = ConnectionUtil.getInputConnection(configuration);
-            PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
-
-            if (clean) {
-                // Take a snapshot of system tables to be modified
-                createSnapshot(phoenixConnection, scn);
-            }
             if (outputPath != null) {
                 // Create files to log orphan views and links
                 for (int i = VIEW; i < ORPHAN_TYPE_COUNT; i++) {
@@ -834,7 +846,20 @@ public class OrphanViewTool extends Configured implements Tool {
                     writer[i] = new BufferedWriter(new FileWriter(file));
                 }
             }
+            Properties props = new Properties();
+            long scn = System.currentTimeMillis() - ageMs;
+            props.setProperty("CurrentSCN", Long.toString(scn));
+            connection = ConnectionUtil.getInputConnection(configuration, props);
+            PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             identifyOrphanViews(phoenixConnection);
+            if (clean) {
+                // Close the connection with SCN
+                phoenixConnection.close();
+                connection = ConnectionUtil.getInputConnection(configuration);
+                phoenixConnection = connection.unwrap(PhoenixConnection.class);
+                // Take a snapshot of system tables to be modified
+                createSnapshot(phoenixConnection, scn);
+            }
             for (Map.Entry<Key, View> entry : orphanViewSet.entrySet()) {
                 try {
                     dropOrLogOrphanViews(phoenixConnection, configuration, entry.getKey());
@@ -843,10 +868,6 @@ public class OrphanViewTool extends Configured implements Tool {
                 }
             };
             if (clean) {
-                // Wait for the view drop tasks in the SYSTEM.TASK table to be processed
-                long timeInterval = configuration.getLong(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
-                        QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS);
-                Thread.sleep(maxViewLevel * timeInterval);
                 // Clean up any remaining orphan view records from system tables
                 for (Map.Entry<Key, View> entry : orphanViewSet.entrySet()) {
                     try {
