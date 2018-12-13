@@ -812,17 +812,6 @@ public class OrphanViewTool extends Configured implements Tool {
             } catch (IllegalStateException e) {
                 printHelpAndExit(e.getMessage(), getOptions());
             }
-
-            Properties props = new Properties();
-            long scn = System.currentTimeMillis() - ageMs;
-            props.setProperty("CurrentSCN", Long.toString(scn));
-            connection = ConnectionUtil.getInputConnection(configuration);
-            PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
-
-            if (clean) {
-                // Take a snapshot of system tables to be modified
-                createSnapshot(phoenixConnection, scn);
-            }
             if (outputPath != null) {
                 // Create files to log orphan views and links
                 for (int i = VIEW; i < ORPHAN_TYPE_COUNT; i++) {
@@ -834,7 +823,20 @@ public class OrphanViewTool extends Configured implements Tool {
                     writer[i] = new BufferedWriter(new FileWriter(file));
                 }
             }
+            Properties props = new Properties();
+            long scn = System.currentTimeMillis() - ageMs;
+            props.setProperty("CurrentSCN", Long.toString(scn));
+            connection = ConnectionUtil.getInputConnection(configuration, props);
+            PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             identifyOrphanViews(phoenixConnection);
+            if (clean) {
+                // Close the connection with SCN
+                phoenixConnection.close();
+                connection = ConnectionUtil.getInputConnection(configuration);
+                phoenixConnection = connection.unwrap(PhoenixConnection.class);
+                // Take a snapshot of system tables to be modified
+                createSnapshot(phoenixConnection, scn);
+            }
             for (Map.Entry<Key, View> entry : orphanViewSet.entrySet()) {
                 try {
                     dropOrLogOrphanViews(phoenixConnection, configuration, entry.getKey());
