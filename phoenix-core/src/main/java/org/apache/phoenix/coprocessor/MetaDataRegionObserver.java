@@ -519,20 +519,27 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 								String indexTableFullName = SchemaUtil.getTableName(
 										indexPTable.getSchemaName().getString(),
 										indexPTable.getTableName().getString());
-								if (scanEndTime == latestUpperBoundTimestamp) {
-									IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L, latestUpperBoundTimestamp);
-									batchExecutedPerTableMap.remove(dataPTable.getName());
-                                    LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
-								} else {
-								    // Increment timestamp so that client sees updated disable timestamp
-                                    IndexUtil.updateIndexState(conn, indexTableFullName, indexPTable.getIndexState(), scanEndTime * signOfDisableTimeStamp, latestUpperBoundTimestamp);
-									Long noOfBatches = batchExecutedPerTableMap.get(dataPTable.getName());
-									if (noOfBatches == null) {
-										noOfBatches = 0l;
-									}
-									batchExecutedPerTableMap.put(dataPTable.getName(), ++noOfBatches);
-									LOG.info("During Round-robin build: Successfully updated index disabled timestamp  for "
-													+ indexTableFullName + " to " + scanEndTime);
+								try {
+								    if (scanEndTime == latestUpperBoundTimestamp) {
+								        IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L,
+								            latestUpperBoundTimestamp);
+								        batchExecutedPerTableMap.remove(dataPTable.getName());
+								        LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
+								    } else {
+								        // Increment timestamp so that client sees updated disable timestamp
+								        IndexUtil.updateIndexState(conn, indexTableFullName, indexPTable.getIndexState(),
+								            scanEndTime * signOfDisableTimeStamp, latestUpperBoundTimestamp);
+								        Long noOfBatches = batchExecutedPerTableMap.get(dataPTable.getName());
+								        if (noOfBatches == null) {
+								            noOfBatches = 0l;
+								        }
+								        batchExecutedPerTableMap.put(dataPTable.getName(), ++noOfBatches);
+								        LOG.info(
+								            "During Round-robin build: Successfully updated index disabled timestamp  for "
+								                + indexTableFullName + " to " + scanEndTime);
+								    }
+								} catch (SQLException e) {
+								    LOG.error("Unable to rebuild " + dataPTable + " index " + indexTableFullName, e);
 								}
 							}
 						} catch (Exception e) {
