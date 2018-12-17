@@ -1106,7 +1106,7 @@ public class TestUtil {
         }
         return filteredData;
     }
-    
+
     /**
      * Find a random free port in localhost for binding.
      * @return A port number or -1 for failure.
