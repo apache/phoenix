@@ -22,10 +22,11 @@ import java.io.IOException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 
+
 public class TransactionFactory {
     public enum Provider {
         TEPHRA((byte)1, TephraTransactionProvider.getInstance(), true),
-        OMID((byte)2, OmidTransactionProvider.getInstance(), false);
+        OMID((byte)2, OmidTransactionProvider.getInstance(), true);
         
         private final byte code;
         private final PhoenixTransactionProvider provider;
@@ -49,7 +50,7 @@ public class TransactionFactory {
         }
         
         public static Provider getDefault() {
-            return TEPHRA;
+            return OMID;
         }
 
         public PhoenixTransactionProvider getTransactionProvider()  {
