@@ -45,6 +45,34 @@
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
         <include>org.apache.calcite:calcite-avatica*</include>
+
+        <!-- For omid TSO -->
+        <include>org.apache.omid:omid-tso-server-hbase2.x</include>
+        <include>org.apache.omid:omid-hbase-common-hbase2.x</include>
+        <include>org.apache.omid:omid-hbase-tools-hbase2.x</include>
+        <include>org.apache.omid:omid-common</include>
+        <include>org.apache.omid:omid-metrics</include>
+        <include>org.apache.omid:omid-timestamp-storage-hbase2.x</include>
+        <include>org.apache.omid:omid-hbase-shims-hbase2.x</include>
+        <include>org.apache.omid:omid-commit-table</include>
+        <include>org.apache.omid:omid-codahale-metrics</include>
+        <include>org.apache.omid:omid-hbase-commit-table-hbase2.x</include>
+        <include>org.yaml:snakeyaml</include>
+        <include>com.google.inject:guice</include>
+        <include>commons-beanutils:commons-beanutils</include>
+        <include>javax.inject:javax.inject</include>
+        <include>aopalliance:aopalliance</include>
+        <include>org.apache.commons:commons-pool2</include>
+        <include>com.lmax:disruptor</include>
+        <include>com.codahale.metrics:metrics-core</include>
+        <include>com.beust:jcommander</include>
+        <include>commons-collections:commons-collections</include>
+        <include>io.netty:netty-all</include>
+        <include>org.apache.htrace:htrace-core</include>
+        <include>javax.servlet:javax.servlet-api</include>
+        <include>commons-cli:commons-cli</include>
+        <include>com.yammer.metrics:metrics-core</include>
+        <include>com.codahale.metrics:metrics-graphite</include>
       </includes>
     </dependencySet>
     <!-- Separate dependency set to just pull in the jackson stuff since its test 

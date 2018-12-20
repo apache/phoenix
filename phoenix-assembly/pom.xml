@@ -130,5 +130,10 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-load-balancer</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-tools-hbase2.x</artifactId>
+      <version>${omid.version}</version>
+    </dependency>
   </dependencies>
 </project>

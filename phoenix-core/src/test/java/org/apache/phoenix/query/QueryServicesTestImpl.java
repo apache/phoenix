@@ -22,7 +22,6 @@ import static org.apache.phoenix.query.QueryServicesOptions.withDefaults;
 
 import org.apache.curator.shaded.com.google.common.io.Files;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
-import org.apache.phoenix.transaction.OmidTransactionProvider;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;

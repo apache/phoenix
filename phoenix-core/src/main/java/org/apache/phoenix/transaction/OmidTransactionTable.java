@@ -19,6 +19,7 @@ package org.apache.phoenix.transaction;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -44,6 +45,10 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
+import org.apache.omid.transaction.TTable;
+import org.apache.omid.transaction.Transaction;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Message;
@@ -51,80 +56,115 @@ import com.google.protobuf.Service;
 import com.google.protobuf.ServiceException;
 
 public class OmidTransactionTable implements Table {
+    // Copied from HBase ProtobufUtil since it's not accessible
+    final static Result EMPTY_RESULT_EXISTS_TRUE = Result.create(null, true);
+
+    private TTable tTable;
+    private Transaction tx;
+    private final boolean addShadowCells;
 
     public OmidTransactionTable() throws SQLException {
+        this.tTable = null;
+        this.tx = null;
+        this.addShadowCells = false;
     }
 
     public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable) throws SQLException {
+        this(ctx, hTable, false);
     }
 
     public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isConflictFree) throws SQLException  {
+        this(ctx, hTable, isConflictFree, false);
+    }
+
+    public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isConflictFree, boolean addShadowCells) throws SQLException  {
+        assert(ctx instanceof OmidTransactionContext);
+
+        OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
+        this.addShadowCells = addShadowCells;
+        try {
+            tTable = new TTable(hTable, true, isConflictFree);
+        } catch (IOException e) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.TRANSACTION_FAILED)
+            .setMessage(e.getMessage()).setRootCause(e).build()
+            .buildException();
+        }
+
+        this.tx = omidTransactionContext.getTransaction();
     }
 
     @Override
     public Result get(Get get) throws IOException {
-        return null;
+        return tTable.get(tx, get);
     }
 
     @Override
     public void put(Put put) throws IOException {
+        tTable.put(tx, put, addShadowCells);
     }
 
     @Override
     public void delete(Delete delete) throws IOException {
+        tTable.delete(tx, delete);
     }
 
     @Override
     public ResultScanner getScanner(Scan scan) throws IOException {
-        return null;
+        scan.setTimeRange(0, Long.MAX_VALUE);
+        return tTable.getScanner(tx, scan);
     }
 
     @Override
     public Configuration getConfiguration() {
-        return null;
+        return tTable.getConfiguration();
     }
 
     @Override
     public HTableDescriptor getTableDescriptor() throws IOException {
-        return null;
+        return tTable.getTableDescriptor();
     }
 
     @Override
     public boolean exists(Get get) throws IOException {
-        return false;
+       return tTable.exists(tx, get);
     }
 
     @Override
     public Result[] get(List<Get> gets) throws IOException {
-        return null;
+        return tTable.get(tx, gets);
     }
 
     @Override
     public ResultScanner getScanner(byte[] family) throws IOException {
-        return null;
+        return tTable.getScanner(tx, family);
     }
 
     @Override
     public ResultScanner getScanner(byte[] family, byte[] qualifier)
             throws IOException {
-        return null;
+        return tTable.getScanner(tx, family, qualifier);
     }
 
     @Override
     public void put(List<Put> puts) throws IOException {
+        tTable.put(tx, puts, addShadowCells);
     }
 
     @Override
     public void delete(List<Delete> deletes) throws IOException {
+        tTable.delete(tx, deletes);
     }
 
     @Override
     public void close() throws IOException {
+        tTable.close();
     }
 
     @Override
     public TableName getName() {
-        return null;
+        byte[] name = tTable.getTableName();
+        return TableName.valueOf(name);
     }
 
     @Override
@@ -135,6 +175,8 @@ public class OmidTransactionTable implements Table {
     @Override
     public void batch(List<? extends Row> actions, Object[] results)
             throws IOException, InterruptedException {
+        tTable.batch(tx, actions, addShadowCells);
+        Arrays.fill(results, EMPTY_RESULT_EXISTS_TRUE);
     }
 
     @Override
