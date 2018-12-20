@@ -1,0 +1,25 @@
+# =====================================================================================================================
+#
+# Omid TSO Server Configuration
+# ---------------------------------------------------------------------------------------------------------------------
+#
+# Tune here the default values for TSO server config parameters found in 'default-omid-server-configuration.yml' file
+#
+# =====================================================================================================================
+
+
+timestampStoreModule: !!org.apache.omid.timestamp.storage.HBaseTimestampStorageModule [ ]
+commitTableStoreModule: !!org.apache.omid.committable.hbase.HBaseCommitTableStorageModule [ ]
+
+metrics: !!org.apache.omid.metrics.CodahaleMetricsProvider [
+!!org.apache.omid.metrics.CodahaleMetricsConfig {
+  outputFreqInSecs: 10,
+  reporters: !!set {
+    !!org.apache.omid.metrics.CodahaleMetricsConfig$Reporter CSV
+  },
+  csvDir: "csvMetrics",
+}
+]
+
+timestampType: WORLD_TIME
+lowLatency: false

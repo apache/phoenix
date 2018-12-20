@@ -17,13 +17,15 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.omid.committable.CommitTable;
+import org.apache.omid.transaction.OmidCompactor;
+import org.apache.omid.transaction.OmidSnapshotFilter;
 
 
 public class OmidGCProcessor extends DelegateRegionObserver {
 
     public OmidGCProcessor() {
-        super(new BaseRegionObserver());
+        super(new OmidCompactor(true));
     }
 
 }
