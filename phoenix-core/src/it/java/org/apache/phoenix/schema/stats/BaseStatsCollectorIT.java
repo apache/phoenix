@@ -188,16 +188,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 userTableNamespaceMapped).getNameAsString();
 
         if (collectStatsOnSnapshot) {
-            UpdateStatisticsTool tool = new UpdateStatisticsTool();
-            Configuration conf = utility.getConfiguration();
-            HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            String snapshotName = "UpdateStatisticsTool_" + generateUniqueName();
-            admin.snapshot(snapshotName, localPhysicalTableName);
-            LOG.info("Successfully created snapshot " + snapshotName + " for " + localPhysicalTableName);
-            Path randomDir = getUtility().getRandomDir();
-            Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir, guidePostWidth);
-            assertEquals(job.getConfiguration().get(SCHEMA_TYPE), UPDATE_STATS.name());
-            tool.runJob(job);
+            collectStatsOnSnapshot(conn, fullTableName, guidePostWidth, localPhysicalTableName);
             invalidateStats(conn, fullTableName);
         } else {
             String updateStatisticsSql = "UPDATE STATISTICS " + fullTableName;
@@ -207,6 +198,20 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             LOG.info("Running SQL to collect stats: " + updateStatisticsSql);
             conn.createStatement().execute(updateStatisticsSql);
         }
+    }
+
+    private void collectStatsOnSnapshot(Connection conn, String fullTableName,
+                                        String guidePostWidth, String localPhysicalTableName) throws Exception {
+        UpdateStatisticsTool tool = new UpdateStatisticsTool();
+        Configuration conf = utility.getConfiguration();
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        String snapshotName = "UpdateStatisticsTool_" + generateUniqueName();
+        admin.snapshot(snapshotName, localPhysicalTableName);
+        LOG.info("Successfully created snapshot " + snapshotName + " for " + localPhysicalTableName);
+        Path randomDir = getUtility().getRandomDir();
+        Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir, guidePostWidth);
+        assertEquals(job.getConfiguration().get(SCHEMA_TYPE), UPDATE_STATS.name());
+        tool.runJob(job, true);
     }
 
     @Test

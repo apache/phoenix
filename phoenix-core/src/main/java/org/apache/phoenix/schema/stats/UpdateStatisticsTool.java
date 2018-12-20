@@ -85,7 +85,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         parseArgs(args);
         Job job = configureJob(conf, tableName, snapshotName, restoreDir, guidePostWidth);
-        return runJob(job);
+        return runJob(job, isForeground);
     }
 
     private void parseArgs(String[] args) {
@@ -136,7 +136,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         return job;
     }
 
-    int runJob(Job job) throws Exception {
+    int runJob(Job job, boolean isForeground) throws Exception {
         if (isForeground) {
             LOG.info("Running UpdateStatisticsTool in Foreground. " +
                     "Runs full table scans. This may take a long time!.");
