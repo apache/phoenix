@@ -45,7 +45,7 @@ public interface StatisticsCollector extends Closeable {
     /**
      * Write the collected statistics for the given region over the scan provided.
      */
-    void updateStatistic(Region region, Scan scan);
+    void updateStatistics(Region region, Scan scan);
 
     /**
      * Collect statistics for the given list of cells. This method can be called multiple times

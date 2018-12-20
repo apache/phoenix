@@ -48,7 +48,7 @@ public class StatisticsCollectorFactory {
             byte[] storeName, byte[] guidepostWidthBytes,
             byte[] guidepostsPerRegionBytes) throws IOException {
         if (statisticsEnabled(env)) {
-            return new DefaultStatisticsCollector(env, tableName, clientTimeStamp, storeName,
+            return new RegionServerStatisticsCollector(env, tableName, clientTimeStamp, storeName,
                     guidepostWidthBytes, guidepostsPerRegionBytes);
         } else {
             return new NoOpStatisticsCollector();

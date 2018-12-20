@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.iterate;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -41,6 +43,8 @@ import java.util.List;
 import java.util.UUID;
 
 public class TableSnapshotResultIterator implements ResultIterator {
+
+  private static final Log LOG = LogFactory.getLog(TableSnapshotResultIterator.class);
 
   private final Scan scan;
   private ResultIterator scanIterator;
@@ -89,6 +93,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     }
 
     Collections.sort(this.regions);
+    LOG.info("TableSnapshotResultIterator for " + regions.size() + " valid regions.");
   }
 
   /**

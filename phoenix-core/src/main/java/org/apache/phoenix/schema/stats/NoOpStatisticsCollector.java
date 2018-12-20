@@ -45,7 +45,7 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public void updateStatistic(Region region, Scan scan) {
+    public void updateStatistics(Region region, Scan scan) {
         // No-op
     }
 

@@ -23,6 +23,7 @@ import static org.apache.phoenix.schema.stats.StatisticsCollectionScope.INDEX;
 
 import java.util.Map;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 
 import com.sun.istack.NotNull;
@@ -53,4 +54,6 @@ public class UpdateStatisticsStatement extends SingleTableStatement {
     public Map<String,Object> getProps() {
         return props;
     };
+
 }
+

@@ -154,7 +154,8 @@ public final class PhoenixConfigurationUtil {
 
     public enum SchemaType {
         TABLE,
-        QUERY;
+        QUERY,
+        UPDATE_STATS
     }
 
     private PhoenixConfigurationUtil(){
@@ -372,7 +373,7 @@ public final class PhoenixConfigurationUtil {
         }
         return selectColumnList;
     }
-    
+
     public static String getSelectStatement(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         String selectStmt = configuration.get(SELECT_STATEMENT);
@@ -388,7 +389,8 @@ public final class PhoenixConfigurationUtil {
         configuration.set(SELECT_STATEMENT, selectStmt);
         return selectStmt;
     }
-    
+
+
     public static long getBatchSize(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         long batchSize = configuration.getLong(UPSERT_BATCH_SIZE, DEFAULT_UPSERT_BATCH_SIZE);
@@ -616,6 +618,11 @@ public final class PhoenixConfigurationUtil {
     public static void setScrutinyExecuteTimestamp(Configuration configuration, long ts) {
         Preconditions.checkNotNull(configuration);
         configuration.setLong(SCRUTINY_EXECUTE_TIMESTAMP, ts);
+    }
+
+    public static void setSplitByStats(final Configuration configuration, boolean value) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(MAPREDUCE_SPLIT_BY_STATS, value);
     }
 
     public static String getDisableIndexes(Configuration configuration) {

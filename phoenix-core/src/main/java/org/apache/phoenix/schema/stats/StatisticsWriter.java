@@ -27,11 +27,14 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -51,6 +54,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDate;
@@ -68,6 +72,21 @@ import com.google.protobuf.ServiceException;
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
 public class StatisticsWriter implements Closeable {
+
+    public static StatisticsWriter newWriter(PhoenixConnection conn, String tableName, long clientTimeStamp, long guidePostDepth)
+            throws IOException, SQLException {
+        if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
+            clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
+        }
+        Configuration configuration = conn.getQueryServices().getConfiguration();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, configuration);
+        HTableInterface statsWriterTable = conn.getQueryServices().getTable(physicalTableName.getName());
+        HTableInterface statsReaderTable = conn.getQueryServices().getTable(physicalTableName.getName());
+        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
+                clientTimeStamp, guidePostDepth);
+        return statsTable;
+    }
+
     /**
      * @param tableName
      *            TODO

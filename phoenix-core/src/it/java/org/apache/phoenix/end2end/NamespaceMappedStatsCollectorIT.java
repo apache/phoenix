@@ -17,48 +17,49 @@
  */
 package org.apache.phoenix.end2end;
 
+import com.google.common.collect.Maps;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.stats.BaseStatsCollectorIT;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
+import org.junit.runners.Parameterized;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.stats.StatsCollectorIT;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
-import org.junit.runners.Parameterized.Parameters;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
 
-import com.google.common.collect.Maps;
+public class NamespaceMappedStatsCollectorIT extends BaseStatsCollectorIT {
 
-public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
-
-    public SysTableNamespaceMappedStatsCollectorIT(boolean mutable, String transactionProvider,
-            boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
+    public NamespaceMappedStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {
+        super(userTableNamespaceMapped, collectStatsOnSnapshot);
     }
 
-    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
-    public static Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(
-            new Object[][] { 
-                { true, "TEPHRA", false, false }, { true, "TEPHRA", false, true }, 
-                { true, "OMID", false, false },
-            }), 1);
+    @Parameterized.Parameters(name = "userTableNamespaceMapped={0},collectStatsOnSnapshot={1}")
+    public static Collection<Object[]> provideData() {
+        return Arrays.asList(
+                new Object[][] {
+                        // Collect stats on snapshots using UpdateStatisticsTool
+                        { true, true },
+                        // Collect stats via `UPDATE STATISTICS` SQL
+                        { true, false }
+                }
+        );
     }
 
     @BeforeClass
     public static void doSetup() throws Exception {
         // enable name space mapping at global level on both client and server side
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
-        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        serverProps.put(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, "true");
+        serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(DEFAULT_TASK_HANDLING_INTERVAL_MS));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
-        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        clientProps.put(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, "true");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-            new ReadOnlyProps(clientProps.entrySet().iterator()));
+                new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
 }

@@ -31,41 +31,63 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.stats.MapperStatisticsCollector;
+import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
+import org.apache.phoenix.schema.stats.StatisticsCollector;
+import org.apache.phoenix.schema.stats.StatisticsScanner;
 import org.apache.phoenix.util.*;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
+
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 public class SnapshotScanner extends AbstractClientScanner {
 
   private static final Log LOG = LogFactory.getLog(SnapshotScanner.class);
-
-  private RegionScanner scanner = null;
+  private final Scan scan;
+  private RegionScanner scanner;
   private HRegion region;
-  List<Cell> values;
+  private List<Cell> values;
+  private StatisticsCollector statisticsCollector;
 
   public SnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
       HTableDescriptor htd, HRegionInfo hri,  Scan scan) throws Throwable{
 
+    LOG.info("Creating SnapshotScanner for region: " + hri);
+
     scan.setIsolationLevel(IsolationLevel.READ_UNCOMMITTED);
     values = new ArrayList<>();
     this.region = HRegion.openHRegion(conf, fs, rootDir, hri, htd, null, null, null);
+    this.scan = scan;
 
     RegionCoprocessorEnvironment snapshotEnv = getSnapshotContextEnvironment(conf);
 
-    RegionScannerFactory regionScannerFactory;
-    if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
-      regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
+    if (ScanUtil.isAnalyzeTable(scan)) {
+      this.scanner = region.getScanner(scan);
+      PhoenixConnection connection = (PhoenixConnection) ConnectionUtil.getInputConnection(conf, new Properties());
+      statisticsCollector = new MapperStatisticsCollector(connection, conf, region,
+              region.getTableDesc().getNameAsString(), HConstants.LATEST_TIMESTAMP, null, null, null);
+      LOG.info("MapperStatisticsCollector initialized for region: " + hri);
+    } else if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
+      RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
+      this.scanner = regionScannerFactory.getRegionScanner(scan, region.getScanner(scan));
+      statisticsCollector = new NoOpStatisticsCollector();
     } else {
       /* future work : Snapshot M/R jobs for aggregate queries*/
       throw new UnsupportedOperationException("Snapshot M/R jobs not available for aggregate queries");
     }
 
-    this.scanner = regionScannerFactory.getRegionScanner(scan, region.getScanner(scan));
+    statisticsCollector.init();
     region.startRegionOperation();
   }
 
@@ -74,6 +96,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   public Result next() throws IOException {
     values.clear();
     scanner.nextRaw(values);
+    statisticsCollector.collectStatistics(values);
     if (values.isEmpty()) {
       //we are done
       return null;
@@ -86,6 +109,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   public void close() {
     if (this.scanner != null) {
       try {
+        statisticsCollector.updateStatistics(region, scan);
         this.scanner.close();
         this.scanner = null;
       } catch (IOException e) {
