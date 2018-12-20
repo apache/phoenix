@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -30,14 +29,16 @@ import java.util.Collection;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TableViewFinderResult;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.ViewFinder;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -49,6 +50,20 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
     private final boolean isMultiTenant;
     private final boolean columnEncoded;
     private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT1;
+
+    private static RegionCoprocessorEnvironment TaskRegionEnvironment;
+
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        SplitSystemCatalogIT.doSetup();
+        TaskRegionEnvironment =
+                getUtility()
+                        .getRSForFirstRegionInTable(
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .get(0).getCoprocessorHost()
+                        .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+    }
 
     public DropTableWithViewsIT(boolean isMultiTenant, boolean columnEncoded) {
         this.isMultiTenant = isMultiTenant;
@@ -108,30 +123,19 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
             // Drop the base table
             String dropTable = String.format("DROP TABLE IF EXISTS %s CASCADE", baseTable);
             conn.createStatement().execute(dropTable);
-
-            // Wait for the tasks for dropping child views to complete. The depth of the view tree is 2, so we expect that
-            // this will be done in two task handling runs, i.e., in tree task handling interval at most in general
-            // by assuming that each non-root level will be processed in one interval. To be on the safe side, we will
-            // wait at most 10 intervals.
-            long halfTimeInterval = config.getLong(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
-                    QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS)/2;
-            ResultSet rs = null;
-            boolean timedOut = true;
-            Thread.sleep(3 * halfTimeInterval);
-            for (int i = 3; i < 20; i++) {
-                rs = conn.createStatement().executeQuery("SELECT * " +
-                                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                                " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
-                                PTable.TaskType.DROP_CHILD_VIEWS.getSerializedValue());
-                Thread.sleep(halfTimeInterval);
-                if (!rs.next()) {
-                    timedOut = false;
-                    break;
-                }
-            }
-            if (timedOut) {
-                fail("Drop child view task execution timed out!");
-            }
+            // Run DropChildViewsTask to complete the tasks for dropping child views. The depth of the view tree is 2,
+            // so we expect that this will be done in two task handling runs as each non-root level will be processed
+            // in one run
+            TaskRegionObserver.DropChildViewsTask task =
+                    new TaskRegionObserver.DropChildViewsTask(
+                            TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+            task.run();
+            task.run();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
+                    " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
+                    PTable.TaskType.DROP_CHILD_VIEWS.getSerializedValue());
+            assertFalse(rs.next());
             // Views should be dropped by now
             TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
