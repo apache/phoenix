@@ -85,6 +85,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         parseArgs(args);
         Job job = configureJob(conf, tableName, snapshotName, restoreDir, guidePostWidth);
+        TableMapReduceUtil.initCredentials(job);
         return runJob(job, isForeground);
     }
 
@@ -117,7 +118,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         Job job = Job.getInstance(conf);
         PhoenixMapReduceUtil.setInput(job, PhoenixStatsCollectorWritable.class,
                 snapshotName, tableName, restoreDir, SchemaType.UPDATE_STATS);
-        // Do Not allow mapper splits using statistics since it results into many smaller chunks
+        // DO NOT allow mapper splits using statistics since it may result into many smaller chunks
         PhoenixConfigurationUtil.setSplitByStats(conf, false);
 
         job.setJarByClass(UpdateStatisticsTool.class);

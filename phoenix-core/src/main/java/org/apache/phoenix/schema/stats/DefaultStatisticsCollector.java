@@ -120,14 +120,21 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
             initGuidepostDepth();
             initStatsWriter();
         } catch (SQLException e) {
-            throw new IOException("Unable to initialize the guide post depth", e);
+            throw new IOException(e);
         }
     }
 
+    /**
+     * Determine the GPW for statistics collection for the table.
+     * The order of priority is as follows
+     * 1. Value provided in UPDATE STATISTICS SQL statement (N/A for MR jobs)
+     * 2. GPW column in SYSTEM.CATALOG for the table is not null
+     * 3. Value from global configuration parameters from hbase-site.xml
+     */
     private void initGuidepostDepth() throws IOException, SQLException {
-        // First check is if guidepost info set on statement itself
         if (guidePostPerRegionBytes != null || guidePostWidthBytes != null) {
             getGuidePostDepthFromStatement();
+            LOG.info("Guide post depth determined from SQL statement: " + guidePostDepth);
         } else {
             long guidepostWidth = getGuidePostDepthFromSystemCatalog();
             if (guidepostWidth >= 0) {
@@ -164,7 +171,6 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
         }
         this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
                 region.getTableDesc());
-        LOG.info("Guide post depth determined from SQL statement: " + guidePostDepth);
     }
 
 
