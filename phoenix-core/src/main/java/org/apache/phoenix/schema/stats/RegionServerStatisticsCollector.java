@@ -39,6 +39,10 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
+/**
+ * Implementation for DefaultStatisticsCollector when running inside RegionServer process
+ * Triggered via "UPDATE STATISTICS" SQL statement
+ */
 public class RegionServerStatisticsCollector extends DefaultStatisticsCollector {
 
     final private RegionCoprocessorEnvironment env;

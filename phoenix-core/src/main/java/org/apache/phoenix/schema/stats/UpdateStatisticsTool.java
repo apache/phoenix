@@ -126,6 +126,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         job.setMapOutputKeyClass(NullWritable.class);
         job.setMapOutputValueClass(NullWritable.class);
         job.setOutputFormatClass(NullOutputFormat.class);
+        job.setNumReduceTasks(0);
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class, Chronology.class,
                 CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,

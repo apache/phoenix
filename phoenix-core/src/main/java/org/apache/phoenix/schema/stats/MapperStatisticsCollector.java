@@ -42,6 +42,10 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
+/**
+ * Implementation for DefaultStatisticsCollector when running inside Hadoop MR job mapper
+ * Triggered via UpdateStatisticsTool class
+ */
 public class MapperStatisticsCollector extends DefaultStatisticsCollector {
 
     private PhoenixConnection connection;

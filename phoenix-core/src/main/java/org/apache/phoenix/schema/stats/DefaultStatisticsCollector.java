@@ -18,7 +18,6 @@
 package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
