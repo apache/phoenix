@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
@@ -45,6 +47,7 @@ import java.sql.SQLException;
  */
 public class RegionServerStatisticsCollector extends DefaultStatisticsCollector {
 
+    private static final Log LOG = LogFactory.getLog(RegionServerStatisticsCollector.class);
     final private RegionCoprocessorEnvironment env;
 
     RegionServerStatisticsCollector(RegionCoprocessorEnvironment env, String tableName,

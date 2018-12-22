@@ -22,7 +22,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -100,8 +99,6 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         final Class<T> inputClass = (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
         return new PhoenixRecordReader<T>(inputClass , configuration, queryPlan);
     }
-    
-   
 
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {  

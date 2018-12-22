@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
@@ -48,6 +50,7 @@ import java.sql.SQLException;
  */
 public class MapperStatisticsCollector extends DefaultStatisticsCollector {
 
+    private static final Log LOG = LogFactory.getLog(MapperStatisticsCollector.class);
     private PhoenixConnection connection;
 
     public MapperStatisticsCollector(PhoenixConnection connection, Configuration conf, Region region, String tableName,

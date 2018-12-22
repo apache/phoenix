@@ -46,8 +46,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
@@ -57,7 +55,8 @@ import com.google.common.collect.Maps;
  */
 abstract class DefaultStatisticsCollector implements StatisticsCollector {
 
-    private static final Logger logger = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
+    private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
+    
     final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     StatisticsWriter statsWriter;
     final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
@@ -68,7 +67,6 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
 
     long guidePostDepth;
     long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-    static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
     ImmutableBytesWritable currentRow;
     final long clientTimeStamp;
     final String tableName;
@@ -121,6 +119,8 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
         } catch (SQLException e) {
             throw new IOException(e);
         }
+        LOG.info("Initialization complete for " +
+                this.getClass() + " statistics collector for table " + tableName);
     }
 
     /**
@@ -138,7 +138,7 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
             long guidepostWidth = getGuidePostDepthFromSystemCatalog();
             if (guidepostWidth >= 0) {
                 this.guidePostDepth = guidepostWidth;
-                LOG.info("Guide post depth determined from SYSTEM CATALOG: " + guidePostDepth);
+                LOG.info("Guide post depth determined from SYSTEM.CATALOG: " + guidePostDepth);
             } else {
                 // Last use global config value
                 this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
@@ -188,65 +188,59 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
     @Override
     public void updateStatistics(Region region, Scan scan) {
         try {
-            ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            writeStatistics(region, true, mutations, EnvironmentEdgeManager.currentTimeMillis(), scan);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Committing new stats for the region " + region.getRegionInfo());
-            }
+            List<Mutation> mutations = new ArrayList<Mutation>();
+            writeStatistics(region, true, mutations,
+                    EnvironmentEdgeManager.currentTimeMillis(), scan);
             commitStats(mutations);
         } catch (IOException e) {
-            logger.error("Unable to commit new stats", e);
+            LOG.error("Unable to update SYSTEM.STATS table.", e);
         }
     }
 
     private void writeStatistics(final Region region, boolean delete, List<Mutation> mutations, long currentTime, Scan scan)
             throws IOException {
-        try {
-            Set<ImmutableBytesPtr> fams = guidePostsInfoWriterMap.keySet();
-            // Update the statistics table.
-            // Delete statistics for a region if no guide posts are collected for that region during
-            // UPDATE STATISTICS. This will not impact a stats collection of single column family during
-            // compaction as guidePostsInfoWriterMap cannot be empty in this case.
-            if (cachedGuidePosts == null) {
-                // We're either collecting stats for the data table or the local index table, but not both
-                // We can determine this based on the column families in the scan being prefixed with the
-                // local index column family prefix. We always explicitly specify the local index column
-                // families when we're collecting stats for a local index.
-                boolean collectingForLocalIndex = scan != null && !scan.getFamilyMap().isEmpty() && MetaDataUtil.isLocalIndexFamily(scan.getFamilyMap().keySet().iterator().next());
-                for (Store store : region.getStores()) {
-                    ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
-                    boolean isLocalIndexStore = MetaDataUtil.isLocalIndexFamily(cfKey);
-                    if (isLocalIndexStore != collectingForLocalIndex) {
-                        continue;
-                    }
-                    if (!guidePostsInfoWriterMap.containsKey(cfKey)) {
-                        Pair<Long, GuidePostsInfoBuilder> emptyGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
-                        guidePostsInfoWriterMap.put(cfKey, emptyGps);
-                    }
+        Set<ImmutableBytesPtr> fams = guidePostsInfoWriterMap.keySet();
+        // Update the statistics table.
+        // Delete statistics for a region if no guide posts are collected for that region during
+        // UPDATE STATISTICS. This will not impact a stats collection of single column family during
+        // compaction as guidePostsInfoWriterMap cannot be empty in this case.
+        if (cachedGuidePosts == null) {
+            // We're either collecting stats for the data table or the local index table, but not both
+            // We can determine this based on the column families in the scan being prefixed with the
+            // local index column family prefix. We always explicitly specify the local index column
+            // families when we're collecting stats for a local index.
+            boolean collectingForLocalIndex = scan != null &&
+                    !scan.getFamilyMap().isEmpty() &&
+                    MetaDataUtil.isLocalIndexFamily(scan.getFamilyMap().keySet().iterator().next());
+            for (Store store : region.getStores()) {
+                ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
+                boolean isLocalIndexStore = MetaDataUtil.isLocalIndexFamily(cfKey);
+                if (isLocalIndexStore != collectingForLocalIndex) {
+                    continue;
+                }
+                if (!guidePostsInfoWriterMap.containsKey(cfKey)) {
+                    Pair<Long, GuidePostsInfoBuilder> emptyGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
+                    guidePostsInfoWriterMap.put(cfKey, emptyGps);
                 }
             }
-            for (ImmutableBytesPtr fam : fams) {
-                if (delete) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Deleting the stats for the region " + region.getRegionInfo());
-                    }
-                    statsWriter.deleteStatsForRegion(region, this, fam, mutations);
-                }
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Adding new stats for the region " + region.getRegionInfo());
-                }
-                // If we've disabled stats, don't write any, just delete them
-                if (this.guidePostDepth > 0) {
-                    statsWriter.addStats(this, fam, mutations);
-                }
+        }
+        for (ImmutableBytesPtr fam : fams) {
+            if (delete) {
+                statsWriter.deleteStatsForRegion(region, this, fam, mutations);
+                LOG.info("Deleting the stats for the region " + region.getRegionInfo());
             }
-        } catch (IOException e) {
-            logger.error("Failed to update statistics table!", e);
-            throw e;
+
+            // If we've disabled stats, don't write any, just delete them
+            if (this.guidePostDepth > 0) {
+                statsWriter.addStats(this, fam, mutations);
+                LOG.info("Adding new stats for the region " + region.getRegionInfo());
+            }
         }
     }
 
     private void commitStats(List<Mutation> mutations) throws IOException {
+        LOG.debug("Committing " + mutations.size() +
+                " mutations for stats for the region " + region.getRegionInfo());
         statsWriter.commitStats(mutations, this);
     }
 

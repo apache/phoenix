@@ -53,6 +53,4 @@ public class UpdateStatisticsStatement extends SingleTableStatement {
     public Map<String,Object> getProps() {
         return props;
     };
-
 }
-
