@@ -57,10 +57,10 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
     public static void doSetup() throws Exception {
         SplitSystemCatalogIT.doSetup();
         TaskRegionEnvironment =
-                getUtility()
+                (RegionCoprocessorEnvironment)getUtility()
                         .getRSForFirstRegionInTable(
                                 PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .getOnlineRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }
