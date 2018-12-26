@@ -50,4 +50,9 @@ abstract public class AggregateFunction extends FunctionExpression {
     public Determinism getDeterminism() {
         return Determinism.PER_ROW;
     }
+
+    @Override
+    public boolean isConstantIfChildrenAllConstant() {
+        return false;
+    }
 }
