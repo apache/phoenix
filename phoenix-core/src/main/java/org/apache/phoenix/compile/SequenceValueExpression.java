@@ -75,7 +75,12 @@ public class SequenceValueExpression extends BaseTerminalExpression {
     public Determinism getDeterminism() {
         return Determinism.PER_ROW;
     }
-    
+
+    @Override
+    public boolean isConstantIfChildrenAllConstant() {
+        return false;
+    }
+
     @Override
     public boolean isStateless() {
         return true;

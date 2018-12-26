@@ -244,7 +244,12 @@ public abstract class BaseExpression implements Expression {
     public Determinism getDeterminism() {
         return Determinism.ALWAYS;
     }
-    
+
+    @Override
+    public boolean isConstantIfChildrenAllConstant() {
+        return true;
+    }
+
     @Override
     public boolean isStateless() {
         return false;
