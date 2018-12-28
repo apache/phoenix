@@ -93,7 +93,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     }
 
     Collections.sort(this.regions);
-    LOG.info("TableSnapshotResultIterator for " + regions.size() + " valid regions.");
+    LOG.info("Initialized complete with " + regions.size() + " valid regions");
   }
 
   /**

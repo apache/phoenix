@@ -115,11 +115,11 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
     private Job configureJob(Configuration conf, String tableName,
                      String snapshotName, Path restoreDir) throws Exception {
-        Job job = Job.getInstance(conf);
+        Job job = Job.getInstance(conf, "Update statistics for " + tableName);
         PhoenixMapReduceUtil.setInput(job, PhoenixStatsCollectorWritable.class,
                 snapshotName, tableName, restoreDir, SchemaType.UPDATE_STATS);
         // DO NOT allow mapper splits using statistics since it may result into many smaller chunks
-        PhoenixConfigurationUtil.setSplitByStats(conf, false);
+        PhoenixConfigurationUtil.setSplitByStats(job.getConfiguration(), false);
 
         job.setJarByClass(UpdateStatisticsTool.class);
         job.setMapperClass(TableSnapshotMapper.class);

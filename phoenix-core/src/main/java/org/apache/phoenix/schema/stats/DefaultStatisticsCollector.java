@@ -227,21 +227,21 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
         for (ImmutableBytesPtr fam : fams) {
             if (delete) {
                 statsWriter.deleteStatsForRegion(region, this, fam, mutations);
-                LOG.info("Deleting the stats for the region " + region.getRegionInfo());
+                LOG.info("Generated " + mutations.size() + " mutations to delete existing stats");
             }
 
             // If we've disabled stats, don't write any, just delete them
             if (this.guidePostDepth > 0) {
+                int oldSize = mutations.size();
                 statsWriter.addStats(this, fam, mutations);
-                LOG.info("Adding new stats for the region " + region.getRegionInfo());
+                LOG.info("Generated " + (mutations.size() - oldSize) + " mutations for new stats");
             }
         }
     }
 
     private void commitStats(List<Mutation> mutations) throws IOException {
-        LOG.debug("Committing " + mutations.size() +
-                " mutations for stats for the region " + region.getRegionInfo());
         statsWriter.commitStats(mutations, this);
+        LOG.info("Committed " + mutations.size() + " mutations for stats");
     }
 
     /**
