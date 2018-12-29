@@ -18,29 +18,35 @@
 
 package org.apache.phoenix.iterate;
 
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.*;
-import org.apache.hadoop.hbase.client.*;
-
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.Coprocessor;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.AbstractClientScanner;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.IsolationLevel;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
-import org.apache.hadoop.hbase.regionserver.*;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.stats.MapperStatisticsCollector;
 import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
-import org.apache.phoenix.schema.stats.StatisticsScanner;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ScanUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -49,8 +55,9 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-
+/**
+ * Scan over a region from restored snapshot
+ */
 public class SnapshotScanner extends AbstractClientScanner {
 
   private static final Log LOG = LogFactory.getLog(SnapshotScanner.class);
@@ -72,12 +79,12 @@ public class SnapshotScanner extends AbstractClientScanner {
 
     RegionCoprocessorEnvironment snapshotEnv = getSnapshotContextEnvironment(conf);
 
+    // Collect statistics during scan if ANALYZE_TABLE attribute is set
     if (ScanUtil.isAnalyzeTable(scan)) {
       this.scanner = region.getScanner(scan);
       PhoenixConnection connection = (PhoenixConnection) ConnectionUtil.getInputConnection(conf, new Properties());
       statisticsCollector = new MapperStatisticsCollector(connection, conf, region,
               region.getTableDesc().getNameAsString(), HConstants.LATEST_TIMESTAMP, null, null, null);
-      LOG.info("MapperStatisticsCollector initialized for region: " + hri);
     } else if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
       RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
       this.scanner = regionScannerFactory.getRegionScanner(scan, region.getScanner(scan));

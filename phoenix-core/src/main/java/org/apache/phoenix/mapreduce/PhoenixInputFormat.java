@@ -23,13 +23,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
@@ -43,37 +41,20 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
-import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.DelegateTable;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
-import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  * {@link InputFormat} implementation from Phoenix.
@@ -203,6 +184,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
               String selectStatement;
               switch (schemaType) {
                   case UPDATE_STATS:
+                      // This select statement indicates MR job for full table scan for stats collection
                       selectStatement = "SELECT * FROM " + PhoenixConfigurationUtil.getInputTableName(configuration);
                       break;
                   default:
