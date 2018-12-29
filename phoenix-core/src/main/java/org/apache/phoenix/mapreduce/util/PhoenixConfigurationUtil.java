@@ -282,7 +282,7 @@ public final class PhoenixConfigurationUtil {
         return configuration.getClass(INPUT_CLASS, NullDBWritable.class);
     }
     public static SchemaType getSchemaType(final Configuration configuration) {
-        final String schemaTp = configuration.get(SCHEMA_TYPE);
+        final String schemaTp = configuration.get(SCHEMA_TYPE, SchemaType.QUERY.name());
         Preconditions.checkNotNull(schemaTp);
         return SchemaType.valueOf(schemaTp);
     }

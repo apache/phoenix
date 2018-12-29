@@ -62,7 +62,7 @@ public final class PhoenixPigSchemaUtil {
                 Preconditions.checkNotNull(sqlQuery, "No Sql Query exists within the configuration");
                 final SqlQueryToColumnInfoFunction function = new SqlQueryToColumnInfoFunction(configuration);
                 columns = function.apply(sqlQuery);
-            } else {
+            } else if (SchemaType.TABLE.equals(schemaType)) {
                 columns = dependencies.getSelectColumnMetadataList(configuration);
             }
             ResourceFieldSchema fields[] = new ResourceFieldSchema[columns.size()];
