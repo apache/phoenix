@@ -30,9 +30,9 @@ import java.util.Map;
 
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
 
-public class NamespaceMappedStatsCollectorIT extends BaseStatsCollectorIT {
+public class NamespaceEnabledStatsCollectorIT extends BaseStatsCollectorIT {
 
-    public NamespaceMappedStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {
+    public NamespaceEnabledStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {
         super(userTableNamespaceMapped, collectStatsOnSnapshot);
     }
 
@@ -54,7 +54,6 @@ public class NamespaceMappedStatsCollectorIT extends BaseStatsCollectorIT {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(DEFAULT_TASK_HANDLING_INTERVAL_MS));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));

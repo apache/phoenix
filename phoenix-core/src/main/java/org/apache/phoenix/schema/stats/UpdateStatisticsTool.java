@@ -56,6 +56,9 @@ import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Tool to collect table level statistics on HBase snapshot
+ */
 public class UpdateStatisticsTool extends Configured implements Tool {
 
     private static final Logger LOG = LoggerFactory.getLogger(UpdateStatisticsTool.class);
@@ -66,8 +69,6 @@ public class UpdateStatisticsTool extends Configured implements Tool {
             "HBase Snapshot Name");
     private static final Option RESTORE_DIR_OPTION = new Option("d", "restore-dir", true,
             "Restore Directory for HBase snapshot");
-    private static final Option GPW_OPTION = new Option("w", "guide-posts-width", true,
-            "Guide Posts width for stats collection");
     private static final Option RUN_FOREGROUND_OPTION =
             new Option("runfg", "run-foreground", false, "Applicable on top of -direct option."
                     + "If specified, runs index scrutiny in Foreground. Default - Runs the build in background.");
@@ -77,14 +78,13 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     private String tableName;
     private String snapshotName;
     private Path restoreDir;
-    private String guidePostWidth;
     private boolean isForeground;
 
     @Override
     public int run(String[] args) throws Exception {
 
         parseArgs(args);
-        Job job = configureJob(conf, tableName, snapshotName, restoreDir, guidePostWidth);
+        Job job = configureJob(conf, tableName, snapshotName, restoreDir);
         TableMapReduceUtil.initCredentials(job);
         return runJob(job, isForeground);
     }
@@ -101,19 +101,10 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         tableName = cmdLine.getOptionValue(TABLE_NAME_OPTION.getOpt());
         snapshotName = cmdLine.getOptionValue(SNAPSHOT_NAME_OPTION.getOpt());
         restoreDir = new Path(cmdLine.getOptionValue(RESTORE_DIR_OPTION.getOpt()));
-        guidePostWidth = cmdLine.getOptionValue(GPW_OPTION.getOpt());
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     }
 
     Job configureJob(Configuration conf, String tableName,
-                     String snapshotName, Path restoreDir, String guidePostWidth) throws Exception {
-        if (guidePostWidth != null) {
-            conf.set(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, guidePostWidth);
-        }
-        return configureJob(conf, tableName, snapshotName, restoreDir);
-    }
-
-    private Job configureJob(Configuration conf, String tableName,
                      String snapshotName, Path restoreDir) throws Exception {
         Job job = Job.getInstance(conf, "Update statistics for " + tableName);
         PhoenixMapReduceUtil.setInput(job, PhoenixStatsCollectorWritable.class,
@@ -133,7 +124,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
                 ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
                 Cancellable.class, TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
         LOG.info("UpdateStatisticsTool running for: " + tableName
-                + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir + " GPW: " + guidePostWidth);
+                + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
 
         return job;
     }
@@ -202,7 +193,6 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         options.addOption(SNAPSHOT_NAME_OPTION);
         options.addOption(HELP_OPTION);
         options.addOption(RESTORE_DIR_OPTION);
-        options.addOption(GPW_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         return options;
     }

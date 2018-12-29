@@ -144,7 +144,6 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.FALSE.toString());
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(defaultGuidePostWidth));
-        serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(DEFAULT_TASK_HANDLING_INTERVAL_MS));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.FALSE.toString());
         clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(defaultGuidePostWidth));
@@ -209,7 +208,10 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         admin.snapshot(snapshotName, localPhysicalTableName);
         LOG.info("Successfully created snapshot " + snapshotName + " for " + localPhysicalTableName);
         Path randomDir = getUtility().getRandomDir();
-        Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir, guidePostWidth);
+        if (guidePostWidth != null) {
+            conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET GUIDE_POSTS_WIDTH = " + guidePostWidth);
+        }
+        Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir);
         assertEquals(job.getConfiguration().get(SCHEMA_TYPE), UPDATE_STATS.name());
         tool.runJob(job, true);
     }
