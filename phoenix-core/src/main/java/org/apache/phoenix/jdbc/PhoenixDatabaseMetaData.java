@@ -718,6 +718,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
+        try {
         boolean isTenantSpecificConnection = connection.getTenantId() != null;
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
         ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
@@ -893,6 +894,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             }
         }
         return new PhoenixResultSet(new MaterializedResultIterator(tuples), GET_COLUMNS_ROW_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
+        } finally {
+            if (connection.getAutoCommit()) {
+                connection.commit();
+            }
+        }
     }
 
     @Override
@@ -1142,6 +1148,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (tableName == null || tableName.length() == 0) {
             return emptyResultSet;
         }
+        try {
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
         ResultSet rs = getTables(catalog, schemaName, tableName, null);
         while (rs.next()) {
@@ -1219,6 +1226,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         return new PhoenixResultSet(new MaterializedResultIterator(tuples),
                 GET_PRIMARY_KEYS_ROW_PROJECTOR,
                 new StatementContext(new PhoenixStatement(connection), false));
+        } finally {
+            if (connection.getAutoCommit()) {
+                connection.commit();
+            }
+        }
     }
 
     @Override
