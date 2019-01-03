@@ -255,4 +255,15 @@ public abstract class BaseExpression implements Expression {
         return false;
     }
 
+    @Override
+    public boolean isCloneExpression()  {
+       return isCloneExpressionByDeterminism(this);
+    }
+
+    protected static boolean isCloneExpressionByDeterminism(BaseExpression expression) {
+        if(expression.getDeterminism() == Determinism.PER_INVOCATION) {
+            return true;
+        }
+        return false;
+    }
 }

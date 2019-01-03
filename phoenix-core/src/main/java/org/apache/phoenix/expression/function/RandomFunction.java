@@ -118,6 +118,11 @@ public class RandomFunction extends ScalarFunction {
     }
 
     @Override
+    public boolean isCloneExpression()  {
+        return isCloneExpressionByDeterminism(this);
+    }
+
+    @Override
     public boolean isStateless() {
         return true;
     }

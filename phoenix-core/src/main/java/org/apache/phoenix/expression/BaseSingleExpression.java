@@ -118,4 +118,9 @@ public abstract class BaseSingleExpression extends BaseExpression {
     public Determinism getDeterminism() {
         return children.get(0).getDeterminism();
     }
+
+    @Override
+    public boolean isCloneExpression() {
+        return children.get(0).isCloneExpression();
+    }
 }
