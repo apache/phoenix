@@ -18,8 +18,8 @@ import java.util.List;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.CoerceExpression;
-import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -30,6 +30,7 @@ import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisit
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ExpressionUtil;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -76,16 +77,22 @@ public class OrderPreservingTracker {
     private final Ordering ordering;
     private final int pkPositionOffset;
     private final List<Info> orderPreservingInfos;
-    private final TupleProjector projector;
     private boolean isOrderPreserving = true;
     private Boolean isReverse = null;
     private int orderPreservingColumnCount = 0;
+    private Expression whereExpression;
     
     public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes) {
-        this(context, groupBy, ordering, nNodes, null);
+        this(context, groupBy, ordering, nNodes, null, null);
     }
     
-    public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes, TupleProjector projector) {
+    public OrderPreservingTracker(
+            StatementContext context,
+            GroupBy groupBy,
+            Ordering ordering,
+            int nNodes,
+            TupleProjector projector,
+            Expression whereExpression) {
         this.context = context;
         if (groupBy.isEmpty()) {
             PTable table = context.getResolver().getTables().get(0).getTable();
@@ -103,7 +110,7 @@ public class OrderPreservingTracker {
         this.visitor = new TrackOrderPreservingExpressionVisitor(projector);
         this.orderPreservingInfos = Lists.newArrayListWithExpectedSize(nNodes);
         this.ordering = ordering;
-        this.projector = projector;
+        this.whereExpression = whereExpression;
     }
     
     public void track(Expression node) {
@@ -208,20 +215,14 @@ public class OrderPreservingTracker {
         // not by the original row key order of the table (see PHOENIX-3451).
         // We check each GROUP BY expression to see if it only references columns that are
         // matched by equality constraints, in which case the expression itself would be constant.
-        // FIXME: this only recognizes row key columns that are held constant, not all columns.
-        // FIXME: we should optimize out any GROUP BY or ORDER BY expression which is deemed to
-        // be held constant based on the WHERE clause.
         if (!groupBy.isEmpty()) {
             for (int pos = startPos; pos < endPos; pos++) {
-                IsConstantVisitor visitor = new IsConstantVisitor(this.projector, ranges);
+                IsConstantVisitor visitor = new IsConstantVisitor(ranges, whereExpression);
                 List<Expression> groupByExpressions = groupBy.getExpressions();
                 if (pos >= groupByExpressions.size()) { // sanity check - shouldn't be necessary
                     return false;
                 }
                 Expression groupByExpression = groupByExpressions.get(pos);
-                if ( groupByExpression.getDeterminism().ordinal() > Determinism.PER_STATEMENT.ordinal() ) {
-                    return false;
-                }
                 Boolean isConstant = groupByExpression.accept(visitor);
                 if (!Boolean.TRUE.equals(isConstant)) {
                     return false;
@@ -248,17 +249,17 @@ public class OrderPreservingTracker {
      *
      */
     private static class IsConstantVisitor extends StatelessTraverseAllExpressionVisitor<Boolean> {
-        private final TupleProjector projector;
         private final ScanRanges scanRanges;
+        private final Expression whereExpression;
         
-        public IsConstantVisitor(TupleProjector projector, ScanRanges scanRanges) {
-            this.projector = projector;
-            this.scanRanges = scanRanges;
-        }
+        public IsConstantVisitor(ScanRanges scanRanges, Expression whereExpression) {
+           this.scanRanges = scanRanges;
+           this.whereExpression = whereExpression;
+       }
         
         @Override
         public Boolean defaultReturn(Expression node, List<Boolean> returnValues) {
-            if (node.getDeterminism().ordinal() > Determinism.PER_STATEMENT.ordinal() || 
+            if (!ExpressionUtil.isContantForStatement(node) ||
                     returnValues.size() < node.getChildren().size()) {
                 return Boolean.FALSE;
             }
@@ -281,16 +282,12 @@ public class OrderPreservingTracker {
         }
 
         @Override
-        public Boolean visit(ProjectedColumnExpression node) {
-            if (projector == null) {
-                return super.visit(node);
-            }
-            Expression expression = projector.getExpressions()[node.getPosition()];
-            // Only look one level down the projection.
-            if (expression instanceof ProjectedColumnExpression) {
-                return super.visit(node);
-            }
-            return expression.accept(this);
+        public Boolean visit(KeyValueColumnExpression keyValueColumnExpression) {
+            return ExpressionUtil.isColumnExpressionConstant(keyValueColumnExpression, whereExpression);
+        }
+         @Override
+        public Boolean visit(ProjectedColumnExpression projectedColumnExpression) {
+            return ExpressionUtil.isColumnExpressionConstant(projectedColumnExpression, whereExpression);
         }
     }
     /**
