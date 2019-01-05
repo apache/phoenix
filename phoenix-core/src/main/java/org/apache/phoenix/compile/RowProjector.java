@@ -22,9 +22,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.visitor.CloneNonDeterministicExpressionVisitor;
+import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -97,17 +96,17 @@ public class RowProjector {
         this.isProjectEmptyKeyValue = isProjectEmptyKeyValue;
         this.isProjectAll = isProjectAll;
         this.hasUDFs = hasUDFs;
-        boolean hasPerInvocationExpression = false;
+        boolean cloneRequired = false;
         if (!hasUDFs) {
             for (int i = 0; i < this.columnProjectors.size(); i++) {
                 Expression expression = this.columnProjectors.get(i).getExpression();
-                if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
-                    hasPerInvocationExpression = true;
+                if (expression.isCloneExpression()) {
+                    cloneRequired = true;
                     break;
                 }
             }
         }
-        this.cloneRequired = hasPerInvocationExpression || hasUDFs;
+        this.cloneRequired = cloneRequired || hasUDFs;
     }
 
     public RowProjector cloneIfNecessary() {
@@ -118,8 +117,8 @@ public class RowProjector {
         for (int i = 0; i < this.columnProjectors.size(); i++) {
             ColumnProjector colProjector = columnProjectors.get(i);
             Expression expression = colProjector.getExpression();
-            if (expression.getDeterminism() == Determinism.PER_INVOCATION) {
-                CloneNonDeterministicExpressionVisitor visitor = new CloneNonDeterministicExpressionVisitor();
+            if (expression.isCloneExpression()) {
+                CloneExpressionVisitor visitor = new CloneExpressionVisitor();
                 Expression clonedExpression = expression.accept(visitor);
                 clonedColProjectors.add(new ExpressionProjector(colProjector.getName(),
                         colProjector.getTableName(), 
