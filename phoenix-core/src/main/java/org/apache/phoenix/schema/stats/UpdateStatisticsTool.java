@@ -70,8 +70,8 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     private static final Option RESTORE_DIR_OPTION = new Option("d", "restore-dir", true,
             "Restore Directory for HBase snapshot");
     private static final Option RUN_FOREGROUND_OPTION =
-            new Option("runfg", "run-foreground", false, "Applicable on top of -direct option."
-                    + "If specified, runs index scrutiny in Foreground. Default - Runs the build in background.");
+            new Option("runfg", "run-foreground", false,
+                    "If specified, runs UpdateStatisticsTool in Foreground. Default - Runs the build in background.");
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
 
     private Configuration conf;
