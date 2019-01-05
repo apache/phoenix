@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.execute;
 
+import com.google.common.collect.ImmutableList;
+
 import static org.apache.phoenix.execute.MutationState.joinSortedIntArrays;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -30,6 +32,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.types.PUnsignedInt;
@@ -133,6 +138,41 @@ public class MutationStateTest {
         assertTrue("MUTATION_TEST2".equals(tableName2));
         assertTrue(Bytes.equals(PUnsignedInt.INSTANCE.toBytes(222),CellUtil.cloneRow(keyValues2.get(0))));
         assertTrue("app2".equals(PVarchar.INSTANCE.toObject(CellUtil.cloneValue(keyValues2.get(1)))));
+
+    }
+
+    @Test
+    public void testGetMutationBatchList() {
+        byte[] r1 = Bytes.toBytes(1);
+        byte[] r2 = Bytes.toBytes(2);
+        byte[] r3 = Bytes.toBytes(3);
+        byte[] r4 = Bytes.toBytes(4);
+        // one put and one delete as a group
+        {
+            List<Mutation> list = ImmutableList.of(new Put(r1), new Put(r2), new Delete(r2));
+            List<List<Mutation>> batchLists = MutationState.getMutationBatchList(2, 10, list);
+            assertTrue(batchLists.size() == 2);
+            assertEquals(batchLists.get(0).size(), 1);
+            assertEquals(batchLists.get(1).size(), 2);
+        }
+
+        {
+            List<Mutation> list = ImmutableList.of(new Put(r1), new Delete(r1), new Put(r2));
+            List<List<Mutation>> batchLists = MutationState.getMutationBatchList(2, 10, list);
+            assertTrue(batchLists.size() == 2);
+            assertEquals(batchLists.get(0).size(), 2);
+            assertEquals(batchLists.get(1).size(), 1);
+        }
+
+        {
+            List<Mutation> list = ImmutableList.of(new Put(r3), new Put(r1), new Delete(r1), new Put(r2), new Put(r4), new Delete(r4));
+            List<List<Mutation>> batchLists = MutationState.getMutationBatchList(2, 10, list);
+            assertTrue(batchLists.size() == 4);
+            assertEquals(batchLists.get(0).size(), 1);
+            assertEquals(batchLists.get(1).size(), 2);
+            assertEquals(batchLists.get(2).size(), 1);
+            assertEquals(batchLists.get(3).size(), 2);
+        }
 
     }
 }

@@ -492,15 +492,15 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         upsertRows(connection, fullTableName);
         connection.commit();
         assertEquals(2L, connection.getMutationState().getBatchCount());
-        
-        // set the batch size (rows) to 1 
-        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, "1");
+
+        // set the batch size (rows) to 2 since three are at least 2 mutations when updates a single row
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, "2");
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "128");
         connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         upsertRows(connection, fullTableName);
         connection.commit();
         // each row should be in its own batch
-        assertEquals(4L, connection.getMutationState().getBatchCount());
+        assertEquals(2L, connection.getMutationState().getBatchCount());
     }
     
     private void upsertRows(PhoenixConnection conn, String fullTableName) throws SQLException {
