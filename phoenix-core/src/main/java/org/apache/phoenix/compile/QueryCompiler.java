@@ -562,8 +562,16 @@ public class QueryCompiler {
         groupBy = groupBy.compile(context, innerPlanTupleProjector);
         context.setResolver(resolver); // recover resolver
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns, where);
-        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, offset, projector,
-                groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder);
+        OrderBy orderBy = OrderByCompiler.compile(
+                context,
+                select,
+                groupBy,
+                limit,
+                offset,
+                projector,
+                innerPlanTupleProjector,
+                isInRowKeyOrder,
+                where);
         context.getAggregationManager().compile(context, groupBy);
         // Final step is to build the query plan
         if (!asSubquery) {
