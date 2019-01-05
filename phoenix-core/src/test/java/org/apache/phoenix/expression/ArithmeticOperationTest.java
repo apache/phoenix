@@ -30,7 +30,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.function.RandomFunction;
-import org.apache.phoenix.expression.visitor.CloneNonDeterministicExpressionVisitor;
+import org.apache.phoenix.expression.visitor.CloneExpressionVisitor;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
@@ -273,7 +273,7 @@ public class ArithmeticOperationTest {
         e2 = new DoubleSubtractExpression(children);
         e3 = new DoubleAddExpression(Arrays.<Expression>asList(e1, e2));
         e4 = new DoubleAddExpression(Arrays.<Expression>asList(new RandomFunction(Arrays.<Expression>asList(LiteralExpression.newConstant(null))), e3));
-        CloneNonDeterministicExpressionVisitor visitor = new CloneNonDeterministicExpressionVisitor();
+        CloneExpressionVisitor visitor = new CloneExpressionVisitor();
         Expression clone = e4.accept(visitor);
         assertTrue(clone != e4);
         e4.evaluate(null, ptr1);
@@ -281,7 +281,7 @@ public class ArithmeticOperationTest {
         assertNotEquals(ptr1, ptr2);
         
         e4 = new DoubleAddExpression(Arrays.<Expression>asList(new RandomFunction(Arrays.<Expression>asList(LiteralExpression.newConstant(1))), e3));
-        visitor = new CloneNonDeterministicExpressionVisitor();
+        visitor = new CloneExpressionVisitor();
         clone = e4.accept(visitor);
         assertTrue(clone == e4);
         e4.evaluate(null, ptr1);
@@ -294,7 +294,7 @@ public class ArithmeticOperationTest {
         boolean evaluated = e.evaluate(null, ptr);
         assertTrue(evaluated);
         assertEquals(value, type.toObject(ptr.get()));
-        CloneNonDeterministicExpressionVisitor visitor = new CloneNonDeterministicExpressionVisitor();
+        CloneExpressionVisitor visitor = new CloneExpressionVisitor();
         Expression clone = e.accept(visitor);
         evaluated = clone.evaluate(null, ptr);
         assertTrue(evaluated);
