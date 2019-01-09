@@ -28,8 +28,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
-
 public class NamespaceEnabledStatsCollectorIT extends BaseStatsCollectorIT {
 
     public NamespaceEnabledStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {

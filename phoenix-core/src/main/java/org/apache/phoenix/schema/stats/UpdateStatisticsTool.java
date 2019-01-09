@@ -43,7 +43,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.tephra.TransactionNotInProgressException;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
@@ -82,7 +81,6 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-
         parseArgs(args);
         Job job = configureJob(conf, tableName, snapshotName, restoreDir);
         TableMapReduceUtil.initCredentials(job);

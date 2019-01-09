@@ -125,7 +125,7 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
 
     /**
      * Determine the GPW for statistics collection for the table.
-     * The order of priority is as follows
+     * The order of priority from highest to lowest is as follows
      * 1. Value provided in UPDATE STATISTICS SQL statement (N/A for MR jobs)
      * 2. GPW column in SYSTEM.CATALOG for the table is not null
      * 3. Value from global configuration parameters from hbase-site.xml
@@ -140,7 +140,6 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
                 this.guidePostDepth = guidepostWidth;
                 LOG.info("Guide post depth determined from SYSTEM.CATALOG: " + guidePostDepth);
             } else {
-                // Last use global config value
                 this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
                         configuration.getInt(
                                 QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,

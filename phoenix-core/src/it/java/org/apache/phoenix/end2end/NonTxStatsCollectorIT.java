@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.phoenix.schema.stats.BaseStatsCollectorIT;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
 public class NonTxStatsCollectorIT extends BaseStatsCollectorIT {
