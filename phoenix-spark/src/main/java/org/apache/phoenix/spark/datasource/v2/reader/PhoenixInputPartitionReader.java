@@ -25,6 +25,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
@@ -108,7 +109,7 @@ public class PhoenixInputPartitionReader implements InputPartitionReader<Interna
             // Clear the table region boundary cache to make sure long running jobs stay up to date
             byte[] tableNameBytes = queryPlan.getTableRef().getTable().getPhysicalName().getBytes();
             ConnectionQueryServices services = queryPlan.getContext().getConnection().getQueryServices();
-            services.clearTableRegionCache(tableNameBytes);
+            services.clearTableRegionCache(TableName.valueOf(tableNameBytes));
 
             long renewScannerLeaseThreshold = queryPlan.getContext().getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
             for (Scan scan : scans) {

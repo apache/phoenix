@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.RegionSizeCalculator;
+import org.apache.hadoop.hbase.mapreduce.RegionSizeCalculator;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
