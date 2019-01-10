@@ -19,27 +19,15 @@ package org.apache.phoenix.schema.stats;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
 
 /**
  * Implementation for DefaultStatisticsCollector when running inside RegionServer process
@@ -63,65 +51,10 @@ public class RegionServerStatisticsCollector extends DefaultStatisticsCollector 
     }
 
     @Override
-    protected long getGuidePostDepthFromSystemCatalog() throws IOException, SQLException {
-        long guidepostWidth = -1;
-        Table htable = null;
-        try {
-            // Next check for GUIDE_POST_WIDTH on table
-            htable = env.getTable(
-                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-            Get get = new Get(ptableKey);
-            get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
-            Result result = htable.get(get);
-            if (!result.isEmpty()) {
-                Cell cell = result.listCells().get(0);
-                guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
-            } else if (!isViewIndexTable) {
-                /*
-                 * The table we are collecting stats for is potentially a base table, or local
-                 * index or a global index. For view indexes, we rely on the the guide post
-                 * width column in the parent data table's metadata which we already tried
-                 * retrieving above.
-                 */
-                try (Connection conn =
-                             QueryUtil.getConnectionOnServer(env.getConfiguration())) {
-                    PTable table = PhoenixRuntime.getTable(conn, tableName);
-                    if (table.getType() == PTableType.INDEX
-                            && table.getIndexType() == PTable.IndexType.GLOBAL) {
-                        /*
-                         * For global indexes, we need to get the parentName first and then
-                         * fetch guide post width configured for the parent table.
-                         */
-                        PName parentName = table.getParentName();
-                        byte[] parentKey =
-                                SchemaUtil.getTableKeyFromFullName(parentName.getString());
-                        get = new Get(parentKey);
-                        get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                                PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
-                        result = htable.get(get);
-                        if (!result.isEmpty()) {
-                            Cell cell = result.listCells().get(0);
-                            guidepostWidth =
-                                    PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(),
-                                            cell.getValueOffset(), SortOrder.getDefault());
-                        }
-                    }
-                } catch (ClassNotFoundException e) {
-                    throw new IOException(e);
-                }
-            }
-        } finally {
-            if (htable != null) {
-                try {
-                    htable.close();
-                } catch (IOException e) {
-                    LOG.warn("Failed to close " + htable.getName(), e);
-                }
-            }
-        }
-        return guidepostWidth;
+    protected Table getHTableForSystemCatalog() throws IOException {
+        return env.getTable(
+                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
     }
-
 
     @Override
     public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,

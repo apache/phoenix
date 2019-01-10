@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,21 +31,30 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -135,7 +145,7 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
             getGuidePostDepthFromStatement();
             LOG.info("Guide post depth determined from SQL statement: " + guidePostDepth);
         } else {
-            long guidepostWidth = getGuidePostDepthFromSystemCatalog();
+            long guidepostWidth = getGuidePostDepthFromSystemCatalog(getHTableForSystemCatalog());
             if (guidepostWidth >= 0) {
                 this.guidePostDepth = guidepostWidth;
                 LOG.info("Guide post depth determined from SYSTEM.CATALOG: " + guidePostDepth);
@@ -155,8 +165,62 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     protected abstract void initStatsWriter() throws IOException, SQLException;
+    protected abstract Table getHTableForSystemCatalog() throws IOException, SQLException;
 
-    protected abstract long getGuidePostDepthFromSystemCatalog() throws IOException, SQLException;
+    private long getGuidePostDepthFromSystemCatalog(Table htable) throws IOException, SQLException {
+        try {
+            long guidepostWidth = -1;
+            Get get = new Get(ptableKey);
+            get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+            Result result = htable.get(get);
+            if (!result.isEmpty()) {
+                Cell cell = result.listCells().get(0);
+                guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
+            } else if (!isViewIndexTable) {
+                /*
+                 * The table we are collecting stats for is potentially a base table, or local
+                 * index or a global index. For view indexes, we rely on the the guide post
+                 * width column in the parent data table's metadata which we already tried
+                 * retrieving above.
+                 */
+                try (Connection conn =
+                             QueryUtil.getConnectionOnServer(configuration)) {
+                    PTable table = PhoenixRuntime.getTable(conn, tableName);
+                    if (table.getType() == PTableType.INDEX
+                            && table.getIndexType() == PTable.IndexType.GLOBAL) {
+                        /*
+                         * For global indexes, we need to get the parentName first and then
+                         * fetch guide post width configured for the parent table.
+                         */
+                        PName parentName = table.getParentName();
+                        byte[] parentKey =
+                                SchemaUtil.getTableKeyFromFullName(parentName.getString());
+                        get = new Get(parentKey);
+                        get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+                        result = htable.get(get);
+                        if (!result.isEmpty()) {
+                            Cell cell = result.listCells().get(0);
+                            guidepostWidth =
+                                    PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(),
+                                            cell.getValueOffset(), SortOrder.getDefault());
+                        }
+                    }
+                } catch (ClassNotFoundException e) {
+                    throw new IOException(e);
+                }
+            }
+            return guidepostWidth;
+        } finally {
+            if (htable != null) {
+                try {
+                    htable.close();
+                } catch (IOException e) {
+                    LOG.warn("Failed to close " + htable.getName(), e);
+                }
+            }
+        }
+    }
 
     private void getGuidePostDepthFromStatement() {
         int guidepostPerRegion = 0;
@@ -170,7 +234,6 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
         this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
                 region.getTableDesc());
     }
-
 
     @Override
     public long getMaxTimeStamp() {

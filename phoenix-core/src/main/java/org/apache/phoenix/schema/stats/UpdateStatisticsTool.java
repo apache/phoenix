@@ -55,6 +55,10 @@ import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
+
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
+
 /**
  * Tool to collect table level statistics on HBase snapshot
  */
@@ -98,7 +102,11 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         conf = HBaseConfiguration.create();
         tableName = cmdLine.getOptionValue(TABLE_NAME_OPTION.getOpt());
         snapshotName = cmdLine.getOptionValue(SNAPSHOT_NAME_OPTION.getOpt());
-        restoreDir = new Path(cmdLine.getOptionValue(RESTORE_DIR_OPTION.getOpt()));
+        String restoreDirOptionValue = cmdLine.getOptionValue(RESTORE_DIR_OPTION.getOpt());
+        if (restoreDirOptionValue == null) {
+            restoreDirOptionValue = conf.get(FS_DEFAULT_NAME_KEY) + "/tmp";
+        }
+        restoreDir = new Path(restoreDirOptionValue);
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     }
 
