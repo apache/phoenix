@@ -176,7 +176,9 @@ public class OmidTransactionTable implements Table {
     public void batch(List<? extends Row> actions, Object[] results)
             throws IOException, InterruptedException {
         tTable.batch(tx, actions, addShadowCells);
-        Arrays.fill(results, EMPTY_RESULT_EXISTS_TRUE);
+        if (results != null) {
+            Arrays.fill(results, EMPTY_RESULT_EXISTS_TRUE);
+        }
     }
 
     @Override
