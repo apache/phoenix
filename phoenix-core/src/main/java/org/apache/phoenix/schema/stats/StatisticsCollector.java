@@ -57,7 +57,7 @@ public interface StatisticsCollector extends Closeable {
     /**
      * Wrap a compaction scanner with a scanner that will collect statistics using this instance.
      */
-    InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
+    InternalScanner createCompactionScanner(Store store,
             InternalScanner delegate) throws IOException;
 
     /**

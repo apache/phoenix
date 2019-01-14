@@ -47,6 +47,7 @@ import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
@@ -179,10 +180,10 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps);
                  final Statement statement = connection.createStatement()) {
 
-              SchemaType schemaType = PhoenixConfigurationUtil.getSchemaType(configuration);
+              MRJobType mrJobType = PhoenixConfigurationUtil.getMRJobType(configuration, MRJobType.QUERY.name());
 
               String selectStatement;
-              switch (schemaType) {
+              switch (mrJobType) {
                   case UPDATE_STATS:
                       // This select statement indicates MR job for full table scan for stats collection
                       selectStatement = "SELECT * FROM " + PhoenixConfigurationUtil.getInputTableName(configuration);
@@ -197,7 +198,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
               final QueryPlan queryPlan = pstmt.optimizeQuery(selectStatement);
               final Scan scan = queryPlan.getContext().getScan();
 
-              if (schemaType == SchemaType.UPDATE_STATS) {
+              if (mrJobType == MRJobType.UPDATE_STATS) {
                   StatisticsUtil.setScanAttributes(scan, null);
               }
 

@@ -107,8 +107,8 @@ public final class PhoenixMapReduceUtil {
     }
 
     public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String snapshotName, String tableName,
-                                Path restoreDir, final SchemaType schemaType) {
-        setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir, schemaType);
+                                Path restoreDir) {
+        setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir, SchemaType.QUERY);
     }
 
     /**

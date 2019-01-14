@@ -43,6 +43,7 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.htrace.SpanReceiver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.tephra.TransactionNotInProgressException;
@@ -116,7 +117,9 @@ public class UpdateStatisticsTool extends Configured implements Tool {
                      String snapshotName, Path restoreDir) throws Exception {
         Job job = Job.getInstance(conf, "Update statistics for " + tableName);
         PhoenixMapReduceUtil.setInput(job, NullDBWritable.class,
-                snapshotName, tableName, restoreDir, SchemaType.UPDATE_STATS);
+                snapshotName, tableName, restoreDir);
+
+        PhoenixConfigurationUtil.setMRJobType(job.getConfiguration(), MRJobType.UPDATE_STATS);
         // DO NOT allow mapper splits using statistics since it may result into many smaller chunks
         PhoenixConfigurationUtil.setSplitByStats(job.getConfiguration(), false);
 

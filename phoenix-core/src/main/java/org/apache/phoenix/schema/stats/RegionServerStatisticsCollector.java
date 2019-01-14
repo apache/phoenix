@@ -57,7 +57,7 @@ public class RegionServerStatisticsCollector extends DefaultStatisticsCollector 
     }
 
     @Override
-    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
+    public InternalScanner createCompactionScanner(Store store,
                                                    InternalScanner s) throws IOException {
         // See if this is for Major compaction
         if (LOG.isDebugEnabled()) {

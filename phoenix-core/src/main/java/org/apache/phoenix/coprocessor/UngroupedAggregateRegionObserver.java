@@ -1002,8 +1002,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             compactionConfEnv, table.getNameAsString(), clientTimeStamp,
                             store.getFamily().getName());
                         internalScanner =
-                                stats.createCompactionScanner(compactionConfEnv,
-                                    store, scanner);
+                                stats.createCompactionScanner(store, scanner);
                     } catch (Exception e) {
                         // If we can't reach the stats table, don't interrupt the normal
                         // compaction operation, just log a warning.

@@ -19,9 +19,8 @@ package org.apache.phoenix.schema.stats;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SCHEMA_TYPE;
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType.UPDATE_STATS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_JOB_TYPE;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType.UPDATE_STATS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
@@ -220,7 +219,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET GUIDE_POSTS_WIDTH = " + guidePostWidth);
         }
         Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir);
-        assertEquals(job.getConfiguration().get(SCHEMA_TYPE), UPDATE_STATS.name());
+        assertEquals(job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
         tool.runJob(job, true);
     }
 
