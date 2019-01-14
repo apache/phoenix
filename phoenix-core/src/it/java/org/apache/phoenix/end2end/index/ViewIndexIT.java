@@ -39,9 +39,11 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.SplitSystemCatalogIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
@@ -218,50 +220,70 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     
     
     @Test
-    public void testCreatingIndexOnGlobalView() throws Exception {
+    public void testMultiTenantViewGlobalIndex() throws Exception {
         String baseTable =  SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        String globalView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String globalViewName = generateUniqueName();
+        String fullGlobalViewName = SchemaUtil.getTableName(SCHEMA2, globalViewName);
         String globalViewIdx =  generateUniqueName();
+        String tenantView =  generateUniqueName();
         String fullIndexName = SchemaUtil.getTableName(SCHEMA2, globalViewIdx);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("CREATE IMMUTABLE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
-            conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);
-            conn.createStatement().execute("CREATE INDEX " + globalViewIdx + " ON " + globalView + " (PK3 DESC, KV3) INCLUDE (KV1)");
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + globalView + " (TENANT_ID, PK2, PK3, KV1, KV3) VALUES (?, ?, ?, ?, ?)");
-            stmt.setString(1, "tenantId");
-            stmt.setDate(2, new Date(100));
-            stmt.setInt(3, 1);
-            stmt.setString(4, "KV1");
-            stmt.setString(5, "KV3");
-            stmt.executeUpdate();
-            stmt.setString(1, "tenantId");
-            stmt.setDate(2, new Date(100));
-            stmt.setInt(3, 2);
-            stmt.setString(4, "KV4");
-            stmt.setString(5, "KV5");
-            stmt.executeUpdate();
-            stmt.setString(1, "tenantId");
-            stmt.setDate(2, new Date(100));
-            stmt.setInt(3, 3);
-            stmt.setString(4, "KV6");
-            stmt.setString(5, "KV7");
-            stmt.executeUpdate();
-            stmt.setString(1, "tenantId");
-            stmt.setDate(2, new Date(100));
-            stmt.setInt(3, 4);
-            stmt.setString(4, "KV8");
-            stmt.setString(5, "KV9");
-            stmt.executeUpdate();
-            stmt.setString(1, "tenantId");
-            stmt.setDate(2, new Date(100));
-            stmt.setInt(3, 5);
-            stmt.setString(4, "KV10");
-            stmt.setString(5, "KV11");
-            stmt.executeUpdate();
-            conn.commit();
-            
+            conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2, PK3)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + fullGlobalViewName + " AS SELECT * FROM " + baseTable);
+            conn.createStatement().execute("CREATE INDEX " + globalViewIdx + " ON " + fullGlobalViewName + " (PK3 DESC, KV3) INCLUDE (KV1) ASYNC");
+
+            String tenantId = "tenantId";
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            // create a tenant specific view
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                tenantConn.createStatement().execute("CREATE VIEW " + tenantView + " AS SELECT * FROM " + fullGlobalViewName);
+                PreparedStatement stmt = tenantConn.prepareStatement("UPSERT INTO  " + fullGlobalViewName + " (PK2, PK3, KV1, KV3) VALUES (?, ?, ?, ?)");
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 1);
+                stmt.setString(3, "KV1");
+                stmt.setString(4, "KV3");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 2);
+                stmt.setString(3, "KV4");
+                stmt.setString(4, "KV5");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 3);
+                stmt.setString(3, "KV6");
+                stmt.setString(4, "KV7");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 4);
+                stmt.setString(3, "KV8");
+                stmt.setString(4, "KV9");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 5);
+                stmt.setString(3, "KV10");
+                stmt.setString(4, "KV11");
+                stmt.executeUpdate();
+                tenantConn.commit();
+            }
+
+            // run the MR job
+            IndexToolIT.runIndexTool(true, false, SCHEMA2, globalViewName, globalViewIdx);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                // Verify that query uses the global view index works while querying the tenant view
+                PreparedStatement stmt = tenantConn.prepareStatement("SELECT KV1 FROM  " + tenantView + " WHERE PK3 = ? AND KV3 = ?");
+                stmt.setInt(1, 1);
+                stmt.setString(2, "KV3");
+                ResultSet rs = stmt.executeQuery();
+                QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+                assertEquals(fullIndexName, plan.getTableRef().getTable().getName().getString());
+                assertTrue(rs.next());
+                assertEquals("KV1", rs.getString(1));
+                assertFalse(rs.next());
+            }
+
             // Verify that query against the global view index works
-            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 = ?");
+            PreparedStatement stmt = conn.prepareStatement("SELECT KV1 FROM  " + fullGlobalViewName + " WHERE PK3 = ? AND KV3 = ?");
             stmt.setInt(1, 1);
             stmt.setString(2, "KV3");
             ResultSet rs = stmt.executeQuery();
@@ -284,7 +306,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
 
             // Confirm that when view index used, the GUIDE_POSTS_WIDTH from the data physical table
             // was used
-            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 >= ?");
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + fullGlobalViewName + " WHERE PK3 = ? AND KV3 >= ?");
             stmt.setInt(1, 1);
             stmt.setString(2, "KV3");
             rs = stmt.executeQuery();
