@@ -139,6 +139,10 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
      * 1. Value provided in UPDATE STATISTICS SQL statement (N/A for MR jobs)
      * 2. GPW column in SYSTEM.CATALOG for the table is not null
      * 3. Value from global configuration parameters from hbase-site.xml
+     *
+     * GPW of 0 disables the stats collection. If stats were previously collected, this task
+     * would attempt to delete entries from SYSTEM.STATS table. Not reading '0' from SYSTEM.CATALOG
+     * would mean the fall back to global value which is defaulted to DEFAULT_STATS_GUIDEPOST_PER_REGION
      */
     private void initGuidepostDepth() throws IOException, SQLException {
         if (guidePostPerRegionBytes != null || guidePostWidthBytes != null) {

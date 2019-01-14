@@ -87,6 +87,14 @@ import org.junit.runners.Parameterized;
 
 import com.google.common.collect.Maps;
 
+/**
+ * Base Test class for all Statistics Collection
+ * Tests stats collection with various scenario parameters
+ * 1. Column Encoding
+ * 2. Transactions
+ * 3. Namespaces
+ * 4. Stats collection via SQL or MR job
+ */
 @RunWith(Parameterized.class)
 public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 

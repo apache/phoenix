@@ -35,6 +35,8 @@ import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.lib.db.DBInputFormat;
+import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -113,7 +115,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     Job configureJob(Configuration conf, String tableName,
                      String snapshotName, Path restoreDir) throws Exception {
         Job job = Job.getInstance(conf, "Update statistics for " + tableName);
-        PhoenixMapReduceUtil.setInput(job, PhoenixStatsCollectorWritable.class,
+        PhoenixMapReduceUtil.setInput(job, NullDBWritable.class,
                 snapshotName, tableName, restoreDir, SchemaType.UPDATE_STATS);
         // DO NOT allow mapper splits using statistics since it may result into many smaller chunks
         PhoenixConfigurationUtil.setSplitByStats(job.getConfiguration(), false);
@@ -204,10 +206,10 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     }
 
     public static class TableSnapshotMapper
-            extends Mapper<NullWritable, PhoenixStatsCollectorWritable, NullWritable, NullWritable> {
+            extends Mapper<NullWritable, NullDBWritable, NullWritable, NullWritable> {
 
         @Override
-        protected void map(NullWritable key, PhoenixStatsCollectorWritable value,
+        protected void map(NullWritable key, NullDBWritable value,
                            Context context) {
         }
     }
