@@ -944,17 +944,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         PIndexState indexState =
                 indexStateKv == null ? null : PIndexState.fromSerializedValue(indexStateKv
                         .getValueArray()[indexStateKv.getValueOffset()]);
-        // If client is not yet up to 4.12, then translate PENDING_ACTIVE to ACTIVE (as would have been
-        // the value in those versions) since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_ACTIVE && clientVersion < MetaDataProtocol.MIN_PENDING_ACTIVE_INDEX) {
-            indexState = PIndexState.ACTIVE;
-        }
-        // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
-        // since the client won't have this index state in its enum.
-        if (indexState == PIndexState.PENDING_DISABLE && clientVersion < MetaDataProtocol.MIN_PENDING_DISABLE_INDEX) {
-            // note: for older clients, we have to rely on the rebuilder to transition PENDING_DISABLE -> DISABLE
-            indexState = PIndexState.DISABLE;
-        }
         Cell immutableRowsKv = tableKeyValues[IMMUTABLE_ROWS_INDEX];
         boolean isImmutableRows =
                 immutableRowsKv == null ? false : (Boolean) PBoolean.INSTANCE.toObject(
@@ -1077,6 +1066,30 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, storageScheme, encodingScheme, cqCounter, useStatsForParallelization);
     }
     
+    private PTable modifyIndexStateForOldClient(int clientVersion, PTable table)
+            throws SQLException {
+        if (table == null) {
+            return table;
+        }
+        // PHOENIX-5073 Sets the index state based on the client version in case of old clients.
+        // If client is not yet up to 4.12, then translate PENDING_ACTIVE to ACTIVE (as would have
+        // been the value in those versions) since the client won't have this index state in its
+        // enum.
+        if (table.getIndexState() == PIndexState.PENDING_ACTIVE
+                && clientVersion < MetaDataProtocol.MIN_PENDING_ACTIVE_INDEX) {
+            table = PTableImpl.makePTable(table, PIndexState.ACTIVE);
+        }
+        // If client is not yet up to 4.14, then translate PENDING_DISABLE to DISABLE
+        // since the client won't have this index state in its enum.
+        if (table.getIndexState() == PIndexState.PENDING_DISABLE
+                && clientVersion < MetaDataProtocol.MIN_PENDING_DISABLE_INDEX) {
+            // note: for older clients, we have to rely on the rebuilder to transition
+            // PENDING_DISABLE -> DISABLE
+            table = PTableImpl.makePTable(table, PIndexState.DISABLE);
+        }
+        return table;
+    }
+
     private boolean isQualifierCounterKV(Cell kv) {
         int cmp =
                 Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(),
@@ -3427,6 +3440,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             // Try cache again in case we were waiting on a lock
             table = (PTable)metaDataCache.getIfPresent(cacheKey);
+            table = modifyIndexStateForOldClient(clientVersion, table);
             // We only cache the latest, so we'll end up building the table with every call if the
             // client connection has specified an SCN.
             // TODO: If we indicate to the client that we're returning an older version, but there's
