@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.IsolationLevel;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.HRegion;
@@ -42,11 +43,14 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
-import org.apache.phoenix.schema.stats.MapperStatisticsCollector;
+import org.apache.phoenix.schema.stats.DefaultStatisticsCollector;
 import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
+import org.apache.phoenix.schema.stats.StatisticsWriter;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -83,8 +87,12 @@ public class SnapshotScanner extends AbstractClientScanner {
     if (ScanUtil.isAnalyzeTable(scan)) {
       this.scanner = region.getScanner(scan);
       PhoenixConnection connection = (PhoenixConnection) ConnectionUtil.getInputConnection(conf, new Properties());
-      statisticsCollector = new MapperStatisticsCollector(connection, conf, region,
-              region.getTableDesc().getNameAsString(), HConstants.LATEST_TIMESTAMP, null, null, null);
+      String tableName = region.getTableDesc().getNameAsString();
+      TableName physicalTableName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, conf);
+      Table table = connection.getQueryServices().getTable(physicalTableName.getName());
+      StatisticsWriter statsWriter = StatisticsWriter.newWriter(connection, tableName, HConstants.LATEST_TIMESTAMP);
+      statisticsCollector = new DefaultStatisticsCollector(conf, region,
+              tableName, null, null, null, statsWriter, table);
     } else if (scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null) {
       RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(snapshotEnv);
       this.scanner = regionScannerFactory.getRegionScanner(scan, region.getScanner(scan));

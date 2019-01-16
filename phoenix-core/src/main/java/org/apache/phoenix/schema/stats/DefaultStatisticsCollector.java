@@ -57,48 +57,38 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 
 /**
  * A default implementation of the Statistics tracker that helps to collect stats like min key, max key and guideposts.
  */
-abstract class DefaultStatisticsCollector implements StatisticsCollector {
+public class DefaultStatisticsCollector implements StatisticsCollector {
 
     private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
     
     final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
-    StatisticsWriter statsWriter;
+    private final Table htable;
+    private StatisticsWriter statsWriter;
     final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
     final byte[] guidePostWidthBytes;
     final byte[] guidePostPerRegionBytes;
     // Where to look for GUIDE_POSTS_WIDTH in SYSTEM.CATALOG
     final byte[] ptableKey;
 
-    long guidePostDepth;
-    long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-    ImmutableBytesWritable currentRow;
-    final long clientTimeStamp;
-    final String tableName;
-    final boolean isViewIndexTable;
-    final Region region;
-    final Configuration configuration;
+    private long guidePostDepth;
+    private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+    private ImmutableBytesWritable currentRow;
+    private final String tableName;
+    private final boolean isViewIndexTable;
+    private final Region region;
+    private final Configuration configuration;
 
-    DefaultStatisticsCollector(Configuration configuration, Region region, String tableName, long clientTimeStamp, byte[] family,
-                               byte[] gp_width_bytes, byte[] gp_per_region_bytes) {
+    public DefaultStatisticsCollector(Configuration configuration, Region region, String tableName, byte[] family,
+                               byte[] gp_width_bytes, byte[] gp_per_region_bytes, StatisticsWriter statsWriter, Table htable) {
         this.configuration = configuration;
         this.region = region;
         this.guidePostWidthBytes = gp_width_bytes;
         this.guidePostPerRegionBytes = gp_per_region_bytes;
-        // Provides a means of clients controlling their timestamps to not use current time
-        // when background tasks are updating stats. Instead we track the max timestamp of
-        // the cells and use that.
-        boolean useCurrentTime = configuration.getBoolean(
-                QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
-        if (!useCurrentTime) {
-            clientTimeStamp = DefaultStatisticsCollector.NO_TIMESTAMP;
-        }
         String pName = tableName;
         // For view index, get GUIDE_POST_WIDTH from data physical table
         // since there's no row representing those in SYSTEM.CATALOG.
@@ -109,7 +99,6 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
             isViewIndexTable = false;
         }
         ptableKey = SchemaUtil.getTableKeyFromFullName(pName);
-        this.clientTimeStamp = clientTimeStamp;
         this.tableName = tableName;
         // in a compaction we know the one family ahead of time
         if (family != null) {
@@ -119,13 +108,15 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
         } else {
             cachedGuidePosts = null;
         }
+
+        this.statsWriter = statsWriter;
+        this.htable = htable;
     }
 
     @Override
     public void init() throws IOException {
         try {
             initGuidepostDepth();
-            initStatsWriter();
         } catch (SQLException e) {
             throw new IOException(e);
         }
@@ -149,7 +140,7 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
             getGuidePostDepthFromStatement();
             LOG.info("Guide post depth determined from SQL statement: " + guidePostDepth);
         } else {
-            long guidepostWidth = getGuidePostDepthFromSystemCatalog(getHTableForSystemCatalog());
+            long guidepostWidth = getGuidePostDepthFromSystemCatalog();
             if (guidepostWidth >= 0) {
                 this.guidePostDepth = guidepostWidth;
                 LOG.info("Guide post depth determined from SYSTEM.CATALOG: " + guidePostDepth);
@@ -168,10 +159,7 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
 
     }
 
-    protected abstract void initStatsWriter() throws IOException, SQLException;
-    protected abstract Table getHTableForSystemCatalog() throws IOException, SQLException;
-
-    private long getGuidePostDepthFromSystemCatalog(Table htable) throws IOException, SQLException {
+    private long getGuidePostDepthFromSystemCatalog() throws IOException, SQLException {
         try {
             long guidepostWidth = -1;
             Get get = new Get(ptableKey);
@@ -299,7 +287,7 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
             // If we've disabled stats, don't write any, just delete them
             if (this.guidePostDepth > 0) {
                 int oldSize = mutations.size();
-                statsWriter.addStats(this, fam, mutations);
+                statsWriter.addStats(this, fam, mutations, guidePostDepth);
                 LOG.info("Generated " + (mutations.size() - oldSize) + " mutations for new stats");
             }
         }
@@ -381,9 +369,14 @@ abstract class DefaultStatisticsCollector implements StatisticsCollector {
         return null;
     }
 
-    @VisibleForTesting // Don't call this method anywhere else
+    @Override
     public long getGuidePostDepth() {
         return guidePostDepth;
+    }
+
+    @Override
+    public StatisticsWriter getStatisticsWriter() {
+        return statsWriter;
     }
 
 }
