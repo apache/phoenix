@@ -624,7 +624,7 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     varByteArray shouldEqual dataSet(0).get(3)
   }
 
-  test("Can load Phoenix DATE columns through DataFrame API") {
+  test("Can load and filter Phoenix DATE columns through DataFrame API") {
     val df = spark.sqlContext.read
       .format("phoenix")
       .options(Map("table" -> "DATE_TEST", PhoenixDataSource.ZOOKEEPER_URL -> quorumAddress))
@@ -638,6 +638,10 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
     // Note that Spark also applies the timezone offset to the returned date epoch. Rather than perform timezone
     // gymnastics, just make sure we're within 24H of the epoch generated just now
     assert(Math.abs(epoch - dt) < 86400000)
+
+    df.createOrReplaceTempView("DATE_TEST")
+    val df2 = spark.sql("SELECT * FROM DATE_TEST WHERE COL1 > TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss')")
+    assert(df2.count() == 1L)
   }
 
   test("Filter operation doesn't work for column names containing a white space (PHOENIX-2547)") {
