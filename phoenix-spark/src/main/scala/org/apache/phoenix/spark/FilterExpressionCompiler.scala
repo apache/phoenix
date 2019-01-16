@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.spark
 
+import java.sql.Date
 import java.sql.Timestamp
 import java.text.Format
 
@@ -26,6 +27,7 @@ import org.apache.spark.sql.sources._
 
 class FilterExpressionCompiler() {
 
+  val dateformatter:Format = DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT, DateUtil.DEFAULT_TIME_ZONE_ID)
   val timeformatter:Format = DateUtil.getTimestampFormatter(DateUtil.DEFAULT_TIME_FORMAT, DateUtil.DEFAULT_TIME_ZONE_ID)
 
   /**
@@ -102,6 +104,8 @@ class FilterExpressionCompiler() {
 
     case timestampValue: Timestamp => getTimestampString(timestampValue)
 
+    case dateValue: Date => getDateString(dateValue)
+
     // Borrowed from 'elasticsearch-hadoop', support these internal UTF types across Spark versions
     // Spark 1.4
     case utf if (isClass(utf, "org.apache.spark.sql.types.UTF8String")) => s"'${escapeStringConstant(utf.toString)}'"
@@ -115,6 +119,11 @@ class FilterExpressionCompiler() {
   private def getTimestampString(timestampValue: Timestamp): String = {
     "TO_TIMESTAMP('%s', '%s', '%s')".format(timeformatter.format(timestampValue),
       DateUtil.DEFAULT_TIME_FORMAT, DateUtil.DEFAULT_TIME_ZONE_ID)
+  }
+
+  private def getDateString(dateValue: Date): String = {
+    "TO_DATE('%s', '%s', '%s')".format(dateformatter.format(dateValue),
+      DateUtil.DEFAULT_DATE_FORMAT, DateUtil.DEFAULT_TIME_ZONE_ID)
   }
 
   // Helper function to escape column key to work with SQL queries
