@@ -47,8 +47,11 @@ import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 
 import com.google.common.base.Preconditions;
@@ -78,8 +81,6 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         final Class<T> inputClass = (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
         return new PhoenixRecordReader<T>(inputClass , configuration, queryPlan);
     }
-    
-   
 
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {  
@@ -163,8 +164,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
      * @throws IOException
      * @throws SQLException
      */
-    private QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
-            throws IOException {
+    private QueryPlan getQueryPlan(final JobContext context, final Configuration configuration) {
         Preconditions.checkNotNull(context);
         try {
             final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
@@ -180,13 +180,28 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps);
                  final Statement statement = connection.createStatement()) {
 
-              final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
+              MRJobType mrJobType = PhoenixConfigurationUtil.getMRJobType(configuration, MRJobType.QUERY.name());
+
+              String selectStatement;
+              switch (mrJobType) {
+                  case UPDATE_STATS:
+                      // This select statement indicates MR job for full table scan for stats collection
+                      selectStatement = "SELECT * FROM " + PhoenixConfigurationUtil.getInputTableName(configuration);
+                      break;
+                  default:
+                      selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
+              }
               Preconditions.checkNotNull(selectStatement);
 
               final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
               // Optimize the query plan so that we potentially use secondary indexes
               final QueryPlan queryPlan = pstmt.optimizeQuery(selectStatement);
               final Scan scan = queryPlan.getContext().getScan();
+
+              if (mrJobType == MRJobType.UPDATE_STATS) {
+                  StatisticsUtil.setScanAttributes(scan, null);
+              }
+
               // since we can't set a scn on connections with txn set TX_SCN attribute so that the max time range is set by BaseScannerRegionObserver
               if (txnScnValue != null) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
@@ -194,9 +209,10 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
               // setting the snapshot configuration
               String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
-              if (snapshotName != null)
-                PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
-                    getQueryServices().getConfiguration(), snapshotName);
+              if (snapshotName != null) {
+                  PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
+                      getQueryServices().getConfiguration(), snapshotName);
+              }
 
               // Initialize the query plan so it sets up the parallel scans
               queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());

@@ -19,6 +19,8 @@ package org.apache.phoenix.schema.stats;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_JOB_TYPE;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType.UPDATE_STATS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
@@ -38,16 +40,22 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -63,6 +71,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -77,8 +86,19 @@ import org.junit.runners.Parameterized;
 
 import com.google.common.collect.Maps;
 
+/**
+ * Base Test class for all Statistics Collection
+ * Tests stats collection with various scenario parameters
+ * 1. Column Encoding
+ * 2. Transactions
+ * 3. Namespaces
+ * 4. Stats collection via SQL or MR job
+ */
 @RunWith(Parameterized.class)
-public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
+public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
+
+    private static final Log LOG = LogFactory.getLog(BaseStatsCollectorIT.class);
+
     private final String tableDDLOptions;
     private final boolean columnEncoded;
     private String tableName;
@@ -89,8 +109,18 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private final boolean mutable;
     private final String transactionProvider;
     private static final int defaultGuidePostWidth = 20;
-    
-    protected StatsCollectorIT(boolean mutable, String transactionProvider, boolean userTableNamespaceMapped, boolean columnEncoded) {
+    private boolean collectStatsOnSnapshot;
+
+    protected BaseStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {
+        this(false, null, userTableNamespaceMapped, false, collectStatsOnSnapshot);
+    }
+
+    protected BaseStatsCollectorIT(boolean mutable, String transactionProvider, boolean columnEncoded) {
+        this(mutable, transactionProvider, false, columnEncoded, false);
+    }
+
+    private BaseStatsCollectorIT(boolean mutable, String transactionProvider,
+                                 boolean userTableNamespaceMapped, boolean columnEncoded, boolean collectStatsOnSnapshot) {
         this.transactionProvider = transactionProvider;
         StringBuilder sb = new StringBuilder();
         if (columnEncoded) {
@@ -112,16 +142,17 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         this.userTableNamespaceMapped = userTableNamespaceMapped;
         this.columnEncoded = columnEncoded;
         this.mutable = mutable;
+        this.collectStatsOnSnapshot = collectStatsOnSnapshot;
     }
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        // enable name space mapping at global level on both client and server side
+        // disable name space mapping at global level on both client and server side
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
-        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.FALSE.toString());
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(defaultGuidePostWidth));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
-        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.FALSE.toString());
         clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(defaultGuidePostWidth));
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
@@ -148,18 +179,57 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         props.setProperty(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.setProperty(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(statsUpdateFreq));
-        // enable/disable namespace mapping at connection level
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(userTableNamespaceMapped));
         return DriverManager.getConnection(getUrl(), props);
     }
-    
+
+    private void collectStatistics(Connection conn, String fullTableName) throws Exception {
+        collectStatistics(conn, fullTableName, null);
+    }
+
+    private void collectStatistics(Connection conn, String fullTableName,
+                                   String guidePostWidth) throws Exception {
+
+        String localPhysicalTableName = SchemaUtil.getPhysicalTableName(fullTableName.getBytes(),
+                userTableNamespaceMapped).getNameAsString();
+
+        if (collectStatsOnSnapshot) {
+            collectStatsOnSnapshot(conn, fullTableName, guidePostWidth, localPhysicalTableName);
+            invalidateStats(conn, fullTableName);
+        } else {
+            String updateStatisticsSql = "UPDATE STATISTICS " + fullTableName;
+            if (guidePostWidth != null) {
+                updateStatisticsSql += " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\" = " + guidePostWidth;
+            }
+            LOG.info("Running SQL to collect stats: " + updateStatisticsSql);
+            conn.createStatement().execute(updateStatisticsSql);
+        }
+    }
+
+    private void collectStatsOnSnapshot(Connection conn, String fullTableName,
+                                        String guidePostWidth, String localPhysicalTableName) throws Exception {
+        UpdateStatisticsTool tool = new UpdateStatisticsTool();
+        Configuration conf = utility.getConfiguration();
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        String snapshotName = "UpdateStatisticsTool_" + generateUniqueName();
+        admin.snapshot(snapshotName, localPhysicalTableName);
+        LOG.info("Successfully created snapshot " + snapshotName + " for " + localPhysicalTableName);
+        Path randomDir = getUtility().getRandomDir();
+        if (guidePostWidth != null) {
+            conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET GUIDE_POSTS_WIDTH = " + guidePostWidth);
+        }
+        Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir);
+        assertEquals(job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
+        tool.runJob(job, true);
+    }
+
     @Test
     public void testUpdateEmptyStats() throws Exception {
         Connection conn = getConnection();
         conn.setAutoCommit(true);
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k CHAR(1) PRIMARY KEY )"  + tableDDLOptions);
-        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
+        collectStatistics(conn, fullTableName);
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
@@ -168,7 +238,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 explainPlan);
         conn.close();
     }
-    
+
     @Test
     public void testSomeUpdateEmptyStats() throws Exception {
         Connection conn = getConnection();
@@ -176,7 +246,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k VARCHAR PRIMARY KEY, a.v1 VARCHAR, b.v2 VARCHAR ) " + tableDDLOptions + (tableDDLOptions.isEmpty() ? "" : ",") + "SALT_BUCKETS = 3");
         conn.createStatement().execute("UPSERT INTO " + fullTableName + "(k,v1) VALUES('a','123456789')");
-        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
+        collectStatistics(conn, fullTableName);
                 
         ResultSet rs;
         String explainPlan;
@@ -206,8 +276,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @Test
-    public void testUpdateStats() throws SQLException, IOException,
-			InterruptedException {
+    public void testUpdateStats() throws Exception {
 		Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
@@ -220,9 +289,10 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         String[] s;
         Array array;
         conn = upsertValues(props, fullTableName);
-        // CAll the update statistics query here. If already major compaction has run this will not get executed.
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
-        stmt.execute();
+        collectStatistics(conn, fullTableName);
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT k FROM " + fullTableName);
+        rs.next();
+        long rows1 = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
         stmt = upsertStmt(conn, fullTableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -232,10 +302,12 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         array = conn.createArrayOf("VARCHAR", s);
         stmt.setArray(3, array);
         stmt.execute();
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
-        stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName);
-        assertTrue(rs.next());
+        conn.commit();
+        collectStatistics(conn, fullTableName);
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT k FROM " + fullTableName);
+        rs.next();
+        long rows2 = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
+        assertNotEquals(rows1, rows2);
         conn.close();
     }
 
@@ -250,7 +322,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute("upsert into " + fullTableName + " values ('abc',1,3)");
         conn.createStatement().execute("upsert into " + fullTableName + " values ('def',2,4)");
         conn.commit();
-        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
+        collectStatistics(conn, fullTableName);
         rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName + " order by k desc");
         assertTrue(rs.next());
         assertEquals("def", rs.getString(1));
@@ -268,57 +340,6 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testNoDuplicatesAfterUpdateStatsWithDesc() throws Throwable {
         testNoDuplicatesAfterUpdateStats(null);
-    }
-
-    @Test
-    public void testUpdateStatsWithMultipleTables() throws Throwable {
-        String fullTableName2 = SchemaUtil.getTableName(schemaName, "T_" + generateUniqueName());
-        Connection conn;
-        PreparedStatement stmt;
-        ResultSet rs;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = getConnection();
-        conn.createStatement().execute(
-                "CREATE TABLE " + fullTableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
-                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" + tableDDLOptions );
-        conn.createStatement().execute(
-                "CREATE TABLE " + fullTableName2 +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
-                        + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" + tableDDLOptions );
-        String[] s;
-        Array array;
-        conn = upsertValues(props, fullTableName);
-        conn = upsertValues(props, fullTableName2);
-        // CAll the update statistics query here
-        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName);
-        stmt.execute();
-        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
-        stmt.execute();
-        stmt = upsertStmt(conn, fullTableName);
-        stmt.setString(1, "z");
-        s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
-        array = conn.createArrayOf("VARCHAR", s);
-        stmt.setArray(2, array);
-        s = new String[] { "zya", "def", "ghi", "jkll", null, null, null, "xxx" };
-        array = conn.createArrayOf("VARCHAR", s);
-        stmt.setArray(3, array);
-        stmt.execute();
-        stmt = upsertStmt(conn, fullTableName2);
-        stmt.setString(1, "z");
-        s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
-        array = conn.createArrayOf("VARCHAR", s);
-        stmt.setArray(2, array);
-        s = new String[] { "zya", "def", "ghi", "jkll", null, null, null, "xxx" };
-        array = conn.createArrayOf("VARCHAR", s);
-        stmt.setArray(3, array);
-        stmt.execute();
-        conn.close();
-        conn = getConnection();
-        // This analyze would not work
-        stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
-        stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM "+fullTableName2);
-        assertTrue(rs.next());
-        conn.close();
     }
 
     private Connection upsertValues(Properties props, String tableName) throws SQLException, IOException,
@@ -527,7 +548,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
 
         ResultSet rs;
-        TestUtil.analyzeTable(conn, fullTableName);
+        collectStatistics(conn, fullTableName);
         List<KeyRange> keyRanges = getAllSplits(conn, fullTableName);
         assertEquals(26, keyRanges.size());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
@@ -538,10 +559,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         List<HRegionLocation> regions = services.getAllTableRegions(Bytes.toBytes(physicalTableName));
         assertEquals(1, regions.size());
 
-        TestUtil.analyzeTable(conn, fullTableName);
-        String query = "UPDATE STATISTICS " + fullTableName + " SET \""
-                + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(1000);
-        conn.createStatement().execute(query);
+        collectStatistics(conn, fullTableName, Long.toString(1000));
         keyRanges = getAllSplits(conn, fullTableName);
         boolean oneCellPerColFamliyStorageScheme = !mutable && columnEncoded;
         boolean hasShadowCells = TransactionFactory.Provider.OMID.name().equals(transactionProvider);
@@ -582,7 +600,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         // Disable stats
         conn.createStatement().execute("ALTER TABLE " + fullTableName + 
                 " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=0");
-        TestUtil.analyzeTable(conn, fullTableName);
+        collectStatistics(conn, fullTableName);
         // Assert that there are no more guideposts
         rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + 
                 " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + "='" + physicalTableName + "' AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NOT NULL");
@@ -595,7 +613,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testRowCountAndByteCounts() throws SQLException {
+    public void testRowCountAndByteCounts() throws Exception {
         Connection conn = getConnection();
         String ddl = "CREATE TABLE " + fullTableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
                 + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
@@ -610,9 +628,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         }
         conn.commit();
         ResultSet rs;
-        String query = "UPDATE STATISTICS " + fullTableName + " SET \""
-                + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\"=" + Long.toString(20);
-        conn.createStatement().execute(query);
+        collectStatistics(conn, fullTableName, Long.toString(20L));
         Random r = new Random();
         int count = 0;
         boolean hasShadowCells = TransactionFactory.Provider.OMID.name().equals(transactionProvider);
@@ -643,11 +659,10 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testRowCountWhenNumKVsExceedCompactionScannerThreshold() throws Exception {
-        String tableName = generateUniqueName();
         StringBuilder sb = new StringBuilder(200);
-        sb.append("CREATE TABLE " + tableName + "(PK1 VARCHAR NOT NULL, ");
+        sb.append("CREATE TABLE " + fullTableName + "(PK1 VARCHAR NOT NULL, ");
         int numRows = 10;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = getConnection()) {
             int compactionScannerKVThreshold =
                     conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration()
                             .getInt(HConstants.COMPACTION_KV_MAX,
@@ -663,7 +678,7 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             String ddl = sb.toString();
             conn.createStatement().execute(ddl);
             sb = new StringBuilder(200);
-            sb.append("UPSERT INTO " + tableName + " VALUES (");
+            sb.append("UPSERT INTO " + fullTableName + " VALUES (");
             for (int i = 1; i <= numKvColumns + 1; i++) {
                 sb.append("?");
                 if (i < numKvColumns + 1) {
@@ -685,15 +700,15 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 stmt.executeUpdate();
             }
             conn.commit();
-            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
-            String q = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + tableName + "'";
+            collectStatistics(conn, fullTableName);
+            String q = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + physicalTableName + "'";
             ResultSet rs = conn.createStatement().executeQuery(q);
             rs.next();
             assertEquals("Number of expected rows in stats table after update stats didn't match!", numRows, rs.getInt(1));
-            conn.createStatement().executeUpdate("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + tableName + "'");
+            conn.createStatement().executeUpdate("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + physicalTableName + "'");
             conn.commit();
-            TestUtil.doMajorCompaction(conn, tableName);
-            q = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + tableName + "'";
+            TestUtil.doMajorCompaction(conn, physicalTableName);
+            q = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + physicalTableName + "'";
             rs = conn.createStatement().executeQuery(q);
             rs.next();
             assertEquals("Number of expected rows in stats table after major compaction didn't match", numRows, rs.getInt(1));
@@ -721,52 +736,49 @@ public abstract class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testEmptyGuidePostGeneratedWhenDataSizeLessThanGPWidth() throws Exception {
-        String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = getConnection()) {
             long guidePostWidth = 20000000;
             conn.createStatement()
-                    .execute("CREATE TABLE " + tableName
+                    .execute("CREATE TABLE " + fullTableName
                             + " ( k INTEGER, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) GUIDE_POSTS_WIDTH="
                             + guidePostWidth + ", SALT_BUCKETS = 4");
-            conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
-            conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
+            conn.createStatement().execute("upsert into " + fullTableName + " values (100,1,3)");
+            conn.createStatement().execute("upsert into " + fullTableName + " values (101,2,4)");
             conn.commit();
-            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+            collectStatistics(conn, fullTableName);
             ConnectionQueryServices queryServices =
                     conn.unwrap(PhoenixConnection.class).getQueryServices();
-            verifyGuidePostGenerated(queryServices, tableName, new String[] {"C1", "C2"}, guidePostWidth, true);
+            verifyGuidePostGenerated(queryServices, physicalTableName, new String[] {"C1", "C2"}, guidePostWidth, true);
         }
     }
 
     @Test
     public void testCollectingAllVersionsOfCells() throws Exception {
-        String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = getConnection()) {
             long guidePostWidth = 70;
             String ddl =
-                    "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, c1.a bigint, c2.b bigint)"
+                    "CREATE TABLE " + fullTableName + " (k INTEGER PRIMARY KEY, c1.a bigint, c2.b bigint)"
                             + " GUIDE_POSTS_WIDTH=" + guidePostWidth
                             + ", USE_STATS_FOR_PARALLELIZATION=true" + ", VERSIONS=3";
             conn.createStatement().execute(ddl);
-            conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
+            conn.createStatement().execute("upsert into " + fullTableName + " values (100,100,3)");
             conn.commit();
-            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+            collectStatistics(conn, fullTableName);
 
             ConnectionQueryServices queryServices =
                     conn.unwrap(PhoenixConnection.class).getQueryServices();
 
             // The table only has one row. All cells just has one version, and the data size of the row
             // is less than the guide post width, so we generate empty guide post.
-            verifyGuidePostGenerated(queryServices, tableName, new String[] {"C1", "C2"}, guidePostWidth, true);
+            verifyGuidePostGenerated(queryServices, physicalTableName, new String[] {"C1", "C2"}, guidePostWidth, true);
 
-
-            conn.createStatement().execute("upsert into " + tableName + " values (100,101,4)");
+            conn.createStatement().execute("upsert into " + fullTableName + " values (100,101,4)");
             conn.commit();
-            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+            collectStatistics(conn, fullTableName);
 
             // We updated the row. Now each cell has two versions, and the data size of the row
             // is >= the guide post width, so we generate non-empty guide post.
-            verifyGuidePostGenerated(queryServices, tableName, new String[] {"C1", "C2"}, guidePostWidth, false);
+            verifyGuidePostGenerated(queryServices, physicalTableName, new String[] {"C1", "C2"}, guidePostWidth, false);
         }
     }
 

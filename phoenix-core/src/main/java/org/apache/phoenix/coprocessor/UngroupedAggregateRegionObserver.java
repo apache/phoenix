@@ -120,6 +120,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
+import org.apache.phoenix.schema.stats.StatisticsScanner;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedMultiKeyValueTuple;
@@ -998,12 +999,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         DelegateRegionCoprocessorEnvironment compactionConfEnv =
                                 new DelegateRegionCoprocessorEnvironment(c.getEnvironment(),
                                         ConnectionType.COMPACTION_CONNECTION);
-                        StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
+                        StatisticsCollector statisticsCollector = StatisticsCollectorFactory.createStatisticsCollector(
                             compactionConfEnv, table.getNameAsString(), clientTimeStamp,
                             store.getFamily().getName());
-                        internalScanner =
-                                stats.createCompactionScanner(compactionConfEnv,
-                                    store, scanner);
+                        statisticsCollector.init();
+                        internalScanner = createStatsCompactionScanner(store,
+                                scanner, compactionConfEnv, statisticsCollector);
                     } catch (Exception e) {
                         // If we can't reach the stats table, don't interrupt the normal
                         // compaction operation, just log a warning.
@@ -1012,6 +1013,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         }
                     }
                     return internalScanner;
+                }
+
+                private InternalScanner createStatsCompactionScanner(Store store, InternalScanner s,
+                                                                     RegionCoprocessorEnvironment env, StatisticsCollector statisticsCollector) {
+                    ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
+                    return new StatisticsScanner(statisticsCollector,
+                            statisticsCollector.getStatisticsWriter(), env, s, cfKey);
+
                 }
             });
         }
@@ -1254,7 +1263,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
-                        statsCollector.updateStatistic(region, scan);
+                        statsCollector.updateStatistics(region, scan);
                         logger.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
                                 + ". Time: " + (System.currentTimeMillis() - startTime));

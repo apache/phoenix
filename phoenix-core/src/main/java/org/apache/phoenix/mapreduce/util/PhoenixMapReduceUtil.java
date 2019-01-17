@@ -80,7 +80,7 @@ public final class PhoenixMapReduceUtil {
     public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String snapshotName, String tableName,
         Path restoreDir, final String conditions, final String... fieldNames) throws
         IOException {
-        final Configuration configuration = setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir);
+        final Configuration configuration = setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir, SchemaType.QUERY);
         if(conditions != null) {
             PhoenixConfigurationUtil.setInputTableConditions(configuration, conditions);
         }
@@ -99,11 +99,16 @@ public final class PhoenixMapReduceUtil {
     public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String snapshotName, String tableName,
         Path restoreDir, String inputQuery) throws
         IOException {
-        final Configuration configuration = setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir);
+        final Configuration configuration = setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir, SchemaType.QUERY);
         if(inputQuery != null) {
             PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
         }
 
+    }
+
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String snapshotName, String tableName,
+                                Path restoreDir) {
+        setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir, SchemaType.QUERY);
     }
 
     /**
@@ -115,7 +120,7 @@ public final class PhoenixMapReduceUtil {
      * @param restoreDir a temporary dir to copy the snapshot files into
      */
     private static Configuration setSnapshotInput(Job job, Class<? extends DBWritable> inputClass, String snapshotName,
-        String tableName, Path restoreDir) {
+        String tableName, Path restoreDir, SchemaType schemaType) {
         job.setInputFormatClass(PhoenixInputFormat.class);
         final Configuration configuration = job.getConfiguration();
         PhoenixConfigurationUtil.setInputClass(configuration, inputClass);
@@ -123,7 +128,7 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
 
         PhoenixConfigurationUtil.setRestoreDirKey(configuration, new Path(restoreDir, UUID.randomUUID().toString()).toString());
-        PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
+        PhoenixConfigurationUtil.setSchemaType(configuration, schemaType);
         return configuration;
     }
 

@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
@@ -108,6 +109,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
         final PhoenixInputSplit pSplit = (PhoenixInputSplit)split;
         final List<Scan> scans = pSplit.getScans();
         try {
+            LOG.info("Generating iterators for " + scans.size() + " scans in keyrange: " + pSplit.getKeyRange());
             List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
             StatementContext ctx = queryPlan.getContext();
             ReadMetricQueue readMetrics = ctx.getReadMetricsQueue();
@@ -133,6 +135,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                   final TableSnapshotResultIterator tableSnapshotResultIterator = new TableSnapshotResultIterator(configuration, scan,
                       scanMetricsHolder);
                     peekingResultIterator = LookAheadResultIterator.wrap(tableSnapshotResultIterator);
+                    LOG.info("Adding TableSnapshotResultIterator for scan: " + scan);
                 } else {
                   final TableResultIterator tableResultIterator =
                       new TableResultIterator(
@@ -140,8 +143,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                           scanMetricsHolder, renewScannerLeaseThreshold, queryPlan,
                           MapReduceParallelScanGrouper.getInstance());
                   peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
+                  LOG.info("Adding TableResultIterator for scan: " + scan);
                 }
-
                 iterators.add(peekingResultIterator);
             }
             ResultIterator iterator = queryPlan.useRoundRobinIterator() ? RoundRobinResultIterator.newIterator(iterators, queryPlan) : ConcatResultIterator.newIterator(iterators);

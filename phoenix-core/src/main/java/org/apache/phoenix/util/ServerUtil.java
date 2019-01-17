@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.client.CoprocessorHConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
@@ -218,11 +219,12 @@ public class ServerUtil {
         }
     }
     
-    public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, HTableInterface writerTable) throws IOException {
+    public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env,
+                                                               Table writerTable) throws IOException {
         if (coprocessorScanWorks(env)) {
             return writerTable;
         }
-        return getTableFromSingletonPool(env, writerTable.getTableName());
+        return getTableFromSingletonPool(env, writerTable.getName().getName());
     }
     
     public static HTableInterface getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, byte[] tableName) throws IOException {

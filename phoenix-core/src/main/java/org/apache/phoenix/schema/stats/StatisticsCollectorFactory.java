@@ -23,7 +23,11 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLEC
 
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * Provides new {@link StatisticsCollector} instances based on configuration settings for a
@@ -48,8 +52,11 @@ public class StatisticsCollectorFactory {
             byte[] storeName, byte[] guidepostWidthBytes,
             byte[] guidepostsPerRegionBytes) throws IOException {
         if (statisticsEnabled(env)) {
-            return new DefaultStatisticsCollector(env, tableName, clientTimeStamp, storeName,
-                    guidepostWidthBytes, guidepostsPerRegionBytes);
+            StatisticsWriter statsWriter = StatisticsWriter.newWriter(env, tableName, clientTimeStamp);
+            Table table = env.getTable(
+                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
+            return new DefaultStatisticsCollector(env.getConfiguration(), env.getRegion(), tableName,
+                    storeName,guidepostWidthBytes, guidepostsPerRegionBytes, statsWriter, table);
         } else {
             return new NoOpStatisticsCollector();
         }

@@ -22,10 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -45,7 +42,7 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public void updateStatistic(Region region, Scan scan) {
+    public void updateStatistics(Region region, Scan scan) {
         // No-op
     }
 
@@ -55,17 +52,21 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
-            InternalScanner delegate) throws IOException {
-        return delegate;
-    }
-
-    @Override 
     public void init() {
         // No-op
     }
 
     @Override public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
+        return null;
+    }
+
+    @Override
+    public long getGuidePostDepth() {
+        return -1;
+    }
+
+    @Override
+    public StatisticsWriter getStatisticsWriter() {
         return null;
     }
 }

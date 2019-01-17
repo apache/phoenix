@@ -23,10 +23,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -45,7 +42,7 @@ public interface StatisticsCollector extends Closeable {
     /**
      * Write the collected statistics for the given region over the scan provided.
      */
-    void updateStatistic(Region region, Scan scan);
+    void updateStatistics(Region region, Scan scan);
 
     /**
      * Collect statistics for the given list of cells. This method can be called multiple times
@@ -53,12 +50,6 @@ public interface StatisticsCollector extends Closeable {
      * @throws IOException 
      */
     void collectStatistics(List<Cell> results);
-
-    /**
-     * Wrap a compaction scanner with a scanner that will collect statistics using this instance.
-     */
-    InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
-            InternalScanner delegate) throws IOException;
 
     /**
      * Called before beginning the collection of statistics through {@link #collectStatistics(List)}
@@ -70,4 +61,14 @@ public interface StatisticsCollector extends Closeable {
      * Retrieve the calculated guide post info for the given column family.
      */
     GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam);
+
+    /**
+     * Retrieve the guide post depth during stats collection
+     */
+    long getGuidePostDepth();
+
+    /**
+     * Retrieve the object that manages statistics persistence
+     */
+    StatisticsWriter getStatisticsWriter();
 }

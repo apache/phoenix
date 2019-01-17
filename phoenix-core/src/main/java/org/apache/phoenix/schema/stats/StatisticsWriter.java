@@ -27,18 +27,21 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
@@ -51,8 +54,11 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
@@ -68,6 +74,19 @@ import com.google.protobuf.ServiceException;
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
 public class StatisticsWriter implements Closeable {
+
+    public static StatisticsWriter newWriter(PhoenixConnection conn, String tableName, long clientTimeStamp)
+            throws SQLException {
+        Configuration configuration = conn.getQueryServices().getConfiguration();
+        long newClientTimeStamp = determineClientTimeStamp(configuration, clientTimeStamp);
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, configuration);
+        Table statsWriterTable = conn.getQueryServices().getTable(physicalTableName.getName());
+        Table statsReaderTable = conn.getQueryServices().getTable(physicalTableName.getName());
+        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
+                newClientTimeStamp);
+        return statsTable;
+    }
+
     /**
      * @param tableName
      *            TODO
@@ -77,35 +96,47 @@ public class StatisticsWriter implements Closeable {
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
      */
-    public static StatisticsWriter newWriter(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, long guidePostDepth)
+    public static StatisticsWriter newWriter(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp)
             throws IOException {
-        if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
-            clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
-        }
-        HTableInterface statsWriterTable = env.getTable(
+        long newClientTimeStamp = determineClientTimeStamp(env.getConfiguration(), clientTimeStamp);
+        Table statsWriterTable = env.getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
-        HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
+        Table statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
-                clientTimeStamp, guidePostDepth);
+                newClientTimeStamp);
         return statsTable;
     }
 
-    private final HTableInterface statsWriterTable;
+    // Provides a means of clients controlling their timestamps to not use current time
+    // when background tasks are updating stats. Instead we track the max timestamp of
+    // the cells and use that.
+    private static long determineClientTimeStamp(Configuration configuration, long clientTimeStamp) {
+        boolean useCurrentTime = configuration.getBoolean(
+                QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
+        if (!useCurrentTime) {
+            clientTimeStamp = DefaultStatisticsCollector.NO_TIMESTAMP;
+        }
+        if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
+            clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
+        }
+        return clientTimeStamp;
+    }
+
+    private final Table statsWriterTable;
     // In HBase 0.98.4 or above, the reader and writer will be the same.
     // In pre HBase 0.98.4, there was a bug in using the HTable returned
     // from a coprocessor for scans, so in that case it'll be different.
-    private final HTableInterface statsReaderTable;
+    private final Table statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
-    private final long guidePostDepth;
-    
-    private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName,
-            long clientTimeStamp, long guidePostDepth) {
+
+    private StatisticsWriter(Table statsReaderTable,
+                             Table statsWriterTable, String tableName, long clientTimeStamp) {
         this.statsReaderTable = statsReaderTable;
         this.statsWriterTable = statsWriterTable;
         this.tableName = Bytes.toBytes(tableName);
         this.clientTimeStamp = clientTimeStamp;
-        this.guidePostDepth = guidePostDepth;
     }
 
     /**
@@ -133,8 +164,8 @@ public class StatisticsWriter implements Closeable {
      *             remaining list of stats to update
      */
     @SuppressWarnings("deprecation")
-    public void addStats(StatisticsCollector tracker, ImmutableBytesPtr cfKey, List<Mutation> mutations)
-            throws IOException {
+    public void addStats(StatisticsCollector tracker, ImmutableBytesPtr cfKey,
+                         List<Mutation> mutations, long guidePostDepth) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == DefaultStatisticsCollector.NO_TIMESTAMP;
         long timeStamp = clientTimeStamp;

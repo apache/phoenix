@@ -57,12 +57,12 @@ public final class PhoenixPigSchemaUtil {
         try {
             List<ColumnInfo> columns = null;
             final SchemaType schemaType = PhoenixConfigurationUtil.getSchemaType(configuration);
-            if(SchemaType.QUERY.equals(schemaType)) {
+            if(schemaType == SchemaType.QUERY) {
                 final String sqlQuery = PhoenixConfigurationUtil.getSelectStatement(configuration);
                 Preconditions.checkNotNull(sqlQuery, "No Sql Query exists within the configuration");
                 final SqlQueryToColumnInfoFunction function = new SqlQueryToColumnInfoFunction(configuration);
                 columns = function.apply(sqlQuery);
-            } else {
+            } else if (schemaType == SchemaType.TABLE) {
                 columns = dependencies.getSelectColumnMetadataList(configuration);
             }
             ResourceFieldSchema fields[] = new ResourceFieldSchema[columns.size()];
