@@ -316,7 +316,10 @@ public class ServerUtil {
 
         @Override
         public void shutdown() {
-            ConnectionFactory.shutdown();
+      // close the connections when region server is going down
+      if (this.server.isStopping() || this.server.isStopped() || this.server.isAborted()) {
+        ConnectionFactory.shutdown();
+      }
         }
 
         @Override
@@ -383,6 +386,13 @@ public class ServerUtil {
                 return conf;
             }
         }
+
+    /**
+     * Added for testing
+     */
+    public static int getConnectionsCount() {
+      return connections.size();
+    }
     }
 
     public static Configuration getCompactionConfig(Configuration conf) {
