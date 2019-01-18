@@ -27,6 +27,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Array;
@@ -40,20 +41,21 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
+import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescription;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
@@ -190,11 +192,8 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private void collectStatistics(Connection conn, String fullTableName,
                                    String guidePostWidth) throws Exception {
 
-        String localPhysicalTableName = SchemaUtil.getPhysicalTableName(fullTableName.getBytes(),
-                userTableNamespaceMapped).getNameAsString();
-
         if (collectStatsOnSnapshot) {
-            collectStatsOnSnapshot(conn, fullTableName, guidePostWidth, localPhysicalTableName);
+            collectStatsOnSnapshot(conn, fullTableName, guidePostWidth);
             invalidateStats(conn, fullTableName);
         } else {
             String updateStatisticsSql = "UPDATE STATISTICS " + fullTableName;
@@ -207,20 +206,42 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private void collectStatsOnSnapshot(Connection conn, String fullTableName,
-                                        String guidePostWidth, String localPhysicalTableName) throws Exception {
-        UpdateStatisticsTool tool = new UpdateStatisticsTool();
-        Configuration conf = utility.getConfiguration();
-        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        String snapshotName = "UpdateStatisticsTool_" + generateUniqueName();
-        admin.snapshot(snapshotName, localPhysicalTableName);
-        LOG.info("Successfully created snapshot " + snapshotName + " for " + localPhysicalTableName);
-        Path randomDir = getUtility().getRandomDir();
+                                        String guidePostWidth) throws Exception {
         if (guidePostWidth != null) {
             conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET GUIDE_POSTS_WIDTH = " + guidePostWidth);
         }
-        Job job = tool.configureJob(conf, fullTableName, snapshotName, randomDir);
-        assertEquals(job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
-        tool.runJob(job, true);
+        runUpdateStatisticsTool(fullTableName);
+    }
+
+    // Run UpdateStatisticsTool in foreground with create and delete snapshot option
+    private void runUpdateStatisticsTool(String fullTableName) {
+        UpdateStatisticsTool tool = new UpdateStatisticsTool();
+        tool.setConf(utility.getConfiguration());
+        String randomDir = getUtility().getRandomDir().toString();
+        final String[] cmdArgs = getArgValues(fullTableName, randomDir);
+        try {
+            int status = tool.run(cmdArgs);
+            assertEquals(0, status);
+            HBaseAdmin hBaseAdmin = utility.getHBaseAdmin();
+            assertEquals(0, hBaseAdmin.listSnapshots(tool.getSnapshotName()).size());
+        } catch (Exception e) {
+            fail("Exception when running UpdateStatisticsTool for " + tableName + " Exception: " + e);
+        } finally {
+            Job job = tool.getJob();
+            assertEquals(job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
+        }
+    }
+
+    private String[] getArgValues(String fullTableName, String randomDir) {
+        final List<String> args = Lists.newArrayList();
+        args.add("-t");
+        args.add(fullTableName);
+        args.add("-d");
+        args.add(randomDir);
+        args.add("-runfg");
+        args.add("-cs");
+        args.add("-ds");
+        return args.toArray(new String[0]);
     }
 
     @Test
@@ -480,7 +501,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         Scan scan = new Scan();
         scan.setRaw(true);
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        try (HTableInterface htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
+        try (Table htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
             ResultScanner scanner = htable.getScanner(scan);
             Result result;
             while ((result = scanner.next())!=null) {
@@ -493,7 +514,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         scan = new Scan();
         scan.setRaw(true);
         phxConn = conn.unwrap(PhoenixConnection.class);
-        try (HTableInterface htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
+        try (Table htable = phxConn.getQueryServices().getTable(Bytes.toBytes(tableName))) {
             ResultScanner scanner = htable.getScanner(scan);
             Result result;
             while ((result = scanner.next())!=null) {
@@ -718,7 +739,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private void verifyGuidePostGenerated(ConnectionQueryServices queryServices,
             String tableName, String[] familyNames,
             long guidePostWidth, boolean emptyGuidePostExpected) throws Exception {
-        try (HTableInterface statsHTable =
+        try (Table statsHTable =
                 queryServices.getTable(
                         SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
                                 queryServices.getProps()).getName())) {
