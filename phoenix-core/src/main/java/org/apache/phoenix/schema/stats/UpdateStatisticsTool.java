@@ -122,7 +122,9 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         try (final Connection conn = ConnectionUtil.getInputConnection(getConf())) {
             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            snapshotName = "UpdateStatisticsTool_" + tableName + "_" + System.currentTimeMillis();
+            if (snapshotName == null) {
+                snapshotName = "UpdateStatisticsTool_" + tableName + "_" + System.currentTimeMillis();
+            }
             boolean namespaceMapping = getConf().getBoolean(IS_NAMESPACE_MAPPING_ENABLED, DEFAULT_IS_NAMESPACE_MAPPING_ENABLED);
             String physicalTableName =  SchemaUtil.getPhysicalTableName(tableName.getBytes(),
                     namespaceMapping).getNameAsString();
@@ -244,12 +246,6 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         if (!cmdLine.hasOption(TABLE_NAME_OPTION.getOpt())) {
             throw new IllegalStateException(TABLE_NAME_OPTION.getLongOpt() + " is a mandatory "
                     + "parameter");
-        }
-
-        if (cmdLine.hasOption(CREATE_SNAPSHOT_OPTION.getOpt())
-                && cmdLine.hasOption(SNAPSHOT_NAME_OPTION.getOpt())) {
-            throw new IllegalStateException("Create snapshot option and snapshot name option " +
-                    "cannot be used together");
         }
 
         if (!cmdLine.hasOption(CREATE_SNAPSHOT_OPTION.getOpt())
