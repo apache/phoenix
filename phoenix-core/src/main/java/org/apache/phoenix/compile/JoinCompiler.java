@@ -761,13 +761,15 @@ public class JoinCompiler {
         }
 
         public SelectStatement getAsSubquery(List<OrderByNode> orderBy) throws SQLException {
-            if (isSubselect())
-                return SubselectRewriter.applyOrderBy(
+            if (isSubselect()) {
+                return SubselectRewriter.applyOrderByAndPostFilters(
                         SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias()),
                         orderBy,
                         tableNode.getAlias(),
-                        tableNode);
-
+                        postFilters);
+            }
+            //for table, postFilters is empty , because it can safely pushed down as preFilters.
+            assert postFilters == null || postFilters.isEmpty();
             return NODE_FACTORY.select(tableNode, select.getHint(), false, getSelectNodes(), getPreFiltersCombined(), null,
                     null, orderBy, null, null, 0, false, select.hasSequence(),
                     Collections.<SelectStatement> emptyList(), select.getUdfParseNodes());

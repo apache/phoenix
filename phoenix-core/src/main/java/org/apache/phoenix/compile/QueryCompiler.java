@@ -221,7 +221,7 @@ public class QueryCompiler {
             QueryPlan plan = compileSubquery(subquery, false);
             PTable projectedTable = table.createProjectedTable(plan.getProjector());
             context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), subquery.getUdfParseNodes()));
-            return new TupleProjectionPlan(plan, new TupleProjector(plan.getProjector()), table.compilePostFilterExpression(context));
+            return new TupleProjectionPlan(plan, new TupleProjector(plan.getProjector()), null);
         }
 
         List<JoinCompiler.Strategy> strategies = joinTable.getApplicableJoinStrategies();
