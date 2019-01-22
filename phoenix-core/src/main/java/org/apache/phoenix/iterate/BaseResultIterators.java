@@ -23,6 +23,8 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STAR
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -190,6 +192,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private static void initializeScan(QueryPlan plan, Integer perScanLimit, Integer offset, Scan scan) throws SQLException {
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
+        boolean wildcardIncludesDynamicCols = context.getConnection().getQueryServices()
+                .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
+                        DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
         PTable table = tableRef.getTable();
 
         Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
@@ -208,7 +213,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             FilterableStatement statement = plan.getStatement();
             RowProjector projector = plan.getProjector();
             boolean optimizeProjection = false;
-            boolean keyOnlyFilter = familyMap.isEmpty() && context.getWhereConditionColumns().isEmpty();
+            boolean keyOnlyFilter = familyMap.isEmpty() && !wildcardIncludesDynamicCols &&
+                    context.getWhereConditionColumns().isEmpty();
             if (!projector.projectEverything()) {
                 // If nothing projected into scan and we only have one column family, just allow everything
                 // to be projected and use a FirstKeyOnlyFilter to skip from row to row. This turns out to

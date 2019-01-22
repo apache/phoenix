@@ -457,7 +457,7 @@ public class MetaDataUtil {
             for (Cell cell : kvs) {
                 KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
                 if (builder.compareQualifier(kv, key, 0, key.length) ==0) {
-                    KeyValueBuilder.addQuietly(headerRow, builder, keyValue);
+                    KeyValueBuilder.addQuietly(headerRow, keyValue);
                     return true;
                 }
             }

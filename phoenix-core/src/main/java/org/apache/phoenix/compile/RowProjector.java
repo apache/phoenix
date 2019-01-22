@@ -52,19 +52,12 @@ public class RowProjector {
     private final boolean isProjectEmptyKeyValue;
     private final boolean cloneRequired;
     private final boolean hasUDFs;
-    
+    private final boolean isProjectDynColsInWildcardQueries;
+
     public RowProjector(RowProjector projector, boolean isProjectEmptyKeyValue) {
-        this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(), isProjectEmptyKeyValue, projector.hasUDFs, projector.isProjectAll);
-    }
-    /**
-     * Construct RowProjector based on a list of ColumnProjectors.
-     * @param columnProjectors ordered list of ColumnProjectors corresponding to projected columns in SELECT clause
-     * aggregating coprocessor. Only required in the case of an aggregate query with a limit clause and otherwise may
-     * be null.
-     * @param estimatedRowSize 
-     */
-    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue) {
-        this(columnProjectors, estimatedRowSize, isProjectEmptyKeyValue, false, false);
+        this(projector.getColumnProjectors(), projector.getEstimatedRowByteSize(),
+                isProjectEmptyKeyValue, projector.hasUDFs, projector.isProjectAll,
+                projector.isProjectDynColsInWildcardQueries);
     }
     /**
      * Construct RowProjector based on a list of ColumnProjectors.
@@ -73,9 +66,24 @@ public class RowProjector {
      * be null.
      * @param estimatedRowSize 
      * @param isProjectEmptyKeyValue
-     * @param hasUDFs
      */
-    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue, boolean hasUDFs, boolean isProjectAll) {
+    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize, boolean isProjectEmptyKeyValue) {
+        this(columnProjectors, estimatedRowSize, isProjectEmptyKeyValue, false, false, false);
+    }
+    /**
+     * Construct RowProjector based on a list of ColumnProjectors.
+     * @param columnProjectors ordered list of ColumnProjectors corresponding to projected columns in SELECT clause
+     * aggregating coprocessor. Only required in the case of an aggregate query with a limit clause and otherwise may
+     * be null.
+     * @param estimatedRowSize
+     * @param isProjectEmptyKeyValue
+     * @param hasUDFs
+     * @param isProjectAll
+     * @param isProjectDynColsInWildcardQueries
+     */
+    public RowProjector(List<? extends ColumnProjector> columnProjectors, int estimatedRowSize,
+            boolean isProjectEmptyKeyValue, boolean hasUDFs, boolean isProjectAll,
+            boolean isProjectDynColsInWildcardQueries) {
         this.columnProjectors = Collections.unmodifiableList(columnProjectors);
         int position = columnProjectors.size();
         reverseIndex = ArrayListMultimap.<String, Integer>create();
@@ -107,6 +115,7 @@ public class RowProjector {
             }
         }
         this.cloneRequired = cloneRequired || hasUDFs;
+        this.isProjectDynColsInWildcardQueries = isProjectDynColsInWildcardQueries;
     }
 
     public RowProjector cloneIfNecessary() {
@@ -129,7 +138,8 @@ public class RowProjector {
             }
         }
         return new RowProjector(clonedColProjectors, 
-                this.estimatedSize, this.isProjectEmptyKeyValue, this.hasUDFs, this.isProjectAll);
+                this.estimatedSize, this.isProjectEmptyKeyValue, this.hasUDFs, this.isProjectAll,
+                this.isProjectDynColsInWildcardQueries);
     }
 
     public boolean projectEveryRow() {
@@ -138,6 +148,14 @@ public class RowProjector {
     
     public boolean projectEverything() {
         return isProjectAll;
+    }
+
+    public boolean hasUDFs() {
+        return hasUDFs;
+    }
+
+    public boolean projectDynColsInWildcardQueries() {
+        return isProjectDynColsInWildcardQueries;
     }
     
     public List<? extends ColumnProjector> getColumnProjectors() {

@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -50,7 +53,6 @@ import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.optimize.Cost;
@@ -213,7 +215,11 @@ public class QueryCompiler {
                 context.setCurrentTable(table.getTableRef());
                 PTable projectedTable = table.createProjectedTable(!projectPKColumns, context);
                 TupleProjector projector = new TupleProjector(projectedTable);
-                TupleProjector.serializeProjectorIntoScan(context.getScan(), projector);
+                boolean wildcardIncludesDynamicCols = context.getConnection().getQueryServices()
+                        .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
+                                DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
+                TupleProjector.serializeProjectorIntoScan(context.getScan(), projector,
+                        wildcardIncludesDynamicCols);
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), subquery.getUdfParseNodes()));
                 table.projectColumns(context.getScan());
                 return compileSingleFlatQuery(context, subquery, binds, asSubquery, !asSubquery, null, projectPKColumns ? projector : null, true);
@@ -252,6 +258,9 @@ public class QueryCompiler {
     protected QueryPlan compileJoinQuery(JoinCompiler.Strategy strategy, StatementContext context, List<Object> binds, JoinTable joinTable, boolean asSubquery, boolean projectPKColumns, List<OrderByNode> orderBy) throws SQLException {
         byte[] emptyByteArray = new byte[0];
         List<JoinSpec> joinSpecs = joinTable.getJoinSpecs();
+        boolean wildcardIncludesDynamicCols = context.getConnection().getQueryServices()
+                .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
+                        DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
         switch (strategy) {
             case HASH_BUILD_RIGHT: {
                 boolean[] starJoinVector = joinTable.getStarJoinVector();
@@ -318,7 +327,8 @@ public class QueryCompiler {
                     }
                     hashPlans[i] = new HashSubPlan(i, subPlans[i], optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), usePersistentCache, keyRangeLhsExpression, keyRangeRhsExpression);
                 }
-                TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
+                TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector,
+                        wildcardIncludesDynamicCols);
                 QueryPlan plan = compileSingleFlatQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin(), null, !table.isSubselect() && projectPKColumns ? tupleProjector : null, true);
                 Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
                 Integer limit = null;
@@ -370,7 +380,8 @@ public class QueryCompiler {
                 PTable lhsTable = needsMerge ? lhsCtx.getResolver().getTables().get(0).getTable() : null;
                 int fieldPosition = needsMerge ? rhsProjTable.getColumns().size() - rhsProjTable.getPKColumns().size() : 0;
                 PTable projectedTable = needsMerge ? JoinCompiler.joinProjectedTables(rhsProjTable, lhsTable, type == JoinType.Right ? JoinType.Left : type) : rhsProjTable;
-                TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
+                TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector,
+                        wildcardIncludesDynamicCols);
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), rhs.getUdfParseNodes()));
                 QueryPlan rhsPlan = compileSingleFlatQuery(context, rhs, binds, asSubquery, !asSubquery && type == JoinType.Right, null, !rhsTable.isSubselect() && projectPKColumns ? tupleProjector : null, true);
                 Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
@@ -561,7 +572,12 @@ public class QueryCompiler {
         // definitively whether or not we'll traverse in row key order.
         groupBy = groupBy.compile(context, innerPlanTupleProjector);
         context.setResolver(resolver); // recover resolver
-        RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns, where);
+        boolean wildcardIncludesDynamicCols = context.getConnection().getQueryServices()
+                .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
+                        DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
+        RowProjector projector = ProjectionCompiler.compile(context, select, groupBy,
+                asSubquery ? Collections.<PDatum>emptyList() : targetColumns, where,
+                wildcardIncludesDynamicCols);
         OrderBy orderBy = OrderByCompiler.compile(
                 context,
                 select,
@@ -586,7 +602,9 @@ public class QueryCompiler {
         }
 
         if (projectedTable != null) {
-            TupleProjector.serializeProjectorIntoScan(context.getScan(), new TupleProjector(projectedTable));
+            TupleProjector.serializeProjectorIntoScan(context.getScan(),
+                    new TupleProjector(projectedTable), wildcardIncludesDynamicCols &&
+                            projector.projectDynColsInWildcardQueries());
         }
         
         QueryPlan plan = innerPlan;

@@ -728,7 +728,6 @@ public class UpsertCompiler {
                     PTable projectedTable = PTableImpl.builderWithColumns(table, projectedColumns)
                             .setExcludedColumns(ImmutableList.<PColumn>of())
                             .setDefaultFamilyName(PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)))
-                            .setColumns(projectedColumns)
                             .build();
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());

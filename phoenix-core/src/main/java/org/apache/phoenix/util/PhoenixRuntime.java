@@ -1155,7 +1155,7 @@ public class PhoenixRuntime {
         return values.toArray();
     }
     
-    private static KeyValueSchema buildKeyValueSchema(List<PColumn> columns) {
+    public static KeyValueSchema buildKeyValueSchema(List<PColumn> columns) {
         KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(getMinNullableIndex(columns));
         for (PColumn col : columns) {
             builder.addField(col);
