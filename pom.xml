@@ -824,6 +824,52 @@
         <artifactId>tephra-hbase-compat-2.0</artifactId>
         <version>${tephra.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-client-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-tso-server-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+          <groupId>org.testng</groupId>
+          <artifactId>testng</artifactId>
+        </exclusion>
+      </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-tso-server-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <type>test-jar</type>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
 
       <!-- Make sure we have all the antlr dependencies -->
       <dependency>

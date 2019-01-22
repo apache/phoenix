@@ -57,6 +57,15 @@
         <include>org.apache.omid:omid-commit-table</include>
         <include>org.apache.omid:omid-codahale-metrics</include>
         <include>org.apache.omid:omid-hbase-commit-table-hbase2.x</include>
+        <include>com.fasterxml.woodstox:woodstox-core</include>
+        <include>org.codehaus.woodstox:stax2-api</include>
+        <include>org.apache.commons:commons-configuration2</include>
+        <include>org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</include>
+        <include>org.apache.hbase.thirdparty:hbase-shaded-protobuf</include>
+        <include>org.apache.hbase.thirdparty:hbase-shaded-netty</include>
+        <include>org.apache.commons:commons-lang3</include>
+        <include>org.apache.hadoop:hadoop-common</include>
+        <include>org.apache.hadoop:hadoop-hdfs</include>
         <include>org.yaml:snakeyaml</include>
         <include>com.google.inject:guice</include>
         <include>commons-beanutils:commons-beanutils</include>
