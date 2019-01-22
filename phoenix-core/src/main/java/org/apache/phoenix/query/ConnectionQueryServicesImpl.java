@@ -934,6 +934,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             }
+
             if ((SchemaUtil.isStatsTable(tableName) || SchemaUtil.isMetaTable(tableName))
                     && !newDesc.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 builder.addCoprocessor(MultiRowMutationEndpoint.class.getName(),

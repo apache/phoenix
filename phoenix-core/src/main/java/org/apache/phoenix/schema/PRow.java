@@ -23,6 +23,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Mutation;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 
 /**
  * 
@@ -55,7 +57,30 @@ public interface PRow {
      * constraint
      */
     public void setValue(PColumn col, byte[] value);
-    
+
+    /**
+     * Set attributes for the Put operations involving dynamic columns. These attributes are
+     * persisted as cells under a reserved qualifier for the dynamic column metadata so that we
+     * can resolve them for wildcard queries without requiring the user to provide the data type
+     * of the dynamic columns. See PHOENIX-374
+     * @return true if attributes for dynamic columns are added, otherwise false
+     */
+    public boolean setAttributesForDynamicColumnsIfReqd();
+
+    /**
+     * Set an attribute to indicate that we must process dynamic column metadata for the mutation.
+     * This is set if the configuration for supporting dynamic columns in wildcard queries is on
+     * and there are actually dynamic columns for which we need to add metadata.
+     * In case of old clients or for clients where this configuration is off, or for clients where
+     * this configuration is on and there are no dynamic columns to process in the mutation, this
+     * attribute will not be set.
+     * If this attribute is not set, we can avoid unnecessary iterations over each mutation's
+     * column families. See
+     * {@link org.apache.phoenix.coprocessor.ScanRegionObserver#preBatchMutate(ObserverContext,
+     * MiniBatchOperationInProgress)}
+     */
+    public void setAttributeToProcessDynamicColumnsMetadata();
+
     /**
      * Delete the row. Note that a delete take precedence over any
      * values that may have been set before or after the delete call.

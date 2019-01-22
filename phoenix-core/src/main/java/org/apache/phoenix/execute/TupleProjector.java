@@ -17,37 +17,51 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYN_COLS_METADATA_CELL_QUALIFIER;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -112,7 +126,20 @@ public class TupleProjector {
         this.valueSet = bitSet;
     }
     
-    public static void serializeProjectorIntoScan(Scan scan, TupleProjector projector) {
+    public static void serializeProjectorIntoScan(Scan scan, TupleProjector projector,
+            boolean projectDynColsInWildcardQueries) {
+        scan.setAttribute(SCAN_PROJECTOR, serializeProjectorIntoBytes(projector));
+        if (projectDynColsInWildcardQueries) {
+            scan.setAttribute(WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS, TRUE_BYTES);
+        }
+    }
+
+    /**
+     * Serialize the projector into a byte array
+     * @param projector projector to serialize
+     * @return byte array
+     */
+    private static byte[] serializeProjectorIntoBytes(TupleProjector projector) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
@@ -120,10 +147,11 @@ public class TupleProjector {
             int count = projector.expressions.length;
             WritableUtils.writeVInt(output, count);
             for (int i = 0; i < count; i++) {
-            	WritableUtils.writeVInt(output, ExpressionType.valueOf(projector.expressions[i]).ordinal());
-            	projector.expressions[i].write(output);
+                WritableUtils.writeVInt(output,
+                        ExpressionType.valueOf(projector.expressions[i]).ordinal());
+                projector.expressions[i].write(output);
             }
-            scan.setAttribute(SCAN_PROJECTOR, stream.toByteArray());
+            return stream.toByteArray();
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -133,11 +161,18 @@ public class TupleProjector {
                 throw new RuntimeException(e);
             }
         }
-        
     }
     
     public static TupleProjector deserializeProjectorFromScan(Scan scan) {
-        byte[] proj = scan.getAttribute(SCAN_PROJECTOR);
+        return deserializeProjectorFromBytes(scan.getAttribute(SCAN_PROJECTOR));
+    }
+
+    /**
+     * Deserialize the byte array to form a projector
+     * @param proj byte array to deserialize
+     * @return projector
+     */
+    private static TupleProjector deserializeProjectorFromBytes(byte[] proj) {
         if (proj == null) {
             return null;
         }
@@ -149,9 +184,9 @@ public class TupleProjector {
             int count = WritableUtils.readVInt(input);
             Expression[] expressions = new Expression[count];
             for (int i = 0; i < count; i++) {
-            	int ordinal = WritableUtils.readVInt(input);
-            	expressions[i] = ExpressionType.values()[ordinal].newInstance();
-            	expressions[i].readFields(input);
+                int ordinal = WritableUtils.readVInt(input);
+                expressions[i] = ExpressionType.values()[ordinal].newInstance();
+                expressions[i].readFields(input);
             }
             return new TupleProjector(schema, expressions);
         } catch (IOException e) {
@@ -161,6 +196,86 @@ public class TupleProjector {
                 stream.close();
             } catch (IOException e) {
                 throw new RuntimeException(e);
+            }
+        }
+    }
+
+    /**
+     * Iterate over the list of cells returned from the scan and return a tuple projector for the
+     * dynamic columns by parsing the metadata stored for the list of dynamic columns
+     * @param result list of cells
+     * @param dynCols list of dynamic columns to be populated
+     * @param dynColCells list of cells corresponding to dynamic columns to be populated
+     * @return The tuple projector corresponding to dynamic columns or null if there are no dynamic
+     * columns to process
+     * @throws InvalidProtocolBufferException Thrown if there is an error parsing byte[] to protobuf
+     */
+    public static TupleProjector getDynamicColumnsTupleProjector(List<Cell> result,
+            List<PColumn> dynCols, List<Cell> dynColCells) throws InvalidProtocolBufferException {
+        Set<Pair<ByteBuffer, ByteBuffer>> dynColCellQualifiers = new HashSet<>();
+        populateDynColsFromResult(result, dynCols, dynColCellQualifiers);
+        if (dynCols.isEmpty()) {
+            return null;
+        }
+        populateDynamicColumnCells(result, dynColCellQualifiers, dynColCells);
+        if (dynColCells.isEmpty()) {
+            return null;
+        }
+        KeyValueSchema dynColsSchema = PhoenixRuntime.buildKeyValueSchema(dynCols);
+        Expression[] expressions = new Expression[dynCols.size()];
+        for (int i = 0; i < dynCols.size(); i++) {
+            expressions[i] = new KeyValueColumnExpression(dynCols.get(i));
+        }
+        return new TupleProjector(dynColsSchema, expressions);
+    }
+
+    /**
+     * Populate cells corresponding to dynamic columns
+     * @param result list of cells
+     * @param dynColCellQualifiers Set of <column family, column qualifier> pairs corresponding to
+     *                             cells of dynamic columns
+     * @param dynColCells Populated list of cells corresponding to dynamic columns
+     */
+    private static void populateDynamicColumnCells(List<Cell> result,
+            Set<Pair<ByteBuffer, ByteBuffer>> dynColCellQualifiers, List<Cell> dynColCells) {
+        for (Cell c : result) {
+            Pair famQualPair = new Pair<>(ByteBuffer.wrap(CellUtil.cloneFamily(c)),
+                    ByteBuffer.wrap(CellUtil.cloneQualifier(c)));
+            if (dynColCellQualifiers.contains(famQualPair)) {
+                dynColCells.add(c);
+            }
+        }
+    }
+
+    /**
+     * Iterate over the list of cells and populate dynamic columns
+     * @param result list of cells
+     * @param dynCols Populated list of PColumns corresponding to dynamic columns
+     * @param dynColCellQualifiers Populated set of <column family, column qualifier> pairs
+     *                             for the cells in the list, which correspond to dynamic columns
+     * @throws InvalidProtocolBufferException Thrown if there is an error parsing byte[] to protobuf
+     */
+    private static void populateDynColsFromResult(List<Cell> result, List<PColumn> dynCols,
+            Set<Pair<ByteBuffer, ByteBuffer>> dynColCellQualifiers)
+    throws InvalidProtocolBufferException {
+        for (Cell c : result) {
+            byte[] qual = CellUtil.cloneQualifier(c);
+            byte[] fam = CellUtil.cloneFamily(c);
+            int index = Bytes.indexOf(qual, DYN_COLS_METADATA_CELL_QUALIFIER);
+
+            // Contains dynamic column metadata, so add it to the list of dynamic columns
+            if (index != -1) {
+                byte[] dynColMetaDataProto = CellUtil.cloneValue(c);
+                dynCols.add(PColumnImpl.createFromProto(
+                        PTableProtos.PColumn.parseFrom(dynColMetaDataProto)));
+                // Add the <fam, qualifier> pair for the actual dynamic column. The column qualifier
+                // of the dynamic column is got by parsing out the known bytes from the shadow cell
+                // containing the metadata for that column i.e.
+                // DYN_COLS_METADATA_CELL_QUALIFIER<actual column qualifier>
+                byte[] dynColQual = Arrays.copyOfRange(qual,
+                        index + DYN_COLS_METADATA_CELL_QUALIFIER.length, qual.length);
+                dynColCellQualifiers.add(
+                        new Pair<>(ByteBuffer.wrap(fam), ByteBuffer.wrap(dynColQual)));
             }
         }
     }
@@ -205,6 +320,28 @@ public class TupleProjector {
         @Override
         public void getKey(ImmutableBytesWritable ptr) {
             ptr.set(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength());
+        }
+
+        @Override
+        public Cell mergeWithDynColsListBytesAndGetValue(int index, byte[] dynColsList) {
+            if (index != 0) {
+                throw new IndexOutOfBoundsException(Integer.toString(index));
+            }
+            if (dynColsList == null || dynColsList.length == 0) {
+                return getValue(VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER);
+            }
+            // We put the known reserved bytes before the serialized list of dynamic column
+            // PColumns to easily parse out the column list on the client
+            byte[] concatBytes = ByteUtil.concat(projectedValue.get(),
+                    DYN_COLS_METADATA_CELL_QUALIFIER, dynColsList);
+            ImmutableBytesWritable projectedValueWithDynColsListBytes =
+                    new ImmutableBytesWritable(concatBytes);
+            keyValue = PhoenixKeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(),
+                    keyPtr.getLength(), VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER, timestamp,
+                    projectedValueWithDynColsListBytes.get(),
+                    projectedValueWithDynColsListBytes.getOffset(),
+                    projectedValueWithDynColsListBytes.getLength());
+            return keyValue;
         }
 
         @Override
@@ -305,8 +442,9 @@ public class TupleProjector {
         if (!b) throw new IOException("Trying to decode a non-projected value.");
     }
     
-    public static ProjectedValueTuple mergeProjectedValue(ProjectedValueTuple dest, KeyValueSchema destSchema, ValueBitSet destBitSet,
-    		Tuple src, KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset, boolean useNewValueColumnQualifier) throws IOException {
+    public static ProjectedValueTuple mergeProjectedValue(ProjectedValueTuple dest,
+            ValueBitSet destBitSet, Tuple src, ValueBitSet srcBitSet, int offset,
+            boolean useNewValueColumnQualifier) throws IOException {
     	ImmutableBytesWritable destValue = dest.getProjectedValue();
         int origDestBitSetLen = dest.getBitSetLength();
     	destBitSet.clear();

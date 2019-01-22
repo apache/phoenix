@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -110,9 +113,13 @@ public class ProjectionCompiler {
     }
     
     public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy) throws SQLException  {
-        return compile(context, statement, groupBy, Collections.<PColumn>emptyList(), 
-                NULL_EXPRESSION// Pass null expression because we don't want empty key value to be projected
-                );
+        boolean wildcardIncludesDynamicCols = context.getConnection().getQueryServices()
+                .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
+                        DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
+        return compile(context, statement, groupBy, Collections.<PColumn>emptyList(),
+                // Pass null expression because we don't want empty key value to be projected
+                NULL_EXPRESSION,
+                wildcardIncludesDynamicCols);
     }
     
     private static int getMinPKOffset(PTable table, PName tenantId) {
@@ -337,23 +344,29 @@ public class ProjectionCompiler {
     /**
      * Builds the projection for the scan
      * @param context query context kept between compilation of different query clauses
-     * @param statement TODO
+     * @param statement the statement being compiled
      * @param groupBy compiled GROUP BY clause
      * @param targetColumns list of columns, parallel to aliasedNodes, that are being set for an
      * UPSERT SELECT statement. Used to coerce expression types to the expected target type.
+     * @param where the where clause expression
+     * @param wildcardIncludesDynamicCols true if wildcard queries should include dynamic columns
      * @return projector used to access row values during scan
      * @throws SQLException 
      */
-    public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy, List<? extends PDatum> targetColumns, Expression where) throws SQLException {
-        List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
-        List<ProjectedColumnExpression> arrayProjectedColumnRefs = new ArrayList<ProjectedColumnExpression>();
-        List<Expression> arrayKVFuncs = new ArrayList<Expression>();
-        List<Expression> arrayOldFuncs = new ArrayList<Expression>();
+    public static RowProjector compile(StatementContext context, SelectStatement statement,
+            GroupBy groupBy, List<? extends PDatum> targetColumns, Expression where,
+            boolean wildcardIncludesDynamicCols) throws SQLException {
+        List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<>();
+        List<ProjectedColumnExpression> arrayProjectedColumnRefs = new ArrayList<>();
+        List<Expression> arrayKVFuncs = new ArrayList<>();
+        List<Expression> arrayOldFuncs = new ArrayList<>();
         Map<Expression, Integer> arrayExpressionCounts = new HashMap<>();
         List<AliasedNode> aliasedNodes = statement.getSelect();
         // Setup projected columns in Scan
-        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs, arrayKVFuncs, arrayExpressionCounts, arrayProjectedColumnRefs, arrayOldFuncs, statement);
-        List<ExpressionProjector> projectedColumns = new ArrayList<ExpressionProjector>();
+        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs,
+                arrayKVFuncs, arrayExpressionCounts, arrayProjectedColumnRefs, arrayOldFuncs,
+                statement);
+        List<ExpressionProjector> projectedColumns = new ArrayList<>();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
@@ -468,7 +481,9 @@ public class ProjectionCompiler {
         }
 
         boolean isProjectEmptyKeyValue = false;
-        if (isWildcard) {
+        // Don't project known/declared column families into the scan if we want to support
+        // surfacing dynamic columns in wildcard queries
+        if (isWildcard && !wildcardIncludesDynamicCols) {
             projectAllColumnFamilies(table, scan);
         } else {
             isProjectEmptyKeyValue = where == null || LiteralExpression.isTrue(where) || where.requiresFinalEvaluation();
@@ -501,7 +516,9 @@ public class ProjectionCompiler {
                 // Ignore as this can happen for local indexes when the data table has a column family, but there are no covered columns in the family
             }
         }
-        return new RowProjector(projectedColumns, Math.max(estimatedKeySize, estimatedByteSize), isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard);
+        return new RowProjector(projectedColumns, Math.max(estimatedKeySize, estimatedByteSize),
+                isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard,
+                wildcardIncludesDynamicCols);
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {

@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYN_COLS_METADATA_CELL_QUALIFIER;
+import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+
 import java.io.InputStream;
 import java.io.Reader;
 import java.math.BigDecimal;
@@ -38,17 +42,32 @@ import java.sql.SQLXML;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.Format;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Map;
 
+import com.google.common.primitives.Bytes;
+import com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
+import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.log.QueryLogInfo;
 import org.apache.phoenix.log.QueryLogger;
@@ -56,6 +75,8 @@ import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -76,8 +97,7 @@ import org.apache.phoenix.util.SQLCloseable;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
-
-
+import org.apache.phoenix.util.SchemaUtil;
 
 /**
  *
@@ -121,7 +141,11 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     private final ReadMetricQueue readMetricsQueue;
     private final OverAllQueryMetrics overAllQueryMetrics;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    private final boolean wildcardIncludesDynamicCols;
+    private final List<PColumn> staticColumns;
+    private final int startPositionForDynamicCols;
 
+    private RowProjector rowProjectorWithDynamicCols;
     private Tuple currentRow = BEFORE_FIRST;
     private boolean isClosed = false;
     private boolean wasNull = false;
@@ -133,9 +157,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     private Object exception;
 
-
-    
-    public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector, StatementContext ctx) throws SQLException {
+    public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector,
+            StatementContext ctx) throws SQLException {
         this.rowProjector = rowProjector;
         this.scanner = resultIterator;
         this.context = ctx;
@@ -143,6 +166,17 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         this.readMetricsQueue = context.getReadMetricsQueue();
         this.overAllQueryMetrics = context.getOverallQueryMetrics();
         this.queryLogger = context.getQueryLogger() != null ? context.getQueryLogger() : QueryLogger.NO_OP_INSTANCE;
+        this.wildcardIncludesDynamicCols = this.context.getConnection().getQueryServices()
+                .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
+                        DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
+        if (this.wildcardIncludesDynamicCols) {
+            Pair<List<PColumn>, Integer> res = getStaticColsAndStartingPosForDynCols();
+            this.staticColumns = res.getFirst();
+            this.startPositionForDynamicCols = res.getSecond();
+        } else {
+            this.staticColumns = null;
+            this.startPositionForDynamicCols = 0;
+        }
     }
     
     @Override
@@ -202,7 +236,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public int findColumn(String columnLabel) throws SQLException {
-        Integer index = rowProjector.getColumnIndex(columnLabel);
+        Integer index = getRowProjector().getColumnIndex(columnLabel);
         return index + 1;
     }
 
@@ -216,7 +250,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     	checkCursorState();
         // Get the value using the expected type instead of trying to coerce to VARCHAR.
         // We can't coerce using our formatter because we don't have enough context in PDataType.
-    	ColumnProjector projector = rowProjector.getColumnProjector(columnIndex-1);
+        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         Array value = (Array)projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
         return value;
@@ -255,8 +289,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public BigDecimal getBigDecimal(int columnIndex) throws SQLException {
         checkCursorState();
-        BigDecimal value = (BigDecimal)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PDecimal.INSTANCE, ptr);
+        BigDecimal value = (BigDecimal)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PDecimal.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -303,7 +337,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public boolean getBoolean(int columnIndex) throws SQLException {
         checkCursorState();
-        ColumnProjector colProjector = rowProjector.getColumnProjector(columnIndex-1);
+        ColumnProjector colProjector = getRowProjector().getColumnProjector(columnIndex-1);
         PDataType type = colProjector.getExpression().getDataType();
         Object value = colProjector.getValue(currentRow, type, ptr);
         wasNull = (value == null);
@@ -332,8 +366,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public byte[] getBytes(int columnIndex) throws SQLException {
         checkCursorState();
-        byte[] value = (byte[])rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PVarbinary.INSTANCE, ptr);
+        byte[] value = (byte[])getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PVarbinary.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -347,7 +381,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     public byte getByte(int columnIndex) throws SQLException {
 //        throw new SQLFeatureNotSupportedException();
         checkCursorState();
-        Byte value = (Byte)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+        Byte value = (Byte)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTinyint.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
@@ -394,7 +428,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Date getDate(int columnIndex) throws SQLException {
         checkCursorState();
-        Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+        Date value = (Date)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PDate.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
@@ -411,7 +445,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
-        Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+        Date value = (Date)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PDate.INSTANCE, ptr);
         wasNull = (value == null);
         if (wasNull) {
@@ -429,8 +463,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public double getDouble(int columnIndex) throws SQLException {
         checkCursorState();
-        Double value = (Double)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PDouble.INSTANCE, ptr);
+        Double value = (Double)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PDouble.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -456,8 +490,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public float getFloat(int columnIndex) throws SQLException {
         checkCursorState();
-        Float value = (Float)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PFloat.INSTANCE, ptr);
+        Float value = (Float)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PFloat.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -478,8 +512,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public int getInt(int columnIndex) throws SQLException {
         checkCursorState();
-        Integer value = (Integer)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PInteger.INSTANCE, ptr);
+        Integer value = (Integer)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PInteger.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -495,7 +529,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public long getLong(int columnIndex) throws SQLException {
         checkCursorState();
-        Long value = (Long)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+        Long value = (Long)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PLong.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
@@ -511,7 +545,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public ResultSetMetaData getMetaData() throws SQLException {
-        return new PhoenixResultSetMetaData(statement.getConnection(), rowProjector);
+        return new PhoenixResultSetMetaData(statement.getConnection(), getRowProjector());
     }
 
     @Override
@@ -547,7 +581,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Object getObject(int columnIndex) throws SQLException {
         checkCursorState();
-        ColumnProjector projector = rowProjector.getColumnProjector(columnIndex-1);
+        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         Object value = projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
         return value;
@@ -607,7 +641,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public short getShort(int columnIndex) throws SQLException {
         checkCursorState();
-        Short value = (Short)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PSmallint.INSTANCE, ptr);
+        Short value = (Short)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PSmallint.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return 0;
@@ -630,7 +665,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         checkCursorState();
         // Get the value using the expected type instead of trying to coerce to VARCHAR.
         // We can't coerce using our formatter because we don't have enough context in PDataType.
-        ColumnProjector projector = rowProjector.getColumnProjector(columnIndex-1);
+        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         PDataType type = projector.getExpression().getDataType();
         Object value = projector.getValue(currentRow,type, ptr);
         if (wasNull = (value == null)) {
@@ -651,7 +686,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Time getTime(int columnIndex) throws SQLException {
         checkCursorState();
-        Time value = (Time)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+        Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
@@ -665,7 +700,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Time getTime(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
-        Time value = (Time)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
+        Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
@@ -684,8 +719,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Timestamp getTimestamp(int columnIndex) throws SQLException {
         checkCursorState();
-        Timestamp value = (Timestamp)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
-            PTimestamp.INSTANCE, ptr);
+        Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PTimestamp.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }
@@ -713,7 +748,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public URL getURL(int columnIndex) throws SQLException {
         checkCursorState();
-        String value = (String)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PVarchar.INSTANCE, ptr);
+        String value = (String)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PVarchar.INSTANCE, ptr);
         wasNull = (value == null);
         if (value == null) {
             return null;
@@ -807,8 +843,16 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
                 close();
             }else{
                 count++;
+                // Reset this projector with each row
+                if (this.rowProjectorWithDynamicCols != null) {
+                    this.rowProjectorWithDynamicCols = null;
+                }
+                processDynamicColumnsIfRequired();
             }
             rowProjector.reset();
+            if (rowProjectorWithDynamicCols != null) {
+                rowProjectorWithDynamicCols.reset();
+            }
         } catch (RuntimeException e) {
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.
@@ -1352,6 +1396,152 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     
     public StatementContext getContext() {
         return context;
+    }
+
+    /**
+     * Return the row projector to use
+     * @return the row projector including dynamic column projectors in case we are including
+     * dynamic columns, otherwise the regular row projector containing static column projectors
+     */
+    private RowProjector getRowProjector() {
+        if (this.rowProjectorWithDynamicCols != null) {
+            return this.rowProjectorWithDynamicCols;
+        }
+        return this.rowProjector;
+    }
+
+    /**
+     * Populate the static columns and the starting position for dynamic columns which we use when
+     * merging column projectors of static and dynamic columns
+     * @return Pair whose first part is the list of static column PColumns and the second part is
+     * the starting position for dynamic columns
+     */
+    private Pair<List<PColumn>, Integer> getStaticColsAndStartingPosForDynCols(){
+        List<PColumn> staticCols = new ArrayList<>();
+        for (ColumnProjector cp : this.rowProjector.getColumnProjectors()) {
+            Expression exp = cp.getExpression();
+            if (exp instanceof ProjectedColumnExpression) {
+                staticCols.addAll(((ProjectedColumnExpression) exp).getColumns());
+                break;
+            }
+        }
+        int startingPosForDynCols = 0;
+        for (PColumn col : staticCols) {
+            if (!SchemaUtil.isPKColumn(col)) {
+                startingPosForDynCols++;
+            }
+        }
+        return new Pair<>(staticCols, startingPosForDynCols);
+    }
+
+    /**
+     * Process the dynamic column metadata for the current row and store the complete projector for
+     * all static and dynamic columns for this row
+     */
+    private void processDynamicColumnsIfRequired() {
+        if (!this.wildcardIncludesDynamicCols || this.currentRow == null ||
+                !this.rowProjector.projectDynColsInWildcardQueries()) {
+            return;
+        }
+        List<PColumn> dynCols = getDynColsListAndSeparateFromActualData();
+        if (dynCols == null) {
+            return;
+        }
+
+        RowProjector rowProjectorWithDynamicColumns = null;
+        if (this.rowProjector.getColumnCount() > 0 &&
+                dynCols.size() > 0) {
+            rowProjectorWithDynamicColumns = mergeRowProjectorWithDynColProjectors(dynCols,
+                            this.rowProjector.getColumnProjector(0).getTableName());
+        }
+        // Set the combined row projector
+        if (rowProjectorWithDynamicColumns != null) {
+            this.rowProjectorWithDynamicCols = rowProjectorWithDynamicColumns;
+        }
+    }
+
+    /**
+     * Separate the actual cell data from the serialized list of dynamic column PColumns and
+     * return the deserialized list of dynamic column PColumns for the current row
+     * @return Deserialized list of dynamic column PColumns or null if there are no dynamic columns
+     */
+    private List<PColumn> getDynColsListAndSeparateFromActualData() {
+        Cell base = this.currentRow.getValue(0);
+        final byte[] valueArray = CellUtil.cloneValue(base);
+        // We inserted the known byte array before appending the serialized list of dynamic columns
+        final byte[] anchor = Arrays.copyOf(DYN_COLS_METADATA_CELL_QUALIFIER,
+                DYN_COLS_METADATA_CELL_QUALIFIER.length);
+        // Reverse the arrays to find the last occurrence of the sub-array in the value array
+        ArrayUtils.reverse(valueArray);
+        ArrayUtils.reverse(anchor);
+        final int pos = valueArray.length - Bytes.indexOf(valueArray, anchor);
+        // There are no dynamic columns to process so return immediately
+        if (pos >= valueArray.length) {
+            return null;
+        }
+        ArrayUtils.reverse(valueArray);
+
+        // Separate the serialized list of dynamic column PColumns from the actual cell data
+        byte[] actualCellDataBytes = Arrays.copyOfRange(valueArray, 0,
+                pos - DYN_COLS_METADATA_CELL_QUALIFIER.length);
+        ImmutableBytesWritable actualCellData = new ImmutableBytesWritable(actualCellDataBytes);
+        ImmutableBytesWritable key = new ImmutableBytesWritable();
+        currentRow.getKey(key);
+        // Store only the actual cell data as part of the current row
+        this.currentRow = new TupleProjector.ProjectedValueTuple(key.get(), key.getOffset(),
+                key.getLength(), base.getTimestamp(),
+                actualCellData.get(), actualCellData.getOffset(), actualCellData.getLength(), 0);
+
+        byte[] dynColsListBytes = Arrays.copyOfRange(valueArray, pos, valueArray.length);
+        List<PColumn> dynCols = new ArrayList<>();
+        try {
+            List<PTableProtos.PColumn> dynColsProtos = DynamicColumnMetaDataProtos
+                    .DynamicColumnMetaData.parseFrom(dynColsListBytes).getDynamicColumnsList();
+            for (PTableProtos.PColumn colProto : dynColsProtos) {
+                dynCols.add(PColumnImpl.createFromProto(colProto));
+            }
+        } catch (InvalidProtocolBufferException e) {
+            return null;
+        }
+        return dynCols;
+    }
+
+    /**
+     * Add the dynamic column projectors at the end of the current row's row projector
+     * @param dynCols list of dynamic column PColumns for the current row
+     * @param tableName table name
+     * @return The combined row projector containing column projectors for both static and dynamic
+     * columns
+     */
+    private RowProjector mergeRowProjectorWithDynColProjectors(List<PColumn> dynCols,
+            String tableName) {
+        List<ColumnProjector> allColumnProjectors =
+                new ArrayList<>(this.rowProjector.getColumnProjectors());
+        List<PColumn> allCols = new ArrayList<>();
+        if (this.staticColumns != null) {
+            allCols.addAll(this.staticColumns);
+        }
+        // Add dynamic columns to the end
+        allCols.addAll(dynCols);
+
+        int startingPos = this.startPositionForDynamicCols;
+        // Get the ProjectedColumnExpressions for dynamic columns
+        for (PColumn currentDynCol : dynCols) {
+            // Note that we refer to all the existing static columns along with all dynamic columns
+            // in each of the newly added dynamic column projectors.
+            // This is required for correctly building the schema for each of the dynamic columns
+            Expression exp = new ProjectedColumnExpression(currentDynCol, allCols,
+                    startingPos++, currentDynCol.getName().getString());
+
+            ColumnProjector dynColProj = new ExpressionProjector(
+                    currentDynCol.getName().getString(), tableName, exp, false);
+            allColumnProjectors.add(dynColProj);
+        }
+
+        return new RowProjector(allColumnProjectors, this.rowProjector.getEstimatedRowByteSize(),
+                this.rowProjector.projectEveryRow(), this.rowProjector.hasUDFs(),
+                this.rowProjector.projectEverything(),
+                this.rowProjector.projectDynColsInWildcardQueries());
     }
 
 }

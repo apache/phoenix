@@ -17,9 +17,11 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
 import java.sql.DriverManager;
@@ -45,12 +47,15 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -1124,9 +1129,13 @@ public class PTableImpl implements PTable {
         private final long ts;
         private final boolean hasOnDupKey;
         // map from column name to value 
-        private Map<PColumn, byte[]> columnToValueMap; 
+        private Map<PColumn, byte[]> columnToValueMap;
+        // Map from the column family name to the list of dynamic columns in that column family.
+        // If there are no dynamic columns in a column family, the key for that column family
+        // will not exist in the map, rather than the corresponding value being an empty list.
+        private Map<String, List<PColumn>> colFamToDynamicColumnsMapping;
 
-        public PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum, boolean hasOnDupKey) {
+        PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum, boolean hasOnDupKey) {
             this.kvBuilder = kvBuilder;
             this.ts = ts;
             this.hasOnDupKey = hasOnDupKey;
@@ -1138,6 +1147,7 @@ public class PTableImpl implements PTable {
                 this.key = ByteUtil.copyKeyBytesIfNecessary(key);
             }
             this.columnToValueMap = Maps.newHashMapWithExpectedSize(1);
+            this.colFamToDynamicColumnsMapping = Maps.newHashMapWithExpectedSize(1);
             newMutations();
         }
 
@@ -1188,16 +1198,21 @@ public class PTableImpl implements PTable {
                         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                         singleCellConstructorExpression.evaluate(null, ptr);
                         ImmutableBytesPtr colFamilyPtr = new ImmutableBytesPtr(columnFamily);
-                        addQuietly(put, kvBuilder, kvBuilder.buildPut(keyPtr,
+                        addQuietly(put, kvBuilder.buildPut(keyPtr,
                             colFamilyPtr, QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR, ts, ptr));
                     }
+                    // Preserve the attributes of the original mutation
+                    Map<String, byte[]> attrsMap = setValues.getAttributesMap();
                     setValues = put;
+                    for (String attrKey : attrsMap.keySet()) {
+                        setValues.setAttribute(attrKey, attrsMap.get(attrKey));
+                    }
                 }
                 // Because we cannot enforce a not null constraint on a KV column (since we don't know if the row exists when
                 // we upsert it), so instead add a KV that is always empty. This allows us to imitate SQL semantics given the
                 // way HBase works.
                 Pair<byte[], byte[]> emptyKvInfo = EncodedColumnsUtil.getEmptyKeyValueInfo(PTableImpl.this);
-                addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
+                addQuietly(setValues, kvBuilder.buildPut(keyPtr,
                     SchemaUtil.getEmptyColumnFamilyPtr(PTableImpl.this),
                     new ImmutableBytesPtr(emptyKvInfo.getFirst()), ts,
                     new ImmutableBytesPtr(emptyKvInfo.getSecond())));
@@ -1270,11 +1285,50 @@ public class PTableImpl implements PTable {
                 }
                 else {
                     removeIfPresent(unsetValues, family, qualifier);
-                    addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
+                    addQuietly(setValues, kvBuilder.buildPut(keyPtr,
                         column.getFamilyName().getBytesPtr(), qualifierPtr,
                         ts, ptr));
                 }
+                String fam = Bytes.toString(family);
+                if (column.isDynamic()) {
+                    this.colFamToDynamicColumnsMapping.putIfAbsent(fam, new ArrayList<>());
+                    this.colFamToDynamicColumnsMapping.get(fam).add(column);
+                }
             }
+        }
+
+        /**
+         * Add attributes to the Put mutations indicating that we need to add shadow cells to Puts
+         * to store dynamic column metadata. See
+         * {@link org.apache.phoenix.coprocessor.ScanRegionObserver#preBatchMutate(ObserverContext,
+         * MiniBatchOperationInProgress)}
+         */
+        public boolean setAttributesForDynamicColumnsIfReqd() {
+            if (this.colFamToDynamicColumnsMapping == null ||
+                    this.colFamToDynamicColumnsMapping.isEmpty()) {
+                return false;
+            }
+            boolean attrsForDynColsSet = false;
+            for (Entry<String, List<PColumn>> colFamToDynColsList :
+                    this.colFamToDynamicColumnsMapping.entrySet()) {
+                DynamicColumnMetaDataProtos.DynamicColumnMetaData.Builder builder =
+                        DynamicColumnMetaDataProtos.DynamicColumnMetaData.newBuilder();
+                for (PColumn dynCol : colFamToDynColsList.getValue()) {
+                    builder.addDynamicColumns(PColumnImpl.toProto(dynCol));
+                }
+                if (builder.getDynamicColumnsCount() != 0) {
+                    // The attribute key is the column family name and the value is the
+                    // serialized list of dynamic columns
+                    setValues.setAttribute(colFamToDynColsList.getKey(),
+                            builder.build().toByteArray());
+                    attrsForDynColsSet = true;
+                }
+            }
+            return attrsForDynColsSet;
+        }
+
+        @Override public void setAttributeToProcessDynamicColumnsMetadata() {
+            setValues.setAttribute(DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION, TRUE_BYTES);
         }
 
         @Override

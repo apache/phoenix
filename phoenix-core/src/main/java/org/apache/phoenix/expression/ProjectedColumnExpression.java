@@ -80,6 +80,10 @@ public class ProjectedColumnExpression extends ColumnExpression {
     public int getPosition() {
     	return position;
     }
+
+    public Collection<PColumn> getColumns() {
+	    return columns;
+    }
     
     @Override
     public String toString() {
