@@ -18,9 +18,15 @@
 
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+
 import com.google.common.collect.ImmutableList;
 
-import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -30,6 +36,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -37,8 +45,13 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.tuple.*;
+import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
+import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -46,6 +59,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Set;
@@ -180,11 +194,17 @@ public abstract class RegionScannerFactory {
                 tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
           }
           if (projector != null) {
-            Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) : new ResultTuple(
-                Result.create(result));
-            Tuple tuple = projector.projectResults(toProject, useNewValueColumnQualifier);
+            Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
+                    new ResultTuple(Result.create(result));
+
+            Pair<Tuple, byte[]> mergedTupleDynColsPair = getTupleWithDynColsIfRequired(result,
+                    projector.projectResults(toProject, useNewValueColumnQualifier));
+            Tuple tupleWithDynColsIfReqd = mergedTupleDynColsPair.getFirst();
+            byte[] serializedDynColsList = mergedTupleDynColsPair.getSecond();
+
             result.clear();
-            result.add(tuple.getValue(0));
+            result.add(tupleWithDynColsIfReqd.mergeWithDynColsListBytesAndGetValue(0,
+                    serializedDynColsList));
             if (arrayElementCell != null) {
               result.add(arrayElementCell);
             }
@@ -195,6 +215,59 @@ public abstract class RegionScannerFactory {
           ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
           return false; // impossible
         }
+      }
+
+      /**
+       * Iterate over the list of cells returned from the scan and use the dynamic column metadata
+       * to create a tuple projector for dynamic columns. Finally, merge this with the projected
+       * values corresponding to the known columns
+       * @param result list of cells returned from the scan
+       * @param tuple projected value tuple from known schema/columns
+       * @return A pair, whose first part is a combined projected value tuple containing the
+       * known column values along with resolved dynamic column values and whose second part is
+       * the serialized list of dynamic column PColumns. In case dynamic columns are not
+       * to be exposed or are not present, this returns the original tuple and an empty byte array.
+       * @throws IOException Thrown if there is an error parsing protobuf or merging projected
+       * values
+       */
+      private Pair<Tuple, byte[]> getTupleWithDynColsIfRequired(List<Cell> result, Tuple tuple)
+        throws IOException {
+        // We only care about dynamic column cells if the scan has this attribute set
+        if (Bytes.equals(scan.getAttribute(WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS), TRUE_BYTES)) {
+          List<PColumn> dynCols = new ArrayList<>();
+          List<Cell> dynColCells = new ArrayList<>();
+          TupleProjector dynColTupleProj = TupleProjector.getDynamicColumnsTupleProjector(result,
+              dynCols, dynColCells);
+          if (dynColTupleProj != null) {
+            Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(dynColCells) :
+                new ResultTuple(Result.create(dynColCells));
+            Tuple dynColsProjectedTuple = dynColTupleProj
+                .projectResults(toProject, useNewValueColumnQualifier);
+
+            ValueBitSet destBitSet = projector.getValueBitSet();
+            // In case we are not projecting any non-row key columns, the field count for the
+            // current projector will be 0, so we simply use the dynamic column projector's
+            // value bitset as the destination bitset.
+            if (projector.getSchema().getFieldCount() == 0) {
+              destBitSet = dynColTupleProj.getValueBitSet();
+            }
+            // Add dynamic column data at the end of the projected tuple
+            Tuple mergedTuple = TupleProjector.mergeProjectedValue(
+                (TupleProjector.ProjectedValueTuple)tuple, destBitSet, dynColsProjectedTuple,
+                dynColTupleProj.getValueBitSet(), projector.getSchema().getFieldCount(),
+                useNewValueColumnQualifier);
+
+            // We send the serialized list of PColumns for dynamic columns back to the client
+            // so that the client can process the corresponding projected values
+            DynamicColumnMetaDataProtos.DynamicColumnMetaData.Builder dynColsListBuilder =
+                DynamicColumnMetaDataProtos.DynamicColumnMetaData.newBuilder();
+            for (PColumn dynCol : dynCols) {
+              dynColsListBuilder.addDynamicColumns(PColumnImpl.toProto(dynCol));
+            }
+            return new Pair<>(mergedTuple, dynColsListBuilder.build().toByteArray());
+          }
+        }
+        return new Pair<>(tuple, new byte[0]);
       }
 
       @Override

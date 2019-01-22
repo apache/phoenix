@@ -42,11 +42,11 @@ public abstract class KeyValueBuilder {
      * @throws RuntimeException if there is an IOException thrown from the underlying {@link Put}
      */
     @SuppressWarnings("javadoc")
-    public static void addQuietly(Mutation m, KeyValueBuilder builder, KeyValue kv) {
+    public static void addQuietly(Mutation m, KeyValue kv) {
         byte [] family = CellUtil.cloneFamily(kv);
         List<Cell> list = m.getFamilyCellMap().get(family);
         if (list == null) {
-            list = new ArrayList<Cell>();
+            list = new ArrayList<>();
             m.getFamilyCellMap().put(family, list);
         }
         list.add(kv);

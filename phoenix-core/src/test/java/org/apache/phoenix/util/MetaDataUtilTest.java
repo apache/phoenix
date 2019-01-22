@@ -146,7 +146,7 @@ public class MetaDataUtilTest {
     KeyValue kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(QUALIFIER),
             wrap(ORIGINAL_VALUE));
     Put put = new Put(ROW);
-    KeyValueBuilder.addQuietly(put, builder, kv);
+    KeyValueBuilder.addQuietly(put, kv);
 
     // read back out the value
     ImmutableBytesPtr ptr = new ImmutableBytesPtr();
@@ -161,7 +161,7 @@ public class MetaDataUtilTest {
         byte[] value = Bytes.toBytes("client-value");
         kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(QUALIFIER), wrap(value));
         put = new Put(ROW);
-        KeyValueBuilder.addQuietly(put, builder, kv);
+        KeyValueBuilder.addQuietly(put, kv);
     
         // read back out the value
         assertTrue(MetaDataUtil.getMutationValue(put, QUALIFIER, builder, ptr));
@@ -216,7 +216,7 @@ public class MetaDataUtilTest {
         KeyValue kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(QUALIFIER),
                 wrap(ORIGINAL_VALUE));
         Put put = new Put(ROW);
-        KeyValueBuilder.addQuietly(put, builder, kv);
+        KeyValueBuilder.addQuietly(put, kv);
         return put;
     }
 
