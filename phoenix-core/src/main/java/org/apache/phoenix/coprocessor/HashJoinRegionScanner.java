@@ -364,14 +364,14 @@ public class HashJoinRegionScanner implements RegionScanner {
 
         if (dest instanceof ProjectedValueTuple) {
             return TupleProjector.mergeProjectedValue(
-                (ProjectedValueTuple) dest, destSchema, destBitSet, src,
-                srcSchema, srcBitSet, offset, useNewValueColumnQualifier);
+                (ProjectedValueTuple) dest, destBitSet, src,
+                srcBitSet, offset, useNewValueColumnQualifier);
         }
 
         ProjectedValueTuple first = projector.projectResults(
             new SingleKeyValueTuple(dest.getValue(0)));
         ProjectedValueTuple merged = TupleProjector.mergeProjectedValue(
-            first, destSchema, destBitSet, src, srcSchema,
+            first, destBitSet, src,
             srcBitSet, offset, useNewValueColumnQualifier);
 
         int size = dest.size();

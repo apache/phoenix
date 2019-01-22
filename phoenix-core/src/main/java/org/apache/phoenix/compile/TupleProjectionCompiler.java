@@ -167,7 +167,6 @@ public class TupleProjectionCompiler {
                 .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
                 .setExcludedColumns(ImmutableList.of())
                 .setPhysicalNames(ImmutableList.of())
-                .setColumns(projectedColumns)
                 .build();
     }
     

@@ -214,7 +214,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-        return iterator(Collections.<ImmutableBytesPtr,ServerCache>emptyMap(), scanGrouper, scan);
+        return iterator(Collections.emptyMap(), scanGrouper, scan);
     }
         
 	private ResultIterator getWrappedIterator(final Map<ImmutableBytesPtr,ServerCache> dependencies,

@@ -51,7 +51,17 @@ public interface Tuple {
      * the key buffer.
      */
     public void getKey(ImmutableBytesWritable ptr);
-    
+
+    /**
+     * Get the KeyValue at the given index whose value is concatenated with the serialized list of
+     * dynamic column PColumns for that row key.
+     * @param index the zero-based KeyValue index between 0 and {@link #size()} exclusive
+     * @param dynColsList the serialized list of dynamic column PColumns
+     * @return the KeyValue at the given index
+     * @throws IndexOutOfBoundsException if an invalid index is used
+     */
+    public Cell mergeWithDynColsListBytesAndGetValue(int index, byte[] dynColsList);
+
     /**
      * Get the KeyValue at the given index.
      * @param index the zero-based KeyValue index between 0 and {@link #size()} exclusive
