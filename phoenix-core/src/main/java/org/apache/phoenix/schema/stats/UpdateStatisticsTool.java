@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.antlr.runtime.CharStream;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -82,20 +83,16 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     private static final Option RUN_FOREGROUND_OPTION =
             new Option("runfg", "run-foreground", false,
                     "If specified, runs UpdateStatisticsTool in Foreground. Default - Runs the build in background");
-    private static final Option CREATE_SNAPSHOT_OPTION =
-            new Option("cs", "create-snapshot", false,
-                    "Creates a new snapshot and runs the tool on it");
-    private static final Option DELETE_SNAPSHOT_OPTION =
-            new Option("ds", "delete-snapshot", false,
-                    "Deletes the snapshot at the end. Only applicable when RUN_FOREGROUND_OPTION is also specified");
+    private static final Option MANAGE_SNAPSHOT_OPTION =
+            new Option("ms", "manage-snapshot", false,
+                    "Creates a new snapshot, runs the tool and deletes it");
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
 
     private String tableName;
     private String snapshotName;
     private Path restoreDir;
-    private boolean createSnapshot;
-    private boolean deleteSnapshot;
+    private boolean manageSnapshot;
     private boolean isForeground;
 
     private Job job;
@@ -116,16 +113,14 @@ public class UpdateStatisticsTool extends Configured implements Tool {
      * Currently being used for snapshot creation
      */
     private void preJobTask() throws Exception {
-        if (!createSnapshot) {
+        if (!manageSnapshot) {
             return;
         }
 
         try (final Connection conn = ConnectionUtil.getInputConnection(getConf())) {
             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            if (snapshotName == null) {
-                snapshotName = "UpdateStatisticsTool_" + tableName + "_" + System.currentTimeMillis();
-            }
-            boolean namespaceMapping = getConf().getBoolean(IS_NAMESPACE_MAPPING_ENABLED, DEFAULT_IS_NAMESPACE_MAPPING_ENABLED);
+            boolean namespaceMapping = getConf().getBoolean(IS_NAMESPACE_MAPPING_ENABLED,
+                    DEFAULT_IS_NAMESPACE_MAPPING_ENABLED);
             String physicalTableName =  SchemaUtil.getPhysicalTableName(tableName.getBytes(),
                     namespaceMapping).getNameAsString();
             admin.snapshot(snapshotName, physicalTableName);
@@ -138,7 +133,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
      * Currently being used for snapshot deletion
      */
     private void postJobTask() throws Exception {
-        if (!deleteSnapshot) {
+        if (!manageSnapshot) {
             return;
         }
 
@@ -149,7 +144,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         }
     }
 
-    private void parseArgs(String[] args) {
+    void parseArgs(String[] args) {
         CommandLine cmdLine = null;
         try {
             cmdLine = parseOptions(args);
@@ -163,13 +158,17 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         tableName = cmdLine.getOptionValue(TABLE_NAME_OPTION.getOpt());
         snapshotName = cmdLine.getOptionValue(SNAPSHOT_NAME_OPTION.getOpt());
+        if (snapshotName == null) {
+            snapshotName = "UpdateStatisticsTool_" + tableName + "_" + System.currentTimeMillis();
+        }
+
         String restoreDirOptionValue = cmdLine.getOptionValue(RESTORE_DIR_OPTION.getOpt());
         if (restoreDirOptionValue == null) {
             restoreDirOptionValue = getConf().get(FS_DEFAULT_NAME_KEY) + "/tmp";
         }
+        
         restoreDir = new Path(restoreDirOptionValue);
-        createSnapshot = cmdLine.hasOption(CREATE_SNAPSHOT_OPTION.getOpt());
-        deleteSnapshot = cmdLine.hasOption(DELETE_SNAPSHOT_OPTION.getOpt());
+        manageSnapshot = cmdLine.hasOption(MANAGE_SNAPSHOT_OPTION.getOpt());
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     }
 
@@ -198,15 +197,20 @@ public class UpdateStatisticsTool extends Configured implements Tool {
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }
 
-    private int runJob() throws Exception {
-        if (isForeground) {
-            LOG.info("Running UpdateStatisticsTool in Foreground. " +
-                    "Runs full table scans. This may take a long time!");
-            return (job.waitForCompletion(true)) ? 0 : 1;
-        } else {
-            LOG.info("Running UpdateStatisticsTool in Background - Submit async and exit");
-            job.submit();
-            return 0;
+    private int runJob() {
+        try {
+            if (isForeground) {
+                LOG.info("Running UpdateStatisticsTool in Foreground. " +
+                        "Runs full table scans. This may take a long time!");
+                return (job.waitForCompletion(true)) ? 0 : 1;
+            } else {
+                LOG.info("Running UpdateStatisticsTool in Background - Submit async and exit");
+                job.submit();
+                return 0;
+            }
+        } catch (Exception e) {
+            LOG.error("Caught exception " + e + " trying to update statistics.");
+            return 1;
         }
     }
 
@@ -248,15 +252,9 @@ public class UpdateStatisticsTool extends Configured implements Tool {
                     + "parameter");
         }
 
-        if (!cmdLine.hasOption(CREATE_SNAPSHOT_OPTION.getOpt())
-                && !cmdLine.hasOption(SNAPSHOT_NAME_OPTION.getOpt())) {
-            throw new IllegalStateException("Either create snapshot option or snapshot name option " +
-                    "is mandatory");
-        }
-
-        if (cmdLine.hasOption(DELETE_SNAPSHOT_OPTION.getOpt())
+        if (cmdLine.hasOption(MANAGE_SNAPSHOT_OPTION.getOpt())
                 && !cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt())) {
-            throw new IllegalStateException("Snapshot cannot be deleted if job is running in background");
+            throw new IllegalStateException("Snapshot cannot be managed if job is running in background");
         }
 
         return cmdLine;
@@ -269,8 +267,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         options.addOption(HELP_OPTION);
         options.addOption(RESTORE_DIR_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
-        options.addOption(CREATE_SNAPSHOT_OPTION);
-        options.addOption(DELETE_SNAPSHOT_OPTION);
+        options.addOption(MANAGE_SNAPSHOT_OPTION);
         return options;
     }
 
@@ -280,6 +277,10 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
     public String getSnapshotName() {
         return snapshotName;
+    }
+
+    public Path getRestoreDir() {
+        return restoreDir;
     }
 
     /**
