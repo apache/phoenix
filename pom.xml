@@ -79,6 +79,7 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
 
+    <cdh.version>6.0.1</cdh.version>
     <!-- Hadoop Versions -->
     <hbase.version>2.0.0-cdh6.0.1</hbase.version>
     <hadoop.version>3.0.0-cdh6.0.1</hadoop.version>
