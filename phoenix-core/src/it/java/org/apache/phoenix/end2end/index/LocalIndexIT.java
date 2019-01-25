@@ -103,6 +103,128 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
 
     @Test
+    public void testUseUncoveredLocalIndex() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+
+        conn.createStatement().execute("CREATE TABLE " + tableName
+                + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT, V3 INTEGER, V4 INTEGER)");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v2, v3, v4)");
+
+        // 1. COUNT(*) should still use the index - fewer bytes to scan
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT COUNT(*) FROM " + tableName);
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1]\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                            + "    SERVER AGGREGATE INTO SINGLE ROW",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 2. All column projected, no filtering by indexed column, not using the index
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName);
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 3. if the index can avoid a sort operation, use it
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " ORDER BY v2");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1]\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                            + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 4. but can't use the index if not ORDERing by a prefix of the index key.
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " ORDER BY v3");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                    + physicalTableName + "\n"
+                            + "    SERVER SORTED BY [V3]\n"
+                            + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 5. If we pin the prefix of the index key we use the index avoiding sorting on the postfix
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 ORDER BY v3");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                            + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 6. Filtering by a non-indexed column will not use the index
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v1 = 3");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                    + physicalTableName + "\n"
+                            + "    SERVER FILTER BY V1 = 3.0",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 7. Also don't use an index if not filtering on a prefix of the key
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v3 = 1");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                    + physicalTableName + "\n"
+                            + "    SERVER FILTER BY V3 = 1",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 8. Filtering along a prefix of the index key can use the index
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                            + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 9. Make sure a gap in the index columns still uses the index as long as a prefix is specified
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v4 = 4");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY AND \"V4\" = 4\n"
+                            + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 10. Use index even when also filtering on non-indexed column
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0\n"
+                            + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 11. Another case of not using a prefix of the index key
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v1 = 3 AND v3 = 1 AND v4 = 1");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                    + physicalTableName + "\n"
+                            + "    SERVER FILTER BY (V1 = 3.0 AND V3 = 1 AND V4 = 1)",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+    }
+
+    @Test
     public void testLocalIndexRoundTrip() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();

@@ -59,6 +59,7 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -327,13 +328,15 @@ public class QueryOptimizer {
                 boolean optimizedOrderBy = plan.getOrderBy().getOrderByExpressions().isEmpty() &&
                         !dataPlan.getOrderBy().getOrderByExpressions().isEmpty();
 
-                // If query doesn't have where clause and some of columns to project are missing
-                // in the index then we need to get missing columns from main table for each row in
-                // local index. It's like full scan of both local index and data table which is inefficient.
+                // If query doesn't have where clause, or the planner didn't add any (bound) scan ranges, and some of
+                // columns to project/filter are missing in the index then we need to get missing columns from main table
+                // for each row in local index. It's like full scan of both local index and data table which is inefficient.
                 // Then we don't use the index. If all the columns to project are present in the index 
                 // then we can use the index even the query doesn't have where clause.
                 // We'll use the index anyway if it allowed us to optimize an ORDER BY clause away.
-                if (index.getIndexType() == IndexType.LOCAL && indexSelect.getWhere() == null
+                if (index.getIndexType() == IndexType.LOCAL
+                        && (indexSelect.getWhere() == null
+                                || plan.getContext().getScanRanges().getBoundRanges().size() == 1)
                         && !plan.getContext().getDataColumns().isEmpty() && !optimizedOrderBy) {
                     return null;
                 }
