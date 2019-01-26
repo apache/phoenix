@@ -103,6 +103,61 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
 
     @Test
+    public void testUseUncoveredLocalIndexWithPrefix() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+
+        conn.createStatement().execute("CREATE TABLE " + tableName
+                + " (pk1 INTEGER NOT NULL, pk2 INTEGER NOT NULL, pk3 INTEGER NOT NULL, v1 FLOAT, v2 FLOAT, V3 INTEGER CONSTRAINT pk PRIMARY KEY(pk1,pk2,pk3))");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(pk1,pk2,v1,v2)");
+
+        // 1. same prefix length, no other restrictions, but v3 is in the SELECT. Use the main table.
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + physicalTableName + " [3,4]",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 2. same prefix length, no other restrictions. Only index columns used. Use the index.
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4");
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                        + indexPhysicalTableName + " [1,3,4]\n"
+                                + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                                + "CLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 3. same prefix length, but there's a column not on the index
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + physicalTableName + " [3,4]\n"
+                    + "    SERVER FILTER BY V3 = 1",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+
+        // 4. Longer prefix on the index, use it.
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1");
+        assertEquals(
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                    + physicalTableName + " [1,3,4,3]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1\n"
+                    + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+    }
+
+    @Test
     public void testUseUncoveredLocalIndex() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
@@ -199,7 +254,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1,2]\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY AND \"V4\" = 4\n"
+                            + "    SERVER FILTER BY FIRST KEY ONLY AND TO_INTEGER(\"V4\") = 4\n"
                             + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
         rs.close();
