@@ -513,8 +513,13 @@ public class QueryOptimizer {
                 // For shared indexes (i.e. indexes on views and local indexes),
                 // a) add back any view constants as these won't be in the index, and
                 // b) ignore the viewIndexId which will be part of the row key columns.
-                int c = (boundCount2 + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) -
-                        (boundCount1 + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
+                boundCount1 += table1.getViewIndexId() == null ? 0 : (boundRanges - 1);
+                boundCount2 += table2.getViewIndexId() == null ? 0 : (boundRanges - 1);
+                // Adjust for salting. Salting adds a bound range for each salt bucket.
+                // (but the sum of buckets cover the entire table)
+                boundCount1 -= table1.getBucketNum() == null ? 0 : 1;
+                boundCount2 -= table2.getBucketNum() == null ? 0 : 1;
+                int c = boundCount2 - boundCount1;
                 if (c != 0) return c;
                 if (plan1.getGroupBy() != null && plan2.getGroupBy() != null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {

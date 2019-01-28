@@ -158,6 +158,35 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
 
     @Test
+    public void testUseUncoveredLocalIndexWithSplitPrefix() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+
+        conn.createStatement().execute("CREATE TABLE " + tableName
+                + " (pk1 INTEGER NOT NULL, pk2 INTEGER NOT NULL, pk3 INTEGER NOT NULL, v1 FLOAT, v2 FLOAT, V3 INTEGER CONSTRAINT pk PRIMARY KEY(pk1,pk2,pk3)) SALT_BUCKETS=16");
+//                + " (pk1 INTEGER NOT NULL, pk2 INTEGER NOT NULL, pk3 INTEGER NOT NULL, v1 FLOAT, v2 FLOAT, V3 INTEGER CONSTRAINT pk PRIMARY KEY(pk1,pk2,pk3))");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(pk1,pk3)");
+
+        // 1. Still use the index
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT pk1, pk2, pk3, v1 FROM " + tableName + " WHERE pk1 = 2 AND pk3 = 3");
+        assertEquals(
+            "CLIENT PARALLEL 16-WAY RANGE SCAN OVER "
+                    + indexPhysicalTableName + " [1,2,3]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "CLIENT MERGE SORT",
+                    QueryUtil.getExplainPlan(rs));
+        rs.close();
+    }
+
+    @Test
     public void testUseUncoveredLocalIndex() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
