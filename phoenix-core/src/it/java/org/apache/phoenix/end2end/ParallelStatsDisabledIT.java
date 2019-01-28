@@ -42,7 +42,13 @@ import static org.junit.Assert.fail;
 
 
 /**
- * Base class for tests whose methods run in parallel with statistics disabled.
+ * Base class for tests whose methods run in parallel with
+ * 1. Statistics enabled on server side (QueryServices#STATS_COLLECTION_ENABLED is true)
+ * 2. Guide Post Width for all relevant tables is 0. Stats are disabled at table level.
+ *
+ * See {@link org.apache.phoenix.schema.stats.NoOpStatsCollectorIT} for tests that disable
+ * stats collection from server side.
+ *
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
@@ -50,9 +56,8 @@ import static org.junit.Assert.fail;
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
-    public static final void doSetup() throws Exception {
+    public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.FALSE.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 

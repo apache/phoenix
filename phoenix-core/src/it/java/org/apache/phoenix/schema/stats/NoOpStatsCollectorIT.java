@@ -17,17 +17,18 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.Array;
@@ -37,12 +38,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 /**
  * Tests the behavior of stats collection code when stats are disabled on server side
+ * explicitly using QueryServices#STATS_COLLECTION_ENABLED property
  */
 public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
 
@@ -51,6 +54,16 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
     private String fullTableName;
     private String physicalTableName;
     private Connection conn;
+
+    /**
+     * Disable stats on server side by setting QueryServices#STATS_COLLECTION_ENABLED to false
+     */
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.FALSE.toString());
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
     @Before
     public void beforeTest() throws SQLException {
@@ -69,7 +82,6 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
 
     /**
      * Update Statistics SQL statement should be disallowed
-     * when QueryServices#STATS_COLLECTION_ENABLED is disabled on server
      */
     @Test
     public void testStatsCollectionViaSql() throws SQLException {
@@ -88,7 +100,6 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
 
     /**
      * Major compaction should not compute / persist statistics
-     * when QueryServices#STATS_COLLECTION_ENABLED is disabled on server
      */
     @Test
     public void testStatsCollectionDuringMajorCompaction() throws Exception {
@@ -117,7 +128,7 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
     }
 
     private void upsertValues(Connection conn, String tableName) throws SQLException {
-        PreparedStatement stmt = upsertStmt(conn, tableName);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
         stmt.setString(1, "a");
         String[] s = new String[] { "abc", "def", "ghi", "jkll", null, null, "xxx" };
         Array array = conn.createArrayOf("VARCHAR", s);
@@ -127,12 +138,6 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.commit();
-    }
-
-    private PreparedStatement upsertStmt(Connection conn, String tableName) throws SQLException {
-        PreparedStatement stmt;
-        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
-        return stmt;
     }
 
 }
