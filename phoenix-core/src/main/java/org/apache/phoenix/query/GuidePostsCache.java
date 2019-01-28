@@ -93,7 +93,6 @@ public class GuidePostsCache {
     protected class StatsLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
         @Override
         public GuidePostsInfo load(GuidePostsKey statsKey) throws Exception {
-            @SuppressWarnings("deprecation")
             Table statsHTable = queryServices.getTable(SchemaUtil.getPhysicalName(
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
                             queryServices.getProps()).getName());
