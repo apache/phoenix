@@ -1,0 +1,26 @@
+{
+    "phoenix-performance.py": {
+      "destination": "/usr/bin/phoenix-performance.py",
+      "source": "bin/phoenix-performance.py",
+      "priority": 10,
+      "isDirectory": false
+    },
+    "phoenix-psql.py": {
+      "destination": "/usr/bin/phoenix-psql.py",
+      "source": "bin/phoenix-psql.py",
+      "priority": 10,
+      "isDirectory": false
+    },
+    "phoenix-sqlline.py": {
+      "destination": "/usr/bin/phoenix-sqlline.py",
+      "source": "bin/phoenix-sqlline.py",
+      "priority": 10,
+      "isDirectory": false
+    },
+    "phoenix-utils.py" : {
+      "destination": "/usr/bin/phoenix-utils.py",
+      "source": "bin/phoenix-utils.py",
+      "priority": 10,
+      "isDirectory": false
+    }
+}

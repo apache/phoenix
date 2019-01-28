@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.0.0-HBase-2.0-cdh6.0.1</version>
+  <version>CDH-6.0.1-HBase-2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -37,7 +37,6 @@
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
     <module>phoenix-load-balancer</module>
-    <module>phoenix-parcel</module>
   </modules>
 
   <repositories>
@@ -49,15 +48,6 @@
       <id>cloudera</id>
       <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
     </repository>
-    <repository>
-      <id>cdh.releases.repo</id>
-      <url>https://repository.cloudera.com/content/groups/cdh-releases-rcs</url>
-      <name>CDH Releases Repository</name>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-
   </repositories>
 
   <parent>
@@ -79,46 +69,43 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
 
-    <cdh.version>6.0.1</cdh.version>
     <!-- Hadoop Versions -->
     <hbase.version>2.0.0-cdh6.0.1</hbase.version>
     <hadoop.version>3.0.0-cdh6.0.1</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
-    <!--BROKEN <hive.version>2.1.1-cdh6.0.1</hive.version>-->
     <hive.version>3.0.0</hive.version>
-    <!--BROKEN <pig.version>0.17.0-cdh6.0.1</pig.version>-->
     <pig.version>0.13.0</pig.version>
-    <jackson.version>1.9.13</jackson.version>
+    <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
-    <slf4j.version>1.7.25</slf4j.version>
+    <slf4j.version>1.6.4</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
-    <commons-io.version>2.6</commons-io.version>
-    <commons-lang.version>2.6</commons-lang.version>
+    <commons-io.version>2.1</commons-io.version>
+    <commons-lang.version>3.8</commons-lang.version>
     <commons-logging.version>1.2</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.2.0</sqlline.version>
     <guava.version>13.0.1</guava.version>
-    <flume.version>1.8.0-cdh6.0.1</flume.version>
-    <!--BROKEN <kafka.version>1.0.1-cdh6.0.1</kafka.version>-->
+    <flume.version>1.4.0</flume.version>
     <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
     <snappy.version>0.3</snappy.version>
-    <commons-codec.version>1.9</commons-codec.version>
+    <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <avatica.version>1.11.0</avatica.version>
+    <avatica.version>1.12.0</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
-    <tephra.version>0.14.0-incubating</tephra.version>
-    <spark.version>2.2.0-cdh6.0.1</spark.version>
+    <tephra.version>0.15.0-incubating</tephra.version>
+    <omid.version>1.0.0</omid.version>
+    <spark.version>2.3.0</spark.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
@@ -140,7 +127,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
-    <numForkedIT>4</numForkedIT>
+    <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
@@ -378,7 +365,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>2.4.3</version>
+          <version>3.1.1</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
@@ -478,16 +465,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
-        <version>3.2</version>
-        <configuration>
-          <reportPlugins>
-            <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-              <version>2.5.2</version>
-            </plugin>
-          </reportPlugins>
-        </configuration>
+        <version>3.7.1</version>
       </plugin>
       <plugin>
         <groupId>org.apache.rat</groupId>
@@ -513,12 +491,14 @@
             <!-- Argparse is bundled to work around system Python version
                  issues, compatibile with ALv2 -->
             <exclude>bin/argparse-1.4.0/argparse.py</exclude>
-            <exclude>python/ci/**</exclude>
-            <exclude>python/phoenixdb/avatica/proto/*</exclude>
-            <exclude>python/*.rst</exclude>
-            <exclude>python/doc/*.rst</exclude>
-            <exclude>python/doc/conf.py</exclude>
-            <exclude>python/doc/Makefile</exclude>
+            <!-- Not our code -->
+            <exclude>python/requests-kerberos/**</exclude>
+            <exclude>python/phoenixdb/phoenixdb/avatica/proto/*</exclude>
+            <exclude>python/phoenixdb/*.rst</exclude>
+            <exclude>python/phoenixdb/ci/**</exclude>
+            <exclude>python/phoenixdb/doc/*.rst</exclude>
+            <exclude>python/phoenixdb/doc/conf.py</exclude>
+            <exclude>python/phoenixdb/doc/Makefile</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -535,6 +515,11 @@
   <dependencyManagement>
     <dependencies>
       <!-- Intra-project dependencies -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-common</artifactId>
+        <version>${hadoop.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
@@ -584,13 +569,6 @@
       </dependency>
 
       <!-- HBase dependencies -->
-      <!-- Failed to read artifact descriptor for org.glassfish:javax.el:jar:3.0.1-b06-SNAPSHOT -->
-      <!--<dependency>-->
-        <!--<groupId>org.glassfish</groupId>-->
-        <!--<artifactId>javax.el</artifactId>-->
-        <!--<version>3.0.1-b10</version>-->
-        <!--<scope>provided</scope>-->
-      <!--</dependency>-->
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-annotations</artifactId>
@@ -979,6 +957,11 @@
         <version>${commons-csv.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-lang3</artifactId>
+        <version>${commons-lang.version}</version>
+      </dependency>
+      <dependency>
         <groupId>joda-time</groupId>
         <artifactId>joda-time</artifactId>
         <version>${jodatime.version}</version>
@@ -1086,4 +1069,19 @@
       </properties>
     </profile>
   </profiles>
+
+  <reporting>
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-project-info-reports-plugin</artifactId>
+              <version>3.0.0</version>
+          </plugin>
+          <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>findbugs-maven-plugin</artifactId>
+              <version>3.0.5</version>
+          </plugin>
+      </plugins>
+  </reporting>
 </project>
