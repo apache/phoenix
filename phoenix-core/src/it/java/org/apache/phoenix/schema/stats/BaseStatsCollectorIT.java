@@ -213,7 +213,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         runUpdateStatisticsTool(fullTableName);
     }
 
-    // Run UpdateStatisticsTool in foreground with create and delete snapshot option
+    // Run UpdateStatisticsTool in foreground with manage snapshot option
     private void runUpdateStatisticsTool(String fullTableName) {
         UpdateStatisticsTool tool = new UpdateStatisticsTool();
         tool.setConf(utility.getConfiguration());
@@ -221,14 +221,16 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         final String[] cmdArgs = getArgValues(fullTableName, randomDir);
         try {
             int status = tool.run(cmdArgs);
-            assertEquals(0, status);
+            assertEquals("MR Job should complete successfully", 0, status);
             HBaseAdmin hBaseAdmin = utility.getHBaseAdmin();
-            assertEquals(0, hBaseAdmin.listSnapshots(tool.getSnapshotName()).size());
+            assertEquals("Snapshot should be automatically deleted when UpdateStatisticsTool has completed",
+                    0, hBaseAdmin.listSnapshots(tool.getSnapshotName()).size());
         } catch (Exception e) {
             fail("Exception when running UpdateStatisticsTool for " + tableName + " Exception: " + e);
         } finally {
             Job job = tool.getJob();
-            assertEquals(job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
+            assertEquals("MR Job should have been configured with UPDATE_STATS job type",
+                    job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
         }
     }
 

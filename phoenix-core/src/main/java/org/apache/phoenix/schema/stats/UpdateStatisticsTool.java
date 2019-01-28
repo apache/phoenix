@@ -173,7 +173,8 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     }
 
     private void configureJob() throws Exception {
-        job = Job.getInstance(getConf(), "Update statistics for " + tableName);
+        job = Job.getInstance(getConf(),
+                "UpdateStatistics-" + tableName + "-" + snapshotName);
         PhoenixMapReduceUtil.setInput(job, NullDBWritable.class,
                 snapshotName, tableName, restoreDir);
 

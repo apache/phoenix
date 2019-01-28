@@ -6,6 +6,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class UpdateStatisticsToolTest {
 
@@ -24,35 +27,40 @@ public class UpdateStatisticsToolTest {
     @Test
     public void testManageSnapshotAndRunFgOption2() {
         UpdateStatisticsTool tool = new UpdateStatisticsTool();
-        tool.parseOptions(new String[] {"-t", "table1", "-ms", "-runfg"});
+        try {
+            tool.parseOptions(new String[] {"-t", "table1", "-ms", "-runfg"});
+        } catch (IllegalStateException e) {
+            fail("IllegalStateException is not expected " +
+                    "since all required parameters are provided.");
+        }
     }
 
     @Test
     public void testSnapshotNameInput() {
         UpdateStatisticsTool tool = new UpdateStatisticsTool();
         tool.parseArgs(new String[] {"-t", "table1", "-ms", "-runfg", "-s", "snap1"});
-        Assert.assertEquals("snap1", tool.getSnapshotName());
+        assertEquals("snap1", tool.getSnapshotName());
     }
 
     @Test
     public void testSnapshotNameDefault() {
         UpdateStatisticsTool tool = new UpdateStatisticsTool();
         tool.parseArgs(new String[] {"-t", "table1", "-ms", "-runfg"});
-        Assert.assertTrue(tool.getSnapshotName().startsWith("UpdateStatisticsTool_table1_"));
+        assertTrue(tool.getSnapshotName().startsWith("UpdateStatisticsTool_table1_"));
     }
 
     @Test
     public void testRestoreDirDefault() {
         UpdateStatisticsTool tool = new UpdateStatisticsTool();
         tool.parseArgs(new String[] {"-t", "table1", "-ms", "-runfg"});
-        Assert.assertEquals("file:/tmp", tool.getRestoreDir().toString());
+        assertEquals("file:/tmp", tool.getRestoreDir().toString());
     }
 
     @Test
     public void testRestoreDirInput() {
         UpdateStatisticsTool tool = new UpdateStatisticsTool();
         tool.parseArgs(new String[] {"-t", "table1", "-d", "fs:/path"});
-        Assert.assertEquals("fs:/path", tool.getRestoreDir().toString());
+        assertEquals("fs:/path", tool.getRestoreDir().toString());
     }
 
     @Test
@@ -62,7 +70,7 @@ public class UpdateStatisticsToolTest {
         configuration.set(FS_DEFAULT_NAME_KEY, "hdfs://base-dir");
         tool.setConf(configuration);
         tool.parseArgs(new String[] {"-t", "table1", "-ms", "-runfg"});
-        Assert.assertEquals("hdfs://base-dir/tmp", tool.getRestoreDir().toString());
+        assertEquals("hdfs://base-dir/tmp", tool.getRestoreDir().toString());
     }
 
 }
