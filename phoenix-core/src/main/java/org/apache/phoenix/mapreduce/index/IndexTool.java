@@ -249,7 +249,7 @@ public class IndexTool extends Configured implements Tool {
             if (isPartialBuild) {
                 return configureJobForPartialBuild(schemaName, dataTable);
             } else {
-                return configureJobForAysncIndex(schemaName, indexTable, dataTable, useDirectApi, useSnapshot);
+                return configureJobForAsyncIndex(schemaName, indexTable, dataTable, useDirectApi, useSnapshot);
             }
         }
         
@@ -362,7 +362,7 @@ public class IndexTool extends Configured implements Tool {
             
         }
 
-        private Job configureJobForAysncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean useSnapshot)
+        private Job configureJobForAsyncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean useSnapshot)
                 throws Exception {
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             final String qIndexTable;
@@ -409,14 +409,16 @@ public class IndexTool extends Configured implements Tool {
             final List<ColumnInfo> columnMetadataList =
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
-            fs = outputPath.getFileSystem(configuration);
-            fs.delete(outputPath, true);
- 
+
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
             final Job job = Job.getInstance(configuration, jobName);
             job.setJarByClass(IndexTool.class);
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
-            FileOutputFormat.setOutputPath(job, outputPath);
+            if (outputPath != null) {
+                fs = outputPath.getFileSystem(configuration);
+                fs.delete(outputPath, true);
+                FileOutputFormat.setOutputPath(job, outputPath);
+            }
 
             if (!useSnapshot) {
                 PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
