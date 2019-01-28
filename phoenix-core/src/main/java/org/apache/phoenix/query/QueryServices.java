@@ -192,9 +192,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String STATS_GUIDEPOST_PER_REGION_ATTRIB = "phoenix.stats.guidepost.per.region";
     public static final String STATS_USE_CURRENT_TIME_ATTRIB = "phoenix.stats.useCurrentTime";
     
-    @Deprecated // use STATS_COLLECTION_ENABLED config instead
-    public static final String STATS_ENABLED_ATTRIB = "phoenix.stats.enabled";
-
     public static final String RUN_UPDATE_STATS_ASYNC = "phoenix.update.stats.command.async";
     public static final String STATS_SERVER_POOL_SIZE = "phoenix.stats.pool.size";
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";

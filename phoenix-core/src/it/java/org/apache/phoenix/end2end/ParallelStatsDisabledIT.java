@@ -18,8 +18,10 @@
 
 package org.apache.phoenix.end2end;
 
+import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -31,6 +33,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -48,7 +51,9 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
     public static final void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.FALSE.toString());
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @AfterClass

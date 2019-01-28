@@ -416,10 +416,6 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         return stmt;
     }
 
-    private void compactTable(Connection conn, String tableName) throws Exception {
-        TestUtil.doMajorCompaction(conn, tableName);
-    }
-    
     @Test
     @Ignore //TODO remove this once  https://issues.apache.org/jira/browse/TEPHRA-208 is fixed
     public void testCompactUpdatesStats() throws Exception {
@@ -455,8 +451,8 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             stmt.executeUpdate();
         }
         conn.commit();
-        
-        compactTable(conn, physicalTableName);
+
+        TestUtil.doMajorCompaction(conn, physicalTableName);
         
         if (statsUpdateFreq != 0) {
             invalidateStats(conn, tableName);
@@ -487,8 +483,8 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 System.out.println(result);
             }
         }
-        
-        compactTable(conn, physicalTableName);
+
+        TestUtil.doMajorCompaction(conn, physicalTableName);
         
         scan = new Scan();
         scan.setRaw(true);
@@ -848,7 +844,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement()
                     .execute("ALTER TABLE " + baseTable + " SET GUIDE_POSTS_WIDTH=" + newGpWidth);
 
-            // base table
+            // base table and local index
             statsCollector = getDefaultStatsCollectorForTable(baseTable);
             statsCollector.init();
             assertEquals(newGpWidth, statsCollector.getGuidePostDepth());
