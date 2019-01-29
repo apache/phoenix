@@ -348,6 +348,11 @@ public class ServerUtil {
                 connections.clear();
             }
         }
+
+        public static int getConnectionsCount() {
+            return connections.size();
+        }
+
      }
 
     public static Configuration getCompactionConfig(Configuration conf) {
