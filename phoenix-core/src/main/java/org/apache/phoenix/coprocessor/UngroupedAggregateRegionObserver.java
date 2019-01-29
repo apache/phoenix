@@ -105,6 +105,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
+import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
@@ -261,6 +262,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 @Override
                 public void doMutation() throws IOException {
                     commitBatch(region, localRegionMutations, blockingMemstoreSize);
+                }
+
+                @Override
+                public List<Mutation> getMutationList() {
+                    return localRegionMutations;
                 }
             });
         }
@@ -944,6 +950,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                  public void doMutation() throws IOException {
                      commitBatchWithHTable(targetHTable, remoteRegionMutations);
                  }
+
+                @Override
+                public List<Mutation> getMutationList() {
+                    return remoteRegionMutations;
+                }
              });
          }
         localRegionMutations.clear();
@@ -958,7 +969,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
              // For an index write failure, the data table write succeeded,
              // so when we retry we need to set REPLAY_WRITES
              for (Mutation mutation : localRegionMutations) {
-                 mutation.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                 if (PhoenixIndexMetaData.isIndexRebuild(mutation.getAttributesMap())) {
+                     mutation.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                         BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
+                 } else {
+                     mutation.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                         BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES);
+                 }
                  // use the server timestamp for index write retries
                  PhoenixKeyValueUtil.setTimestamp(mutation, serverTimestamp);
              }
@@ -1089,7 +1106,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put = new Put(CellUtil.cloneRow(cell));
                                     put.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    put.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                                    put.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
                                     put.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(put);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal
@@ -1101,7 +1119,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del = new Delete(CellUtil.cloneRow(cell));
                                     del.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    del.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
+                                    del.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
                                     del.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
                                     mutations.add(del);
                                     // Since we're replaying existing mutations, it makes no sense to write them to the wal

@@ -103,10 +103,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
+    // In case of Index Write failure, we need to determine that Index mutation
+    // is part of normal client write or Index Rebuilder. # PHOENIX-5080
+    public final static byte[] REPLAY_INDEX_REBUILD_WRITES = PUnsignedTinyint.INSTANCE.toBytes(3);
     
     public enum ReplayWrite {
         TABLE_AND_INDEX,
-        INDEX_ONLY;
+        INDEX_ONLY,
+        REBUILD_INDEX_ONLY;
         
         public static ReplayWrite fromBytes(byte[] replayWriteBytes) {
             if (replayWriteBytes == null) {
@@ -117,6 +121,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             }
             if (Bytes.compareTo(REPLAY_ONLY_INDEX_WRITES, replayWriteBytes) == 0) {
                 return INDEX_ONLY;
+            }
+            if (Bytes.compareTo(REPLAY_INDEX_REBUILD_WRITES, replayWriteBytes) == 0) {
+                return REBUILD_INDEX_ONLY;
             }
             throw new IllegalArgumentException("Unknown ReplayWrite code of " + Bytes.toStringBinary(replayWriteBytes));
         }

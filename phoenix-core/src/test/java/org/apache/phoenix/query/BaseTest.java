@@ -123,6 +123,7 @@ import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.master.HMaster;
@@ -1912,5 +1913,29 @@ public abstract class BaseTest {
             // wait for the move to be finished
             Thread.sleep(100);
         }
+    }
+
+    /**
+     * It always unassign first region of table.
+     * @param tableName move region of table.
+     * @throws IOException
+     */
+    protected static void unassignRegionAsync(final String tableName) throws IOException {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                    try {
+                        final Admin admin = utility.getAdmin();
+                        final RegionInfo tableRegion =
+                                admin.getRegions(TableName.valueOf(tableName)).get(0);
+                        admin.unassign(tableRegion.getEncodedNameAsBytes(), false);
+                        admin.assign(tableRegion.getEncodedNameAsBytes());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
     }
 }

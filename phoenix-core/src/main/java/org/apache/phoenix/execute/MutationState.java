@@ -40,7 +40,6 @@ import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -61,6 +60,7 @@ import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
+import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
@@ -996,6 +996,11 @@ public class MutationState implements SQLCloseable {
                                             throw new IOException(e);
                                         }
                                     }
+
+                                    @Override
+                                    public List<Mutation> getMutationList() {
+                                        return mutationBatch;
+                                    }
                                 }, iwe, connection, connection.getQueryServices().getProps());
                             } else {
                                 hTable.batch(mutationBatch, null);
@@ -1050,7 +1055,12 @@ public class MutationState implements SQLCloseable {
                                     // For an index write failure, the data table write succeeded,
                                     // so when we retry we need to set REPLAY_WRITES
                                     for (Mutation m : mutationList) {
-                                        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES, BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES);
+                                        if (!PhoenixIndexMetaData.isIndexRebuild(
+                                            m.getAttributesMap())){
+                                            m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                                BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
+                                                );
+                                        }
                                         PhoenixKeyValueUtil.setTimestamp(m, serverTimestamp);
                                     }
                                     shouldRetry = true;

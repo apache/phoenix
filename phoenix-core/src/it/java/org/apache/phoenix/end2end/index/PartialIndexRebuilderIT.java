@@ -86,6 +86,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     private static final long REBUILD_PERIOD = 50000;
     private static final long REBUILD_INTERVAL = 2000;
     private static RegionCoprocessorEnvironment indexRebuildTaskRegionEnvironment;
+    private static Boolean runRebuildOnce = true;
 
     
     @BeforeClass
@@ -125,6 +126,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         runIndexRebuilderAsync(interval, cancel, Collections.<String>singletonList(table));
     }
     private static void runIndexRebuilderAsync(final int interval, final boolean[] cancel, final List<String> tables) {
+        runRebuildOnce = true;
         Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -137,6 +139,8 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                         throw new RuntimeException(e);
                     } catch (SQLException e) {
                         LOG.error(e.getMessage(),e);
+                    } finally {
+                        runRebuildOnce = false;
                     }
                 }
             }
@@ -1037,6 +1041,65 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             } finally {
                 TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
             }
+        }
+    }
+
+    @Test
+    @Repeat(5)
+    public void testIndexActiveIfRegionMovesWhileRebuilding() throws Throwable {
+        final MyClock clock = new MyClock(1000);
+        EnvironmentEdgeManager.injectEdge(clock);
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        int nThreads = 5;
+        int nRows = 50;
+        int nIndexValues = 23;
+        int batchSize = 200;
+        final CountDownLatch doneSignal = new CountDownLatch(nThreads);
+        boolean[] cancel = new boolean[1];
+
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        final String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try {
+                conn.createStatement().execute("CREATE TABLE " + fullTableName
+                    + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, "
+                    + "CONSTRAINT pk PRIMARY KEY (k1,k2)) STORE_NULLS=true, VERSIONS=1");
+                conn.createStatement().execute("CREATE INDEX " + indexName + " ON "
+                    + fullTableName + "(v1)");
+                conn.commit();
+                long disableTS = clock.currentTime();
+                Table metaTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                        .getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+                IndexUtil.updateIndexState(fullIndexName, disableTS,
+                    metaTable, PIndexState.DISABLE);
+                assertTrue(TestUtil.checkIndexState(conn, fullIndexName,
+                    PIndexState.DISABLE, disableTS));
+                mutateRandomly(fullTableName, nThreads, nRows,
+                    nIndexValues, batchSize, doneSignal);
+                assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+                runIndexRebuilder(fullTableName);
+                assertTrue(TestUtil.checkIndexState(conn, fullIndexName,
+                    PIndexState.INACTIVE, disableTS));
+                clock.time += WAIT_AFTER_DISABLED;
+                runIndexRebuilderAsync(500,cancel,fullTableName);
+                unassignRegionAsync(fullIndexName);
+                while (runRebuildOnce) {
+                    PIndexState indexState = TestUtil.getIndexState(conn, fullIndexName);
+                    if (indexState != PIndexState.INACTIVE && indexState != PIndexState.ACTIVE) {
+                        cancel[0] = true;
+                        throw new Exception("Index State should not transtion from INACTIVE to "
+                            + indexState);
+                    }
+                }
+                assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.ACTIVE, 0L));
+            } finally {
+                cancel[0] = true;
+                EnvironmentEdgeManager.injectEdge(null);
+            }
+            long totalRows = IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
+            assertEquals(nRows, totalRows);
         }
     }
 
