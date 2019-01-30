@@ -367,10 +367,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
 
         // wrap the iterator so we start/end tracing as we expect
-        TraceScope scope =
-                Tracing.startNewSpan(context.getConnection(), "Creating basic query for "
-                        + getPlanSteps(iterator));
-        return (scope.getSpan() != null) ? new TracingIterator(scope, iterator) : iterator;
+        if (Tracing.isTracing()) {
+            TraceScope scope = Tracing.startNewSpan(context.getConnection(),
+                    "Creating basic query for " + getPlanSteps(iterator));
+            if (scope.getSpan() != null) return new TracingIterator(scope, iterator);
+        }
+        return iterator;
     }
 
     private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) throws SQLException {

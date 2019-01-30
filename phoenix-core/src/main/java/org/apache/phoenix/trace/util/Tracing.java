@@ -300,4 +300,11 @@ public class Tracing {
         }
     }
 
+    /**
+     * Check whether tracing is generally enabled.
+     * @return true If tracing is enabled, false otherwise
+     */
+    public static boolean isTracing() {
+        return Trace.isTracing();
+    }
 }
