@@ -141,12 +141,6 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("k1", rs.getString(1));
             assertEquals("v2", rs.getString(2));
             assertFalse(rs.next());
-            
-            TestPhoenixIndexRpcSchedulerFactory.reset();
-            createIndex(conn, indexName + "_1");
-            // Verify that that index queue is not used since running upsert select on server side has been disabled
-            // See PHOENIX-4171
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(), Mockito.never()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();
