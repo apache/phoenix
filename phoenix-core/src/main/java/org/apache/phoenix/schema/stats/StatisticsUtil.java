@@ -16,9 +16,12 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema.stats;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
@@ -32,10 +35,13 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -226,6 +232,21 @@ public class StatisticsUtil {
     public static boolean isStatsEnabled(TableName tableName) {
         return !DISABLE_STATS.contains(tableName);
     }
-	
+
+    public static void setScanAttributes(Scan scan, Map<String, Object> statsProps) {
+        scan.setCacheBlocks(false);
+        scan.readAllVersions();
+        scan.setAttribute(ANALYZE_TABLE, TRUE_BYTES);
+        if (statsProps != null) {
+            Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
+            if (gp_width != null) {
+                scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
+            }
+            Object gp_per_region = statsProps.get(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB);
+            if (gp_per_region != null) {
+                scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
+            }
+        }
+    }
 	
 }

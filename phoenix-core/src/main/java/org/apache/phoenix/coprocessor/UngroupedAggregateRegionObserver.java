@@ -123,9 +123,12 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
+import org.apache.phoenix.schema.stats.StatisticsScanner;
+import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedMultiKeyValueTuple;
@@ -397,7 +400,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             StatisticsCollector statsCollector = StatisticsCollectorFactory.createStatisticsCollector(
                     env, region.getRegionInfo().getTable().getNameAsString(), ts,
                     gp_width_bytes, gp_per_region_bytes);
-            return collectStats(s, statsCollector, region, scan, env.getConfiguration());
+            if (statsCollector instanceof NoOpStatisticsCollector) {
+                throw new StatsCollectionDisabledOnServerException();
+            } else {
+                return collectStats(s, statsCollector, region, scan, env.getConfiguration());
+            }
         } else if (ScanUtil.isIndexRebuild(scan)) {
             return rebuildIndices(s, region, scan, env.getConfiguration());
         }
@@ -1004,32 +1011,38 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         CompactionRequest request) throws IOException {
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             final TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-            // Compaction and split upcalls run with the effective user context of the requesting user.
-            // This will lead to failure of cross cluster RPC if the effective user is not
-            // the login user. Switch to the login user context to ensure we have the expected
-            // security context.
-            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-                @Override public InternalScanner run() throws Exception {
-                    InternalScanner internalScanner = scanner;
-                    try {
-                        long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
-                        DelegateRegionCoprocessorEnvironment compactionConfEnv = new DelegateRegionCoprocessorEnvironment(c.getEnvironment(), ConnectionType.COMPACTION_CONNECTION);
-                        StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
-                            compactionConfEnv, table.getNameAsString(), clientTimeStamp,
-                            store.getColumnFamilyDescriptor().getName());
-                        internalScanner =
-                                stats.createCompactionScanner(compactionConfEnv,
-                                    store, scanner);
-                    } catch (Exception e) {
-                        // If we can't reach the stats table, don't interrupt the normal
-                        // compaction operation, just log a warning.
-                        if (logger.isWarnEnabled()) {
-                            logger.warn("Unable to collect stats for " + table, e);
-                        }
-                    }
-                    return internalScanner;
+      // Compaction and split upcalls run with the effective user context of the requesting user.
+      // This will lead to failure of cross cluster RPC if the effective user is not
+      // the login user. Switch to the login user context to ensure we have the expected
+      // security context.
+      return User.runAsLoginUser(
+          new PrivilegedExceptionAction<InternalScanner>() {
+            @Override
+            public InternalScanner run() throws Exception {
+              InternalScanner internalScanner = scanner;
+              try {
+                long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
+                DelegateRegionCoprocessorEnvironment compactionConfEnv =
+                    new DelegateRegionCoprocessorEnvironment(
+                        c.getEnvironment(), ConnectionType.COMPACTION_CONNECTION);
+                StatisticsCollector statisticsCollector =
+                    StatisticsCollectorFactory.createStatisticsCollector(
+                        compactionConfEnv,
+                        table.getNameAsString(),
+                        clientTimeStamp,
+                        store.getColumnFamilyDescriptor().getName());
+                statisticsCollector.init();
+                internalScanner = statisticsCollector.createCompactionScanner(compactionConfEnv, store, scanner);
+              } catch (Exception e) {
+                // If we can't reach the stats table, don't interrupt the normal
+                // compaction operation, just log a warning.
+                if (logger.isWarnEnabled()) {
+                  logger.warn("Unable to collect stats for " + table, e);
                 }
-            });
+              }
+              return internalScanner;
+            }
+          });
         }
         return scanner;
     }
@@ -1270,7 +1283,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
-                        statsCollector.updateStatistic(region, scan);
+                        statsCollector.updateStatistics(region, scan);
                         logger.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
                                 + ". Time: " + (System.currentTimeMillis() - startTime));

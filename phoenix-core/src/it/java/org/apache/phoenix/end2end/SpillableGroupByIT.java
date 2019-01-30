@@ -76,7 +76,7 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         
         // Set guidepost width, but disable stats
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        props.put(QueryServices.STATS_ENABLED_ATTRIB, Boolean.toString(false));
+        props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.toString(false));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
         // Must update config before starting server

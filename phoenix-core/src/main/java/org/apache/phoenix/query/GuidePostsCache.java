@@ -17,7 +17,6 @@
 package org.apache.phoenix.query;
 
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
-import static org.apache.phoenix.query.QueryServices.STATS_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
 
 import java.io.IOException;
@@ -70,8 +69,7 @@ public class GuidePostsCache {
         final long maxTableStatsCacheSize = config.getLong(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
-		final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
-				&& config.getBoolean(STATS_ENABLED_ATTRIB, true);
+		final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
         cache = CacheBuilder.newBuilder()
                 // Expire entries a given amount of time after they were written
                 .expireAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)

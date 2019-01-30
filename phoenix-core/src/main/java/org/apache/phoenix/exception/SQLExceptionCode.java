@@ -464,6 +464,8 @@ public enum SQLExceptionCode {
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
+    STATS_COLLECTION_DISABLED_ON_SERVER(1401, "STS01", "Stats collection attempted but is disabled on server"),
+
     CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN(901,"43M12",
             "Cannot use a connection with SCN set to upsert data for " +
                     "table with ROW_TIMESTAMP column."),

@@ -15,28 +15,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.schema.stats;
 
 import java.util.Arrays;
 import java.util.Collection;
 
-import org.apache.phoenix.schema.stats.StatsCollectorIT;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized.Parameters;
 
-public class NonColumnEncodedImmutableTxStatsCollectorIT extends StatsCollectorIT {
+public class NonTxStatsCollectorIT extends BaseStatsCollectorIT {
 
-    public NonColumnEncodedImmutableTxStatsCollectorIT(boolean mutable, String transactionProvider,
-            boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable,transactionProvider, userTableNamespaceMapped, columnEncoded);
+    public NonTxStatsCollectorIT(boolean mutable,
+                                 String transactionProvider, boolean columnEncoded) {
+        super(mutable, transactionProvider, columnEncoded);
     }
 
-    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
-    public static Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(
-            new Object[][] { 
-                { false, "TEPHRA", false, false }, { false, "TEPHRA", true, false },
-                { false, "OMID", false, false }, { false, "OMID", true, false },
-            }),1);
+    @Parameters(name = "mutable={0},transactionProvider={1},columnEncoded={2}")
+    public static Collection<Object[]> provideData() {
+        return Arrays.asList(
+                new Object[][] {
+                    // Immutable, Column Encoded
+                    { false, null, true },
+                    // Mutable, Column Encoded
+                    { true, null, true },
+                    // Immutable, Not Column Encoded
+                    { false, null, false }
+                }
+        );
     }
+
 }

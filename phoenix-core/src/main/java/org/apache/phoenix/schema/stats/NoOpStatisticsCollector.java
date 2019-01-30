@@ -45,7 +45,7 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public void updateStatistic(Region region, Scan scan) {
+    public void updateStatistics(Region region, Scan scan) {
         // No-op
     }
 
@@ -55,17 +55,27 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
-            InternalScanner delegate) throws IOException {
-        return delegate;
-    }
-
-    @Override 
     public void init() {
         // No-op
     }
 
     @Override public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
         return null;
+    }
+
+    @Override
+    public long getGuidePostDepth() {
+        return -1;
+    }
+
+    @Override
+    public StatisticsWriter getStatisticsWriter() {
+        return null;
+    }
+
+    @Override
+    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env,
+                                                   Store store, InternalScanner delegate) {
+        return delegate;
     }
 }

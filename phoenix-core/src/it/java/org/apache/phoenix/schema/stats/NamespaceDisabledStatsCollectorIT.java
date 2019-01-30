@@ -15,25 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+
+package org.apache.phoenix.schema.stats;
+
+import org.junit.runners.Parameterized;
 
 import java.util.Arrays;
 import java.util.Collection;
 
-import org.apache.phoenix.schema.stats.StatsCollectorIT;
-import org.junit.runners.Parameterized.Parameters;
+public class NamespaceDisabledStatsCollectorIT extends BaseStatsCollectorIT {
 
-public class ColumnEncodedImmutableNonTxStatsCollectorIT extends StatsCollectorIT {
-    
-    public ColumnEncodedImmutableNonTxStatsCollectorIT(boolean mutable, String transactionProvider,
-            boolean userTableNamespaceMapped, boolean columnEncoded) {
-        super(mutable, transactionProvider, userTableNamespaceMapped, columnEncoded);
+    public NamespaceDisabledStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {
+        super(userTableNamespaceMapped, collectStatsOnSnapshot);
     }
 
-    @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {     
-                { false, null, false, true }, { false, null, true, true }
-        });
+    @Parameterized.Parameters(name = "userTableNamespaceMapped={0},collectStatsOnSnapshot={1}")
+    public static Collection<Object[]> provideData() {
+        return Arrays.asList(
+                new Object[][] {
+                        // Collect stats on snapshots using UpdateStatisticsTool
+                        { false, true },
+                        // Collect stats via `UPDATE STATISTICS` SQL
+                        { false, false }
+                }
+        );
     }
+
 }

@@ -153,9 +153,21 @@ public final class PhoenixConfigurationUtil {
 
     public static final String MAPREDUCE_TENANT_ID = "phoenix.mapreduce.tenantid";
 
+    public static final String MAPREDUCE_JOB_TYPE = "phoenix.mapreduce.jobtype";
+
+    /**
+     * Determines type of Phoenix Map Reduce job.
+     * 1. QUERY allows running arbitrary queries without aggregates
+     * 2. UPDATE_STATS collects statistics for the table
+     */
+    public enum MRJobType {
+        QUERY,
+        UPDATE_STATS
+    }
+
     public enum SchemaType {
         TABLE,
-        QUERY;
+        QUERY
     }
 
     private PhoenixConfigurationUtil(){
@@ -218,7 +230,12 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         configuration.set(SCHEMA_TYPE, schemaType.name());
     }
-    
+
+    public static void setMRJobType(Configuration configuration, final MRJobType mrJobType) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_JOB_TYPE, mrJobType.name());
+    }
+
     public static void setPhysicalTableName(final Configuration configuration, final String tableName) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(tableName);
@@ -286,7 +303,13 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(schemaTp);
         return SchemaType.valueOf(schemaTp);
     }
-    
+
+    public static MRJobType getMRJobType(final Configuration configuration, String defaultMRJobType) {
+        final String mrJobType = configuration.get(MAPREDUCE_JOB_TYPE, defaultMRJobType);
+        Preconditions.checkNotNull(mrJobType);
+        return MRJobType.valueOf(mrJobType);
+    }
+
     public static List<ColumnInfo> getUpsertColumnMetadataList(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         List<ColumnInfo> columnMetadataList = null;
@@ -373,7 +396,7 @@ public final class PhoenixConfigurationUtil {
         }
         return selectColumnList;
     }
-    
+
     public static String getSelectStatement(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         String selectStmt = configuration.get(SELECT_STATEMENT);
@@ -389,7 +412,8 @@ public final class PhoenixConfigurationUtil {
         configuration.set(SELECT_STATEMENT, selectStmt);
         return selectStmt;
     }
-    
+
+
     public static long getBatchSize(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         long batchSize = configuration.getLong(UPSERT_BATCH_SIZE, DEFAULT_UPSERT_BATCH_SIZE);
@@ -619,6 +643,11 @@ public final class PhoenixConfigurationUtil {
         configuration.setLong(SCRUTINY_EXECUTE_TIMESTAMP, ts);
     }
 
+    public static void setSplitByStats(final Configuration configuration, boolean value) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(MAPREDUCE_SPLIT_BY_STATS, value);
+    }
+
     public static String getDisableIndexes(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(DISABLED_INDEXES);
@@ -674,4 +703,5 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         configuration.set(MAPREDUCE_TENANT_ID, tenantId);
     }
+
 }

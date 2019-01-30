@@ -211,7 +211,8 @@ public class ServerUtil {
         }
     }
     
-    public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, Table writerTable) throws IOException {
+    public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env,
+                                                               Table writerTable) throws IOException {
         if (coprocessorScanWorks(env)) {
             return writerTable;
         }

@@ -218,6 +218,7 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme.QualifierOutOfRangeException;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
@@ -1317,21 +1318,9 @@ public class MetaDataClient {
             TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
             MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, cfs, null, clientTimeStamp);
             Scan scan = plan.getContext().getScan();
-            scan.setCacheBlocks(false);
-            scan.readAllVersions();
-            scan.setAttribute(ANALYZE_TABLE, TRUE_BYTES);
+            StatisticsUtil.setScanAttributes(scan, statsProps);
             boolean runUpdateStatsAsync = props.getBoolean(QueryServices.RUN_UPDATE_STATS_ASYNC, DEFAULT_RUN_UPDATE_STATS_ASYNC);
             scan.setAttribute(RUN_UPDATE_STATS_ASYNC_ATTRIB, runUpdateStatsAsync ? TRUE_BYTES : FALSE_BYTES);
-            if (statsProps != null) {
-                Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
-                if (gp_width != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
-                }
-                Object gp_per_region = statsProps.get(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB);
-                if (gp_per_region != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
-                }
-            }
             MutationState mutationState = plan.execute();
             rowCount = mutationState.getUpdateCount();
         }
@@ -1722,6 +1711,7 @@ public class MetaDataClient {
                 }
                 PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
                 tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getName().getString());
+
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount(), null);
                 table = createTableInternal(tableStatement, splits, dataTable, null, null, MetaDataUtil.getViewIndexIdDataType(),null, null, allocateIndexId, statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
                 break;
