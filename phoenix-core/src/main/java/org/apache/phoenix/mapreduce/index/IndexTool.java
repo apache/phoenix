@@ -28,7 +28,10 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -74,6 +77,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
+import org.apache.phoenix.mapreduce.PhoenixServerBuildIndexInputFormat;
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColNames;
 import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -105,6 +109,22 @@ import com.google.common.collect.Lists;
 public class IndexTool extends Configured implements Tool {
 
     private static final Logger LOG = LoggerFactory.getLogger(IndexTool.class);
+
+    private String schemaName;
+    private String dataTable;
+    private String indexTable;
+    private boolean isPartialBuild;
+    private String qDataTable;
+    private String qIndexTable;
+    private boolean useDirectApi;
+    private boolean useSnapshot;
+    private boolean isLocalIndexBuild;
+    private PTable pIndexTable;
+    private PTable pDataTable;
+    private String tenantId;
+    private Job job;
+
+
 
     private static final Option SCHEMA_NAME_OPTION = new Option("s", "schema", true,
             "Phoenix schema name (optional)");
@@ -247,18 +267,30 @@ public class IndexTool extends Configured implements Tool {
 
         }
 
-        public Job getJob(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean isPartialBuild,
-            boolean useSnapshot, String tenantId) throws Exception {
+        public Job getJob() throws Exception {
             if (isPartialBuild) {
-                return configureJobForPartialBuild(schemaName, dataTable, tenantId);
+                return configureJobForPartialBuild();
             } else {
-                return configureJobForAsyncIndex(schemaName, indexTable, dataTable, useDirectApi, useSnapshot, tenantId);
+                long maxTimeRange = pIndexTable.getTimeStamp() + 1;
+                // this is set to ensure index tables remains consistent post population.
+
+                if (pDataTable.isTransactional()) {
+                    configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
+                            Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
+                }
+                configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
+                        Long.toString(maxTimeRange));
+                if (useSnapshot || !useDirectApi || (!isLocalIndexBuild && pDataTable.isTransactional())) {
+                    return configureJobForAysncIndex();
+                }
+                else {
+                    //Local and non-transactional global indexes to be built on the server side
+                    return configureJobForServerBuildIndex();
+                }
             }
         }
-        
-        private Job configureJobForPartialBuild(String schemaName, String dataTable, String tenantId) throws Exception {
-            final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
-            final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
+
+        private Job configureJobForPartialBuild() throws Exception {
             connection = ConnectionUtil.getInputConnection(configuration);
             long minDisableTimestamp = HConstants.LATEST_TIMESTAMP;
             PTable indexWithMinDisableTimestamp = null;
@@ -266,7 +298,7 @@ public class IndexTool extends Configured implements Tool {
             //Get Indexes in building state, minDisabledTimestamp 
             List<String> disableIndexes = new ArrayList<String>();
             List<PTable> disabledPIndexes = new ArrayList<PTable>();
-            for (PTable index : pdataTable.getIndexes()) {
+            for (PTable index : pDataTable.getIndexes()) {
                 if (index.getIndexState().equals(PIndexState.BUILDING)) {
                     disableIndexes.add(index.getTableName().getString());
                     disabledPIndexes.add(index);
@@ -299,10 +331,10 @@ public class IndexTool extends Configured implements Tool {
             //serialize index maintaienr in job conf with Base64 TODO: Need to find better way to serialize them in conf.
             List<IndexMaintainer> maintainers = Lists.newArrayListWithExpectedSize(disabledPIndexes.size());
             for (PTable index : disabledPIndexes) {
-                maintainers.add(index.getIndexMaintainer(pdataTable, connection.unwrap(PhoenixConnection.class)));
+                maintainers.add(index.getIndexMaintainer(pDataTable, connection.unwrap(PhoenixConnection.class)));
             }
             ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
-            IndexMaintainer.serializeAdditional(pdataTable, indexMetaDataPtr, disabledPIndexes, connection.unwrap(PhoenixConnection.class));
+            IndexMaintainer.serializeAdditional(pDataTable, indexMetaDataPtr, disabledPIndexes, connection.unwrap(PhoenixConnection.class));
             PhoenixConfigurationUtil.setIndexMaintainers(configuration, indexMetaDataPtr);
             if (tenantId != null) {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
@@ -313,15 +345,15 @@ public class IndexTool extends Configured implements Tool {
             scan.setTimeRange(minDisableTimestamp - 1, maxTimestamp);
             scan.setRaw(true);
             scan.setCacheBlocks(false);
-            if (pdataTable.isTransactional()) {
-                long maxTimeRange = pdataTable.getTimeStamp() + 1;
+            if (pDataTable.isTransactional()) {
+                long maxTimeRange = pDataTable.getTimeStamp() + 1;
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN,
                         Bytes.toBytes(Long.valueOf(Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)))));
             }
             
           
-            String physicalTableName=pdataTable.getPhysicalName().getString();
-            final String jobName = String.format("Phoenix Indexes build for " + pdataTable.getName().toString());
+            String physicalTableName=pDataTable.getPhysicalName().getString();
+            final String jobName = String.format("Phoenix Indexes build for " + pDataTable.getName().toString());
             
             PhoenixConfigurationUtil.setInputTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalTableName);
@@ -338,7 +370,7 @@ public class IndexTool extends Configured implements Tool {
                     null, job);
             TableMapReduceUtil.initCredentials(job);
             TableInputFormat.configureSplitTable(job, TableName.valueOf(physicalTableName));
-            return configureSubmittableJobUsingDirectApi(job, true);
+            return configureSubmittableJobUsingDirectApi(job);
         }
         
         private long getMaxRebuildAsyncDate(String schemaName, List<String> disableIndexes) throws SQLException {
@@ -368,39 +400,14 @@ public class IndexTool extends Configured implements Tool {
             
         }
 
-        private Job configureJobForAsyncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean useSnapshot, String tenantId)
+        private Job configureJobForAysncIndex()
                 throws Exception {
-            final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
-            final String qIndexTable;
-            if (schemaName != null && !schemaName.isEmpty()) {
-                qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
-            } else {
-                qIndexTable = indexTable;
-            }
-            final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
-            
-            final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
-            
-            long maxTimeRange = pindexTable.getTimeStamp() + 1;
-            // this is set to ensure index tables remains consistent post population.
 
-            if (pdataTable.isTransactional()) {
-                configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
-                    Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
-            }
-            configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
-                Long.toString(maxTimeRange));
-            
-            // check if the index type is LOCAL, if so, derive and set the physicalIndexName that is
-            // computed from the qDataTable name.
-            String physicalIndexTable = pindexTable.getPhysicalName().getString();
-            
-
+            String physicalIndexTable = pIndexTable.getPhysicalName().getString();
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
             final PostIndexDDLCompiler ddlCompiler =
-                    new PostIndexDDLCompiler(pConnection, new TableRef(pdataTable));
-            ddlCompiler.compile(pindexTable);
-
+                    new PostIndexDDLCompiler(pConnection, new TableRef(pDataTable));
+            ddlCompiler.compile(pIndexTable);
             final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
             final String selectQuery = ddlCompiler.getSelectQuery();
             final String upsertQuery =
@@ -409,6 +416,7 @@ public class IndexTool extends Configured implements Tool {
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
             PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
+
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
                 indexColumns.toArray(new String[indexColumns.size()]));
             if (tenantId != null) {
@@ -418,25 +426,22 @@ public class IndexTool extends Configured implements Tool {
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
+            fs = outputPath.getFileSystem(configuration);
+            fs.delete(outputPath, true);
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
             final Job job = Job.getInstance(configuration, jobName);
             job.setJarByClass(IndexTool.class);
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
-            if (outputPath != null) {
-                fs = outputPath.getFileSystem(configuration);
-                fs.delete(outputPath, true);
-                FileOutputFormat.setOutputPath(job, outputPath);
-            }
+            FileOutputFormat.setOutputPath(job, outputPath);
 
             if (!useSnapshot) {
-                PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
-                    selectQuery);
+                PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable, selectQuery);
             } else {
                 HBaseAdmin admin = null;
                 String snapshotName;
                 try {
                     admin = pConnection.getQueryServices().getAdmin();
-                    String pdataTableName = pdataTable.getName().getString();
+                    String pdataTableName = pDataTable.getName().getString();
                     snapshotName = new StringBuilder(pdataTableName).append("-Snapshot").toString();
                     admin.snapshot(snapshotName, TableName.valueOf(pdataTableName));
                 } finally {
@@ -451,17 +456,47 @@ public class IndexTool extends Configured implements Tool {
 
                 // set input for map reduce job using hbase snapshots
                 PhoenixMapReduceUtil
-                    .setInput(job, PhoenixIndexDBWritable.class, snapshotName, qDataTable, restoreDir, selectQuery);
+                            .setInput(job, PhoenixIndexDBWritable.class, snapshotName, qDataTable, restoreDir, selectQuery);
             }
             TableMapReduceUtil.initCredentials(job);
             
             if (useDirectApi) {
-                return configureSubmittableJobUsingDirectApi(job, false);
+                job.setMapperClass(PhoenixIndexImportDirectMapper.class);
+                return configureSubmittableJobUsingDirectApi(job);
             } else {
                 return configureRunnableJobUsingBulkLoad(job, outputPath);
-                
             }
-            
+        }
+
+        private Job configureJobForServerBuildIndex()
+                throws Exception {
+
+            PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
+            PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
+
+            String physicalIndexTable = pIndexTable.getPhysicalName().getString();
+
+            PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
+            PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
+            if (tenantId != null) {
+                PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
+            }
+
+            fs = outputPath.getFileSystem(configuration);
+            fs.delete(outputPath, true);
+
+            final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
+            final Job job = Job.getInstance(configuration, jobName);
+            job.setJarByClass(IndexTool.class);
+            job.setMapOutputKeyClass(ImmutableBytesWritable.class);
+            FileOutputFormat.setOutputPath(job, outputPath);
+
+            PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
+                            qDataTable, "");
+
+            TableMapReduceUtil.initCredentials(job);
+            job.setMapperClass(PhoenixServerBuildIndexMapper.class);
+            return configureSubmittableJobUsingDirectApi(job);
         }
 
         /**
@@ -495,12 +530,9 @@ public class IndexTool extends Configured implements Tool {
          * @return
          * @throws Exception
          */
-        private Job configureSubmittableJobUsingDirectApi(Job job, boolean isPartialRebuild)
+        private Job configureSubmittableJobUsingDirectApi(Job job)
                 throws Exception {
-            if (!isPartialRebuild) {
-                //Don't configure mapper for partial build as it is configured already
-                job.setMapperClass(PhoenixIndexImportDirectMapper.class);
-            }
+
             job.setReducerClass(PhoenixIndexImportDirectReducer.class);
             Configuration conf = job.getConfiguration();
             HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
@@ -519,6 +551,10 @@ public class IndexTool extends Configured implements Tool {
         
     }
 
+    public Job getJob() {
+        return job;
+    }
+
     @Override
     public int run(String[] args) throws Exception {
         Connection connection = null;
@@ -531,64 +567,75 @@ public class IndexTool extends Configured implements Tool {
                 printHelpAndExit(e.getMessage(), getOptions());
             }
             final Configuration configuration = HBaseConfiguration.addHbaseResources(getConf());
-            final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
-            final String dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
-            final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
-            final boolean isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
-            final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
-            boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
-            String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
-            boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
-            boolean useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
             boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
-            byte[][] splitKeysBeforeJob = null;
-            boolean isLocalIndexBuild = false;
-            PTable pindexTable = null;
-            String tenantId = null;
+            tenantId = null;
             if (useTenantId) {
                 tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
                 configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             }
             connection = ConnectionUtil.getInputConnection(configuration);
+            schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
+            dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
+            indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
+            isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
+            qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+            pDataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
+            useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
+            String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
+            boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
+            useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
+
+            byte[][] splitKeysBeforeJob = null;
+            isLocalIndexBuild = false;
+            pIndexTable = null;
+
+            connection = ConnectionUtil.getInputConnection(configuration);
+
             if (indexTable != null) {
                 if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
                     throw new IllegalArgumentException(String.format(
                         " %s is not an index table for %s for this connection", indexTable, qDataTable));
                 }
-                pindexTable = PhoenixRuntime.getTable(connection, schemaName != null && !schemaName.isEmpty()
+                pIndexTable = PhoenixRuntime.getTable(connection, schemaName != null && !schemaName.isEmpty()
                         ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : indexTable);
+
+                if (schemaName != null && !schemaName.isEmpty()) {
+                    qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+                } else {
+                    qIndexTable = indexTable;
+                }
                 htable = (HTable)connection.unwrap(PhoenixConnection.class).getQueryServices()
-                        .getTable(pindexTable.getPhysicalName().getBytes());
-                if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
+                        .getTable(pIndexTable.getPhysicalName().getBytes());
+
+                if (IndexType.LOCAL.equals(pIndexTable.getIndexType())) {
                     isLocalIndexBuild = true;
                     splitKeysBeforeJob = htable.getRegionLocator().getStartKeys();
                 }
                 // presplit the index table
                 boolean autosplit = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt());
-                boolean isSalted = pindexTable.getBucketNum() != null; // no need to split salted tables
-                if (!isSalted && IndexType.GLOBAL.equals(pindexTable.getIndexType())
+                boolean isSalted = pIndexTable.getBucketNum() != null; // no need to split salted tables
+                if (!isSalted && IndexType.GLOBAL.equals(pIndexTable.getIndexType())
                         && (autosplit || cmdLine.hasOption(SPLIT_INDEX_OPTION.getOpt()))) {
                     String nOpt = cmdLine.getOptionValue(AUTO_SPLIT_INDEX_OPTION.getOpt());
                     int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
                     String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());
                     double samplingRate = rateOpt == null ? DEFAULT_SPLIT_SAMPLING_RATE : Double.parseDouble(rateOpt);
                     LOG.info(String.format("Will split index %s , autosplit=%s , autoSplitNumRegions=%s , samplingRate=%s", indexTable, autosplit, autosplitNumRegions, samplingRate));
-                    splitIndexTable(connection.unwrap(PhoenixConnection.class), qDataTable, pindexTable, autosplit, autosplitNumRegions, samplingRate);
+
+                    splitIndexTable(connection.unwrap(PhoenixConnection.class), autosplit, autosplitNumRegions, samplingRate, configuration);
                 }
             }
-            
-            PTable pdataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
 			Path outputPath = null;
 			FileSystem fs = null;
 			if (basePath != null) {
-				outputPath = CsvBulkImportUtil.getOutputPath(new Path(basePath), pindexTable == null
-						? pdataTable.getPhysicalName().getString() : pindexTable.getPhysicalName().getString());
+				outputPath = CsvBulkImportUtil.getOutputPath(new Path(basePath), pIndexTable == null
+						? pDataTable.getPhysicalName().getString() : pIndexTable.getPhysicalName().getString());
 				fs = outputPath.getFileSystem(configuration);
 				fs.delete(outputPath, true);
 			}
-            
-            Job job = new JobFactory(connection, configuration, outputPath).getJob(schemaName, indexTable, dataTable,
-                    useDirectApi, isPartialBuild, useSnapshot, tenantId);
+
+			job = new JobFactory(connection, configuration, outputPath).getJob();
+
             if (!isForeground && useDirectApi) {
                 LOG.info("Running Index Build in Background - Submit async and exit");
                 job.submit();
@@ -634,32 +681,29 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
-    
 
-    private void splitIndexTable(PhoenixConnection pConnection, String qDataTable,
-            PTable pindexTable, boolean autosplit, int autosplitNumRegions, double samplingRate)
+    private void splitIndexTable(PhoenixConnection pConnection, boolean autosplit, int autosplitNumRegions, double samplingRate, Configuration configuration)
             throws SQLException, IOException, IllegalArgumentException, InterruptedException {
-        final PTable pdataTable = PhoenixRuntime.getTable(pConnection, qDataTable);
         int numRegions;
         try (HTable hDataTable =
                 (HTable) pConnection.getQueryServices()
-                        .getTable(pdataTable.getPhysicalName().getBytes())) {
+                        .getTable(pDataTable.getPhysicalName().getBytes())) {
             numRegions = hDataTable.getRegionLocator().getStartKeys().length;
             if (autosplit && !(numRegions > autosplitNumRegions)) {
                 LOG.info(String.format(
                     "Will not split index %s because the data table only has %s regions, autoSplitNumRegions=%s",
-                    pindexTable.getPhysicalName(), numRegions, autosplitNumRegions));
+                    pIndexTable.getPhysicalName(), numRegions, autosplitNumRegions));
                 return; // do nothing if # of regions is too low
             }
         }
         // build a tablesample query to fetch index column values from the data table
-        DataSourceColNames colNames = new DataSourceColNames(pdataTable, pindexTable);
+        DataSourceColNames colNames = new DataSourceColNames(pDataTable, pIndexTable);
         String qTableSample = String.format(qDataTable + " TABLESAMPLE(%.2f)", samplingRate);
         List<String> dataColNames = colNames.getDataColNames();
         final String dataSampleQuery =
                 QueryUtil.constructSelectStatement(qTableSample, dataColNames, null,
                     Hint.NO_INDEX, true);
-        IndexMaintainer maintainer = IndexMaintainer.create(pdataTable, pindexTable, pConnection);
+        IndexMaintainer maintainer = IndexMaintainer.create(pDataTable, pIndexTable, pConnection);
         ImmutableBytesWritable dataRowKeyPtr = new ImmutableBytesWritable();
         try (final PhoenixResultSet rs =
                 pConnection.createStatement().executeQuery(dataSampleQuery)
@@ -683,7 +727,7 @@ public class IndexTool extends Configured implements Tool {
                 splitPoints[splitIdx++] = b.getRightBoundExclusive();
             }
             // drop table and recreate with appropriate splits
-            TableName indexTN = TableName.valueOf(pindexTable.getPhysicalName().getBytes());
+            TableName indexTN = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
             HTableDescriptor descriptor = admin.getTableDescriptor(indexTN);
             admin.disableTable(indexTN);
             admin.deleteTable(indexTN);
