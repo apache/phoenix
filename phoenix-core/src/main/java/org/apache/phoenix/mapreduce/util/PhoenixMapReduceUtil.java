@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce.util;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
@@ -66,6 +67,23 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
         PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
      }
+
+    /**
+     *
+     * @param job
+     * @param inputClass        DBWritable class
+     * @param inputFormatClass  InputFormat class
+     * @param tableName         Input table name
+     * @param inputQuery        Select query
+     */
+
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass,
+                                final Class<? extends InputFormat> inputFormatClass,
+                                final String tableName, final String inputQuery) {
+        final Configuration configuration = setInput(job, inputClass, inputFormatClass, tableName);
+        PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
+        PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
+    }
 
     /**
      *
@@ -129,6 +147,15 @@ public final class PhoenixMapReduceUtil {
 
     private static Configuration setInput(final Job job, final Class<? extends DBWritable> inputClass, final String tableName){
         job.setInputFormatClass(PhoenixInputFormat.class);
+        final Configuration configuration = job.getConfiguration();
+        PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
+        PhoenixConfigurationUtil.setInputClass(configuration,inputClass);
+        return configuration;
+    }
+
+    private static Configuration setInput(final Job job, final Class<? extends DBWritable> inputClass,
+                                          final Class<? extends InputFormat> inputFormatClass, final String tableName){
+        job.setInputFormatClass(inputFormatClass);
         final Configuration configuration = job.getConfiguration();
         PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
         PhoenixConfigurationUtil.setInputClass(configuration,inputClass);
