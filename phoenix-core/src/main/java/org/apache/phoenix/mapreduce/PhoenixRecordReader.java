@@ -60,8 +60,8 @@ import com.google.common.collect.Lists;
 public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<NullWritable,T> {
     
     private static final Log LOG = LogFactory.getLog(PhoenixRecordReader.class);
-    private final Configuration  configuration;
-    private final QueryPlan queryPlan;
+    protected final Configuration  configuration;
+    protected final QueryPlan queryPlan;
     private NullWritable key =  NullWritable.get();
     private T value = null;
     private Class<T> inputClass;
