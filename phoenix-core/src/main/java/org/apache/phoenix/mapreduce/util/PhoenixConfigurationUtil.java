@@ -122,6 +122,10 @@ public final class PhoenixConfigurationUtil {
 
     public static final String SCRUTINY_INDEX_TABLE_NAME = "phoenix.mr.scrutiny.index.table.name";
 
+    public static final String INDEX_TOOL_DATA_TABLE_NAME = "phoenix.mr.index_tool.data.table.name";
+
+    public static final String INDEX_TOOL_INDEX_TABLE_NAME = "phoenix.mr.index_tool.index.table.name";
+
     public static final String SCRUTINY_SOURCE_TABLE = "phoenix.mr.scrutiny.source.table";
 
     public static final String SCRUTINY_BATCH_SIZE = "phoenix.mr.scrutiny.batch.size";
@@ -545,6 +549,16 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_INDEX_TABLE_NAME);
     }
+    public static void setIndexToolDataTableName(Configuration configuration, String qDataTableName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(qDataTableName);
+        configuration.set(INDEX_TOOL_DATA_TABLE_NAME, qDataTableName);
+    }
+
+    public static String getIndexToolDataTableName(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_DATA_TABLE_NAME);
+    }
 
     public static void setScrutinyIndexTable(Configuration configuration, String qIndexTableName) {
         Preconditions.checkNotNull(configuration);
@@ -555,6 +569,17 @@ public final class PhoenixConfigurationUtil {
     public static SourceTable getScrutinySourceTable(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return SourceTable.valueOf(configuration.get(SCRUTINY_SOURCE_TABLE));
+    }
+
+    public static void setIndexToolIndexTableName(Configuration configuration, String qIndexTableName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(qIndexTableName);
+        configuration.set(INDEX_TOOL_INDEX_TABLE_NAME, qIndexTableName);
+    }
+
+    public static String getIndexToolIndexTableName(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_INDEX_TABLE_NAME);
     }
 
     public static void setScrutinySourceTable(Configuration configuration,
