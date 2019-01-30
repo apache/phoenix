@@ -204,14 +204,7 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
 
             // we should be able to read the data from another index as well to which we have not given any access to
             // this user
-            verifyAllowed(createIndex(indexName2, phoenixTableName), unprivilegedUser);
             verifyAllowed(readTable(phoenixTableName, indexName1), unprivilegedUser);
-            verifyAllowed(readTable(phoenixTableName, indexName2), unprivilegedUser);
-            verifyAllowed(rebuildIndex(indexName2, phoenixTableName), unprivilegedUser);
-
-            // data table user should be able to read new index
-            verifyAllowed(rebuildIndex(indexName2, phoenixTableName), regularUser1);
-            verifyAllowed(readTable(phoenixTableName, indexName2), regularUser1);
 
             verifyAllowed(readTable(phoenixTableName), regularUser1);
             verifyAllowed(rebuildIndex(indexName1, phoenixTableName), regularUser1);
@@ -220,7 +213,6 @@ public class TableDDLPermissionsIT extends BasePermissionsIT {
             verifyAllowed(dropView(viewName1), regularUser1);
             verifyAllowed(dropView(viewName2), regularUser1);
             verifyAllowed(dropColumn(phoenixTableName, "val1"), regularUser1);
-            verifyAllowed(dropIndex(indexName2, phoenixTableName), regularUser1);
             verifyAllowed(dropIndex(indexName1, phoenixTableName), regularUser1);
             verifyAllowed(dropTable(phoenixTableName), regularUser1);
 

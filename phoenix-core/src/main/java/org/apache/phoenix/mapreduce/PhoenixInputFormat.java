@@ -74,7 +74,6 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
     @Override
     public RecordReader<NullWritable,T> createRecordReader(InputSplit split, TaskAttemptContext context)
             throws IOException, InterruptedException {
-        
         final Configuration configuration = context.getConfiguration();
         final QueryPlan queryPlan = getQueryPlan(context,configuration);
         @SuppressWarnings("unchecked")
@@ -164,7 +163,8 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
      * @throws IOException
      * @throws SQLException
      */
-    private QueryPlan getQueryPlan(final JobContext context, final Configuration configuration) {
+    protected  QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
+            throws IOException {
         Preconditions.checkNotNull(context);
         try {
             final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);

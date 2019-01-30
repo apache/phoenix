@@ -156,6 +156,7 @@ import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.compile.PostLocalIndexDDLCompiler;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.ServerBuildIndexCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -1390,16 +1391,17 @@ public class MetaDataClient {
     }
     
     private MutationPlan getMutationPlanForBuildingIndex(PTable index, TableRef dataTableRef) throws SQLException {
-        MutationPlan mutationPlan;
         if (index.getIndexType() == IndexType.LOCAL) {
             PostLocalIndexDDLCompiler compiler =
                     new PostLocalIndexDDLCompiler(connection, getFullTableName(dataTableRef));
-            mutationPlan = compiler.compile(index);
-        } else {
+            return compiler.compile(index);
+        } else if (dataTableRef.getTable().isTransactional()){
             PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
-            mutationPlan = compiler.compile(index);
+            return compiler.compile(index);
+        } else {
+            ServerBuildIndexCompiler compiler = new ServerBuildIndexCompiler(connection, getFullTableName(dataTableRef));
+            return compiler.compile(index);
         }
-        return mutationPlan;
     }
 
     private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
@@ -1741,6 +1743,10 @@ public class MetaDataClient {
         if (connection.getSCN() != null) {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
+
+        String dataTableFullName = SchemaUtil.getTableName(
+                tableRef.getTable().getSchemaName().getString(),
+                tableRef.getTable().getTableName().getString());
         return buildIndex(table, tableRef);
     }
 

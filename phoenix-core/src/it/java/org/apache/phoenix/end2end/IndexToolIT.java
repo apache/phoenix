@@ -47,11 +47,17 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexImportMapper;
+import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
+
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -498,6 +504,32 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, new String[0]);
     }
 
+    private static void verifyMapper(Job job, boolean directApi, boolean useSnapshot, String schemaName,
+                                  String dataTableName, String indexTableName, String tenantId) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (tenantId != null) {
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
+        try (Connection conn =
+                     DriverManager.getConnection(getUrl(), props)) {
+            PTable dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, dataTableName));
+            PTable indexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, indexTableName));
+            boolean transactional = dataTable.isTransactional();
+            boolean localIndex = PTable.IndexType.LOCAL.equals(indexTable.getIndexType());
+
+            if (directApi) {
+                if ((localIndex || !transactional) && !useSnapshot) {
+                    assertEquals(job.getMapperClass(), PhoenixServerBuildIndexMapper.class);
+                } else {
+                    assertEquals(job.getMapperClass(), PhoenixIndexImportDirectMapper.class);
+                }
+            }
+            else {
+                assertEquals(job.getMapperClass(), PhoenixIndexImportMapper.class);
+            }
+        }
+    }
+
     public static void runIndexTool(boolean directApi, boolean useSnapshot, String schemaName,
             String dataTableName, String indexTableName, String... additionalArgs) throws Exception {
         runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, additionalArgs);
@@ -515,6 +547,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
         cmdArgList.addAll(Arrays.asList(additionalArgs));
         int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
+
+        if (expectedStatus == 0) {
+            verifyMapper(indexingTool.getJob(), directApi, useSnapshot, schemaName, dataTableName, indexTableName, tenantId);
+        }
         assertEquals(expectedStatus, status);
     }
 }
