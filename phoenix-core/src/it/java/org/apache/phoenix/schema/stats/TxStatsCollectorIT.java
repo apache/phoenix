@@ -15,9 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.schema.stats;
 
-import org.apache.phoenix.schema.stats.BaseStatsCollectorIT;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.runners.Parameterized;
 

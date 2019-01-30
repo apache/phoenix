@@ -18,12 +18,10 @@
 package org.apache.phoenix.schema.stats;
 
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
-import static org.apache.phoenix.query.QueryServices.STATS_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -69,11 +67,7 @@ public class StatisticsCollectorFactory {
      * use case for that.
      */
     private static boolean statisticsEnabled(RegionCoprocessorEnvironment env) {
-        return (env.getConfiguration().getBoolean(STATS_COLLECTION_ENABLED,
-            DEFAULT_STATS_COLLECTION_ENABLED)
-            // old config left here for backward compatibility. TODO: remove in the next major release
-            && env.getConfiguration().getBoolean(STATS_ENABLED_ATTRIB, true)
-            )
+        return (env.getConfiguration().getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED))
             && StatisticsUtil.isStatsEnabled(env.getRegionInfo().getTable());
     }
 

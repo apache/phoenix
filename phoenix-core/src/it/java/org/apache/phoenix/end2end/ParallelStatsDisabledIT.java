@@ -18,8 +18,10 @@
 
 package org.apache.phoenix.end2end;
 
+import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -31,6 +33,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -39,7 +42,13 @@ import static org.junit.Assert.fail;
 
 
 /**
- * Base class for tests whose methods run in parallel with statistics disabled.
+ * Base class for tests whose methods run in parallel with
+ * 1. Statistics enabled on server side (QueryServices#STATS_COLLECTION_ENABLED is true)
+ * 2. Guide Post Width for all relevant tables is 0. Stats are disabled at table level.
+ *
+ * See {@link org.apache.phoenix.schema.stats.NoOpStatsCollectorIT} for tests that disable
+ * stats collection from server side.
+ *
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
@@ -47,8 +56,9 @@ import static org.junit.Assert.fail;
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
-    public static final void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    public static void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @AfterClass

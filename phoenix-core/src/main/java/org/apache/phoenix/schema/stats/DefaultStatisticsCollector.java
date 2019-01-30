@@ -36,7 +36,9 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
@@ -129,6 +131,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
      * The order of priority from highest to lowest is as follows
      * 1. Value provided in UPDATE STATISTICS SQL statement (N/A for MR jobs)
      * 2. GPW column in SYSTEM.CATALOG for the table is not null
+     * Inherits the value from base table for views and indexes (PHOENIX-4332)
      * 3. Value from global configuration parameters from hbase-site.xml
      *
      * GPW of 0 disables the stats collection. If stats were previously collected, this task
@@ -377,6 +380,17 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     @Override
     public StatisticsWriter getStatisticsWriter() {
         return statsWriter;
+    }
+
+    @Override
+    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env,
+                                                   Store store, InternalScanner delegate) {
+
+        ImmutableBytesPtr cfKey =
+                new ImmutableBytesPtr(store.getFamily().getName());
+        LOG.info("StatisticsScanner created for table: "
+                + tableName + " CF: " + store.getColumnFamilyName());
+        return new StatisticsScanner(this, statsWriter, env, delegate, cfKey);
     }
 
 }

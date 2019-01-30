@@ -23,7 +23,10 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -71,4 +74,11 @@ public interface StatisticsCollector extends Closeable {
      * Retrieve the object that manages statistics persistence
      */
     StatisticsWriter getStatisticsWriter();
+
+    /**
+     * Wrap a compaction scanner with a scanner that will collect statistics using this instance.
+     */
+    InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
+                                            InternalScanner delegate);
+
 }
