@@ -516,8 +516,8 @@ public class QueryOptimizer {
                 boundCount2 += table2.getViewIndexId() == null ? 0 : (boundRanges - 1);
                 // Adjust for salting. Salting adds a bound range for each salt bucket.
                 // (but the sum of buckets cover the entire table)
-                boundCount1 -= table1.getBucketNum() == null ? 0 : 1;
-                boundCount2 -= table2.getBucketNum() == null ? 0 : 1;
+                boundCount1 -= plan1.getContext().getScanRanges().isSalted() ? 1 : 0;
+                boundCount2 -= plan2.getContext().getScanRanges().isSalted() ? 1 : 0;
                 int c = boundCount2 - boundCount1;
                 if (c != 0) return c;
                 if (plan1.getGroupBy() != null && plan2.getGroupBy() != null) {
