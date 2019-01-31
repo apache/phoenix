@@ -241,8 +241,7 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         args.add("-d");
         args.add(randomDir);
         args.add("-runfg");
-        args.add("-cs");
-        args.add("-ds");
+        args.add("-ms");
         return args.toArray(new String[0]);
     }
 
