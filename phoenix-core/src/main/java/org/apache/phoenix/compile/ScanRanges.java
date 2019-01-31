@@ -535,7 +535,14 @@ public class ScanRanges {
     public boolean isPointLookup() {
         return isPointLookup;
     }
-    
+
+    /**
+     * @return true if this range is salted - i.e. has a salt range
+     */
+    public boolean isSalted() {
+        return isSalted;
+    }
+
     public int getPointLookupCount() {
         return getPointLookupCount(isPointLookup, ranges);
     }
