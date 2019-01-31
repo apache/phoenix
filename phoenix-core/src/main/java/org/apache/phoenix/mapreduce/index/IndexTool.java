@@ -149,6 +149,8 @@ public class IndexTool extends Configured implements Tool {
             "Output path where the files are written");
     private static final Option SNAPSHOT_OPTION = new Option("snap", "snapshot", false,
         "If specified, uses Snapshots for async index building (optional)");
+    private static final Option TENANT_ID_OPTION = new Option("tenant", "tenant-id", true,
+        "If specified, uses Tenant connection for tenant view index building (optional)");
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
@@ -162,6 +164,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
+        options.addOption(TENANT_ID_OPTION);
         options.addOption(HELP_OPTION);
         AUTO_SPLIT_INDEX_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
@@ -247,15 +250,15 @@ public class IndexTool extends Configured implements Tool {
         }
 
         public Job getJob(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean isPartialBuild,
-            boolean useSnapshot) throws Exception {
+            boolean useSnapshot, String tenantId) throws Exception {
             if (isPartialBuild) {
-                return configureJobForPartialBuild(schemaName, dataTable);
+                return configureJobForPartialBuild(schemaName, dataTable, tenantId);
             } else {
-                return configureJobForAsyncIndex(schemaName, indexTable, dataTable, useDirectApi, useSnapshot);
+                return configureJobForAsyncIndex(schemaName, indexTable, dataTable, useDirectApi, useSnapshot, tenantId);
             }
         }
         
-        private Job configureJobForPartialBuild(String schemaName, String dataTable) throws Exception {
+        private Job configureJobForPartialBuild(String schemaName, String dataTable, String tenantId) throws Exception {
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
             connection = ConnectionUtil.getInputConnection(configuration);
@@ -303,7 +306,10 @@ public class IndexTool extends Configured implements Tool {
             ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
             IndexMaintainer.serializeAdditional(pdataTable, indexMetaDataPtr, disabledPIndexes, connection.unwrap(PhoenixConnection.class));
             PhoenixConfigurationUtil.setIndexMaintainers(configuration, indexMetaDataPtr);
-            
+            if (tenantId != null) {
+                PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
+            }
+
             //Prepare raw scan 
             Scan scan = IndexManagementUtil.newLocalStateScan(maintainers);
             scan.setTimeRange(minDisableTimestamp - 1, maxTimestamp);
@@ -364,7 +370,7 @@ public class IndexTool extends Configured implements Tool {
             
         }
 
-        private Job configureJobForAsyncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean useSnapshot)
+        private Job configureJobForAsyncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean useSnapshot, String tenantId)
                 throws Exception {
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             final String qIndexTable;
@@ -408,6 +414,9 @@ public class IndexTool extends Configured implements Tool {
             PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
                 indexColumns.toArray(new String[indexColumns.size()]));
+            if (tenantId != null) {
+                PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
+            }
             final List<ColumnInfo> columnMetadataList =
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
@@ -536,14 +545,20 @@ public class IndexTool extends Configured implements Tool {
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
             boolean useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
-            connection = ConnectionUtil.getInputConnection(configuration);
+            boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
             byte[][] splitKeysBeforeJob = null;
             boolean isLocalIndexBuild = false;
             PTable pindexTable = null;
+            String tenantId = null;
+            if (useTenantId) {
+                tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
+                configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            }
+            connection = ConnectionUtil.getInputConnection(configuration);
             if (indexTable != null) {
-                if (!isValidIndexTable(connection, qDataTable,indexTable)) {
+                if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
                     throw new IllegalArgumentException(String.format(
-                        " %s is not an index table for %s ", indexTable, qDataTable));
+                        " %s is not an index table for %s for this connection", indexTable, qDataTable));
                 }
                 pindexTable = PhoenixRuntime.getTable(connection, schemaName != null && !schemaName.isEmpty()
                         ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : indexTable);
@@ -581,7 +596,7 @@ public class IndexTool extends Configured implements Tool {
 			}
             
             Job job = new JobFactory(connection, configuration, outputPath).getJob(schemaName, indexTable, dataTable,
-                    useDirectApi, isPartialBuild, useSnapshot);
+                    useDirectApi, isPartialBuild, useSnapshot, tenantId);
             if (!isForeground && useDirectApi) {
                 LOG.info("Running Index Build in Background - Submit async and exit");
                 job.submit();
@@ -742,18 +757,23 @@ public class IndexTool extends Configured implements Tool {
      * @param connection
      * @param masterTable
      * @param indexTable
+     * @param tenantId
      * @return
      * @throws SQLException
      */
     private boolean isValidIndexTable(final Connection connection, final String masterTable,
-            final String indexTable) throws SQLException {
+            final String indexTable, final String tenantId) throws SQLException {
         final DatabaseMetaData dbMetaData = connection.getMetaData();
         final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
         final String tableName = SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
 
         ResultSet rs = null;
         try {
-            rs = dbMetaData.getIndexInfo("", schemaName, tableName, false, false);
+            String catalog = "";
+            if (tenantId != null) {
+                catalog = tenantId;
+            }
+            rs = dbMetaData.getIndexInfo(catalog, schemaName, tableName, false, false);
             while (rs.next()) {
                 final String indexName = rs.getString(6);
                 if (indexTable.equalsIgnoreCase(indexName)) {
