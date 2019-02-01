@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
@@ -46,6 +47,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -843,4 +845,32 @@ public class IndexUtil {
         return Lists.newArrayList(indexIterator);
     }
     
+    public static Result incrementCounterForIndex(PhoenixConnection conn, String failedIndexTable,long amount) throws IOException {
+        byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(failedIndexTable);
+        Increment incr = new Increment(indexTableKey);
+        incr.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, amount);
+        try {
+            return conn.getQueryServices()
+                    .getTable(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                            conn.getQueryServices().getProps()).getName())
+                    .increment(incr);
+        } catch (SQLException e) {
+            throw new IOException(e);
+        }
+    }
+
+    public static long getIndexPendingDisableCount(PhoenixConnection conn, String failedIndexTable) throws IOException {
+        byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(failedIndexTable);
+        Get get = new Get(indexTableKey);
+        get.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+        try {
+            Result result = conn.getQueryServices()
+                    .getTable(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                            conn.getQueryServices().getProps()).getName())
+                    .get(get);
+            return Bytes.toLong(result.getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES));
+        } catch (SQLException e) {
+            throw new IOException(e);
+        }
+    }
 }

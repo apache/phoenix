@@ -4211,7 +4211,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         newState = PIndexState.DISABLE;
                     }
                 }
-                if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE) {
+                if (newState == PIndexState.PENDING_DISABLE && currentState != PIndexState.PENDING_DISABLE && currentState != PIndexState.INACTIVE) {
                     // reset count for first PENDING_DISABLE
                     newKVs.add(KeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, timeStamp, Bytes.toBytes(0L)));
