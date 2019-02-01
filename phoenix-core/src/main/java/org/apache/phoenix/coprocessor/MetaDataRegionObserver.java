@@ -103,6 +103,9 @@ import com.google.common.collect.Maps;
 public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
     public static final String REBUILD_INDEX_APPEND_TO_URL_STRING = "REBUILDINDEX";
+    // PHOENIX-5094 To differentiate the increment in PENDING_DISABLE_COUNT made by client or index
+    // rebuilder, we are using large value for index rebuilder
+    public static final long PENDING_DISABLE_INACTIVE_STATE_COUNT = 10000L;
     private static final byte[] SYSTEM_CATALOG_KEY = SchemaUtil.getTableKey(
             ByteUtil.EMPTY_BYTE_ARRAY,
             QueryConstants.SYSTEM_SCHEMA_NAME_BYTES,
@@ -262,6 +265,20 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
             this.props = new ReadOnlyProps(env.getConfiguration().iterator());
         }
 
+        public List<PTable> decrementIndexesPendingDisableCount(PhoenixConnection conn, PTable dataPTable, List<PTable> indexes){
+            List<PTable> indexesIncremented = new ArrayList<>();
+            for(PTable index :indexes) {
+                try {
+                    String indexName = index.getName().getString();
+                    IndexUtil.incrementCounterForIndex(conn, indexName, -PENDING_DISABLE_INACTIVE_STATE_COUNT);
+                    indexesIncremented.add(index);
+                }catch(Exception e) {
+                    LOG.warn("Decrement  of -" + PENDING_DISABLE_INACTIVE_STATE_COUNT +" for index :" + index.getName().getString() + "of table: " + dataPTable.getName().getString(), e);
+                }
+            }
+            return indexesIncremented;
+        }
+
         @Override
         public void run() {
             // FIXME: we should replay the data table Put, as doing a partial index build would only add
@@ -399,6 +416,10 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                     // Allow index to begin incremental maintenance as index is back online and we
                     // cannot transition directly from DISABLED -> ACTIVE
                     if (indexState == PIndexState.DISABLE) {
+                        if(IndexUtil.getIndexPendingDisableCount(conn, indexTableFullName) < PENDING_DISABLE_INACTIVE_STATE_COUNT){
+                            // to avoid incrementing again
+                            IndexUtil.incrementCounterForIndex(conn, indexTableFullName, PENDING_DISABLE_INACTIVE_STATE_COUNT);
+                        }
                         IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.INACTIVE, null);
                         continue; // Must wait until clients start to do index maintenance again
                     } else if (indexState == PIndexState.PENDING_ACTIVE) {
@@ -510,6 +531,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                                     + (scanEndTime == HConstants.LATEST_TIMESTAMP ? "LATEST_TIMESTAMP" : scanEndTime));
 							MutationState mutationState = plan.execute();
 							long rowCount = mutationState.getUpdateCount();
+							decrementIndexesPendingDisableCount(conn, dataPTable, indexesToPartiallyRebuild);
                             if (scanEndTime == latestUpperBoundTimestamp) {
                                 LOG.info("Rebuild completed for all inactive/disabled indexes in data table:"
                                         + dataPTable.getName());

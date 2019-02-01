@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.index;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
@@ -39,7 +37,6 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
-import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
@@ -512,25 +509,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     }
 
     private static void incrementCounterForIndex(PhoenixConnection conn, String failedIndexTable) throws IOException {
-        incrementCounterForIndex(conn, failedIndexTable, 1);
+        IndexUtil.incrementCounterForIndex(conn, failedIndexTable, 1);
     }
 
     private static void decrementCounterForIndex(PhoenixConnection conn, String failedIndexTable) throws IOException {
-        incrementCounterForIndex(conn, failedIndexTable, -1);
-    }
-    
-    private static void incrementCounterForIndex(PhoenixConnection conn, String failedIndexTable,long amount) throws IOException {
-        byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(failedIndexTable);
-        Increment incr = new Increment(indexTableKey);
-        incr.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, amount);
-        try {
-            conn.getQueryServices()
-                    .getTable(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                            conn.getQueryServices().getProps()).getName())
-                    .increment(incr);
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
+        IndexUtil.incrementCounterForIndex(conn, failedIndexTable, -1);
     }
 
     private static boolean canRetryMore(int numRetry, int maxRetries, long canRetryUntil) {
