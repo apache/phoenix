@@ -98,10 +98,12 @@ public class CoprocessorHConnectionTableFactoryTest extends BaseUniqueNamesOwnCl
     conn.createStatement().execute("CREATE INDEX " + index1Name + " ON " + tableName + "(v1)");
     List<HRegionInfo> regions = admin.getTableRegions(TableName.valueOf(tableName));
     final HRegionInfo regionInfo = regions.get(0);
+
     writeToTable(tableName, conn, noOfOrgs);
     int beforeRegionCloseCount = getActiveConnections(regionServer, conf);
+    int regionsCount = admin.getOnlineRegions(regionServer.getServerName()).size();
     admin.unassign(regionInfo.getEncodedNameAsBytes(), true);
-    getUtility().waitUntilAllRegionsAssigned(TableName.valueOf(tableName));
+    while(!(admin.getOnlineRegions(regionServer.getServerName()).size() < regionsCount));
     int afterRegionCloseCount = getActiveConnections(regionServer, conf);
     assertTrue("Cached connections not closed when region closes: ",
     afterRegionCloseCount == beforeRegionCloseCount && afterRegionCloseCount > 0);
