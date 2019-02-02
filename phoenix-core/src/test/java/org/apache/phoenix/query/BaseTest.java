@@ -1926,4 +1926,27 @@ public abstract class BaseTest {
             Thread.sleep(100);
         }
     }
+
+    /**
+     * It always unassign first region of table.
+     * @param tableName move region of table.
+     * @throws IOException
+     */
+    protected static void unassignRegionAsync(final String tableName) throws IOException {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                    try {
+                        final HBaseAdmin admin = utility.getHBaseAdmin();
+                        final HRegionInfo tableRegion =
+                                admin.getTableRegions(TableName.valueOf(tableName)).get(0);
+                        admin.unassign(tableRegion.getRegionName(), false);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
+    }
 }
