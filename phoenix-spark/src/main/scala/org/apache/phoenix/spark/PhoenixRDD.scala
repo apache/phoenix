@@ -83,6 +83,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
     PhoenixConfigurationUtil.setInputClass(config, classOf[PhoenixRecordWritable])
     PhoenixConfigurationUtil.setInputTableName(config, table)
+    PhoenixConfigurationUtil.setPropertyPolicyProviderDisabled(config);
 
     if(!columns.isEmpty) {
       PhoenixConfigurationUtil.setSelectColumnNames(config, columns.toArray)
