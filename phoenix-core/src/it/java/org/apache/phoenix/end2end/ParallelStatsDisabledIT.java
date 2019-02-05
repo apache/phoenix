@@ -47,7 +47,7 @@ import static org.junit.Assert.fail;
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
-    public static final void doSetup() throws Exception {
+    public static void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
 
