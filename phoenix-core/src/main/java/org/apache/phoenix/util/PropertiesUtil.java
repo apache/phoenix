@@ -18,6 +18,7 @@
 package org.apache.phoenix.util;
 
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -25,6 +26,8 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 
 public class PropertiesUtil {
 
@@ -55,7 +58,7 @@ public class PropertiesUtil {
     public static Properties combineProperties(Properties props, final Configuration conf) {
         return combineProperties(props, conf, Collections.<String>emptySet());
     }
-    
+
     public static Properties combineProperties(Properties props, final Configuration conf, Set<String> withoutTheseProps) {
         Iterator<Map.Entry<String, String>> iterator = conf.iterator();
         Properties copy = deepCopy(props);
