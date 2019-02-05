@@ -17,8 +17,9 @@
  */
 package org.apache.phoenix.iterate;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.MappedByteBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -36,11 +37,11 @@ import org.apache.phoenix.util.ResultUtil;
 
 import com.google.common.collect.MinMaxPriorityQueue;
 
-public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEntry> {
+public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;
     private final int limit;
 
-    public MappedByteBufferSortedQueue(Comparator<ResultEntry> comparator,
+    public BufferedSortedQueue(Comparator<ResultEntry> comparator,
             Integer limit, int thresholdBytes) throws IOException {
         super(thresholdBytes);
         this.comparator = comparator;
@@ -48,25 +49,25 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
     }
 
     @Override
-    protected org.apache.phoenix.iterate.MappedByteBufferQueue.MappedByteBufferSegmentQueue<ResultEntry> createSegmentQueue(
+    protected BufferedSegmentQueue<ResultEntry> createSegmentQueue(
             int index, int thresholdBytes) {
-        return new MappedByteBufferResultEntryPriorityQueue(index, thresholdBytes, limit, comparator);
+        return new BufferedResultEntryPriorityQueue(index, thresholdBytes, limit, comparator);
     }
 
     @Override
-    protected Comparator<org.apache.phoenix.iterate.MappedByteBufferQueue.MappedByteBufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
-        return new Comparator<MappedByteBufferSegmentQueue<ResultEntry>>() {
+    protected Comparator<BufferedSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
+        return new Comparator<BufferedSegmentQueue<ResultEntry>>() {
             @Override
-            public int compare(MappedByteBufferSegmentQueue<ResultEntry> q1,
-                    MappedByteBufferSegmentQueue<ResultEntry> q2) {
+            public int compare(BufferedSegmentQueue<ResultEntry> q1,
+                    BufferedSegmentQueue<ResultEntry> q2) {
                 return comparator.compare(q1.peek(), q2.peek());
             }};
     }
 
-    private static class MappedByteBufferResultEntryPriorityQueue extends MappedByteBufferSegmentQueue<ResultEntry> {    	
+    private static class BufferedResultEntryPriorityQueue extends BufferedSegmentQueue<ResultEntry> {
         private MinMaxPriorityQueue<ResultEntry> results = null;
         
-    	public MappedByteBufferResultEntryPriorityQueue(int index,
+        public BufferedResultEntryPriorityQueue(int index,
                 int thresholdBytes, int limit, Comparator<ResultEntry> comparator) {
             super(index, thresholdBytes, limit >= 0);
             this.results = limit < 0 ? 
@@ -85,54 +86,54 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
         }
 
         @Override
-        protected void writeToBuffer(MappedByteBuffer buffer, ResultEntry e) {
+        protected void writeToStream(DataOutputStream os, ResultEntry e) throws IOException {
             int totalLen = 0;
             List<KeyValue> keyValues = toKeyValues(e);
             for (KeyValue kv : keyValues) {
                 totalLen += (kv.getLength() + Bytes.SIZEOF_INT);
             }
-            buffer.putInt(totalLen);
+            os.writeInt(totalLen);
             for (KeyValue kv : keyValues) {
-                buffer.putInt(kv.getLength());
-                buffer.put(kv.getBuffer(), kv.getOffset(), kv
+                os.writeInt(kv.getLength());
+                os.write(kv.getBuffer(), kv.getOffset(), kv
                         .getLength());
             }
             ImmutableBytesWritable[] sortKeys = e.sortKeys;
-            buffer.putInt(sortKeys.length);
+            os.writeInt(sortKeys.length);
             for (ImmutableBytesWritable sortKey : sortKeys) {
                 if (sortKey != null) {
-                    buffer.putInt(sortKey.getLength());
-                    buffer.put(sortKey.get(), sortKey.getOffset(),
+                    os.writeInt(sortKey.getLength());
+                    os.write(sortKey.get(), sortKey.getOffset(),
                             sortKey.getLength());
                 } else {
-                    buffer.putInt(0);
+                    os.writeInt(0);
                 }
             }
         }
 
         @Override
-        protected ResultEntry readFromBuffer(MappedByteBuffer buffer) {            
-            int length = buffer.getInt();
+        protected ResultEntry readFromStream(DataInputStream is) throws IOException {
+            int length = is.readInt();
             if (length < 0)
                 return null;
-            
+
             byte[] rb = new byte[length];
-            buffer.get(rb);
+            is.read(rb);
             Result result = ResultUtil.toResult(new ImmutableBytesWritable(rb));
             ResultTuple rt = new ResultTuple(result);
-            int sortKeySize = buffer.getInt();
+            int sortKeySize = is.readInt();
             ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[sortKeySize];
             for (int i = 0; i < sortKeySize; i++) {
-                int contentLength = buffer.getInt();
+                int contentLength = is.readInt();
                 if (contentLength > 0) {
                     byte[] sortKeyContent = new byte[contentLength];
-                    buffer.get(sortKeyContent);
+                    is.read(sortKeyContent);
                     sortKeys[i] = new ImmutableBytesWritable(sortKeyContent);
                 } else {
                     sortKeys[i] = null;
                 }
             }
-            
+
             return new ResultEntry(sortKeys, rt);
         }
 
