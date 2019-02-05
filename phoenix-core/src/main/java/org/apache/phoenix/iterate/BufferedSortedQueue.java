@@ -117,7 +117,7 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
                 return null;
 
             byte[] rb = new byte[length];
-            is.read(rb);
+            is.readFully(rb);
             Result result = ResultUtil.toResult(new ImmutableBytesWritable(rb));
             ResultTuple rt = new ResultTuple(result);
             int sortKeySize = is.readInt();
@@ -126,7 +126,7 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
                 int contentLength = is.readInt();
                 if (contentLength > 0) {
                     byte[] sortKeyContent = new byte[contentLength];
-                    is.read(sortKeyContent);
+                    is.readFully(sortKeyContent);
                     sortKeys[i] = new ImmutableBytesWritable(sortKeyContent);
                 } else {
                     sortKeys[i] = null;
