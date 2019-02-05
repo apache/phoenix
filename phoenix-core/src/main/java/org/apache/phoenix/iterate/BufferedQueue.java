@@ -17,13 +17,15 @@
  */
 package org.apache.phoenix.iterate;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.Closeable;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
 import java.util.AbstractQueue;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -34,26 +36,26 @@ import java.util.UUID;
 import com.google.common.collect.Lists;
 import com.google.common.collect.MinMaxPriorityQueue;
 
-public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
+public abstract class BufferedQueue<T> extends AbstractQueue<T> {
     private final int thresholdBytes;
-    private List<MappedByteBufferSegmentQueue<T>> queues;
+    private List<BufferedSegmentQueue<T>> queues;
     private int currentIndex;
-    private MappedByteBufferSegmentQueue<T> currentQueue;
-    private MinMaxPriorityQueue<MappedByteBufferSegmentQueue<T>> mergedQueue;
+    private BufferedSegmentQueue<T> currentQueue;
+    private MinMaxPriorityQueue<BufferedSegmentQueue<T>> mergedQueue;
 
-    public MappedByteBufferQueue(int thresholdBytes) {
+    public BufferedQueue(int thresholdBytes) {
         this.thresholdBytes = thresholdBytes;
-        this.queues = Lists.<MappedByteBufferSegmentQueue<T>> newArrayList();
+        this.queues = Lists.<BufferedSegmentQueue<T>> newArrayList();
         this.currentIndex = -1;
         this.currentQueue = null;
         this.mergedQueue = null;
     }
     
-    abstract protected MappedByteBufferSegmentQueue<T> createSegmentQueue(int index, int thresholdBytes);
+    abstract protected BufferedSegmentQueue<T> createSegmentQueue(int index, int thresholdBytes);
     
-    abstract protected Comparator<MappedByteBufferSegmentQueue<T>> getSegmentQueueComparator();
+    abstract protected Comparator<BufferedSegmentQueue<T>> getSegmentQueueComparator();
     
-    protected final List<MappedByteBufferSegmentQueue<T>> getSegmentQueues() {
+    protected final List<BufferedSegmentQueue<T>> getSegmentQueues() {
         return queues.subList(0, currentIndex + 1);
     }
 
@@ -77,7 +79,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     public T poll() {
         initMergedQueue();
         if (mergedQueue != null && !mergedQueue.isEmpty()) {
-            MappedByteBufferSegmentQueue<T> queue = mergedQueue.poll();
+            BufferedSegmentQueue<T> queue = mergedQueue.poll();
             T re = queue.poll();
             if (queue.peek() != null) {
                 mergedQueue.add(queue);
@@ -98,7 +100,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     
     @Override
     public void clear() {
-        for (MappedByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+        for (BufferedSegmentQueue<T> queue : getSegmentQueues()) {
             queue.clear();
         }
         currentIndex = -1;
@@ -114,7 +116,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     @Override
     public int size() {
         int size = 0;
-        for (MappedByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+        for (BufferedSegmentQueue<T> queue : getSegmentQueues()) {
             size += queue.size();
         }
         return size;
@@ -125,7 +127,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     }
 
     public void close() {
-        for (MappedByteBufferSegmentQueue<T> queue : queues) {
+        for (BufferedSegmentQueue<T> queue : queues) {
             queue.close();
         }
         queues.clear();
@@ -133,9 +135,9 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     
     private void initMergedQueue() {
         if (mergedQueue == null && currentIndex >= 0) {
-            mergedQueue = MinMaxPriorityQueue.<MappedByteBufferSegmentQueue<T>> orderedBy(
+            mergedQueue = MinMaxPriorityQueue.<BufferedSegmentQueue<T>> orderedBy(
                     getSegmentQueueComparator()).maximumSize(currentIndex + 1).create();
-            for (MappedByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+            for (BufferedSegmentQueue<T> queue : getSegmentQueues()) {
                 T re = queue.peek();
                 if (re != null) {
                     mergedQueue.add(queue);
@@ -144,17 +146,14 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
         }        
     }
 
-    public abstract static class MappedByteBufferSegmentQueue<T> extends AbstractQueue<T> {
+    public abstract static class BufferedSegmentQueue<T> extends AbstractQueue<T> {
         protected static final int EOF = -1;
-        // at least create 128 KB MappedByteBuffers
-        private static final long DEFAULT_MAPPING_SIZE = 128 * 1024;
         
         private final int index;
         private final int thresholdBytes;
         private final boolean hasMaxQueueSize;
         private long totalResultSize = 0;
         private int maxResultSize = 0;
-        private long mappingSize = 0;
         private File file;
         private boolean isClosed = false;
         private boolean flushBuffer = false;
@@ -164,7 +163,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
         // iterators to close on close()
         private List<SegmentQueueFileIterator> iterators;
 
-        public MappedByteBufferSegmentQueue(int index, int thresholdBytes, boolean hasMaxQueueSize) {
+        public BufferedSegmentQueue(int index, int thresholdBytes, boolean hasMaxQueueSize) {
             this.index = index;
             this.thresholdBytes = thresholdBytes;
             this.hasMaxQueueSize = hasMaxQueueSize;
@@ -173,8 +172,8 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
         
         abstract protected Queue<T> getInMemoryQueue();
         abstract protected int sizeOf(T e);
-        abstract protected void writeToBuffer(MappedByteBuffer buffer, T e);
-        abstract protected T readFromBuffer(MappedByteBuffer buffer);
+        abstract protected void writeToStream(DataOutputStream out, T e) throws IOException;
+        abstract protected T readFromStream(DataInputStream in) throws IOException;
         
         public int index() {
             return this.index;
@@ -253,7 +252,6 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
             getInMemoryQueue().clear();
             this.totalResultSize = 0;
             this.maxResultSize = 0;
-            this.mappingSize = 0;
             this.flushBuffer = false;
             this.flushedCount = 0;
             this.current = null;
@@ -303,38 +301,25 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
             totalResultSize = hasMaxQueueSize ? maxResultSize * inMemQueue.size() : (totalResultSize + resultSize);
             if (totalResultSize >= thresholdBytes) {
                 this.file = File.createTempFile(UUID.randomUUID().toString(), null);
-                RandomAccessFile af = new RandomAccessFile(file, "rw");
-                FileChannel fc = af.getChannel();
-                int writeIndex = 0;
-                mappingSize = Math.min(Math.max(maxResultSize, DEFAULT_MAPPING_SIZE), totalResultSize);
-                MappedByteBuffer writeBuffer = fc.map(MapMode.READ_WRITE, writeIndex, mappingSize);
-
-                int resSize = inMemQueue.size();
-                for (int i = 0; i < resSize; i++) {                
-                    T e = inMemQueue.poll();
-                    writeToBuffer(writeBuffer, e);
-                    // buffer close to exhausted, re-map.
-                    if (mappingSize - writeBuffer.position() < maxResultSize) {
-                        writeIndex += writeBuffer.position();
-                        writeBuffer = fc.map(MapMode.READ_WRITE, writeIndex, mappingSize);
+                try (DataOutputStream out = new DataOutputStream(
+                        new BufferedOutputStream(new FileOutputStream(file)))) {
+                    int resSize = inMemQueue.size();
+                    for (int i = 0; i < resSize; i++) {
+                        T e = inMemQueue.poll();
+                        writeToStream(out, e);
                     }
+                    out.writeInt(EOF); // end
+                    flushedCount = resSize;
+                    inMemQueue.clear();
+                    flushBuffer = true;
                 }
-                writeBuffer.putInt(EOF); // end
-                fc.force(true);
-                fc.close();
-                af.close();
-                flushedCount = resSize;
-                inMemQueue.clear();
-                flushBuffer = true;
             }
         }
         
         private class SegmentQueueFileIterator implements Iterator<T>, Closeable {
             private boolean isEnd;
             private long readIndex;
-            private RandomAccessFile af;
-            private FileChannel fc;
-            private MappedByteBuffer readBuffer;
+            private DataInputStream in;
             private T next;
             
             public SegmentQueueFileIterator() {
@@ -354,9 +339,8 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
                 this.readIndex = readIndex;
                 this.next = null;
                 try {
-                    this.af = new RandomAccessFile(file, "r");
-                    this.fc = af.getChannel();
-                    this.readBuffer = fc.map(MapMode.READ_ONLY, readIndex, mappingSize);
+                    this.in = new DataInputStream(
+                            new BufferedInputStream(new FileInputStream(file)));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -384,23 +368,17 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
             private T readNext() {
                 if (isEnd)
                     return null;
-                
-                T e = readFromBuffer(readBuffer);
+
+                T e = null;
+                try {
+                    e = readFromStream(in);
+                } catch (IOException ex) {
+                  throw new RuntimeException(ex);
+                }
                 if (e == null) {
                     close();
                     return null;
                 }
-                
-                // buffer close to exhausted, re-map.
-                if (mappingSize - readBuffer.position() < maxResultSize) {
-                    readIndex += readBuffer.position();
-                    try {
-                        readBuffer = fc.map(MapMode.READ_ONLY, readIndex, mappingSize);
-                    } catch (IOException ex) {
-                        throw new RuntimeException(ex);
-                    }
-                }
-                
                 return e;
             }
 
@@ -412,18 +390,9 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
             @Override
             public void close() {
                 this.isEnd = true;
-                if (this.fc != null) {
-                    try {
-                        this.fc.close();
-                    } catch (IOException ignored) {
-                    }
-                }
-                if (this.af != null) {
-                    try {
-                        this.af.close();
-                    } catch (IOException ignored) {
-                    }
-                    this.af = null;
+                try {
+                    this.in.close();
+                } catch (IOException ignored) {
                 }
             }
         }

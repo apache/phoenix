@@ -20,8 +20,9 @@ package org.apache.phoenix.execute;
 import static org.apache.phoenix.util.NumberUtil.add;
 import static org.apache.phoenix.util.NumberUtil.getMin;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.MappedByteBuffer;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -51,7 +52,7 @@ import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
-import org.apache.phoenix.iterate.MappedByteBufferQueue;
+import org.apache.phoenix.iterate.BufferedQueue;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
@@ -293,7 +294,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         private ValueBitSet lhsBitSet;
         private ValueBitSet rhsBitSet;
         private byte[] emptyProjectedValue;
-        private MappedByteBufferTupleQueue queue;
+        private BufferedTupleQueue queue;
         private Iterator<Tuple> queueIterator;
         
         public BasicJoinIterator(ResultIterator lhsIterator, ResultIterator rhsIterator) {
@@ -315,7 +316,7 @@ public class SortMergeJoinPlan implements QueryPlan {
             int len = lhsBitSet.getEstimatedLength();
             this.emptyProjectedValue = new byte[len];
             lhsBitSet.toBytes(emptyProjectedValue, 0);
-            this.queue = new MappedByteBufferTupleQueue(thresholdBytes);
+            this.queue = new BufferedTupleQueue(thresholdBytes);
             this.queueIterator = null;
         }
         
@@ -609,24 +610,24 @@ public class SortMergeJoinPlan implements QueryPlan {
         }
     }
     
-    private static class MappedByteBufferTupleQueue extends MappedByteBufferQueue<Tuple> {
+    private static class BufferedTupleQueue extends BufferedQueue<Tuple> {
 
-        public MappedByteBufferTupleQueue(int thresholdBytes) {
+        public BufferedTupleQueue(int thresholdBytes) {
             super(thresholdBytes);
         }
 
         @Override
-        protected MappedByteBufferSegmentQueue<Tuple> createSegmentQueue(
+        protected BufferedSegmentQueue<Tuple> createSegmentQueue(
                 int index, int thresholdBytes) {
-            return new MappedByteBufferTupleSegmentQueue(index, thresholdBytes, false);
+            return new BufferedTupleSegmentQueue(index, thresholdBytes, false);
         }
 
         @Override
-        protected Comparator<MappedByteBufferSegmentQueue<Tuple>> getSegmentQueueComparator() {
-            return new Comparator<MappedByteBufferSegmentQueue<Tuple>>() {
+        protected Comparator<BufferedSegmentQueue<Tuple>> getSegmentQueueComparator() {
+            return new Comparator<BufferedSegmentQueue<Tuple>>() {
                 @Override
-                public int compare(MappedByteBufferSegmentQueue<Tuple> q1, 
-                        MappedByteBufferSegmentQueue<Tuple> q2) {
+                public int compare(BufferedSegmentQueue<Tuple> q1,
+                        BufferedSegmentQueue<Tuple> q2) {
                     return q1.index() - q2.index();
                 }                
             };
@@ -635,7 +636,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         @Override
         public Iterator<Tuple> iterator() {
             return new Iterator<Tuple>() {
-                private Iterator<MappedByteBufferSegmentQueue<Tuple>> queueIter;
+                private Iterator<BufferedSegmentQueue<Tuple>> queueIter;
                 private Iterator<Tuple> currentIter;
                 {
                     this.queueIter = getSegmentQueues().iterator();
@@ -668,10 +669,10 @@ public class SortMergeJoinPlan implements QueryPlan {
             };
         }
         
-        private static class MappedByteBufferTupleSegmentQueue extends MappedByteBufferSegmentQueue<Tuple> {
+        private static class BufferedTupleSegmentQueue extends BufferedSegmentQueue<Tuple> {
             private LinkedList<Tuple> results;
             
-            public MappedByteBufferTupleSegmentQueue(int index,
+            public BufferedTupleSegmentQueue(int index,
                     int thresholdBytes, boolean hasMaxQueueSize) {
                 super(index, thresholdBytes, hasMaxQueueSize);
                 this.results = Lists.newLinkedList();
@@ -688,23 +689,22 @@ public class SortMergeJoinPlan implements QueryPlan {
                 return Bytes.SIZEOF_INT * 2 + kv.getLength();
             }
 
-            @SuppressWarnings("deprecation")
             @Override
-            protected void writeToBuffer(MappedByteBuffer buffer, Tuple e) {
+            protected void writeToStream(DataOutputStream out, Tuple e) throws IOException {
                 KeyValue kv = KeyValueUtil.ensureKeyValue(e.getValue(0));
-                buffer.putInt(kv.getLength() + Bytes.SIZEOF_INT);
-                buffer.putInt(kv.getLength());
-                buffer.put(kv.getBuffer(), kv.getOffset(), kv.getLength());
+                out.writeInt(kv.getLength() + Bytes.SIZEOF_INT);
+                out.writeInt(kv.getLength());
+                out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
             }
 
             @Override
-            protected Tuple readFromBuffer(MappedByteBuffer buffer) {
-                int length = buffer.getInt();
+            protected Tuple readFromStream(DataInputStream in) throws IOException {
+                int length = in.readInt();
                 if (length < 0)
                     return null;
                 
                 byte[] b = new byte[length];
-                buffer.get(b);
+                in.read(b);
                 Result result = ResultUtil.toResult(new ImmutableBytesWritable(b));
                 return new ResultTuple(result);
             }
