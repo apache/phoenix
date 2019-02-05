@@ -245,7 +245,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
         // Filter user provided properties based on property policy, if
         // provided.
-        PropertyPolicyProvider.getPropertyPolicy().evaluate(info);
+        PropertyPolicyProvider.getPropertyPolicy().evaluate(PropertiesUtil.removeStandardHBasePhoenixConfig(info));
 
         // Copy so client cannot change
         this.info = info == null ? new Properties() : PropertiesUtil
