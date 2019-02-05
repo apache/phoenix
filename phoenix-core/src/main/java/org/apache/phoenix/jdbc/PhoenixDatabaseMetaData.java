@@ -721,23 +721,23 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         try {
         boolean isTenantSpecificConnection = connection.getTenantId() != null;
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
+        // Allow a "." in columnNamePattern for column family match
+        String colPattern = null;
+        String cfPattern = null;
+        if (columnNamePattern != null && columnNamePattern.length() > 0) {
+            int index = columnNamePattern.indexOf('.');
+            if (index <= 0) {
+                colPattern = columnNamePattern;
+            } else {
+                cfPattern = columnNamePattern.substring(0, index);
+                if (columnNamePattern.length() > index+1) {
+                    colPattern = columnNamePattern.substring(index+1);
+                }
+            }
+        }
         ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
         while (rs.next()) {
             String schemaName = rs.getString(TABLE_SCHEM);
-            // Allow a "." in columnNamePattern for column family match
-            String colPattern = null;
-            String cfPattern = null;
-            if (columnNamePattern != null && columnNamePattern.length() > 0) {
-                int index = columnNamePattern.indexOf('.');
-                if (index <= 0) {
-                    colPattern = columnNamePattern;
-                } else {
-                    cfPattern = columnNamePattern.substring(0, index);
-                    if (columnNamePattern.length() > index+1) {
-                        colPattern = columnNamePattern.substring(index+1);
-                    }
-                }
-            }
             String tableName = rs.getString(TABLE_NAME);
             String tenantId = rs.getString(TABLE_CAT);
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -1148,25 +1148,25 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (tableName == null || tableName.length() == 0) {
             return emptyResultSet;
         }
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+        boolean isSalted = table.getBucketNum() != null;
+        boolean tenantColSkipped = false;
+        List<PColumn> pkColumns = table.getPKColumns();
+        List<PColumn> sorderPkColumns =
+                Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
+        // sort the columns by name
+        Collections.sort(sorderPkColumns, new Comparator<PColumn>(){
+            @Override public int compare(PColumn c1, PColumn c2) {
+                return c1.getName().getString().compareTo(c2.getName().getString());
+            }
+        });
+
         try {
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
         ResultSet rs = getTables(catalog, schemaName, tableName, null);
         while (rs.next()) {
             String tenantId = rs.getString(TABLE_CAT);
-            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-            PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
-            boolean isSalted = table.getBucketNum() != null;
-            boolean tenantColSkipped = false;
-            List<PColumn> pkColumns = table.getPKColumns();
-            List<PColumn> sorderPkColumns =
-                    Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
-            // sort the columns by name
-            Collections.sort(sorderPkColumns, new Comparator<PColumn>(){
-                @Override public int compare(PColumn c1, PColumn c2) {
-                    return c1.getName().getString().compareTo(c2.getName().getString());
-                }
-            });
-            
             for (PColumn column : sorderPkColumns) {
                 String columnName = column.getName().getString();
                 // generate row key
