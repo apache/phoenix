@@ -704,7 +704,7 @@ public class SortMergeJoinPlan implements QueryPlan {
                     return null;
                 
                 byte[] b = new byte[length];
-                in.read(b);
+                in.readFully(b);
                 Result result = ResultUtil.toResult(new ImmutableBytesWritable(b));
                 return new ResultTuple(result);
             }
