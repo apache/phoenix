@@ -5284,4 +5284,222 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
+
+    @Test
+    public void testSortMergeJoinPushFilterThroughSortBug5105() throws Exception {
+        Connection conn = null;
+        try {
+            conn= DriverManager.getConnection(getUrl());
+
+            String tableName1="MERGE1";
+            String tableName2="MERGE2";
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName1);
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName2);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            //test for simple scan
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid where b.code > 50";
+
+            QueryPlan queryPlan=getQueryPlan(conn, sql);
+            SortMergeJoinPlan sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            ClientScanPlan lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            OrderBy orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            ScanPlan innerScanPlan=(ScanPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AGE"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 3);
+
+            ClientScanPlan rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            String tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
+            String rewrittenSql = "SELECT "+tableAlias+".BID,"+tableAlias+".CODE FROM (SELECT BID,CODE FROM MERGE2  ORDER BY CODE LIMIT 1) "+tableAlias+" WHERE "+tableAlias+".CODE > 50 ORDER BY "+tableAlias+".BID";
+            assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("BID"));
+            innerScanPlan=(ScanPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("CODE"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 1);
+
+            //test for aggregate
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.codesum from (select aid,sum(age) agesum from "+tableName1+" where age >=11 and age<=33 group by aid order by agesum limit 3) a inner join "+
+                "(select bid,sum(code) codesum from "+tableName2+" group by bid order by codesum limit 1) b on a.aid=b.bid where b.codesum > 50";
+
+
+            queryPlan=getQueryPlan(conn, sql);
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            AggregatePlan innerAggregatePlan=(AggregatePlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(AGE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
+            rewrittenSql = "SELECT "+tableAlias+".BID,"+tableAlias+".CODESUM FROM (SELECT BID, SUM(CODE) CODESUM FROM MERGE2  GROUP BY BID ORDER BY CODESUM LIMIT 1) "+tableAlias+" WHERE "+tableAlias+".CODESUM > 50 ORDER BY "+tableAlias+".BID";
+            assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("BID"));
+            innerAggregatePlan=(AggregatePlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(CODE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 1);
+
+            String tableName3="merge3";
+            conn.createStatement().execute("DROP TABLE if exists "+tableName3);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName3+" ( "+
+                    "CID INTEGER PRIMARY KEY,"+
+                    "REGION INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            //test for join
+            sql="select t1.aid,t1.code,t2.region from "+
+                "(select a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 order by b.code limit 3) t1 inner join "+
+                "(select a.aid,c.region from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 order by c.region desc limit 1) t2 on t1.aid=t2.aid "+
+                "where t1.code > 50";
+
+            PhoenixPreparedStatement phoenixPreparedStatement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+            queryPlan = phoenixPreparedStatement.optimizeQuery(sql);
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            tableAlias = lhsOuterPlan.getTableRef().getTableAlias();
+            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".CODE FROM (SELECT A.AID,B.CODE FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) ORDER BY B.CODE LIMIT 3) "+
+                           tableAlias+" WHERE "+tableAlias+".CODE > 50 ORDER BY "+tableAlias+".AID";
+            assertTrue(lhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerScanPlan=(ScanPlan)((HashJoinPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("B.CODE"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerScanPlan=(ScanPlan)((HashJoinPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("C.REGION DESC"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 1);
+
+            //test for join and aggregate
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by regionsum desc limit 2) t2 on t1.aid=t2.aid "+
+                "where t1.codesum >=40 and t2.regionsum >= 90";
+
+            phoenixPreparedStatement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+            queryPlan = phoenixPreparedStatement.optimizeQuery(sql);
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            tableAlias = lhsOuterPlan.getTableRef().getTableAlias();
+            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".CODESUM FROM (SELECT A.AID, SUM(B.CODE) CODESUM FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) GROUP BY A.AID ORDER BY CODESUM LIMIT 3) "+tableAlias+
+                           " WHERE "+tableAlias+".CODESUM >= 40 ORDER BY "+tableAlias+".AID";
+            assertTrue(lhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(B.CODE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
+            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".REGIONSUM FROM (SELECT A.AID, SUM(C.REGION) REGIONSUM FROM MERGE1 A  Inner JOIN MERGE3 C  ON (A.AID = C.CID) WHERE (C.REGION >= 77 AND C.REGION <= 99) GROUP BY A.AID ORDER BY REGIONSUM DESC LIMIT 2) "+tableAlias+
+                           " WHERE "+tableAlias+".REGIONSUM >= 90 ORDER BY "+tableAlias+".AID";
+            assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(C.REGION) DESC"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 2);
+
+            //test for if SubselectRewriter.isOrderByPrefix had take effect
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by a.aid,codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by a.aid desc,regionsum desc limit 2) t2 on t1.aid=t2.aid "+
+                 "where t1.codesum >=40 and t2.regionsum >= 90 order by t1.aid desc";
+
+            phoenixPreparedStatement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+            queryPlan = phoenixPreparedStatement.optimizeQuery(sql);
+            orderBy=queryPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("T1.AID DESC"));
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan = (ClientScanPlan)(((TupleProjectionPlan)sortMergeJoinPlan.getLhsPlan()).getDelegate());
+            tableAlias = lhsOuterPlan.getTableRef().getTableAlias();
+            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".CODESUM FROM (SELECT A.AID, SUM(B.CODE) CODESUM FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) GROUP BY A.AID ORDER BY A.AID,CODESUM LIMIT 3) "+tableAlias+
+                           " WHERE "+tableAlias+".CODESUM >= 40";
+            assertTrue(lhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 2);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("A.AID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("SUM(B.CODE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
+            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".REGIONSUM FROM (SELECT A.AID, SUM(C.REGION) REGIONSUM FROM MERGE1 A  Inner JOIN MERGE3 C  ON (A.AID = C.CID) WHERE (C.REGION >= 77 AND C.REGION <= 99) GROUP BY A.AID ORDER BY A.AID DESC,REGIONSUM DESC LIMIT 2) "+tableAlias+
+                           " WHERE "+tableAlias+".REGIONSUM >= 90 ORDER BY "+tableAlias+".AID";
+            assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
+
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 2);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("A.AID DESC"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("SUM(C.REGION) DESC"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 2);
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
 }
