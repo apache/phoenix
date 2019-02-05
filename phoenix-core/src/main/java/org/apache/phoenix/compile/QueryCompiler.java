@@ -221,7 +221,7 @@ public class QueryCompiler {
             QueryPlan plan = compileSubquery(subquery, false);
             PTable projectedTable = table.createProjectedTable(plan.getProjector());
             context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), subquery.getUdfParseNodes()));
-            return new TupleProjectionPlan(plan, new TupleProjector(plan.getProjector()), table.compilePostFilterExpression(context));
+            return new TupleProjectionPlan(plan, new TupleProjector(plan.getProjector()), null);
         }
 
         List<JoinCompiler.Strategy> strategies = joinTable.getApplicableJoinStrategies();
@@ -320,7 +320,7 @@ public class QueryCompiler {
                 }
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
                 QueryPlan plan = compileSingleFlatQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin(), null, !table.isSubselect() && projectPKColumns ? tupleProjector : null, true);
-                Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, table);
+                Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
                 Integer limit = null;
                 Integer offset = null;
                 if (!query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
@@ -373,7 +373,7 @@ public class QueryCompiler {
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), rhs.getUdfParseNodes()));
                 QueryPlan rhsPlan = compileSingleFlatQuery(context, rhs, binds, asSubquery, !asSubquery && type == JoinType.Right, null, !rhsTable.isSubselect() && projectPKColumns ? tupleProjector : null, true);
-                Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, rhsTable);
+                Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
                 Integer limit = null;
                 Integer offset = null;
                 if (!rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
