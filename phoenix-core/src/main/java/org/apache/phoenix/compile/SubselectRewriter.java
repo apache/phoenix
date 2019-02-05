@@ -27,8 +27,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -38,6 +36,7 @@ import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.OffsetNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableNode;
@@ -57,25 +56,142 @@ public class SubselectRewriter extends ParseNodeRewriter {
     private final Map<String, ParseNode> aliasMap;
     private boolean removeAlias = false;
     
-    public static SelectStatement applyPostFilters(SelectStatement statement, List<ParseNode> postFilters, String subqueryAlias) throws SQLException {
-        if (postFilters.isEmpty())
+    public static SelectStatement applyPreFiltersForSubselect(SelectStatement statement, List<ParseNode> preFilterParseNodes, String subqueryAlias) throws SQLException {
+        if (preFilterParseNodes.isEmpty())
             return statement;
         
         assert(isPostFilterConvertible(statement));
         
-        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyPostFilters(statement, postFilters);
+        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyPreFilters(statement, preFilterParseNodes);
     }
     
     public static boolean isPostFilterConvertible(SelectStatement statement) throws SQLException {
         return statement.getLimit() == null && (!statement.isAggregate() || !statement.getGroupBy().isEmpty());        
     }
     
-    public static SelectStatement applyOrderBy(SelectStatement statement, List<OrderByNode> orderBy, String subqueryAlias,TableNode tableNode) throws SQLException {
-        if (orderBy == null)
-            return statement;
-        
-        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyOrderBy(statement, orderBy, tableNode);
-    }
+    /**
+     * <pre>
+     * only append orderByNodes and postFilters, the optimization is left to {@link #flatten(SelectStatement, SelectStatement)}.
+     * an example :
+     * when the subselectStatment is : (SELECT reverse(loc_id), \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE + " LIMIT 5) AS supp
+     * orderByNodes is  : supp.\"supplier_id\"
+     * postFilterParseNodes is : supp.name != 'S1'
+     * we rewrite the subselectStatment as :
+     * (SELECT $2.$3,$2."supplier_id",$2.NAME FROM (SELECT  REVERSE(LOC_ID) $3,"supplier_id",NAME FROM SUPPLIERTABLE  LIMIT 5) $2 WHERE $2.NAME != 'S1' ORDER BY $2."supplier_id") AS supp
+     *
+     * </pre>
+     * @param subselectStatement
+     * @param orderByNodes
+     * @param subselectTableAliasName
+     * @param postFilterParseNodes
+     * @return
+     * @throws SQLException
+     */
+    public static SelectStatement applyOrderByAndPostFilters(
+            SelectStatement subselectStatement,
+            List<OrderByNode> orderByNodes,
+            String subselectTableAliasName,
+            List<ParseNode> postFilterParseNodes) throws SQLException {
+
+       if(orderByNodes == null) {
+           orderByNodes = Collections.emptyList();
+       }
+
+       if(postFilterParseNodes == null) {
+           postFilterParseNodes = Collections.emptyList();
+       }
+
+       if(orderByNodes.isEmpty() && postFilterParseNodes.isEmpty()) {
+           return subselectStatement;
+       }
+
+       List<AliasedNode> subselectAliasedNodes = subselectStatement.getSelect();
+       List<AliasedNode> newOuterSelectAliasedNodes = new ArrayList<AliasedNode>(subselectAliasedNodes.size());
+       Map<String,ParseNode> subselectAliasFullNameToNewColumnParseNode = new HashMap<String,ParseNode>();
+
+       String newSubselectTableAliasName = ParseNodeFactory.createTempAlias();
+       List<AliasedNode> newSubselectAliasedNodes = null;
+       int index = 0;
+       for (AliasedNode subselectAliasedNode : subselectAliasedNodes) {
+           String aliasName = subselectAliasedNode.getAlias();
+           ParseNode aliasParseNode = subselectAliasedNode.getNode();
+           if (aliasName == null) {
+               aliasName = aliasParseNode.getAlias();
+           }
+           if(aliasName == null) {
+               //if there is no alias,we generate a new alias,
+               //and added the new alias to the old subselectAliasedNodes
+               aliasName = ParseNodeFactory.createTempAlias();
+               if(newSubselectAliasedNodes == null) {
+                   newSubselectAliasedNodes = new ArrayList<AliasedNode>(subselectAliasedNodes.size());
+                   if(index > 0) {
+                       newSubselectAliasedNodes.addAll(subselectAliasedNodes.subList(0, index));
+                   }
+               }
+               newSubselectAliasedNodes.add(NODE_FACTORY.aliasedNode(aliasName, aliasParseNode));
+           } else {
+               if(newSubselectAliasedNodes != null) {
+                   newSubselectAliasedNodes.add(subselectAliasedNode);
+               }
+           }
+
+           ColumnParseNode newColumnParseNode = NODE_FACTORY.column(
+                   NODE_FACTORY.table(null, newSubselectTableAliasName),
+                   aliasName,
+                   aliasName);
+           subselectAliasFullNameToNewColumnParseNode.put(
+                   SchemaUtil.getColumnName(subselectTableAliasName, SchemaUtil.normalizeIdentifier(aliasName)),
+                   newColumnParseNode);
+           AliasedNode newOuterSelectAliasNode = NODE_FACTORY.aliasedNode(null, newColumnParseNode);
+           newOuterSelectAliasedNodes.add(newOuterSelectAliasNode);
+           index++;
+       }
+
+       SubselectRewriter rewriter = new SubselectRewriter(subselectAliasFullNameToNewColumnParseNode);
+       List<OrderByNode> rewrittenOrderByNodes = null;
+       if(orderByNodes.size() > 0) {
+           rewrittenOrderByNodes = new ArrayList<OrderByNode>(orderByNodes.size());
+           for (OrderByNode orderByNode : orderByNodes) {
+               ParseNode parseNode = orderByNode.getNode();
+               rewrittenOrderByNodes.add(NODE_FACTORY.orderBy(
+                       parseNode.accept(rewriter),
+                       orderByNode.isNullsLast(),
+                       orderByNode.isAscending()));
+           }
+       }
+
+       ParseNode newWhereParseNode = null;
+       if(postFilterParseNodes.size() > 0) {
+           List<ParseNode> rewrittenPostFilterParseNodes =
+                   new ArrayList<ParseNode>(postFilterParseNodes.size());
+           for(ParseNode postFilterParseNode : postFilterParseNodes) {
+               rewrittenPostFilterParseNodes.add(postFilterParseNode.accept(rewriter));
+           }
+           newWhereParseNode = combine(rewrittenPostFilterParseNodes);
+       }
+
+       SelectStatement subselectStatementToUse = subselectStatement;
+       if(newSubselectAliasedNodes != null) {
+           subselectStatementToUse = NODE_FACTORY.select(subselectStatement, subselectStatement.isDistinct(), newSubselectAliasedNodes);
+       }
+
+       return NODE_FACTORY.select(
+               NODE_FACTORY.derivedTable(newSubselectTableAliasName, subselectStatementToUse),
+               HintNode.EMPTY_HINT_NODE,
+               false,
+               newOuterSelectAliasedNodes,
+               newWhereParseNode,
+               null,
+               null,
+               rewrittenOrderByNodes,
+               null,
+               null,
+               0,
+               false,
+               subselectStatementToUse.hasSequence(),
+               Collections.<SelectStatement> emptyList(),
+               subselectStatementToUse.getUdfParseNodes());
+   }
     
     public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection) throws SQLException {
         TableNode from = select.getFrom();
@@ -113,6 +229,73 @@ public class SubselectRewriter extends ParseNodeRewriter {
         }
     }
     
+    private SubselectRewriter(Map<String, ParseNode> selectAliasFullNameToAliasParseNode) {
+        super(null, selectAliasFullNameToAliasParseNode.size());
+        this.tableAlias = null;
+        this.aliasMap = selectAliasFullNameToAliasParseNode;
+    }
+
+    /**
+     * if the OrderBy of outerSelectStatement is prefix of innerSelectStatement,
+     * we can remove the OrderBy of outerSelectStatement.
+     * @param outerSelectStatement
+     * @param innerSelectStatement
+     * @return
+     * @throws SQLException
+     */
+    private SelectStatement removeOuterSelectStatementOrderByIfNecessary(
+            SelectStatement outerSelectStatement, SelectStatement innerSelectStatement) throws SQLException {
+        if(outerSelectStatement.isDistinct() ||
+           outerSelectStatement.isAggregate() ||
+           (outerSelectStatement.getGroupBy() != null && !outerSelectStatement.getGroupBy().isEmpty()) ||
+           outerSelectStatement.isJoin() ||
+           outerSelectStatement.isUnion()) {
+            return outerSelectStatement;
+        }
+
+        List<OrderByNode> outerOrderByNodes = outerSelectStatement.getOrderBy();
+        if(outerOrderByNodes == null || outerOrderByNodes.isEmpty()) {
+            return outerSelectStatement;
+        }
+
+        if(this.isOuterOrderByNodesPrefixOfInner(innerSelectStatement.getOrderBy(), outerOrderByNodes)) {
+            return NODE_FACTORY.select(outerSelectStatement, (List<OrderByNode>)null);
+        }
+        return outerSelectStatement;
+    }
+
+    /**
+     * check if outerOrderByNodes is prefix of innerOrderByNodes.
+     * @param selectStatement
+     * @param outerOrderByNodes
+     * @return
+     */
+    private boolean isOuterOrderByNodesPrefixOfInner(
+            List<OrderByNode> innerOrderByNodes,
+            List<OrderByNode> outerOrderByNodes) throws SQLException {
+
+        assert outerOrderByNodes != null && outerOrderByNodes.size() > 0;
+
+        if(innerOrderByNodes == null || outerOrderByNodes.size() > innerOrderByNodes.size()) {
+            return false;
+        }
+
+        Iterator<OrderByNode> innerOrderByNodeIter = innerOrderByNodes.iterator();
+        for(OrderByNode outerOrderByNode : outerOrderByNodes) {
+            ParseNode outerOrderByParseNode = outerOrderByNode.getNode();
+            OrderByNode rewrittenOuterOrderByNode = NODE_FACTORY.orderBy(
+                    outerOrderByParseNode.accept(this),
+                    outerOrderByNode.isNullsLast(),
+                    outerOrderByNode.isAscending());
+            assert innerOrderByNodeIter.hasNext();
+            OrderByNode innerOrderByNode = innerOrderByNodeIter.next();
+            if(!innerOrderByNode.equals(rewrittenOuterOrderByNode)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private SelectStatement flatten(SelectStatement select, SelectStatement subselect) throws SQLException {
         // Replace aliases in sub-select first.
         subselect = ParseNodeRewriter.rewrite(subselect, this);
@@ -130,7 +313,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         ParseNode where = select.getWhere();
         if (where != null) {
             if (subselect.getLimit() != null || (subselect.isAggregate() && subselect.getGroupBy().isEmpty())) {
-                return select;
+                return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
             }
             ParseNode postFilter = where.accept(this);
             if (subselect.getGroupBy().isEmpty()) {
@@ -142,7 +325,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         
         if (select.isDistinct()) {
             if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
-                return select;
+                return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
             }
             isDistinctRewrite = true;
             orderByRewrite = null;
@@ -150,7 +333,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         
         if (select.isAggregate()) {
             if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
-                return select;
+                return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
             }
             isAggregateRewrite = true;
             orderByRewrite = null;
@@ -159,7 +342,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         List<ParseNode> groupBy = select.getGroupBy();
         if (!groupBy.isEmpty()) {
             if (subselect.getLimit() != null || subselect.isAggregate() || subselect.isDistinct()) {
-                return select;
+                return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
             }
             groupByRewrite = Lists.<ParseNode>newArrayListWithExpectedSize(groupBy.size());
             for (ParseNode node : groupBy) {
@@ -191,7 +374,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         List<OrderByNode> orderBy = select.getOrderBy();
         if (!orderBy.isEmpty()) {
             if (subselect.getLimit() != null) {
-                return select;
+                return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
             }
             orderByRewrite = Lists.newArrayListWithExpectedSize(orderBy.size());
             for (OrderByNode orderByNode : orderBy) {
@@ -202,7 +385,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         
         OffsetNode offset = select.getOffset();
         if (offsetRewrite != null || (limitRewrite != null && offset != null)) {
-            return select;
+            return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
         } else {
             offsetRewrite = offset;
         }
@@ -217,7 +400,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
                 if (limitValue != null && limitValueSubselect != null) {
                     limitRewrite = limitValue < limitValueSubselect ? limit : limitRewrite;
                 } else {
-                    return select;
+                    return removeOuterSelectStatementOrderByIfNecessary(select,subselect);
                 }
             }
         }
@@ -237,146 +420,26 @@ public class SubselectRewriter extends ParseNodeRewriter {
         }
         return stmt;
     }
-    
-    private SelectStatement applyPostFilters(SelectStatement statement, List<ParseNode> postFilters) throws SQLException {
-        List<ParseNode> postFiltersRewrite = Lists.<ParseNode>newArrayListWithExpectedSize(postFilters.size());
-        for (ParseNode node : postFilters) {
-            postFiltersRewrite.add(node.accept(this));
+
+    private SelectStatement applyPreFilters(SelectStatement statement, List<ParseNode> preFilterParseNodes) throws SQLException {
+        List<ParseNode> rewrittenPreFilterParseNodes = Lists.<ParseNode>newArrayListWithExpectedSize(preFilterParseNodes.size());
+        for (ParseNode preFilterParseNode : preFilterParseNodes) {
+            rewrittenPreFilterParseNodes.add(preFilterParseNode.accept(this));
         }
         
         if (statement.getGroupBy().isEmpty()) {
             ParseNode where = statement.getWhere();
             if (where != null) {
-                postFiltersRewrite.add(where);
+                rewrittenPreFilterParseNodes.add(where);
             }
-            return NODE_FACTORY.select(statement, combine(postFiltersRewrite));
+            return NODE_FACTORY.select(statement, combine(rewrittenPreFilterParseNodes));
         }
         
         ParseNode having = statement.getHaving();
         if (having != null) {
-            postFiltersRewrite.add(having);
+            rewrittenPreFilterParseNodes.add(having);
         }
-        return NODE_FACTORY.select(statement, statement.getWhere(), combine(postFiltersRewrite));
-    }
-
-    private SelectStatement applyOrderBy(SelectStatement subselectStatement,List<OrderByNode> newOrderByNodes, TableNode subselectAsTableNode) throws SQLException {
-        ArrayList<OrderByNode> rewrittenNewOrderByNodes = Lists.<OrderByNode> newArrayListWithExpectedSize(newOrderByNodes.size());
-        for (OrderByNode newOrderByNode : newOrderByNodes) {
-            ParseNode parseNode = newOrderByNode.getNode();
-            rewrittenNewOrderByNodes.add(NODE_FACTORY.orderBy(
-                    parseNode.accept(this),
-                    newOrderByNode.isNullsLast(),
-                    newOrderByNode.isAscending()));
-        }
-
-        // in these case,we can safely override subselect's orderBy
-        if(subselectStatement.getLimit()==null ||
-           subselectStatement.getOrderBy() == null ||
-           subselectStatement.getOrderBy().isEmpty()) {
-            return NODE_FACTORY.select(subselectStatement, rewrittenNewOrderByNodes);
-        }
-
-        //if rewrittenNewOrderByNodes is prefix of subselectStatement's orderBy,
-        //then subselectStatement no need to modify
-        if(this.isOrderByPrefix(subselectStatement, rewrittenNewOrderByNodes)) {
-            return subselectStatement;
-        }
-
-        //modify the subselect "(select id,code from tableName order by code limit 3) as a" to
-        //"(select id,code from (select id,code from tableName order by code limit 3) order by id) as a"
-        List<AliasedNode> newSelectAliasedNodes = createAliasedNodesFromSubselect(subselectStatement,rewrittenNewOrderByNodes);
-        assert subselectAsTableNode instanceof DerivedTableNode;
-        //set the subselect alias to null.
-        subselectAsTableNode=NODE_FACTORY.derivedTable(null, ((DerivedTableNode)subselectAsTableNode).getSelect());
-
-        return NODE_FACTORY.select(
-                subselectAsTableNode,
-                HintNode.EMPTY_HINT_NODE,
-                false,
-                newSelectAliasedNodes,
-                null,
-                null,
-                null,
-                rewrittenNewOrderByNodes,
-                null,
-                null,
-                0,
-                false,
-                subselectStatement.hasSequence(),
-                Collections.<SelectStatement> emptyList(),
-                subselectStatement.getUdfParseNodes());
-    }
-
-    /**
-     * create new aliasedNodes from subSelectStatement's select alias.
-     * @param subSelectStatement
-     * @param rewrittenOrderByNodes
-     * @return
-     */
-    private List<AliasedNode> createAliasedNodesFromSubselect(SelectStatement subSelectStatement,ArrayList<OrderByNode> rewrittenOrderByNodes) throws SQLException {
-        List<AliasedNode> selectAliasedNodes=subSelectStatement.getSelect();
-        List<AliasedNode> newSelectAliasedNodes = new ArrayList<AliasedNode>(selectAliasedNodes.size());
-        Map<ParseNode,Integer> rewrittenOrderByParseNodeToIndex=new HashMap<ParseNode, Integer>(rewrittenOrderByNodes.size());
-        for(int index=0;index < rewrittenOrderByNodes.size();index++) {
-            OrderByNode rewrittenOrderByNode=rewrittenOrderByNodes.get(index);
-            rewrittenOrderByParseNodeToIndex.put(rewrittenOrderByNode.getNode(), Integer.valueOf(index));
-        }
-
-        for (AliasedNode selectAliasedNode : selectAliasedNodes) {
-            String selectAliasName = selectAliasedNode.getAlias();
-            ParseNode oldSelectAliasParseNode = selectAliasedNode.getNode();
-            if (selectAliasName == null) {
-                selectAliasName = SchemaUtil.normalizeIdentifier(oldSelectAliasParseNode.getAlias());
-            }
-            //in order to convert the subselect "select id,sum(code) codesum from table group by id order by codesum limit 3"
-            //to "select id,codesum from (select id,sum(code) codesum from table group by id order by codesum limit 3) order by id"
-            //we must has alias for sum(code)
-            if(selectAliasName== null) {
-                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.SUBQUERY_SELECT_LIST_COLUMN_MUST_HAS_ALIAS)
-                 .setMessage("the subquery is:"+subSelectStatement)
-                 .build()
-                 .buildException();
-            }
-
-            ColumnParseNode newColumnParseNode=NODE_FACTORY.column(null, selectAliasName, selectAliasName);
-            Integer index=rewrittenOrderByParseNodeToIndex.get(oldSelectAliasParseNode);
-            if(index !=null) {
-                //replace the rewrittenOrderByNode's child to newColumnParseNode
-                OrderByNode oldOrderByNode=rewrittenOrderByNodes.get(index);
-                rewrittenOrderByNodes.set(index,
-                        NODE_FACTORY.orderBy(
-                                newColumnParseNode,
-                                oldOrderByNode.isNullsLast(),
-                                oldOrderByNode.isAscending()));
-            }
-
-            AliasedNode newSelectAliasNode=NODE_FACTORY.aliasedNode(null,newColumnParseNode);
-            newSelectAliasedNodes.add(newSelectAliasNode);
-        }
-        return newSelectAliasedNodes;
-    }
-
-    /**
-     * check if rewrittenNewOrderByNodes is prefix of selectStatement's order by.
-     * @param selectStatement
-     * @param rewrittenNewOrderByNodes
-     * @return
-     */
-    private boolean isOrderByPrefix(SelectStatement selectStatement,List<OrderByNode> rewrittenNewOrderByNodes) {
-        List<OrderByNode> existingOrderByNodes=selectStatement.getOrderBy();
-        if(rewrittenNewOrderByNodes.size() > existingOrderByNodes.size()) {
-            return false;
-        }
-
-        Iterator<OrderByNode> existingOrderByNodeIter=existingOrderByNodes.iterator();
-        for(OrderByNode rewrittenNewOrderByNode : rewrittenNewOrderByNodes) {
-            assert existingOrderByNodeIter.hasNext();
-            OrderByNode existingOrderByNode=existingOrderByNodeIter.next();
-            if(!existingOrderByNode.equals(rewrittenNewOrderByNode)) {
-                return false;
-            }
-        }
-        return true;
+        return NODE_FACTORY.select(statement, statement.getWhere(), combine(rewrittenPreFilterParseNodes));
     }
 
     @Override

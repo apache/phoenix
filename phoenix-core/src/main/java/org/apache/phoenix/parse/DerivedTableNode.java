@@ -54,6 +54,7 @@ public class DerivedTableNode extends TableNode {
         buf.append('(');
         select.toSQL(resolver, buf);
         buf.append(')');
+        buf.append(" " + (this.getAlias() == null ? "" : this.getAlias()));
     }
 
     @Override
