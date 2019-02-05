@@ -70,7 +70,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                 Mockito.spy(driver.getConnectionQueryServices(getUrl(),
                     PropertiesUtil.deepCopy(TEST_PROPERTIES)));
         Properties props = new Properties();
-        props.putAll(PhoenixEmbeddedDriver.DEFFAULT_PROPS.asMap());
+        props.putAll(PhoenixEmbeddedDriver.DEFAULT_PROPS.asMap());
 
         try (Connection conn1 = connectionQueryServices.connect(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : connectionQueryServices.connect(getUrl(), props)) {
