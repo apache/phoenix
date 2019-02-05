@@ -19,7 +19,6 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
-import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
@@ -37,7 +36,6 @@ import javax.annotation.concurrent.Immutable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -50,7 +48,6 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.LoggerFactory;
@@ -85,7 +82,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     public final static String MINOR_VERSION_PROP = "DriverMinorVersion";
     public final static String DRIVER_NAME_PROP = "DriverName";
     
-    public static final ReadOnlyProps DEFFAULT_PROPS = new ReadOnlyProps(
+    public static final ReadOnlyProps DEFAULT_PROPS = new ReadOnlyProps(
             ImmutableMap.of(
                     MAJOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MAJOR_VERSION),
                     MINOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MINOR_VERSION),
@@ -95,7 +92,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     }
     
     protected ReadOnlyProps getDefaultProps() {
-        return DEFFAULT_PROPS;
+        return DEFAULT_PROPS;
     }
     
     abstract public QueryServices getQueryServices() throws SQLException;
