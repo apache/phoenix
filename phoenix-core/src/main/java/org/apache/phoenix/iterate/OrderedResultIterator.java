@@ -208,7 +208,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
         List<Expression> expressions = Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
         final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
         try{
-            final MappedByteBufferSortedQueue queueEntries = new MappedByteBufferSortedQueue(comparator, limit,
+            final BufferedSortedQueue queueEntries = new BufferedSortedQueue(comparator, limit,
                     thresholdBytes);
             resultIterator = new PeekingResultIterator() {
                 int count = 0;
