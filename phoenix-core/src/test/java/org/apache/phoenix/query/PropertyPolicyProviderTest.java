@@ -49,4 +49,14 @@ public class PropertyPolicyProviderTest extends BaseConnectionlessQueryTest{
         Connection conn = DriverManager.getConnection(getUrl(),properties);
         ){}
     }
+
+    @Test
+    public void testDisablePropertyPolicyProvider() throws SQLException {
+        Properties properties=new Properties();
+        properties.put("DisallowedProperty","value");
+        properties.put(QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED, "false");
+        try(
+                Connection conn = DriverManager.getConnection(getUrl(), properties)
+        ){}
+    }
 }
