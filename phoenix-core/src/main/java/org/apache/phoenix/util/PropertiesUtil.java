@@ -18,6 +18,7 @@
 package org.apache.phoenix.util;
 
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -25,6 +26,8 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 
 public class PropertiesUtil {
 
@@ -55,7 +58,7 @@ public class PropertiesUtil {
     public static Properties combineProperties(Properties props, final Configuration conf) {
         return combineProperties(props, conf, Collections.<String>emptySet());
     }
-    
+
     public static Properties combineProperties(Properties props, final Configuration conf, Set<String> withoutTheseProps) {
         Iterator<Map.Entry<String, String>> iterator = conf.iterator();
         Properties copy = deepCopy(props);
@@ -69,6 +72,29 @@ public class PropertiesUtil {
             }
         }
         return copy;
+    }
+
+    /**
+     * Removes properties present that are present in standard HBase configuration and standard Phoenix properties
+     */
+    public static Properties removeStandardHBasePhoenixConfig(Properties props) {
+        Configuration config = HBaseConfiguration.create();
+        Properties normalizedProps  = new Properties();
+        for(Entry entry: props.entrySet()) {
+            if ( entry.getKey() instanceof String) {
+                String propName = (String) entry.getKey();
+                if (config.get(propName) == null
+                        && PhoenixEmbeddedDriver.DEFAULT_PROPS.get(propName) == null
+                        && !propName.equals(PhoenixRuntime.CURRENT_SCN_ATTRIB)
+                        && !propName.equals(PhoenixRuntime.TENANT_ID_ATTRIB)) {
+                    normalizedProps.put(propName, props.getProperty(propName));
+                }
+            }
+            else {
+                normalizedProps.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return normalizedProps;
     }
 
    /**

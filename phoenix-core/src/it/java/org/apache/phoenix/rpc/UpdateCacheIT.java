@@ -192,7 +192,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
 		// use a spyed ConnectionQueryServices so we can verify calls to getTable
 		ConnectionQueryServices connectionQueryServices = Mockito.spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
 		Properties props = new Properties();
-		props.putAll(PhoenixEmbeddedDriver.DEFFAULT_PROPS.asMap());
+		props.putAll(PhoenixEmbeddedDriver.DEFAULT_PROPS.asMap());
 		Connection conn = connectionQueryServices.connect(getUrl(), props);
 		try {
 			conn.setAutoCommit(false);
