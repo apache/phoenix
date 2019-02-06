@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.stats;
 import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -30,6 +31,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Array;
 import java.sql.Connection;
@@ -47,6 +49,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
  * Tests the behavior of stats collection code when stats are disabled on server side
  * explicitly using QueryServices#STATS_COLLECTION_ENABLED property
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
 
     private static final Log LOG = LogFactory.getLog(NoOpStatsCollectorIT.class);
@@ -90,6 +93,7 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         try {
             stmt.execute(updateStatisticsSql);
+            Assert.fail("Update Statistics SQL should have failed");
         } catch (SQLException e) {
             Assert.assertEquals("StatsCollectionDisabledOnServerException expected",
                     1401, e.getErrorCode());
