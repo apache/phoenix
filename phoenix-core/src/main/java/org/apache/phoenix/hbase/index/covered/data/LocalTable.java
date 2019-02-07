@@ -70,14 +70,15 @@ public class LocalTable implements LocalHBaseState {
         s.setTimeRange(0,ts);
     }
     Region region = this.env.getRegion();
-    RegionScanner scanner = region.getScanner(s);
-    List<Cell> kvs = new ArrayList<Cell>(1);
-    boolean more = scanner.next(kvs);
-    assert !more : "Got more than one result when scanning" + " a single row in the primary table!";
+    try (RegionScanner scanner = region.getScanner(s)) {
+      List<Cell> kvs = new ArrayList<Cell>(1);
+      boolean more = scanner.next(kvs);
+      assert !more : "Got more than one result when scanning"
+          + " a single row in the primary table!";
 
-    Result r = Result.create(kvs);
-    scanner.close();
-    return r;
+      Result r = Result.create(kvs);
+      return r;
+    }
   }
 
     // Returns the smallest timestamp in the given cell lists.
