@@ -47,7 +47,6 @@ import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -91,6 +90,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     static final Option IMPORT_COLUMNS_OPT = new Option("c", "import-columns", true, "Comma-separated list of columns to be imported");
     static final Option IGNORE_ERRORS_OPT = new Option("g", "ignore-errors", false, "Ignore input errors");
     static final Option HELP_OPT = new Option("h", "help", false, "Show this help and quit");
+    static final Option SKIP_HEADER_OPT = new Option("k", "skip-header", false, "Skip the first line of CSV files (the header)");
 
     /**
      * Set configuration values based on parsed command line options.
@@ -114,6 +114,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         options.addOption(IMPORT_COLUMNS_OPT);
         options.addOption(IGNORE_ERRORS_OPT);
         options.addOption(HELP_OPT);
+        options.addOption(SKIP_HEADER_OPT);
         return options;
     }
 
@@ -205,6 +206,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                 conf.set(entry.getKey(), entry.getValue());
             }
         }
+        // Skip the first line of the CSV file(s)?
+        if (cmdLine.hasOption(SKIP_HEADER_OPT.getOpt())) {
+            PhoenixTextInputFormat.setSkipHeader(conf);
+        }
 
         final Connection conn = QueryUtil.getConnection(conf);
         if (LOG.isDebugEnabled()) {
@@ -282,7 +287,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         FileInputFormat.addInputPaths(job, inputPaths);
         FileOutputFormat.setOutputPath(job, outputPath);
 
-        job.setInputFormatClass(TextInputFormat.class);
+        job.setInputFormatClass(PhoenixTextInputFormat.class);
         job.setMapOutputKeyClass(TableRowkeyPair.class);
         job.setMapOutputValueClass(ImmutableBytesWritable.class);
         job.setOutputKeyClass(TableRowkeyPair.class);
