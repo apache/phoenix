@@ -497,4 +497,37 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.close();
 
     }
+
+    @Test
+    public void testIgnoreCsvHeader() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE13 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream = fs.create(new Path("/tmp/input13.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream)) {
+                printWriter.println("id,name");
+                printWriter.println("1,Name 1");
+                printWriter.println("2,Name 2");
+                printWriter.println("3,Name 3");
+            }
+
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+            int exitCode = csvBulkLoadTool.run(new String[] {
+                    "--input", "/tmp/input13.csv",
+                    "--table", "table13",
+                    "--schema", "s",
+                    "--zookeeper", zkQuorum,
+                    "--skip-header"});
+            assertEquals(0, exitCode);
+
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(1) FROM S.TABLE13")) {
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertFalse(rs.next());
+            }
+        }
+    }
 }
