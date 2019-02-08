@@ -277,7 +277,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      * Represents the three different types of rounding expression and produces
      * expressions of their type when given a Decimal key and scale.
      */
-    private static enum RoundingType {
+    private enum RoundingType {
         ROUND("ROUND"),
         FLOOR("FLOOR"),
         CEIL("CEIL");
@@ -315,7 +315,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      * Includes information not kept by CompareFilter.CompareOp, including a string symbol
      * representation and a method for actually comparing comparables.
      */
-    private static enum Relation {
+    private enum Relation {
         EQUAL(CompareOp.EQUAL, "="),
         GREATER(CompareOp.GREATER, ">"),
         GREATER_OR_EQUAL(CompareOp.GREATER_OR_EQUAL, ">="),
