@@ -76,6 +76,7 @@ public class PropertiesUtil {
 
     /**
      * Removes properties present that are present in standard HBase configuration and standard Phoenix properties
+     * These are then evaluated by the PropertyPolicyProvider.
      */
     public static Properties removeStandardHBasePhoenixConfig(Properties props) {
         Configuration config = HBaseConfiguration.create();
@@ -83,10 +84,12 @@ public class PropertiesUtil {
         for(Entry entry: props.entrySet()) {
             if ( entry.getKey() instanceof String) {
                 String propName = (String) entry.getKey();
-                if (config.get(propName) == null
-                        && PhoenixEmbeddedDriver.DEFAULT_PROPS.get(propName) == null
+                // add the property to the normalized list if its not a standard Phoenix property and
+                // if the property is not defined in hbase-site.xml or if it is defined and its value is different
+                if ( PhoenixEmbeddedDriver.DEFAULT_PROPS.get(propName) == null
                         && !propName.equals(PhoenixRuntime.CURRENT_SCN_ATTRIB)
-                        && !propName.equals(PhoenixRuntime.TENANT_ID_ATTRIB)) {
+                        && !propName.equals(PhoenixRuntime.TENANT_ID_ATTRIB)
+                        && (config.get(propName) == null || !config.get(propName).equals(entry.getValue()) )) {
                     normalizedProps.put(propName, props.getProperty(propName));
                 }
             }
