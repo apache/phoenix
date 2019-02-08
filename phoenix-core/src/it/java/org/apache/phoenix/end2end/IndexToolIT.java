@@ -128,7 +128,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                 .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
                         for (boolean directApi : Booleans) {
                             for (boolean useSnapshot : Booleans) {
-                                list.add(new Object[] { transactionProvider, mutable, localIndex, directApi, useSnapshot, false});
+                                list.add(new Object[] { transactionProvider, mutable, localIndex,
+                                        directApi, useSnapshot, false});
                             }
                         }
                     }
@@ -249,15 +250,15 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         Connection connGlobal = DriverManager.getConnection(getUrl(), props);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         Connection connTenant = DriverManager.getConnection(getUrl(), props);
-        String createTableStr = "CREATE TABLE %s (TENANT_ID VARCHAR(15) NOT NULL, ID INTEGER NOT NULL, NAME VARCHAR, "
-                + "CONSTRAINT PK_1 PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
+        String createTblStr = "CREATE TABLE %s (TENANT_ID VARCHAR(15) NOT NULL,ID INTEGER NOT NULL"
+                + ", NAME VARCHAR, CONSTRAINT PK_1 PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
         String createViewStr = "CREATE VIEW %s AS SELECT * FROM %s";
 
         String upsertQueryStr = "UPSERT INTO %s (TENANT_ID, ID, NAME) VALUES('%s' , %d, '%s')";
         String createIndexStr = "CREATE INDEX %s ON %s (NAME) ";
 
         try {
-            String tableStmtGlobal = String.format(createTableStr, dataTableName);
+            String tableStmtGlobal = String.format(createTblStr, dataTableName);
             connGlobal.createStatement().execute(tableStmtGlobal);
 
             String viewStmtTenant = String.format(createViewStr, viewTenantName, dataTableName);
@@ -270,8 +271,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     .execute(String.format(upsertQueryStr, viewTenantName, tenantId, 1, "x"));
             connTenant.commit();
 
-            runIndexTool(true, false, "", viewTenantName, indexNameTenant, tenantId, 0,
-                    new String[0]);
+            runIndexTool(true, false, "", viewTenantName, indexNameTenant,
+                    tenantId, 0, new String[0]);
 
             String selectSql = String.format("SELECT ID FROM %s WHERE NAME='x'", viewTenantName);
             ResultSet rs = connTenant.createStatement().executeQuery("EXPLAIN " + selectSql);
@@ -289,14 +290,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             admin.disableTable(tableName);
             admin.truncateTable(tableName, false);
 
-            runIndexTool(true, false, "", viewTenantName, indexNameTenant, tenantId, 0,
-                    new String[0]);
+            runIndexTool(true, false, "", viewTenantName, indexNameTenant,
+                    tenantId, 0, new String[0]);
+
             Table htable= queryServices.getTable(Bytes.toBytes(viewIndexTableName));
             int count = getUtility().countRows(htable);
             // Confirm index has rows
             assertTrue(count == 1);
 
-            selectSql = String.format("SELECT /*+ INDEX(%s) */ COUNT(*) FROM %s", indexNameTenant, viewTenantName);
+            selectSql = String.format("SELECT /*+ INDEX(%s) */ COUNT(*) FROM %s",
+                    indexNameTenant, viewTenantName);
             rs = connTenant.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
@@ -421,7 +424,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(indexDDL);
 
             // run with 50% sampling rate, split if data table more than 3 regions
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null,"-sp", "50", "-spa", "3");
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,"-sp", "50", "-spa", "3");
 
             assertEquals(targetNumRegions, admin.getTableRegions(indexTN).size());
             List<Cell> values = new ArrayList<>();
