@@ -131,7 +131,7 @@ public class PhoenixQueryBuilder {
             for(String column:columnList) {
                 if(columnMappingMap.containsKey(column)) {
                     newList.add(columnMappingMap.get(column));
-                } else {
+                } else if(!column.isEmpty()){
                     newList.add(column);
                 }
             }
