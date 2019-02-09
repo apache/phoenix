@@ -57,6 +57,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -73,6 +75,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -1368,7 +1371,53 @@ public class ViewIT extends SplitSystemCatalogIT {
         // we should be able to load the second view
         PhoenixRuntime.getTableNoCache(conn, fullViewName2);
     }
-    
+
+    @Test
+    public void testCreateViewFromHBaseTable() throws Exception {
+        String tableNameStr = generateUniqueName();
+        String familyNameStr = generateUniqueName();
+
+        TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(
+                TableName.valueOf(tableNameStr));
+        builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(familyNameStr));
+
+        HBaseTestingUtility testUtil = getUtility();
+        Admin admin = testUtil.getAdmin();
+        admin.createTable(builder.build());
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        //PK is not specified, without where clause
+        try {
+            conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                    "\" (ROWKEY VARCHAR, \"" + familyNameStr + "\".a VARCHAR)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
+        }
+
+        // No error, as PK is specified
+        conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                "\" (ROWKEY VARCHAR PRIMARY KEY, \"" + familyNameStr + "\".a VARCHAR)");
+
+        conn.createStatement().executeUpdate("DROP VIEW \"" + tableNameStr + "\"");
+
+        //PK is not specified, with where clause
+        try {
+            conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                    "\" (ROWKEY VARCHAR, \"" + familyNameStr + "\".a VARCHAR) AS SELECT * FROM \""
+                    + tableNameStr + "\" WHERE ROWKEY = '1'");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
+        }
+
+        conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                "\" (ROWKEY VARCHAR PRIMARY KEY, \"" + familyNameStr + "\".a VARCHAR) AS SELECT " +
+                "* FROM \"" + tableNameStr + "\" WHERE ROWKEY = '1'");
+
+        conn.createStatement().executeUpdate("DROP VIEW \"" + tableNameStr + "\"");
+    }
+
     @Test
     public void testConcurrentViewCreationAndTableDrop() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
