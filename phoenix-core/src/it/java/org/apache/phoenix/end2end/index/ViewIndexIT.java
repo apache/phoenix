@@ -43,10 +43,10 @@ import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.SplitSystemCatalogIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -54,6 +54,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -95,9 +96,37 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         conn.createStatement().execute(ddl + ddlOptions);
         conn.close();
     }
+
+    private void createView(Connection conn, String schemaName, String viewName, String baseTableName) throws SQLException {
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+        String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+        conn.createStatement().execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+        conn.commit();
+    }
+
+    private void createViewIndex(Connection conn, String schemaName, String indexName, String viewName,
+                                 String indexColumn) throws SQLException {
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            conn.commit();
+        }
+        String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullViewName + "(" + indexColumn + ")");
+        conn.commit();
+    }
     
     private Connection getConnection() throws SQLException{
         Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+        return DriverManager.getConnection(getUrl(),props);
+    }
+
+    private Connection getTenantConnection(String tenant) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenant);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return DriverManager.getConnection(getUrl(),props);
     }
@@ -516,5 +545,41 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
                 assertEquals(1, rs.getInt("i4"));
             }
         }
+    }
+
+    @Test
+    public void testGlobalAndTenantViewIndexesHaveDifferentIndexIds() throws Exception {
+        String tableName = "T_" + generateUniqueName();
+        String globalViewName = "V_" + generateUniqueName();
+        String tenantViewName = "TV_" + generateUniqueName();
+        String globalViewIndexName = "GV_" + generateUniqueName();
+        String tenantViewIndexName = "TV_" + generateUniqueName();
+        Connection globalConn = getConnection();
+        Connection tenantConn = getTenantConnection(TENANT1);
+        createBaseTable(SCHEMA1, tableName, true, 0, null);
+        createView(globalConn, SCHEMA1, globalViewName, tableName);
+        createViewIndex(globalConn, SCHEMA1, globalViewIndexName, globalViewName, "v1");
+        createView(tenantConn, SCHEMA1, tenantViewName, tableName);
+        createViewIndex(tenantConn, SCHEMA1, tenantViewIndexName, tenantViewName, "v2");
+
+        PTable globalViewIndexTable = PhoenixRuntime.getTable(globalConn, SCHEMA1 + "." + globalViewIndexName);
+        PTable tenantViewIndexTable = PhoenixRuntime.getTable(tenantConn, SCHEMA1 + "." + tenantViewIndexName);
+        Assert.assertNotNull(globalViewIndexTable);
+        Assert.assertNotNull(tenantViewIndexName);
+        Assert.assertNotEquals(globalViewIndexTable.getViewIndexId(), tenantViewIndexTable.getViewIndexId());
+        globalConn.createStatement().execute("UPSERT INTO " + SchemaUtil.getTableName(SCHEMA1, globalViewName) + " (T_ID, K1, K2) VALUES ('GLOBAL', 'k1', 100)");
+        tenantConn.createStatement().execute("UPSERT INTO " + SchemaUtil.getTableName(SCHEMA1, tenantViewName) + " (T_ID, K1, K2) VALUES ('TENANT', 'k1', 101)");
+
+        assertEquals(1, getRowCountOfView(globalConn, SCHEMA1, globalViewIndexName));
+        assertEquals(1, getRowCountOfView(tenantConn, SCHEMA1, tenantViewName));
+    }
+
+    private int getRowCountOfView(Connection conn, String schemaName, String viewName) throws SQLException {
+      int size = 0;
+      ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + SchemaUtil.getTableName(schemaName, viewName));
+      while (rs.next()){
+        size++;
+      }
+      return size;
     }
 }
