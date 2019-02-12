@@ -622,19 +622,29 @@ public class MetaDataUtil {
     }
 
     public static String getViewIndexSequenceName(PName physicalName, PName tenantId, boolean isNamespaceMapped) {
-        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX + (tenantId == null ? "" : tenantId); }
+        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX; }
         return SchemaUtil.getTableNameFromFullName(physicalName.toString()) + VIEW_INDEX_SEQUENCE_NAME_PREFIX;
     }
 
+    /**
+     *
+     * @param tenantId No longer used, but kept in signature for backwards compatibility
+     * @param physicalName Name of physical view index table
+     * @param nSaltBuckets Number of salt buckets
+     * @param isNamespaceMapped Is namespace mapping enabled
+     * @return SequenceKey for the ViewIndexId
+     */
     public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets,
             boolean isNamespaceMapped) {
-        // Create global sequence of the form: <prefixed base table name><tenant id>
-        // rather than tenant-specific sequence, as it makes it much easier
+        // Create global sequence of the form: <prefixed base table name>.
+        // We can't use a tenant-owned or escaped sequence because of collisions,
+        // with other view indexes that may be global or owned by other tenants that
+        // also use this same physical view index table. It's also much easier
         // to cleanup when the physical table is dropped, as we can delete
         // all global sequences leading with <prefix> + physical name.
         String schemaName = getViewIndexSequenceSchemaName(physicalName, isNamespaceMapped);
-        String tableName = getViewIndexSequenceName(physicalName, PNameFactory.newName(tenantId), isNamespaceMapped);
-        return new SequenceKey(isNamespaceMapped ? tenantId : null, schemaName, tableName, nSaltBuckets);
+        String tableName = getViewIndexSequenceName(physicalName, null, isNamespaceMapped);
+        return new SequenceKey(null, schemaName, tableName, nSaltBuckets);
     }
 
     public static PDataType getViewIndexIdDataType() {
