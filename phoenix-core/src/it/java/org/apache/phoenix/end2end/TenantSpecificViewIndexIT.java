@@ -124,14 +124,16 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         createTableAndValidate(tableName, isNamespaceEnabled);
         String tenantId1 = TENANT1;
         String tenantId2 = TENANT2;
-        createViewAndIndexesWithTenantId(tableName, viewName1, localIndex, tenantId1, isNamespaceEnabled);
-        createViewAndIndexesWithTenantId(tableName, viewName2, localIndex, tenantId2, isNamespaceEnabled);
+        createViewAndIndexesWithTenantId(tableName, viewName1, localIndex, tenantId1, isNamespaceEnabled, 0L);
+        createViewAndIndexesWithTenantId(tableName, viewName2, localIndex, tenantId2, isNamespaceEnabled, 1L);
         
         String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId2), isNamespaceEnabled);
         String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName(tenantId1), isNamespaceEnabled);
+        //IndexIds of the same physical base table should come from the same sequence even if the view indexes
+        //are owned by different tenants.
+        assertEquals(sequenceNameA, sequenceNameB);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
-        verifySequenceValue(isNamespaceEnabled? tenantId2 : null, sequenceNameA, sequenceSchemaName, -9223372036854775807L);
-        verifySequenceValue(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName, -9223372036854775807L);
+        verifySequenceValue(null, sequenceNameA, sequenceSchemaName, Long.MIN_VALUE + 2L);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
@@ -144,12 +146,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         }
         DriverManager.getConnection(getUrl()).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
 
-        verifySequenceNotExists(isNamespaceEnabled? tenantId2 : null, sequenceNameA, sequenceSchemaName);
-        verifySequenceNotExists(isNamespaceEnabled? tenantId1 : null, sequenceNameB, sequenceSchemaName);
+        verifySequenceNotExists(null, sequenceNameA, sequenceSchemaName);
     }
 
     private void createViewAndIndexesWithTenantId(String tableName, String viewName, boolean localIndex, String tenantId,
-            boolean isNamespaceMapped) throws Exception {
+            boolean isNamespaceMapped, long indexIdOffset) throws Exception {
         Properties props = new Properties();
         String indexName = "I_"+ generateUniqueName();
         if (tenantId != null) {
@@ -200,14 +201,15 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from " + viewName + " where col1='f'");
         if (localIndex) {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped) + " [1,'"
+                    + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped) +
+                    " [" + Long.toString(1L + indexIdOffset) + ",'"
                     + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
         } else {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
                         SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes()))
-                    + " [-9223372036854775808,'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
+                    + " [" + Long.toString(Long.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
                     QueryUtil.getExplainPlan(rs));
         }
 

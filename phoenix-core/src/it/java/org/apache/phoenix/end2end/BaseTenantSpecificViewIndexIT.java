@@ -41,7 +41,7 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
     public static final String NON_STRING_TENANT_ID = "1234";
     
     protected Set<Pair<String, String>> tenantViewsToDelete = newHashSet();
-    
+
     protected void testUpdatableView(Integer saltBuckets) throws Exception {
         testUpdatableView(saltBuckets, false);
     }
@@ -53,7 +53,7 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
         Connection conn = createTenantConnection(TENANT1);
         try {
             createAndPopulateTenantView(conn, TENANT1, tableName, "", viewName);
-            createAndVerifyIndex(conn, viewName, tableName, saltBuckets, TENANT1, "", localIndex);
+            createAndVerifyIndex(conn, viewName, tableName, saltBuckets, TENANT1, "", localIndex,0L);
             verifyViewData(conn, viewName, "");
         } finally {
             try { conn.close();} catch (Exception ignored) {}
@@ -93,8 +93,8 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
             createAndPopulateTenantView(conn1, TENANT1, tableName, prefixForTenant1Data, viewName1);
             createAndPopulateTenantView(conn2, TENANT2, tableName, prefixForTenant2Data, viewName2);
             
-            createAndVerifyIndex(conn1, viewName1, tableName, saltBuckets, TENANT1, prefixForTenant1Data, localIndex);
-            createAndVerifyIndex(conn2, viewName2, tableName, saltBuckets, TENANT2, prefixForTenant2Data, localIndex);
+            createAndVerifyIndex(conn1, viewName1, tableName, saltBuckets, TENANT1, prefixForTenant1Data, localIndex,0L);
+            createAndVerifyIndex(conn2, viewName2, tableName, saltBuckets, TENANT2, prefixForTenant2Data, localIndex,1L);
             
             verifyViewData(conn1, viewName1, prefixForTenant1Data);
             verifyViewData(conn2, viewName2, prefixForTenant2Data);
@@ -128,7 +128,7 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
         return viewName;
     }
     
-    private void createAndVerifyIndex(Connection conn, String viewName, String tableName, Integer saltBuckets, String tenantId, String valuePrefix, boolean localIndex) throws SQLException {
+    private void createAndVerifyIndex(Connection conn, String viewName, String tableName, Integer saltBuckets, String tenantId, String valuePrefix, boolean localIndex, Long expectedIndexIdOffset) throws SQLException {
         String indexName = generateUniqueName();
         if(localIndex){
             conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
@@ -140,17 +140,18 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'");
         if(localIndex){
             assertEquals(saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [" + Long.toString(1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER " + tableName + " [1,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER " + tableName + " [" + Long.toString(1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             String expected = saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [-9223372036854775808,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [" + Long.toString(Long.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0,-9223372036854775808,'" + tenantId + "','" + valuePrefix + "v2-1'] - ["+(saltBuckets.intValue()-1)+",-9223372036854775808,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0," + Long.toString(Long.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix +
+                        "v2-1'] - ["+(saltBuckets.intValue()-1)+"," + Long.toString(Long.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
 
                   + "    SERVER FILTER BY FIRST KEY ONLY\n"
                   + "CLIENT MERGE SORT";
