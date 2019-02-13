@@ -95,15 +95,17 @@ public class GuidePostsInfo {
         this.guidePostsCount = guidePostsCount;
         this.rowCounts = Longs.toArray(rowCounts);
         this.byteCounts = Longs.toArray(byteCounts);
-        int estimatedSize = SizedUtil.OBJECT_SIZE 
+        this.gpTimestamps = Longs.toArray(updateTimes);
+        // Those Java equivalents of sizeof() in C/C++, mentioned on the Web, might be overkilled here.
+        int estimatedSize = SizedUtil.OBJECT_SIZE
                 + SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE + guidePosts.getLength() // guidePosts
                 + SizedUtil.INT_SIZE // maxLength
                 + SizedUtil.INT_SIZE // guidePostsCount
                 + SizedUtil.ARRAY_SIZE + this.rowCounts.length * SizedUtil.LONG_SIZE // rowCounts
                 + SizedUtil.ARRAY_SIZE + this.byteCounts.length * SizedUtil.LONG_SIZE // byteCounts
+                + SizedUtil.ARRAY_SIZE + this.gpTimestamps.length * SizedUtil.LONG_SIZE // gpTimestamps
                 + SizedUtil.INT_SIZE; // estimatedSize
         this.estimatedSize = estimatedSize;
-        this.gpTimestamps = Longs.toArray(updateTimes);
     }
     
     public ImmutableBytesWritable getGuidePosts() {
