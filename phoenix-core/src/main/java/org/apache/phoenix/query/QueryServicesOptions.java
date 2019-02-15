@@ -351,6 +351,8 @@ public class QueryServicesOptions {
 
     public static final boolean DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK = false;
 
+    public static final boolean DEFAULT_PROPERTY_POLICY_PROVIDER_ENABLED = true;
+
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
       {
