@@ -47,6 +47,7 @@ import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -211,6 +212,11 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(inputQuery);
         configuration.set(SELECT_STATEMENT, inputQuery);
+    }
+
+    public static void setPropertyPolicyProviderDisabled(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED, "false");
     }
     
     public static void setSchemaType(Configuration configuration, final SchemaType schemaType) {
