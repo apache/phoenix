@@ -24,6 +24,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
+import com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -54,7 +55,10 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -65,6 +69,8 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+
+import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 
 /**
  * An MR job to verify that the index table is in sync with the data table.
@@ -111,6 +117,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private static final Option OUTPUT_PATH_OPTION =
             new Option("op", "output-path", true, "Output path where the files are written");
     private static final Option OUTPUT_MAX = new Option("om", "output-max", true, "Max number of invalid rows to output per mapper.  Defaults to 1M");
+    private static final Option TENANT_ID_OPTION = new Option("tenant", "tenant-id", true,
+            "If specified, uses Tenant connection for tenant view index scrutiny (optional)");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_SCRUTINY_[%s]_[%s]";
 
     /**
@@ -145,6 +153,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         options.addOption(TIMESTAMP);
         options.addOption(BATCH_SIZE_OPTION);
         options.addOption(SOURCE_TABLE_OPTION);
+        options.addOption(TENANT_ID_OPTION);
         return options;
     }
 
@@ -202,10 +211,11 @@ public class IndexScrutinyTool extends Configured implements Tool {
         private String basePath;
         private long scrutinyExecuteTime;
         private long outputMaxRows; // per mapper
+        private String tenantId;
 
         public JobFactory(Connection connection, Configuration configuration, long batchSize,
                 boolean useSnapshot, long ts, boolean outputInvalidRows, OutputFormat outputFormat,
-                String basePath, long outputMaxRows) {
+                String basePath, long outputMaxRows, String tenantId) {
             this.outputInvalidRows = outputInvalidRows;
             this.outputFormat = outputFormat;
             this.basePath = basePath;
@@ -214,12 +224,16 @@ public class IndexScrutinyTool extends Configured implements Tool {
             this.connection = connection;
             this.configuration = configuration;
             this.useSnapshot = useSnapshot;
+            this.tenantId = tenantId;
             this.ts = ts; // CURRENT_SCN to set
             scrutinyExecuteTime = EnvironmentEdgeManager.currentTimeMillis(); // time at which scrutiny was run.
                                                               // Same for
             // all jobs created from this factory
             PhoenixConfigurationUtil.setScrutinyExecuteTimestamp(configuration,
                 scrutinyExecuteTime);
+            if (!Strings.isNullOrEmpty(tenantId)) {
+                PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
+            }
         }
 
         public Job createSubmittableJob(String schemaName, String indexTable, String dataTable,
@@ -362,10 +376,17 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 printHelpAndExit(e.getMessage(), getOptions());
             }
             final Configuration configuration = HBaseConfiguration.addHbaseResources(getConf());
+            boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
+            String tenantId = null;
+            if (useTenantId) {
+                tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
+                configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                LOG.info(String.format("IndexScrutinyTool uses a tenantId %s", tenantId));
+            }
             connection = ConnectionUtil.getInputConnection(configuration);
             final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             final String dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
-            final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
+            String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             String basePath = cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
@@ -388,7 +409,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                             : EnvironmentEdgeManager.currentTimeMillis() - 60000;
 
             if (indexTable != null) {
-                if (!isValidIndexTable(connection, qDataTable, indexTable)) {
+                if (!IndexTool.isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
                     throw new IllegalArgumentException(String
                             .format(" %s is not an index table for %s ", indexTable, qDataTable));
                 }
@@ -420,7 +441,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 outputFormat, outputMaxRows));
             JobFactory jobFactory =
                     new JobFactory(connection, configuration, batchSize, useSnapshot, ts,
-                            outputInvalidRows, outputFormat, basePath, outputMaxRows);
+                            outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId);
             // If we are running the scrutiny with both tables as the source, run two separate jobs,
             // one for each direction
             if (SourceTable.BOTH.equals(sourceTable)) {
@@ -479,38 +500,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
     @VisibleForTesting
     public List<Job> getJobs() {
         return jobs;
-    }
-
-    /**
-     * Checks for the validity of the index table passed to the job.
-     * @param connection
-     * @param masterTable
-     * @param indexTable
-     * @return
-     * @throws SQLException
-     */
-    private boolean isValidIndexTable(final Connection connection, final String masterTable,
-            final String indexTable) throws SQLException {
-        final DatabaseMetaData dbMetaData = connection.getMetaData();
-        final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
-        final String tableName =
-                SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
-
-        ResultSet rs = null;
-        try {
-            rs = dbMetaData.getIndexInfo("", schemaName, tableName, false, false);
-            while (rs.next()) {
-                final String indexName = rs.getString(6);
-                if (indexTable.equalsIgnoreCase(indexName)) {
-                    return true;
-                }
-            }
-        } finally {
-            if (rs != null) {
-                rs.close();
-            }
-        }
-        return false;
     }
 
     public static void main(final String[] args) throws Exception {
