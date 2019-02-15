@@ -244,8 +244,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
 
         // Filter user provided properties based on property policy, if
-        // provided.
-        PropertyPolicyProvider.getPropertyPolicy().evaluate(PropertiesUtil.removeStandardHBasePhoenixConfig(info));
+        // provided and QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED is true
+        if (Boolean.valueOf(info.getProperty(QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED,
+                String.valueOf(QueryServicesOptions.DEFAULT_PROPERTY_POLICY_PROVIDER_ENABLED)))) {
+            PropertyPolicyProvider.getPropertyPolicy().evaluate(info);
+        }
 
         // Copy so client cannot change
         this.info = info == null ? new Properties() : PropertiesUtil
