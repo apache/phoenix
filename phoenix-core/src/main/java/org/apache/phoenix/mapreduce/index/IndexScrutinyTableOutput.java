@@ -26,6 +26,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
