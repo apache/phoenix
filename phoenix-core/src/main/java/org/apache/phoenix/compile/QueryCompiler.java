@@ -20,6 +20,9 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -30,11 +33,13 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
@@ -47,7 +52,9 @@ import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.execute.UnionPlan;
+import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -600,7 +607,7 @@ public class QueryCompiler {
                 }
             }
         }
-
+        serializeUnnestArrayInformationAndSetInScan(context,select.getUnnestArrayKVRefs());
         if (projectedTable != null) {
             TupleProjector.serializeProjectorIntoScan(context.getScan(),
                     new TupleProjector(projectedTable), wildcardIncludesDynamicCols &&
@@ -644,5 +651,34 @@ public class QueryCompiler {
         }
 
         return plan;
+    }
+
+    private static void serializeUnnestArrayInformationAndSetInScan(StatementContext context, List<ColumnExpression> unnestArrayKVRefs)
+            throws SQLException {
+        //TODO Allow multiple column to be UNNEST
+        if(unnestArrayKVRefs.size()>0) {
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            try {
+                DataOutputStream output = new DataOutputStream(stream);
+                //Write the column list to be unnested
+                WritableUtils.writeVInt(output, unnestArrayKVRefs.size());
+                for (ColumnExpression expression : unnestArrayKVRefs) {
+                    WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
+                    expression.write(output);
+                }
+
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } finally {
+                try {
+                    stream.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }
+
+            context.getScan().setAttribute(BaseScannerRegionObserver.UNNEST_ARRAY, stream.toByteArray());
+        }
     }
 }

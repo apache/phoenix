@@ -97,14 +97,14 @@ public class OrderByCompiler {
         // for ungroupedAggregates as GROUP BY expression, check against an empty group by
         ExpressionCompiler compiler;
         if (groupBy.isUngroupedAggregate()) {
-            compiler = new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY) {
+            compiler = new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY,statement.getUnnestArrayKVRefs()) {
                 @Override
                 protected Expression addExpression(Expression expression) {return expression;}
                 @Override
                 protected void addColumn(PColumn column) {}
             };
         } else {
-            compiler = new ExpressionCompiler(context, groupBy);
+            compiler = new ExpressionCompiler(context, groupBy, statement.getUnnestArrayKVRefs());
         }
 
         if(groupBy != GroupBy.EMPTY_GROUP_BY) {

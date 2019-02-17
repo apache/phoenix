@@ -17,7 +17,11 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
@@ -34,13 +38,19 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.expression.ColumnExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ScanUtil;
@@ -67,6 +77,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
+    public static final String UNNEST_ARRAY = "_UnnestArray";
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
     * Needed for backward compatibility purposes. TODO: get rid of this in next major release.
@@ -342,6 +353,46 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
         return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
+    }
+
+    public static RegionScanner getUnnestArrayRegionScanner(final RegionScanner s, final Scan scan, final ImmutableBytesWritable ptr, final PTable.QualifierEncodingScheme encodingScheme){
+        List<ColumnExpression> unnestArrayKVRefs = new ArrayList<>();
+        ArrayElemRefExpression[] unnestArrayKVExpr = deserializeUnnestExpressionInfoFromScan(scan, unnestArrayKVRefs);
+        if(unnestArrayKVExpr == null){
+            return s;
+        }
+        return new UnnestArrayRegionScanner(unnestArrayKVRefs,unnestArrayKVExpr,ptr,s,scan,encodingScheme);
+    }
+
+    private static ArrayElemRefExpression[] deserializeUnnestExpressionInfoFromScan(Scan scan, List<ColumnExpression> unnestArrayKVRefs){
+        byte[] unnestArrayExprInfo = scan.getAttribute(BaseScannerRegionObserver.UNNEST_ARRAY);
+        if(unnestArrayExprInfo == null){
+            return null;
+        }
+        ByteArrayInputStream stream = new ByteArrayInputStream(unnestArrayExprInfo);
+        try {
+            DataInputStream input = new DataInputStream(stream);
+            int unnestArrayKVRefSize = WritableUtils.readVInt(input);
+            for(int i = 0;i < unnestArrayKVRefSize; i++){
+                ColumnExpression kvExp = (ColumnExpression) ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+                kvExp.readFields(input);
+                unnestArrayKVRefs.add(kvExp);
+            }
+            ArrayElemRefExpression[] expr = new ArrayElemRefExpression[unnestArrayKVRefSize];
+            for(int i = 0; i<unnestArrayKVRefSize; i++){
+                List<Expression> e = Arrays.asList(unnestArrayKVRefs.get(i));
+                expr[i] = new ArrayElemRefExpression(e);
+            }
+            return expr;
+        } catch(IOException e){
+            throw new RuntimeException(e);
+        } finally{
+            try {
+                stream.close();
+            }catch(IOException e){
+                throw new RuntimeException(e);
+            }
+        }
     }
 
 }

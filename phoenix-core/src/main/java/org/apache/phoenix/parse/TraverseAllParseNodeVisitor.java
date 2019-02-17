@@ -221,4 +221,10 @@ public abstract class TraverseAllParseNodeVisitor<T> extends BaseParseNodeVisito
         enterParseNode(node);
         return true;
     }
+
+    @Override
+    public boolean visitEnter(UnnestArrayParseNode node) throws SQLException{
+        enterParseNode(node);
+        return true;
+    }
 }

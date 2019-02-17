@@ -283,4 +283,14 @@ abstract public class UnsupportedAllParseNodeVisitor<E> extends BaseParseNodeVis
     public E visitLeave(ArrayAllComparisonNode node, List<E> l) throws SQLException {
         throw new SQLFeatureNotSupportedException(node.toString());
     }
+
+    @Override
+    public boolean visitEnter(UnnestArrayParseNode node) throws SQLException{
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
+
+    @Override
+    public E visitLeave(UnnestArrayParseNode node, List<E> l) throws  SQLException{
+        throw new SQLFeatureNotSupportedException(node.toString());
+    }
 }

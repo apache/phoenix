@@ -176,6 +176,9 @@ public abstract class ExplainTable {
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
+        if (scan.getAttribute(BaseScannerRegionObserver.UNNEST_ARRAY) != null){
+            planSteps.add("    SERVER UNNEST ARRAY");
+        }
         groupBy.explain(planSteps, groupByLimit);
         if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");

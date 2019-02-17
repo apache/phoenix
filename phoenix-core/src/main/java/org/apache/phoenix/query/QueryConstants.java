@@ -86,7 +86,9 @@ public interface QueryConstants {
     
     public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = RESERVED_COLUMN_FAMILY_BYTES;
     public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(2);
-    
+
+    public static final int UNNEST_VALUE_COLUMN_QUALIFIER_BASE = 3;
+
     public final static PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
     public final static PName SINGLE_COLUMN_FAMILY_NAME = PNameFactory.newNormalizedName("s");
     public final static byte[] SINGLE_COLUMN = SINGLE_COLUMN_NAME.getBytes();
