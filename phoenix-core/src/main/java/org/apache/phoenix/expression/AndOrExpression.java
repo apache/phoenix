@@ -73,7 +73,17 @@ public abstract class AndOrExpression extends BaseCompoundExpression {
                     // Short circuit if we see our stop value
                     if (isStopValue((Boolean) PBoolean.INSTANCE.toObject(ptr, child.getDataType()))) {
                         return true;
-                    } else if (partialEvalState != null) {
+                    // The partialEvalState saves us computation if we know that the child expression was already
+                    // evaluated for a different cell and did not result in a stop value. Assuming expression results
+                    // are binary (true or false), we could safely skip re-evaluation when processing other cells.
+                    //
+                    // However, if the ptr was empty then the expression evaluation result is treated as NULL instead of
+                    // either true or false.  Therefore it is not safe to skip re-evaluation of the child expression in
+                    // this case.  An example is "column2" = 2 AND ("column1" = 1 OR "column1" = 1).  If "column1"
+                    // results in an empty ptr, when re-evaluating the AndOrExpression against the cell for "column2",
+                    // we would skip both re-evaluations of "column1" = 1 and only use the result of "column2" = 2,
+                    // which would incorrectly match rows with empty byte arrays for "column1".
+                    } else if (partialEvalState != null && ptr.getLength() > 0) {
                         partialEvalState.set(i);
                     }
                 } else {
