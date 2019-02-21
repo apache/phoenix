@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -121,6 +122,7 @@ public class TableDDLPermissionsIT extends BasePermissionsIT{
         }
     }
 
+    @Ignore
     @Test
     public void testAutomaticGrantWithIndexAndView() throws Throwable {
         startNewMiniCluster();

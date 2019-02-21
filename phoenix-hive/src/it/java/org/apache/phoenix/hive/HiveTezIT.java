@@ -20,8 +20,10 @@ package org.apache.phoenix.hive;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
 
+@Ignore("Tez is not supported in CDH")
 @Category(NeedsOwnMiniClusterTest.class)
 public class HiveTezIT extends HivePhoenixStoreIT {
 

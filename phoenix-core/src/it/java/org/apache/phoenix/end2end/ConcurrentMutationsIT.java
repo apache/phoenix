@@ -608,6 +608,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Ignore
     @Test
     public void testDeleteRowAndUpsertValueAtSameTS1() throws Exception {
         try {

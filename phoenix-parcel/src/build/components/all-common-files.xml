@@ -1,0 +1,84 @@
+<?xml version='1.0'?>
+<!--
+
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+
+-->
+<component>
+
+  <fileSets>
+
+    <!-- Executable files from bin directory  -->
+    <fileSet>
+      <directory>${project.basedir}/src/parcel/bin</directory>
+      <outputDirectory>${parcel.folder}/bin</outputDirectory>
+      <fileMode>0755</fileMode>
+      <directoryMode>0755</directoryMode>
+      <filtered>false</filtered>
+      <includes>
+        <include>*</include>
+      </includes>
+    </fileSet>
+    <!-- Meta files -->
+    <fileSet>
+      <directory>${project.basedir}/src/parcel/meta</directory>
+      <outputDirectory>${parcel.folder}/meta</outputDirectory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+      <filtered>true</filtered>
+      <includes>
+        <include>*</include>
+      </includes>
+    </fileSet>
+
+    <!-- lib/bin files -->
+    <fileSet>
+      <directory>${project.basedir}/../bin</directory>
+      <outputDirectory>${parcel.folder}/lib/phoenix/bin</outputDirectory>
+      <fileMode>0755</fileMode>
+      <directoryMode>0755</directoryMode>
+      <filtered>false</filtered>
+      <excludes>
+        <exclude>hbase-site.xml</exclude>
+      </excludes>
+    </fileSet>
+    <!-- lib/dev files -->
+    <fileSet>
+      <directory>${project.basedir}/../dev</directory>
+      <outputDirectory>${parcel.folder}/lib/phoenix/dev</outputDirectory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+      <filtered>false</filtered>
+      <includes>
+        <include>*</include>
+      </includes>
+    </fileSet>
+    <!-- lib/examples files -->
+    <fileSet>
+      <directory>${project.basedir}/../examples</directory>
+      <outputDirectory>${parcel.folder}/lib/phoenix/examples</outputDirectory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+      <filtered>false</filtered>
+      <includes>
+        <include>*</include>
+      </includes>
+    </fileSet>
+
+  </fileSets>
+</component>

@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexCodec.ColumnEntry;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -145,6 +146,7 @@ public class TestCoveredColumnIndexCodec {
    * Test that we get back the correct index updates for a given column group
    * @throws Exception on failure
    */
+  @Ignore
   @Test
   public void testGeneratedIndexUpdates() throws Exception {
     ColumnGroup group = new ColumnGroup("test-column-group");

@@ -133,9 +133,9 @@ public class BaseHivePhoenixStoreIT {
                 return;
             }
 
-            QTestProcessExecResult result = qt.checkCliDriverResults(fname);
-            if (result.getReturnCode() != 0) {
-              qt.failedDiff(result.getReturnCode(), fname, result.getCapturedOutput());
+            int returnCode = qt.checkCliDriverResults(fname);
+            if (returnCode != 0) {
+              qt.failedDiff(returnCode, fname, null);
             }
             qt.clearPostTestEffects();
 

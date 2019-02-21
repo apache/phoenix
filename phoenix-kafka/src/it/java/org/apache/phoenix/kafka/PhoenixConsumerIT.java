@@ -29,10 +29,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import kafka.admin.RackAwareMode;
+import kafka.admin.RackAwareMode$;
 import org.I0Itec.zkclient.ZkClient;
 import org.apache.flume.Context;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.utils.Time;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.flume.DefaultKeyGenerator;
 import org.apache.phoenix.flume.FlumeConstants;
@@ -50,7 +53,6 @@ import kafka.server.KafkaConfig;
 import kafka.server.KafkaServer;
 import kafka.utils.MockTime;
 import kafka.utils.TestUtils;
-import kafka.utils.Time;
 import kafka.utils.ZKStringSerializer$;
 import kafka.utils.ZkUtils;
 import kafka.zk.EmbeddedZookeeper;
@@ -81,16 +83,17 @@ public class PhoenixConsumerIT extends BaseHBaseManagedTimeIT {
         brokerProps.setProperty("log.dirs",
             Files.createTempDirectory("kafka-").toAbsolutePath().toString());
         brokerProps.setProperty("listeners", "PLAINTEXT://" + BROKERHOST + ":" + BROKERPORT);
+        brokerProps.setProperty("offsets.topic.replication.factor","1");
         KafkaConfig config = new KafkaConfig(brokerProps);
         Time mock = new MockTime();
         kafkaServer = TestUtils.createServer(config, mock);
         kafkaServer.startup();
 
         // create topic
-        AdminUtils.createTopic(zkUtils, TOPIC, 1, 1, new Properties());
+        AdminUtils.createTopic(zkUtils, TOPIC, 1, 1, new Properties(), RackAwareMode.Disabled$.MODULE$);
 
         pConsumer = new PhoenixConsumer();
-        
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
     }
@@ -151,7 +154,7 @@ public class PhoenixConsumerIT extends BaseHBaseManagedTimeIT {
         consumerProperties.setProperty(KafkaConstants.BOOTSTRAP_SERVERS, "localhost:9092");
         consumerProperties.setProperty(KafkaConstants.TOPICS, "topic1,topic2");
         consumerProperties.setProperty(KafkaConstants.TIMEOUT, "100");
-        
+
         PhoenixConsumerThread pConsumerThread = new PhoenixConsumerThread(pConsumer, consumerProperties);
         Thread phoenixConsumer = new Thread(pConsumerThread);
 

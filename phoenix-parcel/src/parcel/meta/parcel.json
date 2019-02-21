@@ -1,0 +1,34 @@
+{
+    "schema_version": 1,
+    "name": "APACHE_PHOENIX",
+    "version": "${parcel.version}",
+    "groups": [],
+    "extraVersionInfo": {
+        "baseVersion": "${parcel.base.version}",
+        "fullVersion": "${parcel.full.version}",
+        "patchCount": "${parcel.patch.count}"
+    },
+    "packages": [
+        {
+            "version": "${parcel.package.version}",
+            "name": "phoenix"
+        }
+    ],
+    "components": [
+        {
+            "name": "phoenix",
+            "version": "${parcel.component.version}",
+            "pkg_version": "${parcel.package.version}",
+            "pkg_release": "${parcel.component.release}"
+        }
+    ],
+    "scripts": {
+        "defines": "phoenix_env.sh"
+    },
+    "depends": "${parcel.depends}",
+    "provides": [
+        "hbase-plugin"
+    ],
+    "setActiveSymlink": true,
+    "users": {}
+}

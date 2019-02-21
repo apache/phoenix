@@ -33,6 +33,7 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class HashJoinMoreIT extends ParallelStatsDisabledIT {
@@ -842,7 +843,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
-    
+
+    @Ignore
     @Test
     public void testBug2961() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

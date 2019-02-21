@@ -24,6 +24,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -78,7 +79,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
      * Verify that READ and EXECUTE permissions are required on SYSTEM tables to get a Phoenix Connection
      * Tests grant revoke permissions per user 1. if NS enabled -> on namespace 2. If NS disabled -> on tables
      */
-    @Test
+    @Ignore @Test
     public void testRXPermsReqdForPhoenixConn() throws Exception {
 
         startNewMiniCluster();
@@ -110,7 +111,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
      * Not affected with namespace props
      * Tests grant revoke permissions on per user global level
      */
-    @Test
+    @Ignore @Test
     public void testSuperUserCanChangePerms() throws Exception {
 
         startNewMiniCluster();
@@ -135,7 +136,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
      * Test to verify READ permissions on table, indexes and views
      * Tests automatic grant revoke of permissions per user on a table
      */
-    @Test
+    @Ignore @Test
     public void testReadPermsOnTableIndexAndView() throws Exception {
 
         startNewMiniCluster();
@@ -196,7 +197,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
     /**
      * Verifies permissions for users present inside a group
      */
-    @Test
+    @Ignore @Test
     public void testGroupUserPerms() throws Exception {
 
         startNewMiniCluster();
@@ -227,7 +228,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
     /**
      * Tests permissions for MultiTenant Tables and view index tables
      */
-    @Test
+    @Ignore @Test
     public void testMultiTenantTables() throws Exception {
 
         startNewMiniCluster();
@@ -274,7 +275,7 @@ public class ChangePermissionsIT extends BasePermissionsIT {
      * Grant RX permissions on the schema to regularUser1,
      * Creating view on a table with that schema by regularUser1 should be allowed
      */
-    @Test
+    @Ignore @Test
     public void testCreateViewOnTableWithRXPermsOnSchema() throws Exception {
 
         startNewMiniCluster();

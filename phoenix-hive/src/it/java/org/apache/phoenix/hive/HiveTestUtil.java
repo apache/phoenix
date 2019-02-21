@@ -28,7 +28,7 @@ public class HiveTestUtil extends QTestUtil{
 
     public HiveTestUtil(String outDir, String logDir, MiniClusterType clusterType, String confDir, String hadoopVer,
             String initScript, String cleanupScript, boolean withLlapIo) throws Exception {
-        super(outDir, logDir, clusterType, confDir, hadoopVer, initScript, cleanupScript, withLlapIo);
+        super(outDir, logDir, clusterType, confDir, hadoopVer, initScript, cleanupScript, false, withLlapIo);
     }
 
     @Override

@@ -353,8 +353,4 @@ public class PhoenixRecordWriter<T extends DBWritable> implements RecordWriter<N
         return stats;
     }
 
-    @Override
-    public long getBufferedRowCount() {
-        return numRecords;
-    }
 }

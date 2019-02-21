@@ -281,8 +281,8 @@ public class PhoenixStorageHandlerUtil {
         int bucket = getBucket(options);
         String inspectorInfo = options.getInspector().getCategory() + ":" + options.getInspector()
                 .getTypeName();
-        long maxTxnId = options.getMaximumWriteId();
-        long minTxnId = options.getMinimumWriteId();
+        long maxTxnId = options.getMaximumTransactionId();
+        long minTxnId = options.getMinimumTransactionId();
         int recordIdColumn = options.getRecordIdColumn();
         boolean isCompresses = options.isCompressed();
         boolean isWritingBase = options.isWritingBase();

@@ -28,6 +28,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class HiveMapReduceIT extends HivePhoenixStoreIT {
 

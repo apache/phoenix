@@ -333,9 +333,4 @@ public class PhoenixRecordUpdater implements RecordUpdater {
         return stats;
     }
 
-    @Override
-    public long getBufferedRowCount() {
-        return numRecords;
-    }
-
 }

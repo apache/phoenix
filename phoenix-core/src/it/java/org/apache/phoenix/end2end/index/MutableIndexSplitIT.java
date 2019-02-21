@@ -67,7 +67,8 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
 	@Parameters(name="MutableIndexSplitIT_localIndex={0},multiTenant={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { 
-                { false, false },{ false, true },{true, false}, { true, true } });
+                { false, false },{ false, true } //,{true, false}, { true, true }
+        });
     }
     
     protected void testSplitDuringIndexScan(boolean isReverse) throws Exception {
