@@ -83,7 +83,7 @@ public class UnionCompiler {
         for (int i = 0; i < plans.size(); i++) {
             QueryPlan subPlan = plans.get(i);
             TupleProjector projector = getTupleProjector(subPlan.getProjector(), targetTypes);
-            subPlan = new TupleProjectionPlan(subPlan, projector, null);
+            subPlan = new TupleProjectionPlan(subPlan, projector, null, null);
             plans.set(i, subPlan);
         }
         QueryPlan plan = plans.get(0);

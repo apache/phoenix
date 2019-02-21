@@ -123,7 +123,6 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+dynamicTableName+"_DERIVED_IDX\n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                         "CLIENT MERGE SORT\n" +
-                        "CLIENT SORTED BY [A]\n" +
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                         "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" +
                         "CLIENT SORTED BY [A DESC]"}});
@@ -140,7 +139,6 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
                 "CLIENT PARALLEL 4-WAY FULL SCAN OVER "+dynamicTableName+"\n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
                         "CLIENT MERGE SORT\n" +
-                        "CLIENT SORTED BY [A]\n" +
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                         "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" +
                         "CLIENT SORTED BY [A DESC]"}});

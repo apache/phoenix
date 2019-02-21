@@ -516,8 +516,8 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
             assertEquals(rs.getString(2), "T6");
 
             assertFalse(rs.next());
-            
-            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity)";
+            //add order by to make the query result stable
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity) order by \"order_id\"";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());

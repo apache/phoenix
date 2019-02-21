@@ -73,6 +73,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,6 +92,7 @@ public class AggregatePlan extends BaseQueryPlan {
     private List<List<Scan>> scans;
     private static final Logger logger = LoggerFactory.getLogger(AggregatePlan.class);
     private boolean isSerial;
+    private OrderBy actualOutputOrderBy;
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
@@ -113,6 +115,7 @@ public class AggregatePlan extends BaseQueryPlan {
             logger.warn("This query cannot be executed serially. Ignoring the hint");
         }
         this.isSerial = hasSerialHint && canBeExecutedSerially;
+        this.actualOutputOrderBy = convertActualOutputOrderBy(orderBy, groupBy, context);
     }
 
     public Expression getHaving() {
@@ -185,14 +188,17 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         @Override
         public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName, QueryPlan plan) throws SQLException {
-            Expression expression = RowKeyExpression.INSTANCE;
-            boolean isNullsLast=false;
-            boolean isAscending=true;
-            if(this.orderBy==OrderBy.REV_ROW_KEY_ORDER_BY) {
-                isNullsLast=true; //which is needed for the whole rowKey.
-                isAscending=false;
-            }
-            OrderByExpression orderByExpression = new OrderByExpression(expression, isNullsLast, isAscending);
+            /**
+             * Sort the result tuples by the GroupBy expressions.
+             * When orderByReverse is false,if some GroupBy expression is SortOrder.DESC, then sorted results on that expression are DESC, not ASC.
+             * When orderByReverse is true,if some GroupBy expression is SortOrder.DESC, then sorted results on that expression are ASC, not DESC.
+             */
+            OrderByExpression orderByExpression =
+                    OrderByExpression.createByCheckIfOrderByReverse(
+                            RowKeyExpression.INSTANCE,
+                            false,
+                            true,
+                            this.orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             return new OrderedResultIterator(scanner, Collections.<OrderByExpression>singletonList(orderByExpression), threshold);
         }
@@ -327,4 +333,15 @@ public class AggregatePlan extends BaseQueryPlan {
         return visitor.visit(this);
     }
 
+    private static OrderBy convertActualOutputOrderBy(OrderBy orderBy, GroupBy groupBy, StatementContext statementContext) {
+        if(!orderBy.isEmpty()) {
+            return OrderBy.convertCompiledOrderByToOutputOrderBy(orderBy);
+        }
+        return ExpressionUtil.convertGroupByToOrderBy(groupBy, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+    }
+
+    @Override
+    public List<OrderBy> getActualOutputOrderBys() {
+       return OrderBy.wrapForOutputOrderBys(this.actualOutputOrderBy);
+    }
 }

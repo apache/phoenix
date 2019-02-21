@@ -281,4 +281,9 @@ public class ListJarsQueryPlan implements QueryPlan {
     public Long getEstimateInfoTimestamp() throws SQLException {
         return 0l;
     }
+
+    @Override
+    public List<OrderBy> getActualOutputOrderBys() {
+        return Collections.<OrderBy> emptyList();
+    }
 }

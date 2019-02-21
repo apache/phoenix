@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -461,4 +462,152 @@ public class OrderByIT extends BaseOrderByIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testOrderPreservingOptimizeBug5148() throws Exception {
+        doTestOrderPreservingOptimizeBug5148(false,false);
+        doTestOrderPreservingOptimizeBug5148(false,true);
+        doTestOrderPreservingOptimizeBug5148(true,false);
+        doTestOrderPreservingOptimizeBug5148(true,true);
+    }
+
+    private void doTestOrderPreservingOptimizeBug5148(boolean desc ,boolean salted) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 varchar not null , " +
+                    " pk2 varchar not null, " +
+                    " pk3 varchar not null," +
+                    " v1 varchar, " +
+                    " v2 varchar, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                    "pk1 "+(desc ? "desc" : "")+", "+
+                    "pk2 "+(desc ? "desc" : "")+", "+
+                    "pk3 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "split on('b')");
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a11','a12','a13','a14','a15')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a21','a22','a23','a24','a25')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a31','a32','a33','a34','a35')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('b11','b12','b13','b14','b15')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('b21','b22','b23','b24','b25')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('b31','b32','b33','b34','b35')");
+            conn.commit();
+            //TestOrderByOrderPreserving
+            sql = "select pk3 from (select v1,v2,pk3 from " + tableName + " t where pk1 > 'a10' order by t.v2,t.pk3,t.v1 limit 10) a order by v2,pk3";
+            ResultSet rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"},{"b13"},{"b23"},{"b33"}});
+
+            sql = "select pk3 from (select v1,v2,pk3 from "+tableName+" t where pk1 > 'a10' order by t.v2 desc,t.pk3 desc,t.v1 desc limit 10) a order by v2 desc ,pk3 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"},{"a33"},{"a23"},{"a13"}});
+
+            sql = "select sub from (select substr(pk2,0,3) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3),t.pk2 limit 10) a order by cnt,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a12"},{"a22"},{"a32"},{"b12"},{"b22"},{"b32"}});
+
+            sql = "select sub from (select substr(pk2,0,3) sub,count(pk3) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3),t.pk2 limit 10) a "+
+                  "order by cast(cnt as bigint),substr(sub,0,3)";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a12"},{"a22"},{"a32"},{"b12"},{"b22"},{"b32"}});
+
+            sql = "select sub from (select substr(pk2,0,3) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3) desc,t.pk2 desc limit 10) a "+
+                  "order by cnt desc,sub desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b32"},{"b22"},{"b12"},{"a32"},{"a22"},{"a12"}});
+
+            sql = "select sub from (select substr(pk2,0,3) sub,count(pk3) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3) desc,t.pk2 desc limit 10) a "+
+                  "order by cast(cnt as bigint) desc,substr(sub,0,3) desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b32"},{"b22"},{"b12"},{"a32"},{"a22"},{"a12"}});
+
+            sql = "select sub,pk2 from (select substr(v2,0,3) sub,pk2 from "+tableName+" t where pk1 > 'a10' group by pk2,v2 limit 10) a order by pk2,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a15","a12"},{"a25","a22"},{"a35","a32"},{"b15","b12"},{"b25","b22"},{"b35","b32"}});
+
+            sql = "select sub,pk2 from (select substr(v2,0,3) sub,pk2 from "+tableName+" t where pk1 > 'a10' group by pk2,v2 limit 10) a order by pk2 desc,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b35","b32"},{"b25","b22"},{"b15","b12"},{"a35","a32"},{"a25","a22"},{"a15","a12"}});
+
+            //test innerQueryPlan is ordered by rowKey
+            sql = "select pk3 from (select pk3,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1,t.pk2 limit 10) a where pk3 > 'a10' order by pk1,pk2,pk3";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"},{"b13"},{"b23"},{"b33"}});
+
+            sql = "select sub from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1,t.pk2 limit 10) a where sub > 'a10' order by pk1,pk2,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"},{"b13"},{"b23"},{"b33"}});
+
+            sql = "select pk3 from (select pk3,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1 desc,t.pk2 desc limit 10) a where pk3 > 'a10' order by pk1 desc ,pk2 desc ,pk3 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"},{"a33"},{"a23"},{"a13"}});
+
+            sql = "select sub from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1 desc,t.pk2 desc limit 10) a where sub > 'a10' order by pk1 desc,pk2 desc,sub desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"},{"a33"},{"a23"},{"a13"}});
+
+            //TestGroupByOrderPreserving
+            sql = "select pk2 from (select v1,pk2,pk1 from "+tableName+" t where pk1 > 'a10' order by t.pk2,t.v1,t.pk1 limit 10) a group by pk2, v1 order by pk2,v1";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a12"},{"a22"},{"a32"},{"b12"},{"b22"},{"b32"}});
+
+            sql = "select pk2 from (select v1,pk2,pk1 from "+tableName+" t where pk1 > 'a10' order by t.pk2 desc,t.v1 desc,t.pk1 limit 10) a group by pk2, v1 order by pk2 desc,v1 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b32"},{"b22"},{"b12"},{"a32"},{"a22"},{"a12"}});
+
+            sql = "select sub from (select substr(pk2,0,3) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3),t.pk2 limit 10) a "+
+                  "group by cnt,sub order by cnt,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a12"},{"a22"},{"a32"},{"b12"},{"b22"},{"b32"}});
+
+            sql = "select substr(sub,0,3) from (select substr(pk2,0,3) sub,count(pk3) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3),t.pk2 limit 10) a "+
+                  "group by cast(cnt as bigint),substr(sub,0,3) order by cast(cnt as bigint),substr(sub,0,3)";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a12"},{"a22"},{"a32"},{"b12"},{"b22"},{"b32"}});
+
+            sql = "select sub from (select substr(pk2,0,3) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3) desc,t.pk2 desc limit 10) a "+
+                  "group by cnt,sub order by cnt desc,sub desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b32"},{"b22"},{"b12"},{"a32"},{"a22"},{"a12"}});
+
+            sql = "select substr(sub,0,3) from (select substr(pk2,0,3) sub,count(pk3) cnt from "+tableName+" t where pk1 > 'a10' group by v1 ,pk2 order by count(pk3) desc,t.pk2 desc limit 10) a "+
+                  "group by cast(cnt as bigint),substr(sub,0,3) order by cast(cnt as bigint) desc,substr(sub,0,3) desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b32"},{"b22"},{"b12"},{"a32"},{"a22"},{"a12"}});
+
+            sql = "select pk2 from (select substr(v2,0,3) sub,pk2 from "+tableName+" t where pk1 > 'a10' group by pk2,v2 limit 10) a group by pk2,sub order by pk2,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a12"},{"a22"},{"a32"},{"b12"},{"b22"},{"b32"}});
+
+            sql = "select pk2 from (select substr(v2,0,3) sub,pk2 from "+tableName+" t where pk1 > 'a10' group by pk2,v2 limit 10) a group by pk2,sub order by pk2 desc,sub";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b32"},{"b22"},{"b12"},{"a32"},{"a22"},{"a12"}});
+
+            //test innerQueryPlan is ordered by rowKey
+            sql = "select pk3 from (select pk3,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1,t.pk2 limit 10) a where pk3 > 'a10' group by pk1,pk2,pk3 order by pk1,pk2,pk3";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"},{"b13"},{"b23"},{"b33"}});
+
+            sql = "select sub from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1,t.pk2 limit 10) a where sub > 'a10' group by pk1,pk2,sub order by pk1,pk2";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"a13"},{"a23"},{"a33"},{"b13"},{"b23"},{"b33"}});
+
+            sql = "select pk3 from (select pk3,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1 desc,t.pk2 desc limit 10) a where pk3 > 'a10' group by pk1, pk2, pk3 order by pk1 desc ,pk2 desc ,pk3 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"},{"a33"},{"a23"},{"a13"}});
+
+            sql = "select sub from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 > 'a10' order by t.pk1 desc,t.pk2 desc limit 10) a where sub > 'a10' group by pk1,pk2,sub order by pk1 desc,pk2 desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"b33"},{"b23"},{"b13"},{"a33"},{"a23"},{"a13"}});
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+
 }
