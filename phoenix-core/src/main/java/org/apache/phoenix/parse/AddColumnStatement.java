@@ -28,13 +28,18 @@ import com.google.common.collect.ListMultimap;
 public class AddColumnStatement extends AlterTableStatement {
     private final List<ColumnDef> columnDefs;
     private final boolean ifNotExists;
+    private final boolean ifSetOptionExists;
     private final ListMultimap<String,Pair<String,Object>> props;
     
-    protected AddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
+    protected AddColumnStatement(NamedTableNode table, PTableType tableType,
+                                 List<ColumnDef> columnDefs, boolean ifNotExists,
+                                 ListMultimap<String,Pair<String,Object>> props,
+                                 boolean ifSetOptionExists) {
         super(table, tableType);
         this.columnDefs = columnDefs;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of()  : props;
         this.ifNotExists = ifNotExists;
+        this.ifSetOptionExists = ifSetOptionExists;
     }
 
     public List<ColumnDef> getColumnDefs() {
@@ -44,6 +49,8 @@ public class AddColumnStatement extends AlterTableStatement {
     public boolean ifNotExists() {
         return ifNotExists;
     }
+
+    public boolean ifSetOptionExists() { return ifSetOptionExists; }
 
     public ListMultimap<String,Pair<String,Object>> getProps() {
         return props;

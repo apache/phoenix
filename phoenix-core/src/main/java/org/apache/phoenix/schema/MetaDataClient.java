@@ -1138,7 +1138,8 @@ public class MetaDataClient {
                 }
                 // if there are new columns to add
                 return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(),
-                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
+                        true, NamedTableNode.create(statement.getTableName()),
+                        statement.getTableType(), false);
             }
         }
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
@@ -3505,13 +3506,15 @@ public class MetaDataClient {
 
     public MutationState addColumn(AddColumnStatement statement) throws SQLException {
         PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
-        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType());
+        return addColumn(table, statement.getColumnDefs(), statement.getProps(),
+                statement.ifNotExists(), false, statement.getTable(), statement.getTableType(),
+                statement.ifSetOptionExists());
     }
 
     public MutationState addColumn(PTable table, List<ColumnDef> origColumnDefs,
             ListMultimap<String, Pair<String, Object>> stmtProperties, boolean ifNotExists,
-            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType)
-                    throws SQLException {
+            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType,
+                                   boolean ifSetOptionExist) throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
 		List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ? origColumnDefs.size() : 0);
