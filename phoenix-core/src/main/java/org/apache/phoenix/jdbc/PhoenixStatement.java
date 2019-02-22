@@ -430,6 +430,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                         return executeMutation(stmt, false);
                                     }
                                 }
+                                if (stmt instanceof ExecutableAddColumnStatement &&
+                                        ((ExecutableAddColumnStatement) stmt).ifSetOptionExists()) {
+                                    return 0;
+                                }
                                 throw e;
                             }catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException
@@ -1414,8 +1418,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
 
-        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            super(table, tableType, columnDefs, ifNotExists, props);
+        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType,
+                                     List<ColumnDef> columnDefs, boolean ifNotExists,
+                                     ListMultimap<String,Pair<String,Object>> props,
+                                     boolean ifSetOptionsExists) {
+            super(table, tableType, columnDefs, ifNotExists, props, ifSetOptionsExists);
         }
 
         @SuppressWarnings("unchecked")
@@ -1556,8 +1563,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
         
         @Override
-        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType,
+                                            List<ColumnDef> columnDefs, boolean ifNotExists,
+                                            ListMultimap<String,Pair<String,Object>> props,
+                                            boolean ifSetOptionExists) {
+            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists,
+                    props, ifSetOptionExists);
         }
         
         @Override

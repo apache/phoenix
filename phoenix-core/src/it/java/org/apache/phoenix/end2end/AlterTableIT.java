@@ -1352,7 +1352,27 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
-    
+
+    @Test
+    public void testAlterTableIfExistsThenOption() throws Exception {
+        String ddl = "CREATE TABLE FOO (A VARCHAR  PRIMARY KEY, B VARCHAR)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTestTable(getUrl(), ddl);
+            // testing ALTER TABLE ADD WITH IF EXISTS SET OPTION
+            try {
+                conn.createStatement().execute("ALTER TABLE FOO ADD C VARCHAR IF EXISTS" +
+                        "  SET DISABLE_WAL = true");
+            } catch (SQLException e){
+                assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
+            }
+
+            conn.createStatement().execute("ALTER TABLE FOO IF EXISTS SET DISABLE_WAL = true");
+            conn.createStatement().execute("DROP TABLE FOO");
+            // testing IF EXISTS should not throw an error.
+            conn.createStatement().execute("ALTER TABLE FOO IF EXISTS SET DISABLE_WAL = true");
+        }
+    }
+
 	@Test
 	public void testAlterTableWithIndexesExtendPk() throws Exception {
 		Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
