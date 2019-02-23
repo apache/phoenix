@@ -96,7 +96,10 @@ abstract public class BooleanExpressionFilter extends FilterBase implements Writ
         } catch (IllegalDataException e) {
             return Boolean.FALSE;
         }
-        return (Boolean)expression.getDataType().toObject(tempPtr);
+        // If the entire Boolean expression evaluated to completion (evaluate returned true),
+        // but the result was SQL NULL, treat it as Java Boolean FALSE rather than returning null,
+        // which is used above to indicate incomplete evaluation.
+        return Boolean.TRUE.equals(expression.getDataType().toObject(tempPtr));
     }
 
     @Override
