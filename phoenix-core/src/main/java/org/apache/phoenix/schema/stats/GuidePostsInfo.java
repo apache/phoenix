@@ -137,7 +137,7 @@ public class GuidePostsInfo {
     }
 
     public boolean isEmptyGuidePost() {
-        return guidePosts.equals(EMPTY_GUIDEPOST_KEY) && guidePostsCount == 0
+        return guidePosts.get() == EMPTY_GUIDEPOST_KEY && guidePostsCount == 0
                 && byteCounts.length == 1 && gpTimestamps.length == 1;
     }
 

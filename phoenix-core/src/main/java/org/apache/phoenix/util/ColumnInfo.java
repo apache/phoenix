@@ -12,6 +12,7 @@ package org.apache.phoenix.util;
 
 import java.sql.Types;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -110,8 +111,8 @@ public class ColumnInfo {
         ColumnInfo that = (ColumnInfo) o;
 
         if (sqlType != that.sqlType) return false;
-        if (precision != that.precision) return false;
-        if (scale != that.scale) return false;
+        if (!Objects.equals(precision, that.precision)) return false;
+        if (!Objects.equals(scale, that.scale)) return false;
         if (!columnName.equals(that.columnName)) return false;
 
         return true;
