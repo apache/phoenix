@@ -28,6 +28,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -47,13 +48,42 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     private int partialEvalIndex = -1;
     private int estimatedByteSize;
 
+    // The boolean field that indicated the object is a literal constant, 
+    // has been repurposed to a bitset and now holds additional information. 
+    // This is to facilitate b/w compat to 4.13 clients.
+    // @see <a href="https://issues.apache.org/jira/browse/PHOENIX-5122">PHOENIX-5122</a> 
+    private BitSet extraFields;
+    
+    // Important : When you want to add new bits make sure to add those towards the end, 
+    // else will break b/w compat again.
+    private enum ExtraFieldPosition {
+    	
+    	LITERAL_CONSTANT(0),
+    	STRIP_TRAILING_SEPARATOR_BYTE(1);
+    	
+    	private int bitPosition;
+
+    	private ExtraFieldPosition(int position) {
+    		bitPosition = position;
+    	}
+    	
+    	private int getBitPosition() {
+    		return bitPosition;
+    	}
+    }
+
     public RowValueConstructorExpression() {
     }
     
     public RowValueConstructorExpression(List<Expression> children, boolean isConstant) {
         super(children);
+        extraFields = new BitSet(8);
+    	extraFields.set(ExtraFieldPosition.STRIP_TRAILING_SEPARATOR_BYTE.getBitPosition());
+        if (isConstant) {
+        	extraFields.set(ExtraFieldPosition.LITERAL_CONSTANT.getBitPosition());
+        }
         estimatedByteSize = 0;
-        init(isConstant);
+        init();
     }
 
     public RowValueConstructorExpression clone(List<Expression> children) {
@@ -82,22 +112,32 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
-        init(input.readBoolean());
+        extraFields = BitSet.valueOf(new byte[] {input.readByte()});
+        init();
     }
     
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        output.writeBoolean(literalExprPtr != null);
+        byte[] b = extraFields.toByteArray();
+        output.writeByte((int)(b.length > 0 ? b[0] & 0xff  : 0));
     }
     
-    private void init(boolean isConstant) {
+    private void init() {
         this.ptrs = new ImmutableBytesWritable[children.size()];
-        if(isConstant) {
+        if (isConstant()) {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             this.evaluate(null, ptr);
             literalExprPtr = ptr;
         }
+    }
+    
+    private boolean isConstant() {
+    	return extraFields.get(ExtraFieldPosition.LITERAL_CONSTANT.getBitPosition());
+    }
+    
+    private boolean isStripTrailingSepByte() {
+    	return extraFields.get(ExtraFieldPosition.STRIP_TRAILING_SEPARATOR_BYTE.getBitPosition());
     }
     
     @Override
@@ -200,7 +240,8 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                     for (int k = expressionCount -1 ; 
                             k >=0 &&  getChildren().get(k).getDataType() != null 
                                   && !getChildren().get(k).getDataType().isFixedWidth()
-                                  && outputBytes[outputSize-1] == SchemaUtil.getSeparatorByte(true, false, getChildren().get(k)) ; k--) {
+                                  && outputBytes[outputSize-1] == SchemaUtil.getSeparatorByte(true, false, getChildren().get(k))
+                                  && isStripTrailingSepByte() ; k--) {
                         outputSize--;
                     }
                     ptr.set(outputBytes, 0, outputSize);
