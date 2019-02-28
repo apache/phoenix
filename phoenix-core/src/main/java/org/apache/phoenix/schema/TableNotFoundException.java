@@ -49,6 +49,10 @@ public class TableNotFoundException extends MetaDataEntityNotFoundException {
     }
     
     public TableNotFoundException(String schemaName, String tableName, long timestamp) {
+        this(schemaName, tableName, timestamp, code);
+    }
+
+    public TableNotFoundException(String schemaName, String tableName, long timestamp, SQLExceptionCode code) {
         super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName).build().toString(),
                 code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
         this.timestamp = timestamp;
