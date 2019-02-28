@@ -64,6 +64,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.FunctionNotFoundException;
+import org.apache.phoenix.schema.IndexNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -265,6 +266,15 @@ public class FromCompiler {
         return visitor;
     }
 
+    public static ColumnResolver getIndexResolver(SingleTableStatement statement,
+                              PhoenixConnection connection) throws SQLException {
+        try {
+            return getResolver(statement, connection);
+        } catch (TableNotFoundException e) {
+            throw new IndexNotFoundException(e.getSchemaName(), e.getTableName(), e.getTimeStamp());
+        }
+    }
+
     public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes)
             throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true, 0, udfParseNodes);
@@ -287,7 +297,7 @@ public class FromCompiler {
                 .build();
         return new SingleTableColumnResolver(connection, new TableRef(tableRef.getTableAlias(), t, tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols()));
     }
-    
+
     public static ColumnResolver getResolver(TableRef tableRef)
             throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(tableRef);
