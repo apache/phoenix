@@ -1291,7 +1291,9 @@ public class PTableImpl implements PTable {
                 }
                 String fam = Bytes.toString(family);
                 if (column.isDynamic()) {
-                    this.colFamToDynamicColumnsMapping.putIfAbsent(fam, new ArrayList<PColumn>());
+                    if (!this.colFamToDynamicColumnsMapping.containsKey(fam)) {
+                        this.colFamToDynamicColumnsMapping.put(fam, new ArrayList<PColumn>());
+                    }
                     this.colFamToDynamicColumnsMapping.get(fam).add(column);
                 }
             }
