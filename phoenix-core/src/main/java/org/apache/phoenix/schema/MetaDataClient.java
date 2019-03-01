@@ -1467,7 +1467,7 @@ public class MetaDataClient {
                 }
                 MutationState newMutationState =
                         connection.getQueryServices().updateData(mutationPlan);
-                state.join(newMutationState);
+                state.join(newMutationState, true);
             }
 
             indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,

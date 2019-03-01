@@ -248,11 +248,14 @@ public class DeleteCompiler {
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
-                    MutationState state = new MutationState(tableRef, mutations, 0, maxSize, maxSizeBytes, connection);
-                    connection.getMutationState().join(state);
+                    MutationState state = new MutationState(tableRef, mutations, 0, maxSize,
+                            maxSizeBytes, connection, true);
+                    connection.getMutationState().join(state, true);
                     for (int i = 0; i < otherTableRefs.size(); i++) {
-                        MutationState indexState = new MutationState(otherTableRefs.get(i), otherMutations.get(i), 0, maxSize, maxSizeBytes, connection);
-                        connection.getMutationState().join(indexState);
+                        MutationState indexState = new MutationState(otherTableRefs.get(i),
+                                otherMutations.get(i), 0, maxSize, maxSizeBytes,
+                                connection, true);
+                        connection.getMutationState().join(indexState, true);
                     }
                     connection.getMutationState().send();
                     mutations.clear();
@@ -266,10 +269,13 @@ public class DeleteCompiler {
 
             // If auto commit is true, this last batch will be committed upon return
             int nCommittedRows = isAutoCommit ? (rowCount / batchSize * batchSize) : 0;
-            MutationState state = new MutationState(tableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
+            MutationState state = new MutationState(tableRef, mutations, nCommittedRows, maxSize,
+                    maxSizeBytes, connection, true);
             for (int i = 0; i < otherTableRefs.size(); i++) {
-                MutationState indexState = new MutationState(otherTableRefs.get(i), otherMutations.get(i), 0, maxSize, maxSizeBytes, connection);
-                state.join(indexState);
+                MutationState indexState = new MutationState(otherTableRefs.get(i),
+                        otherMutations.get(i), 0, maxSize,
+                        maxSizeBytes, connection, true);
+                state.join(indexState,true);
             }
             return state;
         }
@@ -354,9 +360,9 @@ public class DeleteCompiler {
         @Override
         public MutationState execute() throws SQLException {
             MutationState state = firstPlan.execute();
-            statement.getConnection().getMutationState().join(state);
+            statement.getConnection().getMutationState().join(state, true);
             for (MutationPlan plan : plans.subList(1, plans.size())) {
-                statement.getConnection().getMutationState().join(plan.execute());
+                statement.getConnection().getMutationState().join(plan.execute(), true);
             }
             return state;
         }
@@ -680,7 +686,8 @@ public class DeleteCompiler {
                         new RowMutationState(PRow.DELETE_MARKER, 0,
                                 statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
             }
-            return new MutationState(dataPlan.getTableRef(), mutation, 0, maxSize, maxSizeBytes, connection);
+            return new MutationState(dataPlan.getTableRef(), mutation, 0, maxSize, maxSizeBytes,
+                    connection, true);
         }
 
         @Override

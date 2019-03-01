@@ -871,6 +871,31 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testDeleteNumberOfRowExceedMaxMutationSizeWhenAutoCommitTurnOff() throws SQLException {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (V BIGINT PRIMARY KEY, K BIGINT)";
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                Integer.toString(NUMBER_OF_ROWS / 2));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+
+        for(int i = 0; i < NUMBER_OF_ROWS; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ("
+                    + i + ", "+ i + ")");
+            if (i % (NUMBER_OF_ROWS / 2) == 0)
+                conn.commit();
+
+        }
+
+        conn.setAutoCommit(false);
+        for(int i = 0; i < NUMBER_OF_ROWS; i++) {
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE K = " + i );
+        }
+    }
 }
 
 

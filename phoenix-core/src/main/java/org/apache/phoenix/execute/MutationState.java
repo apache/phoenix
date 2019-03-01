@@ -133,6 +133,7 @@ public class MutationState implements SQLCloseable {
     private long estimatedSize = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     private boolean isExternalTxContext = false;
+    private boolean isDelete = false;
     private Map<TableRef, MultiRowMutationState> txMutations = Collections.emptyMap();
 
     private PhoenixTransactionContext phoenixTransactionContext = PhoenixTransactionContext.NULL_CONTEXT;
@@ -191,14 +192,31 @@ public class MutationState implements SQLCloseable {
         }
     }
 
-    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset, long maxSize,
-            long maxSizeBytes, PhoenixConnection connection) throws SQLException {
+    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
+                         long maxSize, long maxSizeBytes, PhoenixConnection connection,
+                         boolean isDelete) throws SQLException {
         this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
+        this.isDelete = isDelete;
+
+        setDeleteAndUpsertMutationSate(table,mutations);
+    }
+
+    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
+                         long maxSize, long maxSizeBytes, PhoenixConnection connection)
+                         throws SQLException {
+        this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
+
+        setDeleteAndUpsertMutationSate(table,mutations);
+    }
+
+    private void setDeleteAndUpsertMutationSate(TableRef table, MultiRowMutationState mutations)
+            throws SQLException {
         if (!mutations.isEmpty()) {
             this.mutations.put(table, mutations);
         }
         this.numRows = mutations.size();
         this.estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSize(this.mutations);
+
         throwIfTooBig();
     }
 
@@ -366,6 +384,8 @@ public class MutationState implements SQLCloseable {
     }
 
     private void throwIfTooBig() throws SQLException {
+        if (!connection.getAutoCommit() && this.isDelete)
+            return;
         if (numRows > maxSize) {
             resetState();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED).build().buildException();
@@ -474,6 +494,11 @@ public class MutationState implements SQLCloseable {
             readMetricQueue.combineReadMetrics(newMutationState.readMetricQueue);
         }
         throwIfTooBig();
+    }
+
+    public void join(MutationState newMutationState, boolean isDelete) throws SQLException {
+        this.isDelete = isDelete;
+        join(newMutationState);
     }
 
     private static ImmutableBytesPtr getNewRowKeyWithRowTimestamp(ImmutableBytesPtr ptr, long rowTimestamp, PTable table) {
