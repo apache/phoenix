@@ -45,7 +45,7 @@ class DataFrameFunctions(data: DataFrame) extends Serializable {
     val phxRDD = data.rdd.mapPartitions{ rows =>
  
        // Create a within-partition config to retrieve the ColumnInfo list
-       @transient val partitionConfig = ConfigurationUtil.getOutputCon figuration(tableName, fieldArray, zkUrlFinal, tenantId)
+       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal, tenantId)
        @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
 
        rows.map { row =>
