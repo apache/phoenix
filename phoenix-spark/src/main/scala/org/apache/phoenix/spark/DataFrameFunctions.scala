@@ -28,7 +28,7 @@ class DataFrameFunctions(data: DataFrame) extends Serializable {
   		saveToPhoenix(parameters("table"), zkUrl = parameters.get("zkUrl"), tenantId = parameters.get("TenantId"), 
   		skipNormalizingIdentifier=parameters.contains("skipNormalizingIdentifier"))
    }
-  def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
+  def saveToPhoenix(tableName: String, conf: Option[Configuration] = None,
                     zkUrl: Option[String] = None, tenantId: Option[String] = None, skipNormalizingIdentifier: Boolean = false): Unit = {
 
     // Retrieve the schema field names and normalize to Phoenix, need to do this outside of mapPartitions
@@ -36,7 +36,7 @@ class DataFrameFunctions(data: DataFrame) extends Serializable {
     
 
     // Create a configuration object to use for saving
-    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, tenantId, Some(conf))
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, tenantId, conf)
 
     // Retrieve the zookeeper URL
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
@@ -45,9 +45,9 @@ class DataFrameFunctions(data: DataFrame) extends Serializable {
     val phxRDD = data.rdd.mapPartitions{ rows =>
  
        // Create a within-partition config to retrieve the ColumnInfo list
-       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal, tenantId)
+       @transient val partitionConfig = ConfigurationUtil.getOutputCon figuration(tableName, fieldArray, zkUrlFinal, tenantId)
        @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
- 
+
        rows.map { row =>
          val rec = new PhoenixRecordWritable(columns)
          row.toSeq.foreach { e => rec.add(e) }
