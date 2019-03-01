@@ -1359,7 +1359,8 @@ public class UpsertCompiler {
                 }
                 // Return total number of rows that have been updated. In the case of auto commit being off
                 // the mutations will all be in the mutation state of the current connection.
-                MutationState mutationState = new MutationState(maxSize, maxSizeBytes, statement.getConnection(), totalRowCount);
+                MutationState mutationState = new MutationState(maxSize, maxSizeBytes,
+                        statement.getConnection(), totalRowCount, false);
                 /*
                  *  All the metrics collected for measuring the reads done by the parallel mutating iterators
                  *  is included in the ReadMetricHolder of the statement context. Include these metrics in the
