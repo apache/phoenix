@@ -466,8 +466,12 @@ public enum SQLExceptionCode {
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
     
-    MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
-    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes"), 
+    MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger" +
+            " than maximum allowed number of rows, try upserting rows in smaller batches or " +
+            "using autocommit on for deletes."),
+    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is " +
+            "bigger than maximum allowed number of bytes, try upserting rows in smaller batches " +
+            "or using autocommit on for deletes."),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
