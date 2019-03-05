@@ -27,8 +27,6 @@
     <module>phoenix-flume</module>
     <module>phoenix-kafka</module>
     <module>phoenix-pig</module>
-    <module>phoenix-queryserver-client</module>
-    <module>phoenix-queryserver</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
     <module>phoenix-hive</module>
