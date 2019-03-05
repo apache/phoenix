@@ -586,11 +586,16 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression firstChildExpr = expressions.get(0);
         if(fromDataType == targetDataType) {
             return firstChildExpr;
-        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
-          PLong.INSTANCE)) {
+        } else if ((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE ||
+                fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+                PLong.INSTANCE)) {
             return RoundDecimalExpression.create(expressions);
-        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
-          PDate.INSTANCE)) {
+        } else if (expressions.size() == 1 && fromDataType == PTimestamp.INSTANCE  &&
+                targetDataType.isCoercibleTo(PDate.INSTANCE)) {
+            return firstChildExpr;
+        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE ||
+                fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+                        PDate.INSTANCE)) {
             return RoundTimestampExpression.create(expressions);
         } else if(fromDataType.isCastableTo(targetDataType)) {
             return firstChildExpr;
