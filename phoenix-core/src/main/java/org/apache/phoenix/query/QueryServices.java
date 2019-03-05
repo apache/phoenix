@@ -312,7 +312,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String PROPERTY_POLICY_PROVIDER_ENABLED = "phoenix.property.policy.provider.enabled";
 
     // whether to trigger mutations on the server at all (UPSERT/DELETE or DELETE FROM)
-    public static final String ENABLE_SERVER_SIDE_MUTATIONS ="phoenix.client.enable.server.mutations";
+    public static final String ENABLE_SERVER_SIDE_DELETE_MUTATIONS ="phoenix.client.enable.server.delete.mutations";
+    public static final String ENABLE_SERVER_SIDE_UPSERT_MUTATIONS ="phoenix.client.enable.server.upsert.mutations";
 
     //Update Cache Frequency default config attribute
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";

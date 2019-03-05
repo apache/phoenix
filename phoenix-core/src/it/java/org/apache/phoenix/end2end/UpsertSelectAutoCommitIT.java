@@ -60,7 +60,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
     @Test
     public void testAutoCommitUpsertSelect() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String atable = generateUniqueName();
@@ -114,7 +115,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
     @Test
     public void testDynamicUpsertSelect() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String cursorDDL = " CREATE TABLE IF NOT EXISTS " + tableName
@@ -172,7 +174,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(512));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String tableName = generateUniqueName();
@@ -201,7 +204,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         Properties connectionProperties = new Properties();
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "3");
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "50000");
-        connectionProperties.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        connectionProperties.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         PhoenixConnection connection =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         connection.setAutoCommit(true);
@@ -227,7 +231,8 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String tableName = generateUniqueName();
