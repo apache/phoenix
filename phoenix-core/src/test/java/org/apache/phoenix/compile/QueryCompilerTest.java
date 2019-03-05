@@ -1111,6 +1111,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         compileQuery(query, binds);
     }
+
+    @Test
+    public void testCastingTimestampToDateInSelect() throws Exception {
+        String query = "SELECT CAST (a_timestamp AS DATE) FROM aTable";
+        List<Object> binds = Collections.emptyList();
+        compileQuery(query, binds);
+    }
     
     @Test
     public void testCastingStringToDecimalInSelect() throws Exception {
