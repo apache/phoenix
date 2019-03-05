@@ -90,7 +90,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     
     private void testDeleteFilter(boolean autoCommit) throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = initTableValues(conn);
 
@@ -119,7 +120,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
 
     private void testDeleteByFilterAndRow(boolean autoCommit) throws SQLException {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = initTableValues(conn);
 
@@ -186,7 +188,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
 
     private void testDeleteRange(boolean autoCommit, boolean createIndex, boolean local) throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = initTableValues(conn);
         String indexName = generateUniqueName();
@@ -319,7 +322,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Connection con = null;
         try {
             Properties props = new Properties();
-            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
@@ -413,7 +417,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         try {
             boolean autoCommit = false;
             Properties props = new Properties();
-            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
@@ -490,7 +495,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         try {
             boolean autoCommit = false;
             Properties props = new Properties();
-            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
@@ -615,7 +621,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Connection con = null;
         try {
             Properties props = new Properties();
-            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                allowServerSideMutations);
             con = DriverManager.getConnection(getUrl(), props);
             con.setAutoCommit(autoCommit);
 
@@ -678,7 +685,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     
     private void testDeleteForTableWithRowTimestampCol(boolean autoCommit, String tableName) throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(autoCommit);
             Statement stm = conn.createStatement();
@@ -764,7 +772,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                 + "CREATE INDEX IF NOT EXISTS index_column_double_id ON " + tableName + "(double_id);" + "UPSERT INTO "
                 + tableName + " VALUES (9000000,0.5,'Sample text extra');" ;
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS, allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             Statement stm = conn.createStatement();
@@ -788,7 +796,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 DECIMAL NOT NULL, v1 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
         int numRecords = 1010;
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             Statement stmt = conn.createStatement();
@@ -823,7 +832,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         String idx1 = "CREATE INDEX " + indexName1 + " ON " + tableName + "(v1)";
         String idx2 = "CREATE INDEX " + indexName2 + " ON " + tableName + "(v1, v2)";
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(idx1);

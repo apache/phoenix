@@ -99,7 +99,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tenantId = getOrganizationId();
         byte[][] splits = getDefaultSplits(tenantId);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         String aTable = initATableValues(tenantId, saltTable ? null : splits, null, null, getUrl(), saltTable ? "salt_buckets = 2" : null);
 
         String customEntityTable = generateUniqueName();
@@ -249,7 +250,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String ptsdbTable = generateUniqueName();
         ensureTableCreated(getUrl(), ptsdbTable, PTSDB_NAME);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String upsert = "UPSERT INTO " + ptsdbTable + "(\"DATE\", val, host) " +
@@ -420,7 +422,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String ptsdbTable = generateUniqueName();
         ensureTableCreated(getUrl(), ptsdbTable, PTSDB_NAME);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(autoCommit);
         String upsert = "UPSERT INTO " + ptsdbTable + "(\"DATE\", val, host) " +
@@ -492,7 +495,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", splits, null);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
@@ -527,7 +531,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         createTestTable(getUrl(), "create table " + tableName + " (i integer not null primary key desc, j integer)", splits, null);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(1, 1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
@@ -585,7 +590,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         createTestTable(getUrl(), "create table " + tableName + " (i integer not null primary key desc, j integer)", splits, null);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(1, 1)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
@@ -623,7 +629,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", splits, null, null);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String upsert = "UPSERT INTO " + tableName + " VALUES(?)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
@@ -661,7 +668,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertSelectWithLimit() throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute("create table " + tableName + " (id varchar(10) not null primary key, val varchar(10), ts timestamp)");
@@ -725,7 +733,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertSelectWithSequence() throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String t1 = generateUniqueName();
         String t2 = generateUniqueName();
@@ -768,7 +777,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     public void testUpsertSelectWithSequenceAndOrderByWithSalting() throws Exception {
         int numOfRecords = 200;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String t1 = generateUniqueName();
         String t2 = generateUniqueName();
@@ -833,7 +843,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         Date rowTimestampDate = new Date(rowTimestamp);
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t1 + " (PK1, PK2, KV1) VALUES(?, ?, ?)");
             stmt.setString(1, "PK1");
@@ -901,7 +912,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     public void testUpsertSelectSameTableWithRowTimestampColumn() throws Exception {
         String tableName = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + tableName + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
         }
@@ -950,7 +962,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             // Upsert values where row_timestamp column PK2 is not set and the column names are specified
             // This should upsert data with the value for PK2 as server timestamp
@@ -1029,7 +1042,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + tableName1 + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP, PK3)) ");
             conn.createStatement().execute("CREATE TABLE " + tableName2 + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 DESC ROW_TIMESTAMP, PK3)) ");
@@ -1105,7 +1119,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tenantViewIdx = generateUniqueName();
 
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE IMMUTABLE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT = true, SALT_BUCKETS = 8");
             conn.createStatement().execute("CREATE INDEX " + baseTableIdx + " ON " + baseTable + " (PK2, KV3) INCLUDE (KV1)");
@@ -1310,7 +1325,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String tableName2 = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + tableName + " (PK1 BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR)");
             conn.createStatement().execute("CREATE TABLE " + tableName2 + " (PK1 BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR)");
@@ -1335,7 +1351,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertSelectWithFixedWidthNullByteSizeArray() throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String t1 = generateUniqueName();
         conn.createStatement().execute(
@@ -1393,7 +1410,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
     private void testUpsertSelectWithMultiByteChars(boolean autoCommit) throws Exception {
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(autoCommit);
         String t1 = generateUniqueName();
@@ -1438,7 +1456,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(512));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS, allowServerSideMutations);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String t1 = generateUniqueName();
@@ -1467,7 +1485,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE IMMUTABLE TABLE " + tableName
                     + " (k1 TIMESTAMP not null, k2 bigint not null, v bigint, constraint pk primary key (k1 row_timestamp, k2)) SALT_BUCKETS = 9");
@@ -1533,7 +1552,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             conn.createStatement().execute("create table " + tableName1 + "(name varchar(160) primary key, id varchar(120), address varchar(160))"); 
@@ -1551,7 +1571,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+            allowServerSideMutations);
         props.setProperty(TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), props);
     }
