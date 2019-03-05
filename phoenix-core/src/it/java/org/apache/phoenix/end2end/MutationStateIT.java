@@ -53,7 +53,51 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testMaxMutationSize() throws Exception {
+    public void testDeleteMaxMutationSize() throws SQLException {
+        String tableName = generateUniqueName();
+        int NUMBER_OF_ROWS = 20;
+        String ddl = "CREATE TABLE " + tableName + " (V BIGINT PRIMARY KEY, K BIGINT)";
+        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+
+        for(int i = 0; i < NUMBER_OF_ROWS; i++) {
+            conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES (" + i + ", "+ i + ")");
+            conn.commit();
+        }
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                String.valueOf(NUMBER_OF_ROWS / 2));
+        PhoenixConnection connection =
+                (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        connection.setAutoCommit(false);
+
+        try {
+            for(int i = 0; i < NUMBER_OF_ROWS; i++) {
+                connection.createStatement().execute(
+                        "DELETE FROM " + tableName + " WHERE K = " + i );
+            }
+        } catch (SQLException e) {
+            assertTrue(e.getMessage().contains(
+                    SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getMessage()));
+        }
+
+        props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "10");
+        props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "10000");
+        connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
+        connection.setAutoCommit(false);
+
+        try {
+            connection.createStatement().execute("DELETE FROM " + tableName );
+        } catch (SQLException e) {
+            assertTrue(e.getMessage().contains(
+                    SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getMessage()));
+        }
+    }
+
+    @Test
+    public void testUpsertMaxMutationSize() throws Exception {
         Properties connectionProperties = new Properties();
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "3");
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "1000000");
@@ -70,6 +114,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getErrorCode(),
                 e.getErrorCode());
+            assertTrue(e.getMessage().contains(
+                    SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getMessage()));
         }
 
         // set the max mutation size (bytes) to a low value
@@ -83,6 +129,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getErrorCode(),
                 e.getErrorCode());
+            assertTrue(e.getMessage().contains(
+                    SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getMessage()));
         }
     }
 
