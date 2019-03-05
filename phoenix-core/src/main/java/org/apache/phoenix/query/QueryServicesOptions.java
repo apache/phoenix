@@ -369,7 +369,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_ENABLE_SERVER_UPSERT_SELECT = false;
 
     // By default generally allow server trigger mutations
-    public static final boolean DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS = true;
+    public static final boolean DEFAULT_ENABLE_SERVER_SIDE_DELETE_MUTATIONS = true;
+    public static final boolean DEFAULT_ENABLE_SERVER_SIDE_UPSERT_MUTATIONS = true;
 
     public static final boolean DEFAULT_COST_BASED_OPTIMIZER_ENABLED = false;
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();

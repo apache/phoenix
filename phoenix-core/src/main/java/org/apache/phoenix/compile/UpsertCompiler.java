@@ -354,8 +354,8 @@ public class UpsertCompiler {
                 services.getProps().getBoolean(QueryServices.ENABLE_SERVER_UPSERT_SELECT,
                         QueryServicesOptions.DEFAULT_ENABLE_SERVER_UPSERT_SELECT);
         boolean allowServerMutations =
-                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS,
-                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS);
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_UPSERT_MUTATIONS);
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
         boolean useServerTimestampToBe = false;
         
