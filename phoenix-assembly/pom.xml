@@ -119,18 +119,6 @@
       <artifactId>phoenix-spark</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-queryserver</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-queryserver-client</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-load-balancer</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-tools-hbase1.x</artifactId>
       <version>${omid.version}</version>
