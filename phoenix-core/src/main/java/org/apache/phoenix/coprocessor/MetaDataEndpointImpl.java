@@ -225,6 +225,7 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -2819,7 +2820,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         }
                         try {
                             PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-                            TaskRegionObserver.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS, Bytes.toString(tenantId),
+                            Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS, Bytes.toString(tenantId),
                                 Bytes.toString(schemaName), Bytes.toString(tableName), this.accessCheckEnabled);
                         } catch (Throwable t) {
                             logger.error("Adding a task to drop child views failed!", t);
