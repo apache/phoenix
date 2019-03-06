@@ -28,10 +28,12 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
@@ -493,14 +495,17 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
             }
 
-            fs = outputPath.getFileSystem(configuration);
-            fs.delete(outputPath, true);
-
+            if (outputPath != null) {
+                fs = outputPath.getFileSystem(configuration);
+                fs.delete(outputPath, true);
+            }
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
             final Job job = Job.getInstance(configuration, jobName);
             job.setJarByClass(IndexTool.class);
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
-            FileOutputFormat.setOutputPath(job, outputPath);
+            if (outputPath != null) {
+                FileOutputFormat.setOutputPath(job, outputPath);
+            }
 
             PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
                             qDataTable, "");
@@ -590,6 +595,7 @@ public class IndexTool extends Configured implements Tool {
                 tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
                 configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             }
+
             schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
@@ -608,7 +614,7 @@ public class IndexTool extends Configured implements Tool {
             pIndexTable = null;
 
             connection = ConnectionUtil.getInputConnection(configuration);
-
+            
             if (indexTable != null) {
                 if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
                     throw new IllegalArgumentException(String.format(
@@ -873,6 +879,48 @@ public class IndexTool extends Configured implements Tool {
             }
         }
         return false;
+    }
+
+    public static Map.Entry<Integer, Job> run(Configuration conf, String schemaName, String dataTable, String indexTable,
+            boolean directApi, boolean useSnapshot, String tenantId, boolean disableBefore, boolean runForeground) throws Exception {
+        final List<String> args = Lists.newArrayList();
+        if (schemaName != null) {
+            args.add("-s");
+            args.add(schemaName);
+        }
+        args.add("-dt");
+        args.add(dataTable);
+        args.add("-it");
+        args.add(indexTable);
+        if (directApi) {
+            args.add("-direct");
+        }
+
+        if (runForeground) {
+            args.add("-runfg");
+        }
+
+        if (useSnapshot) {
+            args.add("-snap");
+        }
+
+        if (tenantId != null) {
+            args.add("-tenant");
+            args.add(tenantId);
+        }
+
+        args.add("-op");
+        args.add("/tmp/" + UUID.randomUUID().toString());
+
+        if (disableBefore) {
+            PhoenixConfigurationUtil.setDisableIndexes(conf, indexTable);
+        }
+
+        IndexTool indexingTool = new IndexTool();
+        indexingTool.setConf(conf);
+        int status = indexingTool.run(args.toArray(new String[0]));
+        Job job = indexingTool.getJob();
+        return new AbstractMap.SimpleEntry<Integer, Job>(status, job);
     }
 
     public static void main(final String[] args) throws Exception {
