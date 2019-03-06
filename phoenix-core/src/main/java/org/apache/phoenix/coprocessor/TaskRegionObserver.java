@@ -18,20 +18,24 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
+import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.sql.Types;
 
-import java.util.Properties;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -39,21 +43,17 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.hadoop.hbase.ipc.RpcServer.Call;
-import org.apache.hadoop.hbase.ipc.RpcUtil;
-import org.apache.hadoop.hbase.security.User;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.TaskType;
 
-import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 
 
@@ -64,11 +64,50 @@ import org.apache.phoenix.util.QueryUtil;
 
 public class TaskRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(TaskRegionObserver.class);
+
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(TaskType.values().length);
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
     private long timeMaxInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS;
     @GuardedBy("TaskRegionObserver.class")
-    private long initialDelay;
+    private long initialDelay = QueryServicesOptions.DEFAULT_TASK_HANDLING_INITIAL_DELAY_MS;
+
+    private static Map<TaskType, String> classMap = ImmutableMap.<TaskType, String>builder()
+            .put(TaskType.DROP_CHILD_VIEWS, "org.apache.phoenix.coprocessor.tasks.DropChildViewsTask")
+            .put(TaskType.INDEX_REBUILD, "org.apache.phoenix.coprocessor.tasks.IndexRebuildTask")
+            .build();
+
+    public enum TaskResultCode {
+        SUCCESS,
+        FAIL,
+        SKIPPED,
+    }
+
+    public static class TaskResult {
+        private TaskResultCode resultCode;
+        private String details;
+
+        public TaskResult(TaskResultCode resultCode, String details) {
+            this.resultCode = resultCode;
+            this.details = details;
+        }
+
+        public TaskResultCode getResultCode() {
+            return resultCode;
+        }
+
+        public String getDetails() {
+            return details;
+        }
+
+        @Override
+        public String toString() {
+            String result = resultCode.name();
+            if (!Strings.isNullOrEmpty(details)) {
+                result = result + " - " + details;
+            }
+            return result;
+        }
+    }
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -103,102 +142,16 @@ public class TaskRegionObserver extends BaseRegionObserver {
             deprecationLogger.setLevel(Level.WARN);
         }
 
-        DropChildViewsTask task = new DropChildViewsTask(e.getEnvironment(), timeMaxInterval);
+        SelfHealingTask task = new SelfHealingTask(e.getEnvironment(), timeMaxInterval);
         executor.scheduleWithFixedDelay(task, initialDelay, timeInterval, TimeUnit.MILLISECONDS);
     }
 
-    private static void mutateSystemTaskTable(final PhoenixConnection conn, final PreparedStatement stmt, boolean accessCheckEnabled)
-            throws IOException {
-        // we need to mutate SYSTEM.TASK with HBase/login user if access is enabled.
-        if (accessCheckEnabled) {
-            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-                @Override
-                public Void run() throws Exception {
-                    final Call rpcContext = RpcUtil.getRpcContext();
-                    // setting RPC context as null so that user can be reset
-                    try {
-                        RpcUtil.setRpcContext(null);
-                        stmt.execute();
-                        conn.commit();
-                    } catch (SQLException e) {
-                        throw new IOException(e);
-                    } finally {
-                      // setting RPC context back to original context of the RPC
-                      RpcUtil.setRpcContext(rpcContext);
-                    }
-                    return null;
-                }
-            });
-        }
-        else {
-            try {
-                stmt.execute();
-                conn.commit();
-            } catch (SQLException e) {
-                throw new IOException(e);
-            }
-        }
-    }
+    public static class SelfHealingTask extends TimerTask {
+        protected RegionCoprocessorEnvironment env;
+        protected long timeMaxInterval;
+        protected boolean accessCheckEnabled;
 
-    public static void addTask(PhoenixConnection conn, TaskType taskType, String tenantId, String schemaName,
-                               String tableName, boolean accessCheckEnabled)
-            throws IOException {
-        PreparedStatement stmt = null;
-        try {
-            stmt = conn.prepareStatement("UPSERT INTO " +
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME + " ( " +
-                    PhoenixDatabaseMetaData.TASK_TYPE + ", " +
-                    PhoenixDatabaseMetaData.TENANT_ID + ", " +
-                    PhoenixDatabaseMetaData.TABLE_SCHEM + ", " +
-                    PhoenixDatabaseMetaData.TABLE_NAME + " ) VALUES(?,?,?,?)");
-            stmt.setByte(1, taskType.getSerializedValue());
-            if (tenantId != null) {
-                stmt.setString(2, tenantId);
-            } else {
-                stmt.setNull(2, Types.VARCHAR);
-            }
-            if (schemaName != null) {
-                stmt.setString(3, schemaName);
-            } else {
-                stmt.setNull(3, Types.VARCHAR);
-            }
-            stmt.setString(4, tableName);
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-        mutateSystemTaskTable(conn, stmt, accessCheckEnabled);
-    }
-
-    public static void deleteTask(PhoenixConnection conn, TaskType taskType, Timestamp ts, String tenantId,
-                                  String schemaName, String tableName, boolean accessCheckEnabled) throws IOException {
-        PreparedStatement stmt = null;
-        try {
-            stmt = conn.prepareStatement("DELETE FROM " +
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = ? AND " +
-                    PhoenixDatabaseMetaData.TASK_TS + " = ? AND " +
-                    PhoenixDatabaseMetaData.TENANT_ID + (tenantId == null ? " IS NULL " : " = '" + tenantId + "'") + " AND " +
-                    PhoenixDatabaseMetaData.TABLE_SCHEM + (schemaName == null ? " IS NULL " : " = '" + schemaName + "'") + " AND " +
-                    PhoenixDatabaseMetaData.TABLE_NAME + " = ?");
-            stmt.setByte(1, taskType.getSerializedValue());
-            stmt.setTimestamp(2, ts);
-            stmt.setString(3, tableName);
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-        mutateSystemTaskTable(conn, stmt, accessCheckEnabled);
-    }
-
-    /**
-     * Task runs periodically to clean up task of child views whose parent is dropped
-     *
-     */
-    public static class DropChildViewsTask extends TimerTask {
-        private RegionCoprocessorEnvironment env;
-        private long timeMaxInterval;
-        private boolean accessCheckEnabled;
-
-        public DropChildViewsTask(RegionCoprocessorEnvironment env, long timeMaxInterval) {
+        public SelfHealingTask(RegionCoprocessorEnvironment env, long timeMaxInterval) {
             this.env = env;
             this.accessCheckEnabled = env.getConfiguration().getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                     QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
@@ -208,88 +161,106 @@ public class TaskRegionObserver extends BaseRegionObserver {
         @Override
         public void run() {
             PhoenixConnection connForTask = null;
-            Timestamp timestamp = null;
-            String tenantId = null;
-            byte[] tenantIdBytes;
-            String schemaName= null;
-            byte[] schemaNameBytes;
-            String tableName = null;
-            byte[] tableNameBytes;
-            PhoenixConnection pconn;
             try {
-                String taskQuery = "SELECT " +
-                        PhoenixDatabaseMetaData.TASK_TS + ", " +
-                        PhoenixDatabaseMetaData.TENANT_ID + ", " +
-                        PhoenixDatabaseMetaData.TABLE_SCHEM + ", " +
-                        PhoenixDatabaseMetaData.TABLE_NAME +
-                        " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                        " WHERE "+ PhoenixDatabaseMetaData.TASK_TYPE + " = " + PTable.TaskType.DROP_CHILD_VIEWS.getSerializedValue();
-
                 connForTask = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-                PreparedStatement taskStatement = connForTask.prepareStatement(taskQuery);
-                ResultSet rs = taskStatement.executeQuery();
-                while (rs.next()) {
+                String[] excludeStates = new String[] { PTable.TaskStatus.FAILED.toString(),
+                        PTable.TaskStatus.COMPLETED.toString() };
+                List<Task.TaskRecord> taskRecords = Task.queryTaskTable(connForTask,  excludeStates);
+                for (Task.TaskRecord taskRecord : taskRecords){
                     try {
-                        // delete child views only if the parent table is deleted from the system catalog
-                        timestamp = rs.getTimestamp(1);
-                        tenantId = rs.getString(2);
-                        tenantIdBytes= rs.getBytes(2);
-                        schemaName= rs.getString(3);
-                        schemaNameBytes = rs.getBytes(3);
-                        tableName= rs.getString(4);
-                        tableNameBytes = rs.getBytes(4);
-
-                        if (tenantId != null) {
-                            Properties tenantProps = new Properties();
-                            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                            pconn = QueryUtil.getConnectionOnServer(tenantProps, env.getConfiguration()).unwrap(PhoenixConnection.class);
-
-                        }
-                        else {
-                            pconn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-                        }
-
-                        MetaDataProtocol.MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
-                                schemaName, tableName, true);
-                        if (result.getMutationCode() != MetaDataProtocol.MutationCode.TABLE_ALREADY_EXISTS) {
-                            MetaDataEndpointImpl.dropChildViews(env, tenantIdBytes, schemaNameBytes, tableNameBytes);
-                        } else if (System.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
-                            // skip this task as it has not been expired and its parent table has not been dropped yet
-                            LOG.info("Skipping a child view drop task. The parent table has not been dropped yet : " +
-                                    schemaName + "." + tableName +
-                                    " with tenant id " + (tenantId == null ? " IS NULL" : tenantId) +
-                                    " and timestamp " + timestamp.toString());
+                        TaskType taskType = taskRecord.getTaskType();
+                        if (!classMap.containsKey(taskType)) {
+                            LOG.warn("Don't know how to execute task type: " + taskType.name());
                             continue;
                         }
-                        else {
-                            LOG.warn(" A drop child view task has expired and will be removed from the system task table : " +
-                                    schemaName + "." + tableName +
-                                    " with tenant id " + (tenantId == null ? " IS NULL" : tenantId) +
-                                    " and timestamp " + timestamp.toString());
+
+                        String className = classMap.get(taskType);
+
+                        Class<?> concreteClass = Class.forName(className);
+
+                        Object obj = concreteClass.newInstance();
+                        Method runMethod = concreteClass.getDeclaredMethod("run",
+                                Task.TaskRecord.class);
+                        Method checkCurretResult = concreteClass.getDeclaredMethod("checkCurrentResult", Task.TaskRecord.class);
+                        Method initMethod = concreteClass.getSuperclass().getDeclaredMethod("init",
+                                RegionCoprocessorEnvironment.class, Long.class);
+                        initMethod.invoke(obj, env, timeMaxInterval);
+
+                        // if current status is already Started, check if we need to re-run.
+                        // Task can be async and already Started before.
+                        TaskResult result = null;
+                        if (taskRecord.getStatus() != null && taskRecord.getStatus().equals(PTable.TaskStatus.STARTED.toString())) {
+                            result = (TaskResult) checkCurretResult.invoke(obj, taskRecord);
                         }
 
-                        deleteTask(connForTask, PTable.TaskType.DROP_CHILD_VIEWS, timestamp, tenantId, schemaName,
-                                tableName, this.accessCheckEnabled);
+                        if (result == null) {
+                            // reread task record. There might be async setting of task status
+                            taskRecord = Task.queryTaskTable(connForTask, taskRecord.getSchemaName(), taskRecord.getTableName(),
+                                    taskType, taskRecord.getTenantId(), null).get(0);
+                            if (taskRecord.getStatus() != null && taskRecord.getStatus().equals(
+                                    PTable.TaskStatus.COMPLETED.toString())) {
+                                continue;
+                            }
+                            // Change task status to STARTED
+                            Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
+                                    taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
+                                    taskRecord.getData(), taskRecord.getPriority(), taskRecord.getTimeStamp(), null, true);
+
+                            // invokes the method at runtime
+                            result = (TaskResult) runMethod.invoke(obj, taskRecord);
+                        }
+
+                        if (result != null) {
+                            String taskStatus = PTable.TaskStatus.FAILED.toString();
+                            if (result.getResultCode() == TaskResultCode.SUCCESS) {
+                                taskStatus = PTable.TaskStatus.COMPLETED.toString();
+                            } else if (result.getResultCode() == TaskResultCode.SKIPPED) {
+                                // We will pickup this task again
+                                continue;
+                            }
+
+                            setEndTaskStatus(connForTask, taskRecord, taskStatus);
+                        }
+
                     }
                     catch (Throwable t) {
-                        LOG.warn("Exception while dropping a child view task. " +
+                        LOG.warn("Exception while running self healingtask. " +
                                 "It will be retried in the next system task table scan : " +
-                                schemaName + "." + tableName +
-                                " with tenant id " + (tenantId == null ? " IS NULL" : tenantId) +
-                                " and timestamp " + timestamp.toString(), t);
+                                " taskType : " + taskRecord.getTaskType().name() +
+                                taskRecord.getSchemaName()  + "." + taskRecord.getTableName() +
+                                " with tenant id " + (taskRecord.getTenantId() == null ? " IS NULL" : taskRecord.getTenantId()) +
+                                " and timestamp " + taskRecord.getTimeStamp().toString(), t);
                     }
                 }
             } catch (Throwable t) {
-                LOG.error("DropChildViewsTask failed!", t);
+                LOG.error("SelfHealingTask failed!", t);
             } finally {
                 if (connForTask != null) {
                     try {
                         connForTask.close();
                     } catch (SQLException ignored) {
-                        LOG.debug("DropChildViewsTask can't close connection", ignored);
+                        LOG.debug("SelfHealingTask can't close connection", ignored);
                     }
                 }
             }
+        }
+
+        public static void setEndTaskStatus(PhoenixConnection connForTask, Task.TaskRecord taskRecord, String taskStatus)
+                throws IOException {
+            // update data with details.
+            String data = taskRecord.getData();
+            if (Strings.isNullOrEmpty(data)) {
+                data = "{}";
+            }
+            JsonParser jsonParser = new JsonParser();
+            JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
+            jsonObject.addProperty("TaskDetails", taskStatus);
+            data = jsonObject.toString();
+
+            Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+            Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
+                    taskRecord.getTableName(), taskStatus, data, taskRecord.getPriority(),
+                    taskRecord.getTimeStamp(), endTs, true);
         }
     }
 }
