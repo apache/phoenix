@@ -379,9 +379,15 @@ public interface QueryConstants {
             TENANT_ID + " VARCHAR NULL," +
             TABLE_SCHEM + " VARCHAR NULL," +
             TABLE_NAME + " VARCHAR NOT NULL,\n" +
+            // Non-PK columns
+            TASK_STATUS + " VARCHAR NULL," +
+            TASK_END_TS + " TIMESTAMP NULL," +
+            TASK_PRIORITY + " UNSIGNED_TINYINT NULL," +
+            TASK_DATA + " VARCHAR NULL,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
             TABLE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
+            HColumnDescriptor.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 }

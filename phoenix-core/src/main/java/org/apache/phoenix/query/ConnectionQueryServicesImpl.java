@@ -46,8 +46,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
@@ -236,6 +238,7 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -3498,6 +3501,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     clearCache();
                 }
             }
+
+            try {
+                metaConnection.createStatement().executeUpdate(getTaskDDL());
+            } catch (NewerTableAlreadyExistsException e) {
+
+            } catch (TableAlreadyExistsException e) {
+                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+                if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
+                    String
+                            columnsToAdd =
+                            PhoenixDatabaseMetaData.TASK_STATUS + " " + PVarchar.INSTANCE.getSqlTypeName() + ", "
+                                    + PhoenixDatabaseMetaData.TASK_END_TS + " " + PTimestamp.INSTANCE.getSqlTypeName() + ", "
+                                    + PhoenixDatabaseMetaData.TASK_PRIORITY + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName() + ", "
+                                    + PhoenixDatabaseMetaData.TASK_DATA + " " + PVarchar.INSTANCE.getSqlTypeName();
+                    String taskTableFullName = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
+                    metaConnection =
+                            addColumnsIfNotExists(metaConnection, taskTableFullName,
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
+                    metaConnection.createStatement().executeUpdate(
+                            "ALTER TABLE " + taskTableFullName + " SET " + TTL + "=" + TASK_TABLE_TTL);
+                    clearCache();
+                }
+            }
+
             try {
                 metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
@@ -3509,9 +3536,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
             try {
                 metaConnection.createStatement().executeUpdate(getMutexDDL());
-            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
-            try {
-                metaConnection.createStatement().executeUpdate(getTaskDDL());
             } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
