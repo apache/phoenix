@@ -128,7 +128,6 @@ import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
-import org.apache.phoenix.schema.stats.StatisticsScanner;
 import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -457,7 +456,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         MutationList indexMutations = localIndexBytes == null ? new MutationList() : new MutationList(1024);
         
         RegionScanner theScanner = s;
-        
+
         byte[] replayMutations = scan.getAttribute(BaseScannerRegionObserver.REPLAY_WRITES);
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
@@ -510,8 +509,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
                         region, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
-        } 
-        
+        }
+
+        theScanner = getUnnestArrayRegionScanner(theScanner,scan,ptr,encodingScheme);
+
         if (j != null)  {
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), env, useQualifierAsIndex, useNewValueColumnQualifier);
         }

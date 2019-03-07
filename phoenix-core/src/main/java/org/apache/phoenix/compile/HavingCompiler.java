@@ -49,7 +49,7 @@ public class HavingCompiler {
         if (having == null) {
             return null;
         }
-        ExpressionCompiler expressionBuilder = new ExpressionCompiler(context, groupBy);
+        ExpressionCompiler expressionBuilder = new ExpressionCompiler(context, groupBy,statement.getUnnestArrayKVRefs());
         Expression expression = having.accept(expressionBuilder);
         if (expression.getDataType() != PBoolean.INSTANCE) {
             throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());

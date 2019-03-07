@@ -304,5 +304,15 @@ public abstract class BooleanParseNodeVisitor<T> extends BaseParseNodeVisitor<T>
         return leaveNonBooleanNode(node, l);
     }
 
+    @Override
+    public boolean visitEnter(UnnestArrayParseNode node) throws SQLException {
+        return enterNonBooleanNode(node);
+    }
+
+    @Override
+    public T visitLeave(UnnestArrayParseNode node, List<T> l) throws SQLException{
+        return leaveNonBooleanNode(node, l);
+    }
+
 }
 

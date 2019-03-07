@@ -612,11 +612,11 @@ public class ProjectionCompiler {
         private List<Expression> arrayOldFuncs;
         private List<ProjectedColumnExpression> arrayProjectedColumnRefs;
         private Map<Expression, Integer> arrayExpressionCounts;
-        private SelectStatement statement; 
-        
+        private SelectStatement statement;
+
         private SelectClauseVisitor(StatementContext context, GroupBy groupBy, 
                 List<KeyValueColumnExpression> arrayKVRefs, List<Expression> arrayKVFuncs, Map<Expression, Integer> arrayExpressionCounts, List<ProjectedColumnExpression> arrayProjectedColumnRefs, List<Expression> arrayOldFuncs, SelectStatement statement) {
-            super(context, groupBy);
+            super(context, groupBy, statement.getUnnestArrayKVRefs());
             this.arrayKVRefs = arrayKVRefs;
             this.arrayKVFuncs = arrayKVFuncs;
             this.arrayOldFuncs = arrayOldFuncs;

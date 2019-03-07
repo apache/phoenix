@@ -528,6 +528,15 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             }
         });
 	}
+
+	@Override
+  public ParseNode visitLeave(UnnestArrayParseNode node, List<ParseNode> nodes) throws SQLException {
+        return leaveCompoundNode(node, nodes, new CompoundNodeFactory(){
+            @Override
+            public ParseNode createNode(List<ParseNode> children){ return NODE_FACTORY.function(node.getName(),nodes); }
+      });
+  }
+
 	
 	private static class TableNodeRewriter implements TableNodeVisitor<TableNode> {
 	    private final ParseNodeRewriter parseNodeRewriter;

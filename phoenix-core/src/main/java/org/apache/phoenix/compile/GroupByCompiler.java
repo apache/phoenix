@@ -32,6 +32,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.CoerceExpression;
+import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.DistinctCountParseNode;
@@ -380,7 +381,7 @@ public class GroupByCompiler {
 
        // Accumulate expressions in GROUP BY
         ExpressionCompiler compiler =
-                new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY);
+                new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY,statement.getUnnestArrayKVRefs());
         List<Expression> expressions = Lists.newArrayListWithExpectedSize(groupByNodes.size());
         for (int i = 0; i < groupByNodes.size(); i++) {
             ParseNode node = groupByNodes.get(i);

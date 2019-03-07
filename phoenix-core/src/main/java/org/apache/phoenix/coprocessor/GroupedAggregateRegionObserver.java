@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -163,8 +164,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                 innerScanner =
                         getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
                                 c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
-            } 
-    
+            }
+
+            innerScanner = getUnnestArrayRegionScanner(innerScanner,scan,new ImmutableBytesWritable(),EncodedColumnsUtil.getQualifierEncodingScheme(scan));
+
             if (j != null) {
                 innerScanner =
                         new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),

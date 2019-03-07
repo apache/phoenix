@@ -5509,4 +5509,136 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
+
+    @Test
+    public void testExplainSelectUnnest() throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String sql = "CREATE TABLE "
+                + tableName
+                + "    (pk INTEGER PRIMARY KEY, \n"
+                + "     r integer, \n"
+                + "     v integer[])";
+        conn.createStatement().execute(sql);
+        sql = "EXPLAIN SELECT unnest(v) FROM " + tableName;
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        String plan =  QueryUtil.getExplainPlan(rs);
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n"
+                + "    SERVER UNNEST ARRAY",
+                plan);
+    }
+
+    @Test
+    public void testExplainGroupByUnnest()  throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String sql = "CREATE TABLE "
+                + tableName
+                + "    (pk INTEGER PRIMARY KEY, \n"
+                + "     r integer, \n"
+                + "     v integer[])";
+        conn.createStatement().execute(sql);
+        sql = "EXPLAIN SELECT COUNT(1) AS A, UNNEST(V) AS B\n"
+                + "FROM " + tableName + "\n"
+                +"GROUP BY B";
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        String plan = QueryUtil.getExplainPlan(rs);
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n"
+                + "    SERVER UNNEST ARRAY\n"
+                + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [UNNEST(V)]\n"
+                + "CLIENT MERGE SORT",
+                plan);
+    }
+
+    @Test
+    public void testSelectCountGroupByOrderByUnnest() throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String sql =  "CREATE TABLE "
+                + tableName
+                + "   (id CHAR(15) PRIMARY KEY, \n"
+                + "    a_int INTEGER,\n"
+                + "    a_double_array DOUBLE ARRAY,\n"
+                + "    a_varchar_array VARCHAR(100) ARRAY)";
+        conn.createStatement().execute(sql);
+        sql = "EXPLAIN SELECT COUNT(id) AS A, UNNEST(a_varchar_array) AS B\n"
+                + "FROM " + tableName +"\n"
+                + "GROUP BY B\n"
+                + "ORDER BY B";
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        String plan = QueryUtil.getExplainPlan(rs);
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n"
+                + "    SERVER UNNEST ARRAY\n"
+                + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [UNNEST(A_VARCHAR_ARRAY)]\n"
+                + "CLIENT MERGE SORT",
+                plan);
+    }
+
+    @Test
+    public void testSelectCountGroupByOrderByHavingUnnest() throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String sql =  "CREATE TABLE "
+                + tableName
+                + "   (id CHAR(15) PRIMARY KEY, \n"
+                + "    a_int INTEGER,\n"
+                + "    a_double_array DOUBLE ARRAY,\n"
+                + "    a_varchar_array VARCHAR(100) ARRAY)";
+        conn.createStatement().execute(sql);
+        sql = "EXPLAIN SELECT COUNT(id) AS A, UNNEST(a_varchar_array) AS B\n"
+                + "FROM " + tableName +"\n"
+                + "GROUP BY B\n"
+                + "HAVING UNNEST(a_varchar_array) = 'ABC'\n"
+                + "ORDER BY B";
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        String plan = QueryUtil.getExplainPlan(rs);
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n"
+                + "    SERVER UNNEST ARRAY\n"
+                + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [UNNEST(A_VARCHAR_ARRAY)]\n"
+                + "CLIENT MERGE SORT\n"
+                + "CLIENT FILTER BY UNNEST(A_VARCHAR_ARRAY) = 'ABC'",
+                plan);
+    }
+
+    //TODO must not put UNNEST column in the scan but perform a post filter
+    @Test
+    public void testSelectWhereUnnest() throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String sql =  "CREATE TABLE "
+                + tableName
+                + "   (id CHAR(15) PRIMARY KEY, \n"
+                + "    a_int INTEGER,\n"
+                + "    a_double_array DOUBLE ARRAY,\n"
+                + "    a_varchar_array VARCHAR(100) ARRAY)";
+        conn.createStatement().execute(sql);
+        sql = "SELECT id FROM " + tableName + "\n"
+                + " WHERE a_double_array[3] > UNNEST(a_double_array)";
+
+        try {
+            conn.createStatement().execute(sql);
+        }catch (SQLException e){
+            assertEquals("Unnest array function not supported here", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSelectUnnestWithArrayElemRef() throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String sql =  "CREATE TABLE "
+                + tableName
+                + "   (id CHAR(15) PRIMARY KEY, \n"
+                + "    a_int INTEGER,\n"
+                + "    a_double_array DOUBLE ARRAY,\n"
+                + "    a_varchar_array VARCHAR(100) ARRAY)";
+        conn.createStatement().execute(sql);
+        sql = "EXPLAIN SELECT UNNEST(a_double_array) AS A, a_varchar_array[3] AS B FROM " + tableName;
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        String plan = QueryUtil.getExplainPlan(rs);
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n"
+                + "    SERVER UNNEST ARRAY\n"
+                + "    SERVER ARRAY ELEMENT PROJECTION",
+                plan);
+    }
 }

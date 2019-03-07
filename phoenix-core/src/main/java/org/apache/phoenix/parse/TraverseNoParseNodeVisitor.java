@@ -307,4 +307,14 @@ public abstract class TraverseNoParseNodeVisitor<T> extends BaseParseNodeVisitor
     public T visitLeave(ArrayElemRefNode node, List<T> l) throws SQLException {
         return null;
     }
+
+    @Override
+    public boolean visitEnter(UnnestArrayParseNode node) throws SQLException {
+        return false;
+    }
+
+    @Override
+    public T visitLeave(UnnestArrayParseNode node, List<T> l) throws SQLException {
+        return null;
+    }
 }

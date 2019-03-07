@@ -123,6 +123,9 @@ public interface ParseNodeVisitor<E> {
     
     public boolean visitEnter(ArrayElemRefNode node) throws SQLException;
     public E visitLeave(ArrayElemRefNode node, List<E> l) throws SQLException;
+
+    public boolean visitEnter(UnnestArrayParseNode node) throws SQLException;
+    public E visitLeave(UnnestArrayParseNode node, List<E> l) throws SQLException;
     
     
 }

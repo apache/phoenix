@@ -149,4 +149,10 @@ public class StatelessTraverseAllParseNodeVisitor extends TraverseAllParseNodeVi
             throws SQLException {
         return null;
     }
+
+    @Override
+    public Void visitLeave(UnnestArrayParseNode node, List<Void> l)
+            throws SQLException {
+        return null;
+    }
 }

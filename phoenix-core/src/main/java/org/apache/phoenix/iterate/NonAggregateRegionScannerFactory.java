@@ -150,6 +150,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         tupleProjector, dataRegion, indexMaintainer, tx, viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null,
         ptr, useQualifierAsIndex);
 
+    innerScanner = BaseScannerRegionObserver.getUnnestArrayRegionScanner(innerScanner,scan,ptr,encodingScheme);
+
     final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);
     if (j != null) {
         innerScanner = new HashJoinRegionScanner(env, innerScanner, arrayKVRefs, arrayFuncRefs,

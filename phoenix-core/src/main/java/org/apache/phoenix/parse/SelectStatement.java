@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
@@ -109,7 +110,8 @@ public class SelectStatement implements FilterableStatement {
     private final List<SelectStatement> selects = new ArrayList<SelectStatement>();
     private final Map<String, UDFParseNode> udfParseNodes;
     private final OffsetNode offset;
-    
+    private final List<ColumnExpression> unnestArrayKVRefs = new ArrayList<>();
+
     @Override
     public final String toString() {
         StringBuilder buf = new StringBuilder();
@@ -323,6 +325,10 @@ public class SelectStatement implements FilterableStatement {
     @Override
     public List<OrderByNode> getOrderBy() {
         return orderBy;
+    }
+
+    public List<ColumnExpression> getUnnestArrayKVRefs(){
+        return unnestArrayKVRefs;
     }
 
     @Override

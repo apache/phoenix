@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -36,6 +36,7 @@ import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
+import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.DateAddExpression;
 import org.apache.phoenix.expression.DateSubtractExpression;
@@ -51,6 +52,7 @@ import org.apache.phoenix.expression.DoubleSubtractExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.LongAddExpression;
@@ -104,8 +106,10 @@ import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UDFParseNode;
+import org.apache.phoenix.parse.UnnestArrayParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -114,10 +118,12 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
 import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
@@ -152,23 +158,27 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     private int totalNodeCount;
     private final boolean resolveViewConstants;
     private static final Expression NOT_NULL_STRING = LiteralExpression.newConstant(PVarchar.INSTANCE.toObject(KeyRange.IS_NOT_NULL_RANGE.getLowerRange()));
-
+    private List<ColumnExpression> unnestArrayKVRefs;
     public ExpressionCompiler(StatementContext context) {
-        this(context,GroupBy.EMPTY_GROUP_BY, false);
+        this(context,GroupBy.EMPTY_GROUP_BY, false, null);
     }
 
     ExpressionCompiler(StatementContext context, boolean resolveViewConstants) {
-        this(context,GroupBy.EMPTY_GROUP_BY, resolveViewConstants);
+        this(context,GroupBy.EMPTY_GROUP_BY, resolveViewConstants, null);
     }
 
-    ExpressionCompiler(StatementContext context, GroupBy groupBy) {
-        this(context, groupBy, false);
+    ExpressionCompiler(StatementContext context, boolean resolveViewConstants,List<ColumnExpression> unnestArrayKVRefs) {
+        this(context,GroupBy.EMPTY_GROUP_BY, resolveViewConstants, unnestArrayKVRefs);
+    }
+    ExpressionCompiler(StatementContext context, GroupBy groupBy, List<ColumnExpression> unnestArrayKVRefs) {
+        this(context, groupBy, false,unnestArrayKVRefs);
     }
 
-    ExpressionCompiler(StatementContext context, GroupBy groupBy, boolean resolveViewConstants) {
+    ExpressionCompiler(StatementContext context, GroupBy groupBy, boolean resolveViewConstants, List<ColumnExpression> unnestArrayKVRefs) {
         this.context = context;
         this.groupBy = groupBy;
         this.resolveViewConstants = resolveViewConstants;
+        this.unnestArrayKVRefs = unnestArrayKVRefs;
     }
 
     public boolean isAggregate() {
@@ -356,6 +366,41 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (aggregateFunction == node) {
             aggregateFunction = null; // Turn back off on the way out
         }
+        return expression;
+    }
+
+    @Override
+    public boolean visitEnter(UnnestArrayParseNode node) throws SQLException {
+        if(unnestArrayKVRefs != null) {
+            return true;
+        }
+        else{
+            throw new SQLException("Unnest array function not supported here");
+        }
+    }
+
+    @Override
+    /**
+     * @param node a function expression node
+     * @param children the child expression arguments to the unnest array expression node.
+     */
+    public Expression visitLeave(UnnestArrayParseNode node, List<Expression> children) throws SQLException {
+        ColumnExpression columnExpression =  (ColumnExpression) children.get(0);
+        int index = unnestArrayKVRefs.indexOf(columnExpression);
+        if(index < 0) {
+            unnestArrayKVRefs.add(columnExpression);
+            index = unnestArrayKVRefs.size() - 1;
+        }
+        PDataType unnestType = PDataType
+            .fromTypeId(columnExpression.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE);
+        PName colName = PNameFactory.newName("UNNEST(" + unnestArrayKVRefs.get(index).toString() + ")");
+        PColumnImpl col = new PColumnImpl(colName, PNameFactory.newName(QueryConstants.RESERVED_COLUMN_FAMILY),
+            unnestType,null,null,true,0,SortOrder.getDefault(),
+            null,null,false,"",false,false,
+            PTable.QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS
+                .encode(QueryConstants.UNNEST_VALUE_COLUMN_QUALIFIER_BASE+index), HConstants.LATEST_TIMESTAMP);
+        Expression expression = new KeyValueColumnExpression(col);
+        expression = wrapGroupByExpression(expression);
         return expression;
     }
 
