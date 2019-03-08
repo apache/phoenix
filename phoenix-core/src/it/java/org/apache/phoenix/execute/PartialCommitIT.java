@@ -247,7 +247,7 @@ public class PartialCommitIT extends BaseUniqueNamesOwnClusterIT {
                 assertArrayEquals(expectedUncommittedStatementIndexes, uncommittedStatementIndexes);
                 Map<String, Map<MetricType, Long>> mutationWriteMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(con);
                 assertEquals(expectedUncommittedStatementIndexes.length, mutationWriteMetrics.get(bFailureTable).get(MUTATION_BATCH_FAILED_SIZE).intValue());
-                assertEquals(expectedUncommittedStatementIndexes.length, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getTotalSum());
+                assertEquals(expectedUncommittedStatementIndexes.length, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
             }
             
             

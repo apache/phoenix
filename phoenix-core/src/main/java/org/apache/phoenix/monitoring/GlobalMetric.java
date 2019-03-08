@@ -33,5 +33,6 @@ public interface GlobalMetric extends Metric {
     /**
      * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
      */
+    @Deprecated
     public long getTotalSum();
 }
