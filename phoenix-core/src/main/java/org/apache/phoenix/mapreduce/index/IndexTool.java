@@ -270,6 +270,12 @@ public class IndexTool extends Configured implements Tool {
 
         }
 
+        void closeConnection() throws SQLException {
+            if (this.connection != null) {
+                this.connection.close();
+            }
+        }
+
         public Job getJob() throws Exception {
             if (isPartialBuild) {
                 return configureJobForPartialBuild();
@@ -518,11 +524,13 @@ public class IndexTool extends Configured implements Tool {
             final Configuration configuration = job.getConfiguration();
             final String physicalIndexTable =
                     PhoenixConfigurationUtil.getPhysicalTableName(configuration);
-            org.apache.hadoop.hbase.client.Connection conn = ConnectionFactory.createConnection(configuration);
-            TableName tablename = TableName.valueOf(physicalIndexTable);
-            HFileOutputFormat2.configureIncrementalLoad(job, conn.getTable(tablename),conn.getRegionLocator(tablename));
+            try(org.apache.hadoop.hbase.client.Connection conn =
+                    ConnectionFactory.createConnection(configuration)) {
+                TableName tablename = TableName.valueOf(physicalIndexTable);
+                HFileOutputFormat2.configureIncrementalLoad(job, conn.getTable(tablename),
+                        conn.getRegionLocator(tablename));
+            }
             return job;
-               
         }
         
         /**
@@ -566,6 +574,8 @@ public class IndexTool extends Configured implements Tool {
         Connection connection = null;
         Table htable = null;
         RegionLocator regionLocator = null;
+        JobFactory jobFactory = null;
+        org.apache.hadoop.hbase.client.Connection hConn = null;
         try {
             CommandLine cmdLine = null;
             try {
@@ -580,13 +590,14 @@ public class IndexTool extends Configured implements Tool {
                 tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
                 configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             }
-            connection = ConnectionUtil.getInputConnection(configuration);
+            try(Connection tempConn = ConnectionUtil.getInputConnection(configuration)) {
+                pDataTable = PhoenixRuntime.getTableNoCache(tempConn, qDataTable);
+            }
             schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
             qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
-            pDataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
             useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
@@ -612,8 +623,8 @@ public class IndexTool extends Configured implements Tool {
                 }
                 htable = connection.unwrap(PhoenixConnection.class).getQueryServices()
                         .getTable(pIndexTable.getPhysicalName().getBytes());
-                regionLocator =
-                        ConnectionFactory.createConnection(configuration).getRegionLocator(
+                hConn = ConnectionFactory.createConnection(configuration);
+                regionLocator = hConn.getRegionLocator(
                             TableName.valueOf(pIndexTable.getPhysicalName().getBytes()));
                 if (IndexType.LOCAL.equals(pIndexTable.getIndexType())) {
                     isLocalIndexBuild = true;
@@ -641,7 +652,8 @@ public class IndexTool extends Configured implements Tool {
 				fs.delete(outputPath, true);
 			}
 
-			job = new JobFactory(connection, configuration, outputPath).getJob();
+            jobFactory = new JobFactory(connection, configuration, outputPath);
+            job = jobFactory.getJob();
 
             if (!isForeground && useDirectApi) {
                 LOG.info("Running Index Build in Background - Submit async and exit");
@@ -675,19 +687,52 @@ public class IndexTool extends Configured implements Tool {
                     + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
+            boolean rethrowException = false;
             try {
                 if (connection != null) {
-                    connection.close();
+                    try {
+                        connection.close();
+                    } catch (SQLException e) {
+                        LOG.error("Failed to close connection ", e);
+                        rethrowException = true;
+                    }
                 }
                 if (htable != null) {
-                    htable.close();
+                    try {
+                        htable.close();
+                    } catch (IOException e) {
+                        LOG.error("Failed to close htable ", e);
+                        rethrowException = true;
+                    }
                 }
-                if(regionLocator != null) {
-                    regionLocator.close();
+                if (hConn != null) {
+                    try {
+                        hConn.close();
+                    } catch (IOException e) {
+                        LOG.error("Failed to close hconnection ", e);
+                        rethrowException = true;
+                    }
                 }
-            } catch (SQLException sqle) {
-                LOG.error("Failed to close connection ", sqle.getMessage());
-                throw new RuntimeException("Failed to close connection");
+                if (regionLocator != null) {
+                    try {
+                        regionLocator.close();
+                    } catch (IOException e) {
+                        LOG.error("Failed to close regionLocator ", e);
+                        rethrowException = true;
+                    }
+                }
+                if (jobFactory != null) {
+                    try {
+                        jobFactory.closeConnection();
+                    } catch (SQLException e) {
+                        LOG.error("Failed to close jobFactory ", e);
+                        rethrowException = true;
+                    }
+                }
+            } finally {
+                if (rethrowException) {
+                    throw new RuntimeException("Failed to close resource");
+                }
             }
         }
     }
@@ -695,11 +740,11 @@ public class IndexTool extends Configured implements Tool {
     private void splitIndexTable(PhoenixConnection pConnection, boolean autosplit, int autosplitNumRegions, double samplingRate, Configuration configuration)
             throws SQLException, IOException, IllegalArgumentException, InterruptedException {
         int numRegions;
-        
 
-        try (RegionLocator regionLocator =
-                ConnectionFactory.createConnection(configuration).getRegionLocator(
-                    TableName.valueOf(qDataTable))) {
+        try (org.apache.hadoop.hbase.client.Connection tempHConn =
+                ConnectionFactory.createConnection(configuration);
+                RegionLocator regionLocator =
+                        tempHConn.getRegionLocator(TableName.valueOf(qDataTable))) {
             numRegions = regionLocator.getStartKeys().length;
             if (autosplit && !(numRegions > autosplitNumRegions)) {
                 LOG.info(String.format(

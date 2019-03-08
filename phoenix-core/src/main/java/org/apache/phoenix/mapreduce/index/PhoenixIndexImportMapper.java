@@ -94,6 +94,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             this.pStatement = connection.prepareStatement(upsertQuery);
             
         } catch (SQLException e) {
+            tryClosingConnection();
             throw new RuntimeException(e.getMessage());
         } 
     }
@@ -162,14 +163,17 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
-         super.cleanup(context);
-         if (connection != null) {
-             try {
+        super.cleanup(context);
+        tryClosingConnection();
+    }
+
+    private void tryClosingConnection() {
+        if (connection != null) {
+            try {
                 connection.close();
             } catch (SQLException e) {
-                LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",
-                        e.getMessage());
+                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
             }
-         }
+        }
     }
 }
