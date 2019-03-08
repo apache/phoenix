@@ -393,27 +393,35 @@ public class OrphanViewTool extends Configured implements Tool {
         }
     }
 
-    private void gracefullyDropView(PhoenixConnection phoenixConnection, Configuration configuration,
-                          Key key) throws Exception {
-        PhoenixConnection tenantConnection;
-        if (key.getTenantId() != null) {
-            Properties tenantProps = new Properties();
-            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, key.getTenantId());
-            tenantConnection = ConnectionUtil.getInputConnection(configuration, tenantProps).
-                    unwrap(PhoenixConnection.class);
-        } else {
-            tenantConnection = phoenixConnection;
-        }
-
-        MetaDataClient client = new MetaDataClient(tenantConnection);
-        org.apache.phoenix.parse.TableName pTableName = org.apache.phoenix.parse.TableName
-                .create(key.getSchemaName(), key.getTableName());
+    private void gracefullyDropView(PhoenixConnection phoenixConnection,
+            Configuration configuration, Key key) throws Exception {
+        PhoenixConnection tenantConnection = null;
+        boolean newConn = false;
         try {
-            client.dropTable(
-                    new DropTableStatement(pTableName, PTableType.VIEW, false, true, true));
-        }
-        catch (TableNotFoundException e) {
-            LOG.info("Ignoring view " + pTableName + " as it has already been dropped");
+            if (key.getTenantId() != null) {
+                Properties tenantProps = new Properties();
+                tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, key.getTenantId());
+                tenantConnection = ConnectionUtil.getInputConnection(configuration, tenantProps).
+                        unwrap(PhoenixConnection.class);
+                newConn = true;
+            } else {
+                tenantConnection = phoenixConnection;
+            }
+
+            MetaDataClient client = new MetaDataClient(tenantConnection);
+            org.apache.phoenix.parse.TableName pTableName = org.apache.phoenix.parse.TableName
+                    .create(key.getSchemaName(), key.getTableName());
+            try {
+                client.dropTable(
+                        new DropTableStatement(pTableName, PTableType.VIEW, false, true, true));
+            }
+            catch (TableNotFoundException e) {
+                LOG.info("Ignoring view " + pTableName + " as it has already been dropped");
+            }
+        } finally {
+            if (newConn) {
+                tryClosingConnection(tenantConnection);
+            }
         }
     }
 
@@ -775,14 +783,7 @@ public class OrphanViewTool extends Configured implements Tool {
     }
 
     private void closeConnectionAndFiles(Connection connection) throws IOException {
-        try {
-            if (connection != null) {
-                connection.close();
-            }
-        } catch (SQLException sqle) {
-            LOG.error("Failed to close connection ", sqle.getMessage());
-            throw new RuntimeException("Failed to close connection");
-        }
+        tryClosingConnection(connection);
         for (byte i = VIEW; i < ORPHAN_TYPE_COUNT; i++) {
             if (writer[i] != null) {
                 writer[i].close();
@@ -790,6 +791,22 @@ public class OrphanViewTool extends Configured implements Tool {
             if (reader[i] != null) {
                 reader[i].close();
             }
+        }
+    }
+
+    /**
+     * Try closing a connection if it is not null
+     * @param connection connection object
+     * @throws RuntimeException if closing the connection fails
+     */
+    private void tryClosingConnection(Connection connection) {
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } catch (SQLException sqlE) {
+            LOG.error("Failed to close connection: ", sqlE);
+            throw new RuntimeException("Failed to close connection with exception: ", sqlE);
         }
     }
 

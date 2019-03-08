@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce.index;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
 
@@ -44,8 +45,8 @@ public class DirectHTableWriter {
     private static final Logger LOG = LoggerFactory.getLogger(DirectHTableWriter.class);
 
     private Configuration conf = null;
-
     private Table table;
+    private Connection conn;
 
     public DirectHTableWriter(Configuration otherConf) {
         setConf(otherConf);
@@ -60,11 +61,12 @@ public class DirectHTableWriter {
         }
 
         try {
-            Connection conn = ConnectionFactory.createConnection(this.conf);
+            this.conn = ConnectionFactory.createConnection(this.conf);
             this.table = conn.getTable(TableName.valueOf(tableName));
             LOG.info("Created table instance for " + tableName);
         } catch (IOException e) {
             LOG.error("IOException : ", e);
+            tryClosingResourceSilently(this.conn);
             throw new RuntimeException(e);
         }
     }
@@ -99,7 +101,18 @@ public class DirectHTableWriter {
         return table;
     }
 
+    private void tryClosingResourceSilently(Closeable res) {
+        if (res != null) {
+            try {
+                res.close();
+            } catch (IOException e) {
+                LOG.error("Closing resource: " + res + " failed with error: ", e);
+            }
+        }
+    }
+
     public void close() throws IOException {
-        table.close();
+        tryClosingResourceSilently(this.table);
+        tryClosingResourceSilently(this.conn);
     }
 }
