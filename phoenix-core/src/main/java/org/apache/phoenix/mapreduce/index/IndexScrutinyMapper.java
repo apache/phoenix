@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.base.Strings;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Pair;
@@ -151,7 +150,20 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             LOG.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
         } catch (SQLException | NoSuchAlgorithmException e) {
+            tryClosingResourceSilently(this.outputUpsertStmt);
+            tryClosingResourceSilently(this.connection);
+            tryClosingResourceSilently(this.outputConn);
             throw new RuntimeException(e);
+        }
+    }
+
+    private static void tryClosingResourceSilently(AutoCloseable res) {
+        if (res != null) {
+            try {
+                res.close();
+            } catch (Exception e) {
+                LOG.error("Closing resource: " + res + " failed :", e);
+            }
         }
     }
 
@@ -182,17 +194,20 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
         super.cleanup(context);
+        tryClosingResourceSilently(this.outputUpsertStmt);
+        IOException throwException = null;
         if (connection != null) {
             try {
                 processBatch(context);
                 connection.close();
-                if (outputConn != null) {
-                    outputConn.close();
-                }
             } catch (SQLException e) {
                 LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
-                throw new IOException(e);
+                throwException = new IOException(e);
             }
+        }
+        tryClosingResourceSilently(this.outputConn);
+        if (throwException != null) {
+            throw throwException;
         }
     }
 
