@@ -91,7 +91,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testResetGlobalPhoenixMetrics() {
         resetGlobalMetrics();
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
-            assertEquals(0, m.getTotalSum());
+            assertEquals(0, m.getValue());
             assertEquals(0, m.getNumberOfSamples());
         }
     }
@@ -108,42 +108,42 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             rs.getString(1);
             rs.getString(2);
         }
-        assertEquals(1, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getTotalSum());
-        assertEquals(1, GLOBAL_SELECT_SQL_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_REJECTED_TASK_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_MUTATION_BYTES.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getTotalSum());
+        assertEquals(1, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getValue());
+        assertEquals(1, GLOBAL_SELECT_SQL_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_REJECTED_TASK_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_BYTES.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
 
-        assertTrue(GLOBAL_SCAN_BYTES.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_QUERY_TIME.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_TASK_END_TO_END_TIME.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_TASK_EXECUTION_TIME.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_SCAN_BYTES.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_QUERY_TIME.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_TASK_END_TO_END_TIME.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_TASK_EXECUTION_TIME.getMetric().getValue() > 0);
 
-        assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getValue() > 0);
     }
 
     @Test
     public void testGlobalPhoenixMetricsForMutations() throws Exception {
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
-        assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getTotalSum());
-        assertEquals(10, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getTotalSum());
-        assertTrue(GLOBAL_MUTATION_BYTES.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_MUTATION_COMMIT_TIME.getMetric().getTotalSum() > 0);
-        assertEquals(0, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_SELECT_SQL_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_REJECTED_TASK_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getTotalSum());
+        assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getValue());
+        assertEquals(10, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getValue());
+        assertTrue(GLOBAL_MUTATION_BYTES.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_MUTATION_COMMIT_TIME.getMetric().getValue() > 0);
+        assertEquals(0, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getValue());
+        assertEquals(0, GLOBAL_SELECT_SQL_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_REJECTED_TASK_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
     }
 
     @Test
@@ -159,24 +159,24 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         String dml = "UPSERT INTO " + tableTo + " (K, V) SELECT K, V FROM " + tableFrom;
         conn.createStatement().executeUpdate(dml);
         conn.commit();
-        assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getTotalSum());
-        assertEquals(1, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getTotalSum());
-        assertEquals(1, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_QUERY_TIME.getMetric().getTotalSum());
-        assertTrue(GLOBAL_SCAN_BYTES.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_MUTATION_BYTES.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_MUTATION_COMMIT_TIME.getMetric().getTotalSum() > 0);
-        assertEquals(0, GLOBAL_SELECT_SQL_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_REJECTED_TASK_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getTotalSum());
-        assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getTotalSum());
+        assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getValue());
+        assertEquals(1, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getValue());
+        assertEquals(1, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getValue());
+        assertEquals(0, GLOBAL_QUERY_TIME.getMetric().getValue());
+        assertTrue(GLOBAL_SCAN_BYTES.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_MUTATION_BYTES.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_MUTATION_COMMIT_TIME.getMetric().getValue() > 0);
+        assertEquals(0, GLOBAL_SELECT_SQL_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_REJECTED_TASK_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
 
-        assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getTotalSum() > 0);
-        assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getTotalSum() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS.getMetric().getValue() > 0);
+        assertTrue(GLOBAL_HBASE_COUNT_SCANNED_REGIONS.getMetric().getValue() > 0);
     }
 
     private static void resetGlobalMetrics() {
