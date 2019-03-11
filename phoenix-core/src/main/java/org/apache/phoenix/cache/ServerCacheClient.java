@@ -22,9 +22,10 @@ import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -148,7 +149,7 @@ public class ServerCacheClient {
                 } catch (InsufficientMemoryException e) {
                     this.outputFile = File.createTempFile("HashJoinCacheSpooler", ".bin", new File(services.getProps()
                             .get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY)));
-                    try (FileOutputStream fio = new FileOutputStream(outputFile)) {
+                    try (OutputStream fio = Files.newOutputStream(outputFile.toPath())) {
                         fio.write(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength());
                     }
                 }
@@ -158,7 +159,7 @@ public class ServerCacheClient {
 
         public ImmutableBytesWritable getCachePtr() throws IOException {
             if(this.outputFile!=null){
-                try (FileInputStream fio = new FileInputStream(outputFile)) {
+                try (InputStream fio = Files.newInputStream(outputFile.toPath())) {
                     byte[] b = new byte[this.size];
                     fio.read(b);
                     cachePtr = new ImmutableBytesWritable(b);
