@@ -23,9 +23,8 @@ import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.AbstractQueue;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -304,7 +303,7 @@ public abstract class BufferedQueue<T> extends AbstractQueue<T> implements SizeA
             if (totalResultSize >= thresholdBytes) {
                 this.file = File.createTempFile(UUID.randomUUID().toString(), null);
                 try (DataOutputStream out = new DataOutputStream(
-                        new BufferedOutputStream(new FileOutputStream(file)))) {
+                        new BufferedOutputStream(Files.newOutputStream(file.toPath())))) {
                     int resSize = inMemQueue.size();
                     for (int i = 0; i < resSize; i++) {
                         T e = inMemQueue.poll();
@@ -342,7 +341,7 @@ public abstract class BufferedQueue<T> extends AbstractQueue<T> implements SizeA
                 this.next = null;
                 try {
                     this.in = new DataInputStream(
-                            new BufferedInputStream(new FileInputStream(file)));
+                            new BufferedInputStream(Files.newInputStream(file.toPath())));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
