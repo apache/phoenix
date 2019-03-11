@@ -27,8 +27,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -273,7 +273,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
 
         private synchronized void init() throws IOException {
             if (spoolFrom == null) {
-                spoolFrom = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
+                spoolFrom = new DataInputStream(new BufferedInputStream(Files.newInputStream(file.toPath())));
                 advance();
             }
         }
