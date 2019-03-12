@@ -1088,7 +1088,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
         }
         Scan scan = new Scan();
-        scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp + 1);
         ScanRanges scanRanges = ScanRanges.createPointLookup(keyRanges);
         scanRanges.initializeScan(scan);
         scan.setFilter(scanRanges.getSkipScanFilter());
