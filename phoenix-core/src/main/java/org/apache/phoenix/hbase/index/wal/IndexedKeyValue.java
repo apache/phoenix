@@ -53,6 +53,7 @@ public class IndexedKeyValue extends KeyValue {
     public IndexedKeyValue() {}
 
     public IndexedKeyValue(byte[] bs, Mutation mutation) {
+        super(mutation.getRow(), 0, mutation.getRow().length);
         this.indexTableName = new ImmutableBytesPtr(bs);
         this.mutation = mutation;
         this.hashCode = calcHashCode(indexTableName, mutation);
@@ -106,6 +107,24 @@ public class IndexedKeyValue extends KeyValue {
     @Override
     public int getQualifierLength() {
         return COLUMN_QUALIFIER.length;
+    }
+
+    @Override
+    public int getRowOffset() {
+        return this.offset;
+    }
+
+    @Override
+    public short getRowLength() {
+        return (short) this.length;
+    }
+
+    @Override
+    public int getKeyLength(){
+        //normally the key is row key + other key fields such as timestamp,
+        // but those aren't defined here because a Mutation can contain multiple,
+        // so we just return the length of the row key
+        return this.length;
     }
 
     @Override
@@ -171,6 +190,12 @@ public class IndexedKeyValue extends KeyValue {
         MutationProto mProto = MutationProto.parseFrom(mutationData);
         this.mutation = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(mProto);
         this.hashCode = calcHashCode(indexTableName, mutation);
+        if (mutation != null){
+            bytes = mutation.getRow();
+            offset = 0;
+            length = bytes.length;
+        }
+
     }
 
     public boolean getBatchFinished() {
