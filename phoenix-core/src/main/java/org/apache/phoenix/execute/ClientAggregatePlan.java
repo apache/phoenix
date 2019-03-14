@@ -145,8 +145,14 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             if (groupBy.isOrderPreserving()) {
                 aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
             } else {
-                int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt
-                    (QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
+                long thresholdBytes =
+                        context.getConnection().getQueryServices().getProps().getLong(
+                            QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                            QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+                boolean spoolingEnabled =
+                        context.getConnection().getQueryServices().getProps().getBoolean(
+                            QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                            QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
                 List<OrderByExpression> keyExpressionOrderBy = Lists.newArrayListWithExpectedSize(keyExpressions.size());
                 for (Expression keyExpression : keyExpressions) {
                     keyExpressionOrderBy.add(new OrderByExpression(keyExpression, false, true));
@@ -156,7 +162,10 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                     // Pass in orderBy to apply any sort that has been optimized away
                     aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions, orderBy);
                 } else {
-                    iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
+                    iterator =
+                            new OrderedResultIterator(iterator, keyExpressionOrderBy,
+                                    spoolingEnabled, thresholdBytes, null, null,
+                                    projector.getEstimatedRowByteSize());
                     aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
                 }
             }
@@ -180,9 +189,18 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 resultScanner = new LimitingResultIterator(resultScanner, limit);
             }
         } else {
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            resultScanner = new OrderedAggregatingResultIterator(aggResultIterator, orderBy.getOrderByExpressions(), thresholdBytes, limit, offset);
+            long thresholdBytes =
+                    context.getConnection().getQueryServices().getProps().getLong(
+                        QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+            boolean spoolingEnabled =
+                    context.getConnection().getQueryServices().getProps().getBoolean(
+                        QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
+            resultScanner =
+                    new OrderedAggregatingResultIterator(aggResultIterator,
+                            orderBy.getOrderByExpressions(), spoolingEnabled, thresholdBytes, limit,
+                            offset);
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
