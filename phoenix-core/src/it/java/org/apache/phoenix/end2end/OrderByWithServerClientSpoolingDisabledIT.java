@@ -19,19 +19,29 @@ package org.apache.phoenix.end2end;
 
 import java.util.Map;
 
+import org.apache.phoenix.iterate.SizeBoundQueue;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 
 import com.google.common.collect.Maps;
 
-public class OrderByWithSpillingIT extends OrderByIT {
+/**
+ * Same as the order by test but with spooling disabled both on the server and client. This will use
+ * {@link SizeBoundQueue} for all its operations
+ */
+public class OrderByWithServerClientSpoolingDisabledIT extends OrderByIT {
+
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        // do lot's of spooling!
-        props.put(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
-        props.put(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
+        // make sure disabling server side spooling has no affect on correctness(existing orderby
+        // IT)
+        props.put(QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+            Boolean.toString(Boolean.FALSE));
+        props.put(QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+            Boolean.toString(Boolean.FALSE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+
 }

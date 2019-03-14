@@ -44,7 +44,7 @@ public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private Connection getConnection() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(QueryServices.SPOOL_DIRECTORY, spoolDir.getPath());
-        props.setProperty(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
+        props.setProperty(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
         props.setProperty(QueryServices.RENEW_LEASE_ENABLED, Boolean.toString(false));
         // Ensures round robin off so that spooling is used.
         // TODO: review with Samarth - should a Noop iterator be used if pacing is not possible?
