@@ -36,24 +36,8 @@ import org.junit.Test;
 public class LnLogFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
-    private static final double ZERO = 1e-9;
     private String signedTableName;
     private String unsignedTableName;
-
-    private static boolean twoDoubleEquals(double a, double b) {
-        if (Double.isNaN(a) ^ Double.isNaN(b)) return false;
-        if (Double.isNaN(a)) return true;
-        if (Double.isInfinite(a) ^ Double.isInfinite(b)) return false;
-        if (Double.isInfinite(a)) {
-            if ((a > 0) ^ (b > 0)) return false;
-            else return true;
-        }
-        if (Math.abs(a - b) <= ZERO) {
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     @Before
     public void initTable() throws Exception {
