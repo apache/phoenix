@@ -193,8 +193,16 @@ public class AggregatePlan extends BaseQueryPlan {
                 isAscending=false;
             }
             OrderByExpression orderByExpression = new OrderByExpression(expression, isNullsLast, isAscending);
-            int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            return new OrderedResultIterator(scanner, Collections.<OrderByExpression>singletonList(orderByExpression), threshold);
+            long threshold =
+                    services.getProps().getLong(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+            boolean spoolingEnabled =
+                    services.getProps().getBoolean(
+                        QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
+            return new OrderedResultIterator(scanner,
+                    Collections.<OrderByExpression> singletonList(orderByExpression),
+                    spoolingEnabled, threshold);
         }
     }
 
@@ -306,10 +314,18 @@ public class AggregatePlan extends BaseQueryPlan {
                 resultScanner = new LimitingResultIterator(resultScanner, limit);
             }
         } else {
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            resultScanner = new OrderedAggregatingResultIterator(aggResultIterator, orderBy.getOrderByExpressions(),
-                    thresholdBytes, limit, offset);
+            long thresholdBytes =
+                    context.getConnection().getQueryServices().getProps().getLong(
+                        QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+            boolean spoolingEnabled =
+                    context.getConnection().getQueryServices().getProps().getBoolean(
+                        QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
+            resultScanner =
+                    new OrderedAggregatingResultIterator(aggResultIterator,
+                            orderBy.getOrderByExpressions(), spoolingEnabled, thresholdBytes, limit,
+                            offset);
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
