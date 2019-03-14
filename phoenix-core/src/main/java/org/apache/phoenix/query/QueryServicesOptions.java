@@ -23,6 +23,7 @@ import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE
 import static org.apache.phoenix.query.QueryServices.AUTO_UPGRADE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.COST_BASED_OPTIMIZER_ENABLED;
@@ -78,10 +79,10 @@ import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_I
 import static org.apache.phoenix.query.QueryServices.RUN_UPDATE_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
+import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
-import static org.apache.phoenix.query.QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
 import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
@@ -134,6 +135,11 @@ public class QueryServicesOptions {
 	public static final int DEFAULT_QUEUE_SIZE = 5000;
 	public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
 	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+	public static final int DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+	public static final int DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+	public static final boolean DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED = true;
+	public static final boolean DEFAULT_CLIENT_JOIN_SPOOLING_ENABLED = true;
+	public static final boolean DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED = true;
     public static final String DEFAULT_SPOOL_DIRECTORY = System.getProperty("java.io.tmpdir");
 	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
 	public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
@@ -406,7 +412,8 @@ public class QueryServicesOptions {
             .setIfUnset(THREAD_POOL_SIZE_ATTRIB, DEFAULT_THREAD_POOL_SIZE)
             .setIfUnset(QUEUE_SIZE_ATTRIB, DEFAULT_QUEUE_SIZE)
             .setIfUnset(THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS)
-            .setIfUnset(SPOOL_THRESHOLD_BYTES_ATTRIB, DEFAULT_SPOOL_THRESHOLD_BYTES)
+            .setIfUnset(CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES)
+            .setIfUnset(SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES)
             .setIfUnset(SPOOL_DIRECTORY, DEFAULT_SPOOL_DIRECTORY)
             .setIfUnset(MAX_MEMORY_PERC_ATTRIB, DEFAULT_MAX_MEMORY_PERC)
             .setIfUnset(MAX_TENANT_MEMORY_PERC_ATTRIB, DEFAULT_MAX_TENANT_MEMORY_PERC)
@@ -518,8 +525,12 @@ public class QueryServicesOptions {
         return set(THREAD_TIMEOUT_MS_ATTRIB, threadTimeoutMs);
     }
 
-    public QueryServicesOptions setSpoolThresholdBytes(int spoolThresholdBytes) {
-        return set(SPOOL_THRESHOLD_BYTES_ATTRIB, spoolThresholdBytes);
+    public QueryServicesOptions setClientSpoolThresholdBytes(long spoolThresholdBytes) {
+        return set(CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, spoolThresholdBytes);
+    }
+
+    public QueryServicesOptions setServerSpoolThresholdBytes(long spoolThresholdBytes) {
+        return set(SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, spoolThresholdBytes);
     }
 
     public QueryServicesOptions setSpoolDirectory(String spoolDirectory) {

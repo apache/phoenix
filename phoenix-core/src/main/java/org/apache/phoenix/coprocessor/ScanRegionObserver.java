@@ -46,11 +46,11 @@ import org.apache.phoenix.util.ScanUtil;
  */
 public class ScanRegionObserver extends BaseScannerRegionObserver {
 
-    public static void serializeIntoScan(Scan scan, int thresholdBytes, int limit, List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
+    public static void serializeIntoScan(Scan scan, int limit,
+            List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream(); // TODO: size?
         try {
             DataOutputStream output = new DataOutputStream(stream);
-            WritableUtils.writeVInt(output, thresholdBytes);
             WritableUtils.writeVInt(output, limit);
             WritableUtils.writeVInt(output, estimatedRowSize);
             WritableUtils.writeVInt(output, orderByExpressions.size());
