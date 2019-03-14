@@ -28,6 +28,7 @@ import java.util.Random;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.LnFunction;
 import org.apache.phoenix.expression.function.LogFunction;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
@@ -49,24 +50,8 @@ import com.google.common.collect.Lists;
  * Unit tests for {@link LnFunction} and {@link LogFunction}
  */
 public class LnLogFunctionTest {
-    private static final double ZERO = 1e-9;
     private static final Expression THREE = LiteralExpression.newConstant(3);
     private static final Expression DEFAULT_VALUE = LiteralExpression.newConstant(10.0);
-
-    private static boolean twoDoubleEquals(double a, double b) {
-        if (Double.isNaN(a) ^ Double.isNaN(b)) return false;
-        if (Double.isNaN(a)) return true;
-        if (Double.isInfinite(a) ^ Double.isInfinite(b)) return false;
-        if (Double.isInfinite(a)) {
-            if ((a > 0) ^ (b > 0)) return false;
-            else return true;
-        }
-        if (Math.abs(a - b) <= ZERO) {
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     private static boolean testExpression(LiteralExpression literal, LiteralExpression literal2,
             LiteralExpression literal3, double exptForLn, double exptForLog10, double exptForLog3)
@@ -82,7 +67,7 @@ public class LnLogFunctionTest {
         if (retLn) {
             Double result =
                     (Double) lnFunction.getDataType().toObject(ptr, lnFunction.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), exptForLn));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLn));
         }
 
         Expression log10Function = new LogFunction(expressionsLog10);
@@ -91,7 +76,7 @@ public class LnLogFunctionTest {
             Double result =
                     (Double) log10Function.getDataType()
                             .toObject(ptr, log10Function.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), exptForLog10));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLog10));
         }
         assertEquals(retLn, retLog10);
 
@@ -100,7 +85,7 @@ public class LnLogFunctionTest {
         if (retLog3) {
             Double result =
                     (Double) log3Function.getDataType().toObject(ptr, log3Function.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), exptForLog3));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLog3));
         }
         assertEquals(retLn, retLog3);
         return retLn;

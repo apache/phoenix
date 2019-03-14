@@ -179,7 +179,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public abstract class BaseTest {
     public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
-    
+    private static final double ZERO = 1e-9;
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
     @ClassRule
@@ -683,6 +683,21 @@ public abstract class BaseTest {
     public static long nextTimestamp() {
         timestamp += 100;
         return timestamp;
+    }
+
+    public static boolean twoDoubleEquals(double a, double b) {
+        if (Double.isNaN(a) ^ Double.isNaN(b)) return false;
+        if (Double.isNaN(a)) return true;
+        if (Double.isInfinite(a) ^ Double.isInfinite(b)) return false;
+        if (Double.isInfinite(a)) {
+            if ((a > 0) ^ (b > 0)) return false;
+            else return true;
+        }
+        if (Math.abs(a - b) <= ZERO) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {
